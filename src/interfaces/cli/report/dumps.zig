@@ -12,7 +12,7 @@
 //! run live.
 const std = @import("std");
 const Guest = @import("../../../chip/core/cpu/memory/guest.zig").Guest;
-const elf = @import("../../../board/loader/elf.zig");
+const elf = @import("../../../image/elf.zig");
 const cli = @import("../cli.zig");
 const symbols = @import("../../../session/symbols.zig");
 const sd_dump = @import("../../../components/sd_card/dump.zig");

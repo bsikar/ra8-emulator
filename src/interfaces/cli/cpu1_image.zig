@@ -2,8 +2,8 @@
 //! The application reads the file, the board's loader parses it, and the
 //! chip's CPU1 bring-up takes only the loaded value.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
-const loader = @import("../../board/loader/image.zig");
+const elf = @import("../../image/elf.zig");
+const loader = @import("../../image/load.zig");
 const second_core = @import("../../chip/core/second_core.zig");
 const Driver = @import("../../chip/core/second_zig_run.zig").Driver;
 const Wiring = @import("../../chip/core/second_wiring.zig").Wiring;

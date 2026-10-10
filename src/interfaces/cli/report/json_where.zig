@@ -6,7 +6,7 @@
 //! read the run's own tables, not the board, so each is null when that run
 //! did not collect it (the Zig core feeds no step or sample hooks, and the
 //! profile exists only under --profile).
-const elf = @import("../../../board/loader/elf.zig");
+const elf = @import("../../../image/elf.zig");
 const symbols = @import("../../../session/symbols.zig");
 const hotspots = @import("../../../session/hotspots.zig");
 

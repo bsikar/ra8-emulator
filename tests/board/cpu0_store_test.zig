@@ -4,7 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 
 const memmap = ra8.core.memmap;
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 const Cpu0 = ra8.board.cpu0_store.Cpu0;
 
 const page: usize = 0x1000;

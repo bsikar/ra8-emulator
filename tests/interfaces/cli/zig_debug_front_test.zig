@@ -6,7 +6,7 @@ const ra8 = @import("ra8");
 
 const debug_front = ra8.core.debug_front;
 const zig_debug_front = ra8.core.zig_debug_front;
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 const memmap = ra8.core.memmap;
 
 /// The program tests/session/zig_script_test.zig uses: a vector table at

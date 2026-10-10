@@ -174,11 +174,13 @@ pub const gui = @import("interfaces/gui.zig");
 pub const render = struct {
     pub const board_view = @import("render/board_view.zig");
 };
+pub const image = struct {
+    pub const elf = @import("image/elf.zig");
+    pub const pages = @import("image/pages.zig");
+    pub const load = @import("image/load.zig");
+    pub const ra8app = @import("image/ra8app.zig");
+};
 pub const board = struct {
-    pub const elf = @import("board/loader/elf.zig");
-    pub const pages = @import("board/loader/pages.zig");
-    pub const appimg = @import("board/loader/appimg.zig");
-    pub const loader = @import("board/loader/image.zig");
     pub const external_memory = @import("board/external_memory.zig");
     pub const external_backing = @import("board/external_backing.zig");
     pub const Board = @import("board/board.zig").Board;

@@ -10,7 +10,7 @@ const store_board = @import("../interfaces/cli/store_board.zig");
 
 const api = ra8.core.session_api;
 const boot = ra8.core.cpu.boot;
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 const loader = ra8.core.cpu.memory.load;
 const zig_run = ra8.board.zig_run;
 const session_plug = ra8.board.session_plug;
@@ -83,7 +83,7 @@ test "firmware polling the gauge sees it unplugged and plugged back mid-run" {
     var board = ra8.board.Board.init(std.testing.allocator);
     defer board.deinit();
     try store_board.attach(&board, core);
-    const loaded = try ra8.board.loader.read(image);
+    const loaded = try ra8.image.load.read(image);
     _ = try loader.image(core, loaded.image());
 
     var plugs = session_plug.Plugs.init(&board, arena.allocator());

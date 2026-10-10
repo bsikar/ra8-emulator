@@ -59,7 +59,7 @@ fn call(bytes: []u8, at: u32, target: u32) void {
 const names0 = [_][]const u8{ "outer", "middle", "leaf" };
 
 /// An image whose only content is the three function symbols.
-fn image(buffer: []u8, names: [3][]const u8) !ra8.board.elf.Image {
+fn image(buffer: []u8, names: [3][]const u8) !ra8.image.elf.Image {
     const encoded = Builder.build(buffer, &names, &.{ base + outer + 1, base + middle + 1, base + leaf + 1 });
     for (0..names.len) |index| {
         const at = Builder.sym_off + @sizeOf(symbols.Symbol) * index;
@@ -67,7 +67,7 @@ fn image(buffer: []u8, names: [3][]const u8) !ra8.board.elf.Image {
         symbol.st_info = symbols.symbol_type.func;
         symbol.st_size = 0x10;
     }
-    return ra8.board.elf.Image.init(encoded);
+    return ra8.image.elf.Image.init(encoded);
 }
 
 test "a --profile-folded run folds CPU0's sampled stacks into cpu0-rooted rows" {
@@ -105,7 +105,7 @@ test "a --profile-folded run folds CPU0's sampled stacks into cpu0-rooted rows" 
     try expectRows(elf, table, &.{ "cpu0;outer", "cpu0;outer;middle", "cpu0;outer;middle;leaf" }, samples.count);
 }
 
-fn expectRows(elf: ra8.board.elf.Image, table: profile.Table, want: []const []const u8, count: usize) !void {
+fn expectRows(elf: ra8.image.elf.Image, table: profile.Table, want: []const []const u8, count: usize) !void {
     var folded: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer folded.deinit();
     try profile_report.folded(&folded.writer, elf, table);

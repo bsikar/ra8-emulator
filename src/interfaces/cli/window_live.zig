@@ -2,7 +2,7 @@
 //! window's runner, its clock charging the window's pacer, with the
 //! window's settings read from the parsed options.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
+const elf = @import("../../image/elf.zig");
 const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
 const Board = @import("../../board/board.zig").Board;
 const clocks = @import("../../chip/periph/clocks.zig");

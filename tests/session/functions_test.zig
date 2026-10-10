@@ -9,7 +9,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const functions = ra8.core.functions;
 const hotspots = ra8.core.hotspots;
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 
 /// An ELF header with no sections on it, so `symbols.inside` finds no
 /// symbol table, every pc comes back unnamed, and the path this file owns

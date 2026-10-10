@@ -8,7 +8,7 @@ const Builder = @import("symbol_image.zig").Builder;
 
 test "a --stop-sym name resolves to its address and floor" {
     var bytes: [4096]u8 align(4) = undefined;
-    const image = try ra8.board.elf.Image.init(Builder.build(&bytes, &.{"g_tick"}, &.{0x2200_08D8}));
+    const image = try ra8.image.elf.Image.init(Builder.build(&bytes, &.{"g_tick"}, &.{0x2200_08D8}));
     const watch = zig_stop.resolve(image, null, "g_tick", 3) orelse return error.TestExpectedStop;
     try std.testing.expectEqual(@as(u32, 0x2200_08D8), watch.address);
     try std.testing.expectEqual(@as(u32, 3), watch.reaches);
@@ -16,7 +16,7 @@ test "a --stop-sym name resolves to its address and floor" {
 
 test "no --stop-sym means nothing is watched" {
     var bytes: [4096]u8 align(4) = undefined;
-    const image = try ra8.board.elf.Image.init(Builder.build(&bytes, &.{"g_tick"}, &.{0x2200_08D8}));
+    const image = try ra8.image.elf.Image.init(Builder.build(&bytes, &.{"g_tick"}, &.{0x2200_08D8}));
     try std.testing.expect(zig_stop.resolve(image, null, null, 0) == null);
 }
 

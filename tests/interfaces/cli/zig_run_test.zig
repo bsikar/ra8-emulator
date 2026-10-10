@@ -166,7 +166,7 @@ test "a Zig core run profiles retired function instructions and writes folded ou
     const symbol: *align(1) symbols.Symbol = std.mem.bytesAsValue(symbols.Symbol, encoded[Builder.sym_off..][0..@sizeOf(symbols.Symbol)]);
     symbol.st_info = symbols.symbol_type.func;
     symbol.st_size = 8;
-    const image = try ra8.board.elf.Image.init(encoded);
+    const image = try ra8.image.elf.Image.init(encoded);
     var table: profile.Table = .{ .image = image };
     table.prepare();
 
