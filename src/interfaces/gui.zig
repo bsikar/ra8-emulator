@@ -25,6 +25,7 @@ pub const speed_field = @import("gui/speed_field.zig");
 pub const time_readout = @import("gui/time_readout.zig");
 pub const time_bar = @import("gui/ui/time_bar.zig");
 pub const time_bar_capture = @import("gui/time_bar_capture.zig");
+pub const colors = @import("gui/ui/colors.zig");
 pub const board_pane = @import("gui/ui/board_pane.zig");
 pub const board_capture = @import("gui/board_capture.zig");
 pub const fit = @import("gui/ui/fit.zig");

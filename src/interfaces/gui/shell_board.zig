@@ -7,9 +7,10 @@ const std = @import("std");
 const proto = @import("../rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
 const draw_list = @import("../../render/draw_list.zig");
+const colors = @import("ui/colors.zig");
 
 const Color = draw_list.Color;
-const unseen = Color.rgb(0, 0, 0);
+const unseen = colors.black;
 
 pub const Board = struct {
     allocator: std.mem.Allocator,

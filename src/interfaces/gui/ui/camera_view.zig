@@ -12,6 +12,7 @@ const std = @import("std");
 const draw_list = @import("../../../render/draw_list.zig");
 const camera_panel = @import("../camera_panel.zig");
 const font = @import("../../../render/font.zig");
+const colors = @import("colors.zig");
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 const Panel = camera_panel.Panel;
@@ -22,19 +23,19 @@ pub const button: i32 = 24;
 pub const gap: i32 = 4;
 pub const dot: i32 = 8;
 
-pub const background = Color.rgb(0x28, 0x2C, 0x34);
-pub const ring = Color.rgb(0xD8, 0xDE, 0xE9);
-pub const camera_on = Color.rgb(0xE0, 0x3C, 0x31);
-pub const camera_off = Color.rgb(0x4A, 0x51, 0x5C);
+pub const background = colors.preview;
+pub const ring = colors.ink;
+pub const camera_on = colors.recording;
+pub const camera_off = colors.border;
 
 /// Each source's button colour.
 pub fn colorOf(kind: Kind) Color {
     return switch (kind) {
-        .gradient => Color.rgb(0x9A, 0xA5, 0xB4),
-        .image => Color.rgb(0x5E, 0x81, 0xAC),
-        .video => Color.rgb(0xB4, 0x8E, 0xAD),
-        .pipe => Color.rgb(0xA3, 0xBE, 0x8C),
-        .webcam => Color.rgb(0xEB, 0xCB, 0x8B),
+        .gradient => colors.muted,
+        .image => colors.hue.blue,
+        .video => colors.hue.purple,
+        .pipe => colors.hue.green,
+        .webcam => colors.hue.yellow,
     };
 }
 
@@ -68,9 +69,9 @@ pub fn inkOn(fill: Color) Color {
 /// Each answer's button colour.
 pub fn answerColor(reply: Answer) Color {
     return switch (reply) {
-        .allow_once => Color.rgb(0xA3, 0xBE, 0x8C),
-        .always => Color.rgb(0x5E, 0x81, 0xAC),
-        .cancel => Color.rgb(0xBF, 0x61, 0x6A),
+        .allow_once => colors.hue.green,
+        .always => colors.hue.blue,
+        .cancel => colors.hue.red,
     };
 }
 

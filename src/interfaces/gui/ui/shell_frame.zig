@@ -8,6 +8,7 @@ const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
 const pane_layout = @import("pane_layout.zig");
 const status_strip = @import("status_strip.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -15,11 +16,11 @@ const Pane = pane_layout.Pane;
 const Layout = pane_layout.Layout;
 const Solved = pane_layout.Solved;
 
-pub const background = Color.rgb(0x21, 0x25, 0x2B);
-pub const title_fill = Color.rgb(0x2C, 0x31, 0x3A);
-pub const gutter_fill = Color.rgb(0x18, 0x1A, 0x1F);
+pub const background = colors.background;
+pub const title_fill = colors.face;
+pub const gutter_fill = colors.gutter;
 pub const ink = status_strip.ink;
-pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
+pub const muted = colors.muted;
 pub const pad: i32 = 4;
 pub const title_h: i32 = @as(i32, @intCast(font.cell_h)) + 4;
 

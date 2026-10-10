@@ -9,13 +9,14 @@ const draw_list = @import("../../../render/draw_list.zig");
 const font = @import("../../../render/font.zig");
 const console_log = @import("../console_log.zig");
 const console_pane = @import("console_pane.zig");
+const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 
-pub const lit = Color.rgb(0x3B, 0x42, 0x52);
+pub const lit = colors.selected_face;
 /// The SAVE tab's face, set apart from the lit channel tab.
-pub const button = Color.rgb(0x4C, 0x56, 0x6A);
+pub const button = colors.button_face;
 /// Characters the widest label takes: "SCI10".
 pub const label_len: usize = 5;
 /// One tab: the widest label with the pane's pad either side.
