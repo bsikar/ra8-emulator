@@ -26,9 +26,9 @@ const shell_camera = @import("shell_camera.zig");
 const shell_plug = @import("shell_plug.zig");
 const shell_camera_file = @import("shell_camera_file.zig");
 const shell_registers = @import("shell_registers.zig");
-const registers_pane = @import("registers_pane.zig");
+const registers_pane = @import("ui/registers_pane.zig");
 const shell_memory = @import("shell_memory.zig");
-const memory_pane = @import("memory_pane.zig");
+const memory_pane = @import("ui/memory_pane.zig");
 const disasm_pane = @import("disasm_pane.zig");
 
 const Rect = draw_list.Rect;

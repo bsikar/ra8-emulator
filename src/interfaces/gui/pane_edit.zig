@@ -6,14 +6,15 @@
 const draw_list = @import("../../render/draw_list.zig");
 const font = @import("../../render/font.zig");
 const hex_entry = @import("ui/hex_entry.zig");
-const memory_pane = @import("memory_pane.zig");
-const registers_pane = @import("registers_pane.zig");
+const memory_pane = @import("ui/memory_pane.zig");
+const registers_capture = @import("registers_capture.zig");
+const registers_pane = @import("ui/registers_pane.zig");
 const session_api = @import("../../session/session_api.zig");
 
 const Rect = draw_list.Rect;
 
 pub const Target = union(enum) {
-    /// An index into registers_pane.shown.
+    /// An index into registers_capture.shown.
     register: usize,
     byte: u32,
 };
@@ -22,7 +23,7 @@ pub const State = enum { editing, written, cancelled };
 
 /// The register whose value text a click at (x, y) lands on.
 pub fn registerAt(area: Rect, x: i32, y: i32) ?usize {
-    for (0..registers_pane.shown.len) |index| {
+    for (0..registers_pane.names.len) |index| {
         const cell = registers_pane.cellRect(area, registers_pane.open, index) orelse return null;
         const at = registers_pane.valueOrigin(cell);
         const w: i32 = @intCast(font.textWidth(8));
@@ -76,7 +77,7 @@ pub const Edit = struct {
             .cancel => return .cancelled,
             .commit => |value| {
                 switch (self.target) {
-                    .register => |index| try session.setRegister(core, registers_pane.shown[index], value),
+                    .register => |index| try session.setRegister(core, registers_capture.shown[index], value),
                     .byte => |address| try session.write(core, address, &.{@truncate(value)}),
                 }
                 return .written;

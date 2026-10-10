@@ -60,8 +60,10 @@ test {
     _ = @import("interfaces/gui/camera_panel_test.zig");
     _ = @import("interfaces/gui/devices_panel_test.zig");
     _ = @import("interfaces/gui/ui/devices_pane_test.zig");
-    _ = @import("interfaces/gui/registers_pane_test.zig");
-    _ = @import("interfaces/gui/memory_pane_test.zig");
+    _ = @import("interfaces/gui/ui/registers_pane_test.zig");
+    _ = @import("interfaces/gui/registers_capture_test.zig");
+    _ = @import("interfaces/gui/ui/memory_pane_test.zig");
+    _ = @import("interfaces/gui/memory_capture_test.zig");
     _ = @import("interfaces/gui/disasm_pane_test.zig");
     _ = @import("interfaces/gui/source_pane_test.zig");
     _ = @import("interfaces/gui/stack_pane_test.zig");

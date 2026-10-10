@@ -4,16 +4,16 @@
 //! the snapshot taken before the last run or step draws in `changed`, so a
 //! step shows what it touched.
 //!
-//! `capture` reads the session for CPU0 or CPU1; `draw` reads only the
-//! snapshot, so the shell redraws without touching a core.
+//! The pane names its registers as text and never imports the session;
+//! gui/registers_capture.zig turns the names into session registers and
+//! fills a Snapshot. `draw` reads only the snapshot, so the shell redraws
+//! without touching a core.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const session_api = @import("../../session/session_api.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
-const Register = session_api.Register;
 
 pub const background = Color.rgb(0x21, 0x25, 0x2B);
 pub const muted = Color.rgb(0x9A, 0xA5, 0xB4);
@@ -32,13 +32,13 @@ pub const column_len: usize = name_len + 8 + 2;
 /// registers, the three that say where execution is, and status), the
 /// system group (both stack pointers and their limits, the masks, CONTROL),
 /// the FPU group (FPSCR and the single-precision bank, Ozone's order), then
-/// VPR, which opens the MVE group.
-pub const shown = [_]Register{
-    .r0,      .r1,    .r2,  .r3,  .r4,   .r5,  .r6,  .r7,     .r8,     .r9,      .r10,     .r11,
-    .r12,     .sp,    .lr,  .pc,  .xpsr, .msp, .psp, .msplim, .psplim, .primask, .basepri, .faultmask,
-    .control, .fpscr, .s0,  .s1,  .s2,   .s3,  .s4,  .s5,     .s6,     .s7,      .s8,      .s9,
-    .s10,     .s11,   .s12, .s13, .s14,  .s15, .s16, .s17,    .s18,    .s19,     .s20,     .s21,
-    .s22,     .s23,   .s24, .s25, .s26,  .s27, .s28, .s29,    .s30,    .s31,     .vpr,
+/// VPR, which opens the MVE group. Each name is a session register's tag;
+/// gui/registers_capture.zig checks that at comptime.
+pub const names = [_][]const u8{
+    "r0",  "r1",   "r2",  "r3",  "r4",     "r5",     "r6",      "r7",      "r8",        "r9",      "r10",   "r11", "r12", "sp",  "lr",
+    "pc",  "xpsr", "msp", "psp", "msplim", "psplim", "primask", "basepri", "faultmask", "control", "fpscr", "s0",  "s1",  "s2",  "s3",
+    "s4",  "s5",   "s6",  "s7",  "s8",     "s9",     "s10",     "s11",     "s12",       "s13",     "s14",   "s15", "s16", "s17", "s18",
+    "s19", "s20",  "s21", "s22", "s23",    "s24",    "s25",     "s26",     "s27",       "s28",     "s29",   "s30", "s31", "vpr",
 };
 
 /// MVE's q0-q7 alias the FP bank (src/chip/core/cpu/mve/qreg.zig): lane k of qN
@@ -46,9 +46,17 @@ pub const shown = [_]Register{
 /// values already read, so a vector costs no extra read and its changed
 /// mark is per lane (RA8EMU-947).
 pub const lanes: usize = 32;
-/// Every cell the pane can draw: one per shown register, then the q lanes.
-pub const cells: usize = shown.len + lanes;
-const s0_at = std.mem.indexOfScalar(Register, &shown, .s0).?;
+/// Every cell the pane can draw: one per named register, then the q lanes.
+pub const cells: usize = names.len + lanes;
+const s0_at = indexOf("s0");
+
+/// Where `name` sits in `names`.
+fn indexOf(comptime name: []const u8) usize {
+    for (names, 0..) |each, index| {
+        if (std.mem.eql(u8, each, name)) return index;
+    }
+    @compileError("no register named " ++ name);
+}
 
 const lane_names: [lanes][]const u8 = blk: {
     // 32 comptimePrint calls run past the default comptime branch budget.
@@ -60,12 +68,12 @@ const lane_names: [lanes][]const u8 = blk: {
 
 /// Which value in a Snapshot cell `cell` draws.
 pub fn valueIndex(cell: usize) usize {
-    return if (cell < shown.len) cell else s0_at + (cell - shown.len);
+    return if (cell < names.len) cell else s0_at + (cell - names.len);
 }
 
 /// The name cell `cell` draws.
 pub fn label(cell: usize) []const u8 {
-    return if (cell < shown.len) @tagName(shown[cell]) else lane_names[cell - shown.len];
+    return if (cell < names.len) names[cell] else lane_names[cell - names.len];
 }
 
 /// Only CPU0, the Cortex-M85 (core profile m85), has MVE; CPU1 runs the
@@ -105,7 +113,7 @@ pub const Fold = [groups.len]bool;
 pub const open: Fold = @splat(false);
 
 pub const Snapshot = struct {
-    values: [shown.len]u32 = @splat(0),
+    values: [names.len]u32 = @splat(0),
     /// The core has MVE: VPR was read and the MVE group draws.
     mve: bool = false,
 
@@ -116,16 +124,6 @@ pub const Snapshot = struct {
         return old.values[index] != self.values[index];
     }
 };
-
-/// Reads every shown register of `core` through the session.
-pub fn capture(session: *session_api.Session, core: session_api.Core) anyerror!Snapshot {
-    var snapshot: Snapshot = .{ .mve = hasMve(core) };
-    for (shown, 0..) |which, index| {
-        if (which == .vpr and !snapshot.mve) continue;
-        snapshot.values[index] = try session.register(core, which);
-    }
-    return snapshot;
-}
 
 /// How many cells fit down one column of `area`.
 pub fn rows(area: Rect) usize {

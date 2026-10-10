@@ -17,6 +17,7 @@ const frame = ra8.gui.shell_frame;
 const panes = ra8.gui.shell_panes;
 const status_bar = ra8.gui.status_bar;
 const registers_pane = ra8.gui.registers_pane;
+const registers_capture = ra8.gui.registers_capture;
 const memory_pane = ra8.gui.memory_pane;
 const disasm_pane = ra8.gui.disasm_pane;
 const shell_registers = ra8.gui.shell_registers;
@@ -180,7 +181,7 @@ test "a spawned serve --stdio feeds live registers, memory and disassembly leave
 
 /// Where `bits` sits among the S registers of `snapshot`, if anywhere.
 fn singleHolding(snapshot: registers_pane.Snapshot, bits: u32) ?usize {
-    const s0 = std.mem.indexOfScalar(shell_registers.Register, &registers_pane.shown, .s0).?;
+    const s0 = std.mem.indexOfScalar(shell_registers.Register, &registers_capture.shown, .s0).?;
     for (s0..s0 + 32) |index| if (snapshot.values[index] == bits) return index;
     return null;
 }
@@ -221,7 +222,7 @@ test "the fpu group shows the sum fp_basic computes, marked on the step that wro
 fn laneChanged(registers: *const shell_registers.Registers) ?usize {
     const now = registers.now orelse return null;
     const before = registers.before orelse return null;
-    for (registers_pane.shown.len..registers_pane.cells) |cell| {
+    for (registers_capture.shown.len..registers_pane.cells) |cell| {
         if (now.changedAt(before, registers_pane.valueIndex(cell))) return cell;
     }
     return null;
@@ -249,7 +250,7 @@ test "the MVE group draws on cpu0 and marks the q lane a Helium step wrote" {
     } else return error.LaneNeverChanged;
     const registers = &leaves.registers.cores[0];
     try std.testing.expect(registers.now.?.mve);
-    try std.testing.expect(cell >= registers_pane.shown.len and cell < registers_pane.cells);
+    try std.testing.expect(cell >= registers_capture.shown.len and cell < registers_pane.cells);
     try expectFrame(gpa, &leaves, link.state, .registers, registers_pane.changed);
 
     local.end();
