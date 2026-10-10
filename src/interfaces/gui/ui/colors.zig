@@ -2,9 +2,9 @@
 //! the shell, the bars and the panes paint, as named roles. Files under
 //! src/interfaces/gui read from here instead of writing their own
 //! Color.rgb literals; tests/interfaces/gui/ui/colors_test.zig keeps it that
-//! way. The board picture (src/render/board_view.zig), the LCD image and
+//! way. The board picture (src/interfaces/render/board_view.zig), the LCD image and
 //! colours computed from data are not chrome and stay where they are.
-const draw_list = @import("../../../render/draw_list.zig");
+const draw_list = @import("../../render/draw_list.zig");
 
 const Color = draw_list.Color;
 const palette = @This();

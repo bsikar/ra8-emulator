@@ -8,8 +8,8 @@ const std = @import("std");
 const Board = @import("../../board/board.zig").Board;
 const eink = @import("../../components/eink_it8951/panel.zig");
 const eink_wire = @import("../../components/eink_it8951/wire.zig");
-const png = @import("../../render/png.zig");
-const board_view = @import("../../render/board_view.zig");
+const png = @import("../render/png.zig");
+const board_view = @import("../render/board_view.zig");
 const board_leds = @import("../../session/board_leds.zig");
 
 /// The panel's size, the size of the view that was written, and whether

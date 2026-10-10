@@ -1,4 +1,4 @@
-//! Tests for src/render/png.zig.
+//! Tests for src/interfaces/render/png.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const png = ra8.board.report.png;

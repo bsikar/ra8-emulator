@@ -107,7 +107,7 @@ test {
     _ = @import("realtime_test.zig");
     _ = @import("../../session/duration_test.zig");
     _ = @import("../../session/fault_file_test.zig");
-    _ = @import("../../render/png_test.zig");
+    _ = @import("../render/png_test.zig");
     _ = @import("frame_out_test.zig");
     _ = @import("frames_args_test.zig");
     _ = @import("state_args_test.zig");
