@@ -119,7 +119,7 @@ fn settle(startup: *shell_startup.Startup, devices: *shell_devices.Devices) !voi
     var headless = Headless.init(gpa, 480, 320);
     defer headless.deinit();
     var settled = Settled{ .inner = &headless, .startup = startup, .devices = devices };
-    try shell_main.drive(io, &shell, settled.window(), image, bytes, &session);
+    try shell_main.drive(io, &shell, settled.window(), image, bytes, &session, null);
     try std.testing.expect(settled.done());
 }
 

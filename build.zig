@@ -81,8 +81,8 @@ pub fn build(b: *std.Build) void {
     usbipAttach(b, target, optimize);
     const bench_mod = handoffBench(b, target, optimize, emu);
     const sdl_mod = sdlModule(b, target, optimize, emu, gui);
-    if (sdl_mod) |mod| guiExe(b, target, optimize, emu, mod);
-    guiTest(b, target, optimize, emu, gui, sdl_mod);
+    const gui_exe = if (sdl_mod) |mod| guiExe(b, target, optimize, emu, mod) else null;
+    guiTest(b, target, optimize, emu, gui, sdl_mod, gui_exe);
 
     const imports: TestImports = .{ .emu = emu, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod, .bench = bench_mod };
     // Two roots, compiled one after the other under -j1, so the peak memory of
@@ -256,7 +256,7 @@ fn sdlTranslation(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
 
 /// ra8_gui (RA8EMU-1087, ADR 0004 step 6): the debugger shell in its SDL
 /// window, installed next to ra8_emulator in a -Dgui build.
-fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, sdl: *std.Build.Module) void {
+fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, sdl: *std.Build.Module) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "ra8_gui",
         .root_module = b.createModule(.{
@@ -269,13 +269,15 @@ fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
     exe.root_module.addImport("ra8", emu);
     exe.root_module.addImport("gui_sdl", sdl);
     b.installArtifact(exe);
+    return exe;
 }
 
 /// The SDL-backed GUI tests (RA8EMU-733): the geometry presenter against
-/// the CPU golden on SDL's software renderer, headless. Kept out of
-/// `zig build test` so the tests need no SDL.
-fn guiTest(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, enabled: bool, sdl_mod: ?*std.Build.Module) void {
-    const step = b.step("gui-test", "Run the SDL-backed GUI tests (needs -Dgui)");
+/// the CPU golden on SDL's software renderer, then the smoke run
+/// (RA8EMU-1089), both headless. Kept out of `zig build test` so the tests
+/// need no SDL.
+fn guiTest(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, enabled: bool, sdl_mod: ?*std.Build.Module, gui_exe: ?*std.Build.Step.Compile) void {
+    const step = b.step("gui-test", "Run the SDL-backed GUI tests and the ra8_gui --frames smoke run (needs -Dgui)");
     if (!enabled) {
         step.dependOn(&b.addFail("gui-test needs SDL3: run `zig build gui-test -Dgui`").step);
         return;
@@ -285,4 +287,17 @@ fn guiTest(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builti
     mod.addImport("ra8", emu);
     mod.addImport("gui_sdl", sdl);
     step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = mod })).step);
+    if (gui_exe) |exe| step.dependOn(guiSmoke(b, exe));
+}
+
+/// The real ra8_gui with no display: it opens its window on SDL's dummy
+/// video driver, serves a fixture image in-process, draws five frames with
+/// the image loaded and exits 0.
+fn guiSmoke(b: *std.Build, exe: *std.Build.Step.Compile) *std.Build.Step {
+    const smoke = b.addRunArtifact(exe);
+    smoke.setEnvironmentVariable("SDL_VIDEODRIVER", "dummy");
+    smoke.addArgs(&.{ "--frames", "5" });
+    smoke.addFileArg(b.path("tests/fixtures/gpio/blink.elf"));
+    smoke.expectExitCode(0);
+    return &smoke.step;
 }
