@@ -9,7 +9,7 @@ const std = @import("std");
 const proto = @import("../rpc/session_rpc.zig");
 const session_link = @import("session_link.zig");
 const registers_pane = @import("registers_pane.zig");
-const pane_layout = @import("pane_layout.zig");
+const pane_layout = @import("ui/pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
 const draw_list = @import("../../render/draw_list.zig");
 

@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/camera_device_row.zig: the webcam device row's slots,
+//! Covers src/interfaces/gui/ui/camera_device_row.zig: the webcam device row's slots,
 //! drawing and hits.
 const std = @import("std");
 const ra8 = @import("ra8");

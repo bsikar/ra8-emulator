@@ -12,12 +12,12 @@ const draw_list = @import("../../render/draw_list.zig");
 const platform = @import("platform.zig");
 const camera_panel = @import("camera_panel.zig");
 const source_spec = @import("../../host/camera/source_spec.zig");
-const camera_view = @import("camera_view.zig");
+const camera_view = @import("ui/camera_view.zig");
 const camera_open = @import("camera_open.zig");
 const camera_switch = @import("camera_switch.zig");
 const camera_devices = @import("camera_devices.zig");
-const device_row = @import("camera_device_row.zig");
-const media_row = @import("camera_media_row.zig");
+const device_row = @import("ui/camera_device_row.zig");
+const media_row = @import("ui/camera_media_row.zig");
 const FrameSource = camera_switch.FrameSource;
 const SourceSwap = @import("source_swap.zig").SourceSwap;
 

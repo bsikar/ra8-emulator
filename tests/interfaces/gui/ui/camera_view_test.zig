@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/camera_view.zig: what the camera panel draws through the
+//! Covers src/interfaces/gui/ui/camera_view.zig: what the camera panel draws through the
 //! CPU rasterizer, and how clicks on it pick sources and answer the webcam
 //! dialog.
 const std = @import("std");

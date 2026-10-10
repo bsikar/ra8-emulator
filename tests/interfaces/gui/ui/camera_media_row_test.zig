@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/camera_media_row.zig: the picture and clip row's place
+//! Covers src/interfaces/gui/ui/camera_media_row.zig: the picture and clip row's place
 //! under the panel, its slots and the chosen file's ring.
 const std = @import("std");
 const ra8 = @import("ra8");

@@ -6,10 +6,10 @@
 //! press inside the field focuses it and one outside lets it go.
 const std = @import("std");
 const widget = @import("ra8_widget");
-const platform = @import("platform.zig");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const widget_paint = @import("../../render/widget_paint.zig");
+const platform = @import("../platform.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
+const widget_paint = @import("../../../render/widget_paint.zig");
 
 const text_field = widget.text_field;
 

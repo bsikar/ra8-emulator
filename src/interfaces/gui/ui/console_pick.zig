@@ -5,9 +5,9 @@
 //! a demo talking on a channel other than the console is easy to find.
 //! A SAVE tab at the strip's right end writes the shown log to a file.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const console_log = @import("console_log.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
+const console_log = @import("../console_log.zig");
 const console_pane = @import("console_pane.zig");
 
 const Color = draw_list.Color;

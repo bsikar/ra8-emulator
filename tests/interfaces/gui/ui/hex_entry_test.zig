@@ -1,4 +1,4 @@
-//! Covers src/interfaces/gui/hex_entry.zig (RA8EMU-742): only hex digits are typed,
+//! Covers src/interfaces/gui/ui/hex_entry.zig (RA8EMU-742): only hex digits are typed,
 //! upper-cased and up to the width; Backspace drops one; Enter commits the
 //! value or cancels when empty; Escape cancels; and the drawn field is a
 //! band with the caret after the digits.

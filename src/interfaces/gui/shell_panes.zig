@@ -15,9 +15,9 @@
 //! An empty leaf stays blank.
 const draw_list = @import("../../render/draw_list.zig");
 const font = @import("../../render/font.zig");
-const pane_layout = @import("pane_layout.zig");
+const pane_layout = @import("ui/pane_layout.zig");
 const shell_frame = @import("shell_frame.zig");
-const console_pane = @import("console_pane.zig");
+const console_pane = @import("ui/console_pane.zig");
 const shell_console = @import("shell_console.zig");
 const shell_board = @import("shell_board.zig");
 const shell_devices = @import("shell_devices.zig");
