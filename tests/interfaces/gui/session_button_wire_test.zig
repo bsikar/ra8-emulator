@@ -8,6 +8,7 @@ const test_paths = @import("test_paths");
 const proto = ra8.interfaces.rpc.session;
 const session_link = ra8.gui.session_link;
 const pane = ra8.gui.board_pane;
+const capture = ra8.gui.board_capture;
 const input = ra8.gui.board_input;
 const Link = session_link.Link;
 const Env = proto.Client.Env;
@@ -33,7 +34,7 @@ fn answer(link: *Link, leds: *pane.Leds, id: u32) ![]const u8 {
                 .err => error.Refused,
             },
             .event => |event| if (event.topic == @backingInt(proto.Topic.session)) {
-                leds.observe(try proto.decode(proto.SessionEvent, event.payload));
+                capture.observe(leds, try proto.decode(proto.SessionEvent, event.payload));
             },
         }
     }

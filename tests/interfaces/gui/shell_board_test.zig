@@ -13,6 +13,7 @@ const frame = ra8.gui.shell_frame;
 const panes = ra8.gui.shell_panes;
 const status_bar = ra8.gui.status_bar;
 const shell_board = ra8.gui.shell_board;
+const fit = ra8.gui.fit;
 const Board = shell_board.Board;
 const Color = draw_list.Color;
 
@@ -73,9 +74,9 @@ test "responses, other topics, the other core and short payloads leave the image
 
 test "fitIn keeps the aspect and centres the image" {
     const body: draw_list.Rect = .{ .x = 10, .y = 20, .w = 200, .h = 100 };
-    try std.testing.expectEqual(draw_list.Rect{ .x = 85, .y = 20, .w = 50, .h = 100 }, shell_board.fitIn(body, 100, 200));
-    try std.testing.expectEqual(draw_list.Rect{ .x = 10, .y = 45, .w = 200, .h = 50 }, shell_board.fitIn(body, 400, 100));
-    try std.testing.expectEqual(@as(i32, 0), shell_board.fitIn(body, 0, 10).w);
+    try std.testing.expectEqual(draw_list.Rect{ .x = 85, .y = 20, .w = 50, .h = 100 }, fit.fitIn(body, 100, 200));
+    try std.testing.expectEqual(draw_list.Rect{ .x = 10, .y = 45, .w = 200, .h = 50 }, fit.fitIn(body, 400, 100));
+    try std.testing.expectEqual(@as(i32, 0), fit.fitIn(body, 0, 10).w);
 }
 
 fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: Color) bool {
@@ -112,7 +113,7 @@ test "the board leaf draws the panel image in place of its note" {
         if (placed.kind != .board) continue;
         boards += 1;
         const body = frame.bodyOf(leaf.area);
-        try std.testing.expect(holds(&pixels, shell_board.fitIn(body, 4, 6), gray(200)));
+        try std.testing.expect(holds(&pixels, fit.fitIn(body, 4, 6), gray(200)));
         try std.testing.expect(!holds(&pixels, body, frame.muted));
     }
     try std.testing.expect(boards > 0);

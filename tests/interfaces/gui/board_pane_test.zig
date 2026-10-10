@@ -8,6 +8,7 @@ const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
 const pane = ra8.gui.board_pane;
+const capture = ra8.gui.board_capture;
 const proto = ra8.interfaces.rpc.session;
 const Rect = draw_list.Rect;
 const Color = draw_list.Color;
@@ -57,11 +58,11 @@ test "an area under the minimum lays out nothing and draws nothing" {
 
 test "LEDs follow led_changed events and ignore everything else" {
     var leds: pane.Leds = .{};
-    leds.observe(.{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
-    leds.observe(.{ .core = .cpu0, .kind = .led_changed, .address = 0x102 });
-    leds.observe(.{ .core = .cpu0, .kind = .led_changed, .address = 0x002 });
-    leds.observe(.{ .core = .cpu0, .kind = .led_changed, .address = 0x107 });
-    leds.observe(.{ .core = .cpu0, .kind = .breakpoint_set, .address = 0x101 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x102 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x002 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x107 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .breakpoint_set, .address = 0x101 });
     try std.testing.expectEqualSlices(bool, &.{ true, false, false }, &leds.on);
 }
 
@@ -84,7 +85,7 @@ test "the board pane frame with LED1 on is pinned" {
         pixel.* = Color.rgb(shade, shade, shade);
     }
     var leds: pane.Leds = .{};
-    leds.observe(.{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
     try pane.draw(&list, .{ .x = 0, .y = 0, .w = w, .h = h }, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels } });
     raster.draw(&frame, &list, font.atlas);
     const digest = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
