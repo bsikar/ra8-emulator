@@ -1,10 +1,10 @@
 //! An ELF image read into the chip's loaded-image value (RA8EMU-1039,
-//! ADR 0004). The board parses the format; the chip only writes what this
+//! ADR 0004). src/image parses the format; the chip only writes what this
 //! hands it. The value's slices point into the ELF bytes and into the
 //! `Loaded` that holds them, so both outlive the load.
 const elf = @import("elf.zig");
 const pages = @import("pages.zig");
-const loaded_image = @import("../../chip/core/loaded_image.zig");
+const loaded_image = @import("../chip/core/loaded_image.zig");
 
 /// Load segments with file bytes one image may carry.
 pub const capacity: usize = 32;

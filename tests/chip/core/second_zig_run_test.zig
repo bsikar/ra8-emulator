@@ -173,7 +173,7 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     const cpu1_path = try tmp.dir.realPathFileAlloc(std.testing.io, "cpu1.elf", std.testing.allocator);
     defer std.testing.allocator.free(cpu1_path);
 
-    const image = try ra8.board.elf.Image.init(pingpong_bytes);
+    const image = try ra8.image.elf.Image.init(pingpong_bytes);
     var store = try Store.init(null);
     defer store.deinit();
     const memory: Guest = .{ .store = &store };
@@ -181,13 +181,13 @@ test "cpu1_pingpong_ipc reaches its Non-secure target without a forced HardFault
     defer board.deinit();
     try ra8.board.wiring.attachBlocks(&board, memory);
     try ra8.board.wiring.primeWindows(&board, memory, ra8.board.wiring.cpu0Windows(&board));
-    const loaded = try ra8.board.loader.read(image);
+    const loaded = try ra8.image.load.read(image);
     _ = try ra8.core.cpu.memory.load.image(memory, loaded.image());
 
     var driver: Driver = undefined;
     const cpu1_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, cpu1_path, std.testing.allocator, .limited(ra8.core.second_core.limits.image_bytes));
     defer std.testing.allocator.free(cpu1_bytes);
-    const cpu1 = try ra8.board.loader.read(try ra8.board.elf.Image.init(cpu1_bytes));
+    const cpu1 = try ra8.image.load.read(try ra8.image.elf.Image.init(cpu1_bytes));
     try driver.open(ra8.board.wiring.cpu1(&board), cpu1.image(), memory);
     defer driver.close();
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 50_000 };

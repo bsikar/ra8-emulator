@@ -2,7 +2,7 @@
 //! image that carry no answer.
 const std = @import("std");
 const ra8 = @import("ra8");
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 const symbols = ra8.core.symbols;
 
 const Builder = @import("symbol_image.zig").Builder;

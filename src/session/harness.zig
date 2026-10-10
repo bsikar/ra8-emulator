@@ -1,6 +1,6 @@
 //! Public owner for a firmware image, its Zig core, board, and debug session.
 const std = @import("std");
-const elf = @import("../board/loader/elf.zig");
+const elf = @import("../image/elf.zig");
 const part = @import("../chip/core/part.zig");
 const BoardBus = @import("../chip/core/cpu/board_bus.zig").BoardBus;
 const cpu_mod = @import("../chip/core/cpu/cpu.zig");
@@ -8,7 +8,7 @@ const NvicSource = @import("../chip/core/cpu/exception/nvic_source.zig").NvicSou
 const QuietSource = @import("../chip/core/cpu/exception/quiet_source.zig").QuietSource;
 const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const memory_load = @import("../chip/core/cpu/memory/load.zig");
-const read_image = @import("../board/loader/image.zig");
+const read_image = @import("../image/load.zig");
 const Board = @import("../board/board.zig").Board;
 const option_memory = @import("../chip/periph/iwdt/iwdt_option_memory.zig");
 const Reboot = @import("../chip/core/reboot.zig").Reboot;

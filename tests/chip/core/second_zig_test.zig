@@ -151,7 +151,7 @@ const store_stack: u32 = store_vectors + 0x800;
 /// One executable PT_LOAD segment at `store_vectors`: a vector pair, then
 /// MOVS r0, #5; ADDS r0, #1; B . at +0x200.
 fn cpu1Image() [store_page * 2]u8 {
-    const elf = ra8.board.elf;
+    const elf = ra8.image.elf;
     var file: [store_page * 2]u8 align(@alignOf(elf.Header)) = @splat(0);
     const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
     head.* = .{
@@ -188,11 +188,11 @@ fn cpu1Image() [store_page * 2]u8 {
 
 test "CPU1's Zig core resets and runs over a store with no engine open" {
     var file = cpu1Image();
-    const image = try ra8.board.elf.Image.init(&file);
+    const image = try ra8.image.elf.Image.init(&file);
     var store = try ra8.core.cpu.memory.store.Store.init(null);
     defer store.deinit();
     const memory: ra8.core.cpu.memory.guest.Guest = .{ .store = &store };
-    const loaded = try ra8.board.loader.read(image);
+    const loaded = try ra8.image.load.read(image);
     const seeded = try second_core.seedImage(memory, loaded.image());
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
@@ -215,7 +215,7 @@ test "CPU1 on its own store shares CPU0's SRAM and answers as an M33" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var own: second_core.zig.Own = undefined;
-    const loaded = try ra8.board.loader.read(try ra8.board.elf.Image.init(&file));
+    const loaded = try ra8.image.load.read(try ra8.image.elf.Image.init(&file));
     try own.open(&lender, ra8.board.wiring.cpu1(&board), loaded.image());
     defer own.close();
     const memory = own.core.memory;

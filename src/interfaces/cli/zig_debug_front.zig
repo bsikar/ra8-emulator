@@ -2,7 +2,7 @@
 //! `--debug-script` or `--debug`. The public harness owns CPU0 and its board;
 //! this front adds the requested debugger mode and optional CPU1.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
+const elf = @import("../../image/elf.zig");
 const cpu1_image = @import("cpu1_image.zig");
 const cpu_mod = @import("../../chip/core/cpu/cpu.zig");
 const Board = @import("../../board/board.zig").Board;

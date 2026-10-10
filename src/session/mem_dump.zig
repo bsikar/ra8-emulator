@@ -12,7 +12,7 @@
 //! because a zero printed in their place would read like a real value and
 //! this exists to settle exactly the questions a wrong value confuses.
 const std = @import("std");
-const elf = @import("../board/loader/elf.zig");
+const elf = @import("../image/elf.zig");
 const Guest = @import("../chip/core/cpu/memory/guest.zig").Guest;
 const Bus = @import("../chip/periph/registry.zig").Bus;
 const place = @import("place.zig");

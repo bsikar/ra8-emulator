@@ -7,7 +7,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("store_board.zig");
 
-const elf = ra8.board.elf;
+const elf = ra8.image.elf;
 const zig_run = ra8.board.zig_run;
 const cpu_boot = ra8.core.cpu.boot;
 const loader = ra8.core.cpu.memory.load;
@@ -32,9 +32,9 @@ test "the Non-secure image calls every NSC veneer and gets back" {
     defer board.deinit();
     try store_board.attach(&board, core);
     // As cpu0_store.Cpu0: the Secure image after the board, then the `--ns` half.
-    const secure_loaded = try ra8.board.loader.read(secure);
+    const secure_loaded = try ra8.image.load.read(secure);
     _ = try loader.image(core, secure_loaded.image());
-    const ns_loaded = try ra8.board.loader.read(ns);
+    const ns_loaded = try ra8.image.load.read(ns);
     _ = try loader.image(core, ns_loaded.image());
     var timebase: ra8.periph.clocks.Clocks = .{ .per_chunk = 5_000 };
     var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = core, .board = &board, .timebase = &timebase };
