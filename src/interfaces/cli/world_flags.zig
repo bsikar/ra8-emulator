@@ -12,7 +12,7 @@ const source_spec = @import("../../host/camera/source_spec.zig");
 const sci_reply = @import("../../chip/periph/sci/sci_reply.zig");
 const rtc_start = @import("../../session/rtc_start.zig");
 const speed = @import("../../periph/time/speed.zig");
-const duration = @import("duration.zig");
+const duration = @import("../../session/duration.zig");
 const timebase = @import("../../chip/periph/time/timebase.zig");
 
 const Options = cli.Options;

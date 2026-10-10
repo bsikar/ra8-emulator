@@ -5,7 +5,7 @@ const std = @import("std");
 pub const profile = @import("report/profile.zig");
 pub const after = @import("report/after.zig");
 /// The board view's PNG writer (RA8EMU-73).
-pub const png = @import("png.zig");
+pub const png = @import("../../render/png.zig");
 pub const frame_out = @import("frame_out.zig");
 pub const frames_out = @import("frames_out.zig");
 pub const undefined_sites = @import("report/undefined.zig");
