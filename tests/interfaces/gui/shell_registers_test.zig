@@ -6,6 +6,7 @@
 //! registers leaf draws in place of its note.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const proto = ra8.interfaces.rpc.session;
 const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
@@ -194,7 +195,7 @@ test "a registers leaf draws its core's values, changes in amber, in place of it
     defer list.deinit();
     const status: status_bar.Status = .{};
     var painter: panes.Panes = .{ .registers = &pair };
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = 480, .height = 320, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, .closed), .width = 480, .height = 320, .painter = painter.painter() });
     raster.draw(&pixels, &list, font.atlas);
     var drawn: usize = 0;
     var waiting: usize = 0;

@@ -11,7 +11,7 @@ const session_link = @import("session_link.zig");
 const draw_list = @import("../../render/draw_list.zig");
 const font = @import("../../render/font.zig");
 const pane_layout = @import("ui/pane_layout.zig");
-const shell_frame = @import("shell_frame.zig");
+const shell_frame = @import("ui/shell_frame.zig");
 
 /// Rows sit this far apart, a glyph and a gap.
 pub const row_h: i32 = font.glyph_h + 3;

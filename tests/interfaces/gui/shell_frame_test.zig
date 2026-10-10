@@ -3,6 +3,7 @@
 //! every body once, and the chrome lands in the right colours.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
@@ -52,7 +53,7 @@ const Scene = struct {
     }
 
     fn render(self: *Scene, status: *const status_bar.Status, painter: ?frame.Painter) !void {
-        try frame.draw(&self.list, .{ .layout = &self.layout, .solved = &self.solved, .status = status, .state = up, .width = width, .height = height, .painter = painter });
+        try frame.draw(&self.list, .{ .layout = &self.layout, .solved = &self.solved, .strip = status_capture.strip(status, up), .width = width, .height = height, .painter = painter });
         raster.draw(&self.pixels, &self.list, font.atlas);
     }
 

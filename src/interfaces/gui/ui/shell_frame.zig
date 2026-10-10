@@ -4,12 +4,10 @@
 //! strip (RA8EMU-759) runs along the bottom. What goes inside a leaf comes
 //! from a painter, so the window loop fills it and a test can leave it bare.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const pane_layout = @import("ui/pane_layout.zig");
-const status_bar = @import("status_bar.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
+const pane_layout = @import("pane_layout.zig");
 const status_strip = @import("status_strip.zig");
-const session_link = @import("session_link.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -35,8 +33,8 @@ pub const Painter = struct {
 pub const Shell = struct {
     layout: *const Layout,
     solved: *const Solved,
-    status: *const status_bar.Status,
-    state: session_link.State,
+    /// The status strip's view, from gui/status_capture.zig.
+    strip: status_strip.Strip,
     width: i32,
     height: i32,
     painter: ?Painter = null,
@@ -88,7 +86,7 @@ pub fn draw(list: *draw_list.DrawList, shell: Shell) !void {
         try drawLeaf(list, pane, placed.area, shell.painter);
     }
     const strip = status_strip.area(shell.width, shell.height);
-    try status_strip.draw(list, strip, shell.status, shell.state);
+    try status_strip.draw(list, strip, &shell.strip);
 }
 
 fn drawLeaf(list: *draw_list.DrawList, pane: Pane, area: Rect, painter: ?Painter) !void {

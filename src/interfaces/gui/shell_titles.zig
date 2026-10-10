@@ -5,7 +5,7 @@
 //! other pane without a new layout.
 const std = @import("std");
 const pane_layout = @import("ui/pane_layout.zig");
-const shell_frame = @import("shell_frame.zig");
+const shell_frame = @import("ui/shell_frame.zig");
 
 const Kind = pane_layout.Kind;
 

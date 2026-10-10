@@ -3,6 +3,7 @@
 //! ink inside every non-empty leaf's body of the two-core layout.
 const std = @import("std");
 const ra8 = @import("ra8");
+const status_capture = ra8.gui.status_capture;
 const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
@@ -50,7 +51,7 @@ test "the two-core shell shows each leaf's note in muted ink in its body" {
     defer pixels.deinit(gpa);
     const status: ra8.gui.status_bar.Status = .{};
     var painter: panes.Panes = .{};
-    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .status = &status, .state = .closed, .width = width, .height = height, .painter = painter.painter() });
+    try frame.draw(&list, .{ .layout = &layout, .solved = &solved, .strip = status_capture.strip(&status, .closed), .width = width, .height = height, .painter = painter.painter() });
     raster.draw(&pixels, &list, font.atlas);
     try std.testing.expectEqual(@as(usize, 4), solved.panes.items.len);
     for (solved.panes.items) |leaf| {
