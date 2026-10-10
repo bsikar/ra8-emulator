@@ -1,16 +1,13 @@
-//! `--gui` from main (RA8EMU-646): the Zig-core run goes on its own thread,
-//! paced one 60 Hz frame of core time per window tick, and the window shows
-//! the board until the run ends or the window closes.
+//! `--gui` from main (RA8EMU-646): the run goes on its own thread, paced
+//! one 60 Hz frame of core time per window tick, and the window shows the
+//! board until the run ends or the window closes. The caller hands in the
+//! run as a `Runner` (RA8EMU-1074), so the window never reaches into an
+//! engine or the command line.
 const std = @import("std");
-const elf = @import("../../board/loader/elf.zig");
-const Guest = @import("../../chip/core/cpu/memory/guest.zig").Guest;
 const Board = @import("../../board/board.zig").Board;
-const clocks = @import("../../chip/periph/clocks.zig");
+const request = @import("../../components/request.zig");
+const source_spec = @import("../../host/camera/source_spec.zig");
 const duration = @import("../../session/duration.zig");
-const profile = @import("../../session/profile.zig");
-const Until = @import("../../chip/core/until.zig").Until;
-const cli = @import("cli.zig");
-const zig_run = @import("zig_run.zig");
 const window_pace = @import("../../session/window_pace.zig");
 const window_run = @import("window_run.zig");
 const window_devices = @import("window_devices.zig");
@@ -20,19 +17,25 @@ const platform = @import("../gui/platform.zig");
 /// One 60 Hz frame, in ns of core time.
 pub const frame_ns: u64 = 16_666_667;
 
-/// What zig_run.run takes, gathered by zig_main.
+/// The run the window paces: `run` charges `pacer` as it goes and returns
+/// the run's exit code.
+pub const Runner = struct {
+    ctx: *anyopaque,
+    run: *const fn (ctx: *anyopaque, pacer: *window_pace.Pacer) u8,
+};
+
+/// What the window reads.
 pub const Args = struct {
     io: std.Io,
-    out: *std.Io.Writer,
-    memory: Guest,
     board: *Board,
-    timebase: *clocks.Clocks,
-    image: elf.Image,
-    options: cli.Options,
-    vector_base: u32,
-    profile_table: ?*profile.Table,
-    until: ?*Until,
-    ends: zig_run.Ends,
+    runner: Runner,
+    /// Where `--window-stills` writes, and every how many frames.
+    stills: ?[]const u8 = null,
+    stills_every: u32 = 1,
+    /// The `--attach` requests and `--click`, for the devices pane.
+    attaches: []const request.Request = &.{},
+    click: bool = false,
+    camera: source_spec.Spec = .{},
 };
 
 /// How the executable opens and closes its window. src/main.zig sets it
@@ -62,35 +65,32 @@ pub fn show(allocator: std.mem.Allocator, args: Args) !u8 {
     };
     defer how.close();
     var pacer = window_pace.Pacer{ .per_frame = duration.cycles(frame_ns, args.board.time.base.hz), .io = args.io };
-    const stills_dir = try window_stills.openDir(args.io, args.options.frames.window_stills);
+    const stills_dir = try window_stills.openDir(args.io, args.stills);
     defer if (stills_dir) |dir| dir.close(args.io);
-    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = args.io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.options.frames.window_stills_every };
+    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = args.io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
-    var live = Live{ .args = args, .pacer = &pacer };
+    var live = Live{ .runner = args.runner, .pacer = &pacer };
     var devices: window_devices.Devices = undefined;
-    devices.init(allocator, args.io, args.board, args.options.attaches[0..args.options.attach_count], args.options.click);
+    devices.init(allocator, args.io, args.board, args.attaches, args.click);
     defer devices.deinit();
-    const result = try window_run.show(allocator, args.io, shown, args.board, &pacer, live.engine(), args.options.camera, &devices);
+    const result = try window_run.show(allocator, args.io, shown, args.board, &pacer, live.engine(), args.camera, &devices);
     std.debug.print("window: {d} frames, board snapshot up to {d} bytes per frame\n", .{ result.frames, result.snapshot_bytes });
     return live.code;
 }
 
-/// zig_run.run as the window's engine, with its clock charging the pacer.
-pub const Live = struct {
-    args: Args,
+/// The runner as the window's engine, charging the window's pacer.
+const Live = struct {
+    runner: Runner,
     pacer: *window_pace.Pacer,
-    /// The run's exit code; 1 when the run failed outright.
+    /// The run's exit code.
     code: u8 = 1,
 
-    pub fn engine(self: *Live) window_run.Engine {
+    fn engine(self: *Live) window_run.Engine {
         return .{ .ctx = self, .run = run };
     }
 
     fn run(ctx: *anyopaque) void {
         const self: *Live = @ptrCast(@alignCast(ctx));
-        const a = self.args;
-        var ends = a.ends;
-        ends.pace = self.pacer;
-        self.code = zig_run.run(a.out, a.io, a.memory, a.board, a.timebase, a.image, a.options, a.vector_base, a.profile_table, a.until, ends) catch 1;
+        self.code = self.runner.run(self.runner.ctx, self.pacer);
     }
 };
