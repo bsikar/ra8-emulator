@@ -4,17 +4,13 @@
 //! the line number and the text; the current line sits on a full-width band.
 //! A click in the gutter sets or clears a breakpoint on that line.
 //!
-//! The session keeps neither the image nor where its sources live, so the
-//! shell hands in the line sections, the image and the source directory.
+//! gui/source_capture.zig fills a Snapshot and sets or clears the gutter's
+//! breakpoints through the session; this pane never imports the session.
 //! Until the session can list a core's breakpoints (RA8EMU-765), `Marks`
 //! remembers the ones this gutter set, with the ids that clear them.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
-const font = @import("../../render/font.zig");
-const elf = @import("../../board/loader/elf.zig");
-const dwarf_line = @import("../../session/dwarf_line.zig");
-const session_api = @import("../../session/session_api.zig");
-const session_source = @import("../../session/session_source.zig");
+const draw_list = @import("../../../render/draw_list.zig");
+const font = @import("../../../render/font.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -67,51 +63,13 @@ pub const Snapshot = struct {
     }
 };
 
-/// Reads `core`'s pc, finds its line in `sections`, and reads up to
-/// `row_count` lines of that file from `dir`, the current one in the middle.
-pub fn capture(session: *session_api.Session, core: session_api.Core, sections: dwarf_line.Sections, io: std.Io, dir: std.Io.Dir, row_count: usize) anyerror!Snapshot {
-    var snapshot: Snapshot = .{ .pc = try session.register(core, .pc) };
-    const place = (dwarf_line.lookup(sections, snapshot.pc) catch null) orelse return snapshot;
-    var spelled: std.Io.Writer = .fixed(&snapshot.path_buf);
-    session_source.path(&spelled, place.file) catch return snapshot;
-    snapshot.path_len = spelled.buffered().len;
-    snapshot.current = place.line;
-    snapshot.state = .no_file;
-    const file = dir.openFile(io, snapshot.path(), .{}) catch return snapshot;
-    defer file.close(io);
-    const wanted = @min(row_count, max_rows);
-    const half: u32 = @intCast(wanted / 2);
-    const first = if (place.line > half) place.line - half else 1;
-    var staging: [4096]u8 = undefined;
-    var reader = file.reader(io, &staging);
-    try readRows(&snapshot, &reader.interface, first, wanted);
-    snapshot.state = .shown;
-    return snapshot;
-}
-
-fn readRows(snapshot: *Snapshot, reader: *std.Io.Reader, first: u32, wanted: usize) !void {
-    var number: u32 = 1;
-    while (snapshot.count < wanted) : (number += 1) {
-        var row: Row = .{ .number = number };
-        var held: std.Io.Writer = .fixed(&row.buf);
-        const ended = try session_source.takeLine(reader, &held);
-        row.len = held.buffered().len;
-        if (ended and row.len == 0) return;
-        if (number >= first) {
-            std.mem.replaceScalar(u8, row.buf[0..row.len], '\t', ' ');
-            snapshot.rows[snapshot.count] = row;
-            snapshot.count += 1;
-        }
-        if (ended) return;
-    }
-}
-
-/// Streams one line into `held`, at most its capacity, and drops the rest of
-/// the line and its newline. True when the stream ended on this line.
+/// A breakpoint the gutter set: its file (hashed) and line, and the
+/// session's id that clears it. gui/source_capture.zig checks at comptime
+/// that the session's breakpoint id is a u32.
 pub const Mark = struct {
     file: u64,
     line: u32,
-    id: session_api.BreakId,
+    id: u32,
 };
 
 /// The breakpoints this gutter set on one core.
@@ -128,25 +86,6 @@ pub const Marks = struct {
     }
 };
 
-pub const Error = error{ NoCodeOnLine, TooManyMarks };
-
-/// Clears the breakpoint the gutter set on `line` of `file`, or sets one
-/// where the line table puts that line's code. True when one is now set.
-pub fn toggle(marks: *Marks, session: *session_api.Session, core: session_api.Core, image: ?elf.Image, file: []const u8, line: u32) anyerror!bool {
-    if (marks.find(file, line)) |index| {
-        try session.clearBreakpoint(core, marks.items[index].id);
-        marks.items[index] = marks.items[marks.len - 1];
-        marks.len -= 1;
-        return false;
-    }
-    if (marks.len == max_marks) return Error.TooManyMarks;
-    const address = session_source.breakAt(image, .{ .file = file, .line = line }) orelse return Error.NoCodeOnLine;
-    const id = try session.setBreakpoint(core, .{ .address = address });
-    marks.items[marks.len] = .{ .file = std.hash.Fnv1a_64.hash(file), .line = line, .id = id };
-    marks.len += 1;
-    return true;
-}
-
 /// The line under a click at (`x`, `y`) when it lands in the gutter of a
 /// shown row.
 pub fn lineAt(area: Rect, snapshot: *const Snapshot, x: i32, y: i32) ?u32 {
@@ -157,13 +96,6 @@ pub fn lineAt(area: Rect, snapshot: *const Snapshot, x: i32, y: i32) ?u32 {
     const row: usize = @intCast(@divTrunc(y - top, row_h));
     if (row >= @min(rows(area), snapshot.count)) return null;
     return snapshot.rows[row].number;
-}
-
-/// A gutter click: toggles that line's breakpoint, or null when the click
-/// missed the gutter.
-pub fn click(marks: *Marks, session: *session_api.Session, core: session_api.Core, image: ?elf.Image, area: Rect, snapshot: *const Snapshot, x: i32, y: i32) anyerror!?bool {
-    const line = lineAt(area, snapshot, x, y) orelse return null;
-    return try toggle(marks, session, core, image, snapshot.path(), line);
 }
 
 /// How many rows fit down `area`.

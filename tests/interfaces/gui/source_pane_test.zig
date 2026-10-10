@@ -1,4 +1,6 @@
-//! Covers src/interfaces/gui/source_pane.zig (RA8EMU-745) on the PACBTI fixture, whose
+//! Covers src/interfaces/gui/ui/source_pane.zig (RA8EMU-745) and the
+//! capture file that fills it, src/interfaces/gui/source_capture.zig
+//! (RA8EMU-1080), on the PACBTI fixture, whose
 //! line table names pacbti_smoke.S beside it: the rows centre on pc's line,
 //! an address with no line and a missing file each say so, a gutter click
 //! sets and then clears a real breakpoint, a pane too narrow draws nothing,
@@ -17,6 +19,7 @@ const draw_list = ra8.gui.draw_list;
 const raster = ra8.gui.raster;
 const font = ra8.gui.font;
 const pane = ra8.gui.source_pane;
+const capture = ra8.gui.source_capture;
 
 const Rect = draw_list.Rect;
 /// Room for 40 characters of text and twelve rows.
@@ -95,7 +98,7 @@ const Rig = struct {
         try self.session.setRegister(.cpu0, .pc, main_pc);
         var dir = try std.Io.Dir.cwd().openDir(std.testing.io, source_dir, .{});
         defer dir.close(std.testing.io);
-        return pane.capture(&self.session, .cpu0, sections(), std.testing.io, dir, 12);
+        return capture.capture(&self.session, .cpu0, sections(), std.testing.io, dir, 12);
     }
 };
 
@@ -132,7 +135,7 @@ const Scene = struct {
 /// A click in the gutter of row `row`.
 fn gutterClick(rig: *Rig, marks: *pane.Marks, snapshot: *const pane.Snapshot, row: usize) !?bool {
     const image_now = try image();
-    return pane.click(marks, &rig.session, .cpu0, image_now, area, snapshot, area.x + pane.pad + 3, pane.rowRect(area, row).y + 2);
+    return capture.click(marks, &rig.session, .cpu0, image_now, area, snapshot, area.x + pane.pad + 3, pane.rowRect(area, row).y + 2);
 }
 
 test "the gutter, number and text columns line up" {
@@ -158,12 +161,12 @@ test "an address with no line and a missing source each say so" {
     var rig: Rig = undefined;
     try rig.init();
     try rig.session.setRegister(.cpu0, .pc, 0x40);
-    const none = try pane.capture(&rig.session, .cpu0, sections(), std.testing.io, std.Io.Dir.cwd(), 12);
+    const none = try capture.capture(&rig.session, .cpu0, sections(), std.testing.io, std.Io.Dir.cwd(), 12);
     try std.testing.expectEqual(pane.State.no_line, none.state);
     try rig.session.setRegister(.cpu0, .pc, main_pc);
     var elsewhere = try std.Io.Dir.cwd().openDir(std.testing.io, "tests/fixtures", .{});
     defer elsewhere.close(std.testing.io);
-    const missing = try pane.capture(&rig.session, .cpu0, sections(), std.testing.io, elsewhere, 12);
+    const missing = try capture.capture(&rig.session, .cpu0, sections(), std.testing.io, elsewhere, 12);
     try std.testing.expectEqual(pane.State.no_file, missing.state);
     try std.testing.expectEqual(@as(u32, 18), missing.current);
 }
