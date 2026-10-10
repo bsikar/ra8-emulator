@@ -4,7 +4,7 @@
 //! pipe's frame. The decoded picture is box-averaged down to fit a square
 //! of `side` pixels, keeping its shape, and drawn as one image quad.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
+const draw_list = @import("../render/draw_list.zig");
 const decoded = @import("../../host/camera/decoded_image.zig");
 const image_source = @import("../../host/camera/image_file.zig");
 const y4m = @import("../../host/camera/y4m_header.zig");

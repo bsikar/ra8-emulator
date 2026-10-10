@@ -21,7 +21,7 @@ ra8_chip        src/chip/             ra8_snapshot
 ra8_components  src/components/       ra8_chip line interfaces, ra8_snapshot
 ra8_board       src/board/            ra8_chip, ra8_components, ra8_snapshot
 ra8_session     src/session/          ra8_board, ra8_chip, ra8_snapshot
-ra8_render      src/render/           ra8_session value types, ra8_widget
+ra8_render      src/interfaces/render/ ra8_session value types, ra8_widget
 ra8_rpc         src/interfaces/rpc/   ra8_session, ra8_host
 ra8_gdb         src/interfaces/gdb/   ra8_session, ra8_host
 ra8_usbip       src/interfaces/usbip/ ra8_board, ra8_host

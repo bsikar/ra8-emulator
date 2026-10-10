@@ -4,7 +4,7 @@
 //! image and the source directory. ui/source_pane.zig draws the result
 //! without importing the session.
 const std = @import("std");
-const draw_list = @import("../../render/draw_list.zig");
+const draw_list = @import("../render/draw_list.zig");
 const elf = @import("../../image/elf.zig");
 const dwarf_line = @import("../../session/dwarf_line.zig");
 const session_api = @import("../../session/session_api.zig");

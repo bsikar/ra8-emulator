@@ -174,7 +174,7 @@ pub const host = struct {
 };
 pub const gui = @import("interfaces/gui.zig");
 pub const render = struct {
-    pub const board_view = @import("render/board_view.zig");
+    pub const board_view = @import("interfaces/render/board_view.zig");
 };
 pub const image = struct {
     pub const elf = @import("image/elf.zig");

@@ -8,8 +8,8 @@
 //! the breakpoint addresses it is handed, and the pane never imports the
 //! session.
 const std = @import("std");
-const draw_list = @import("../../../render/draw_list.zig");
-const font = @import("../../../render/font.zig");
+const draw_list = @import("../../render/draw_list.zig");
+const font = @import("../../render/font.zig");
 const colors = @import("colors.zig");
 
 const Color = draw_list.Color;

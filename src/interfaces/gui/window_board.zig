@@ -16,7 +16,7 @@ const SourceSwap = @import("source_swap.zig").SourceSwap;
 const console_feed = @import("console_feed.zig");
 const console_keys = @import("console_keys.zig");
 const window_devices = @import("window_devices.zig");
-const board_view = @import("../../render/board_view.zig");
+const board_view = @import("../render/board_view.zig");
 
 /// Runs one frame's slice of emulated time; false once the run has ended.
 pub const Stepper = window_pace.Stepper;

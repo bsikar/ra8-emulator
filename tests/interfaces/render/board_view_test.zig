@@ -1,4 +1,4 @@
-//! Tests for src/render/board_view.zig.
+//! Tests for src/interfaces/render/board_view.zig.
 const std = @import("std");
 const ra8 = @import("ra8");
 const view = ra8.render.board_view;
