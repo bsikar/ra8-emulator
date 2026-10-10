@@ -52,6 +52,7 @@ test {
     _ = @import("board/switches_test.zig");
     _ = @import("board/cpu0_store_test.zig");
     _ = @import("session/board_boundary_test.zig");
+    _ = @import("session/board_leds_test.zig");
     _ = @import("session/board_boundary_sleep_test.zig");
     _ = @import("board/quiet_due_test.zig");
     _ = @import("board/i2c_test.zig");

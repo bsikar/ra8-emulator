@@ -4,7 +4,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const window_board = ra8.board.window_board;
-const frame_out = ra8.board.report.frame_out;
+const board_leds = ra8.board.board_leds;
 const board_view = ra8.render.board_view;
 const host_loop = ra8.gui.host_loop;
 const Headless = ra8.gui.headless.Headless;
@@ -35,7 +35,7 @@ test "a board with no frame shows the dark default panel and its LEDs" {
     try std.testing.expectEqual(board_view.panel_width, screen.width);
     try std.testing.expectEqual(board_view.panel_height, screen.height);
     try std.testing.expectEqual(@as(u32, 0xFF000000), screen.pixels[0]);
-    try std.testing.expectEqualDeep(frame_out.ledsOf(&board), screen.leds);
+    try std.testing.expectEqualDeep(board_leds.of(&board), screen.leds);
 }
 
 test "the camera pane gets the CEU's source and the sensor's format register" {
@@ -118,7 +118,7 @@ test "scanning on the engine leaves a step to read only what was handed over" {
     const run = screen.run();
     const first = run.vtable.board(run.ctx);
     try std.testing.expectEqual(@as(usize, screen.width) * screen.height, first.panel.len);
-    try std.testing.expectEqualDeep(@as([]const board_view.Led, &frame_out.ledsOf(&board)), first.leds);
+    try std.testing.expectEqualDeep(@as([]const board_view.Led, &board_leds.of(&board)), first.leds);
     try std.testing.expect(run.vtable.step(run.ctx));
     try std.testing.expectEqual(first.panel.ptr, run.vtable.board(run.ctx).panel.ptr);
     const hook = screen.parkHook();

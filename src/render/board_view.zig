@@ -25,7 +25,8 @@ pub const led_gap: u32 = 12;
 pub const panel_width: u32 = 1024;
 pub const panel_height: u32 = 600;
 
-pub const Led = struct { rgb565: u16, on: bool };
+/// One user LED, read from the board by the session.
+pub const Led = @import("../session/board_leds.zig").Led;
 
 pub const Size = struct { width: u32, height: u32 };
 
