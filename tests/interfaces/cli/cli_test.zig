@@ -112,7 +112,6 @@ test {
     _ = @import("frames_args_test.zig");
     _ = @import("state_args_test.zig");
     _ = @import("frames_out_test.zig");
-    _ = @import("paced_clock_test.zig");
     _ = @import("gif_test.zig");
     _ = @import("video_out_test.zig");
     _ = @import("gif_lzw_test.zig");
