@@ -138,6 +138,7 @@ test {
     _ = @import("interfaces/gui/shell/devices_test.zig");
     _ = @import("interfaces/gui/shell/fault_test.zig");
     _ = @import("interfaces/gui/shell_fault_live_test.zig");
+    _ = @import("interfaces/gui/shell/sensor_sequence_test.zig");
     _ = @import("interfaces/gui/ui/shell/field_test.zig");
     _ = @import("interfaces/gui/shell/plug_test.zig");
     _ = @import("interfaces/gui/shell/registers_test.zig");
