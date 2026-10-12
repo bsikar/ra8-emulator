@@ -12,8 +12,8 @@ var backend: ?Sdl = null;
 
 pub const opener: gui.platform.Opener = .{ .open = open, .close = close };
 
-fn open() ?gui.platform.Platform {
-    backend = Sdl.init("ra8 emulator") catch return null;
+fn open(saved: ?gui.platform.WindowState) ?gui.platform.Platform {
+    backend = Sdl.init("ra8 emulator", saved) catch return null;
     if (backend) |*window| return window.platform();
     return null;
 }

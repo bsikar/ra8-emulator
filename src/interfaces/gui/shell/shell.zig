@@ -27,3 +27,4 @@ pub const startup = @import("startup.zig");
 pub const theme = @import("theme.zig");
 pub const time = @import("time.zig");
 pub const titles = @import("titles.zig");
+pub const window_store = @import("window_store.zig");

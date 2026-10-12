@@ -56,16 +56,25 @@ pub const Sdl = struct {
     files: dialog.Picker = .{ .kind = 0 },
 
     /// Opens at most of the screen it lands on (window_size.initial) and
-    /// never shrinks under window_size.min (RA8EMU-966).
-    pub fn init(title: [:0]const u8) Error!Sdl {
+    /// never shrinks under window_size.min (RA8EMU-966). The saved
+    /// geometry (RA8EMU-966) opens the window where it last sat, never
+    /// under the minimum; without one, the opener's default.
+    pub fn init(title: [:0]const u8, saved: ?gui.platform.WindowState) Error!Sdl {
         if (!c.SDL_Init(c.SDL_INIT_VIDEO)) return fail(Error.SdlInit);
         errdefer c.SDL_Quit();
-        const opening = window_size.initial(usableScreen());
-        const flags = c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_HIGH_PIXEL_DENSITY;
+        const opening: Size = if (saved) |s|
+            .{ .width = @max(s.width, window_size.min.width), .height = @max(s.height, window_size.min.height) }
+        else
+            window_size.initial(usableScreen());
+        const flags: c.SDL_WindowFlags = c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_HIGH_PIXEL_DENSITY |
+            if (saved) |s| (if (s.fullscreen) c.SDL_WINDOW_FULLSCREEN else 0) else 0;
         const window = c.SDL_CreateWindow(title, @intCast(opening.width), @intCast(opening.height), flags) orelse
             return fail(Error.SdlWindow);
         errdefer c.SDL_DestroyWindow(window);
         _ = c.SDL_SetWindowMinimumSize(window, @intCast(window_size.min.width), @intCast(window_size.min.height));
+        if (saved) |s| if (!s.fullscreen) if (s.x != null and s.y != null) {
+            _ = c.SDL_SetWindowPosition(window, s.x.?, s.y.?);
+        };
         var chain: DriverChain = .{ .window = window };
         const picked = render_driver.select(render_driver.hint(builtin.os.tag), &chain) orelse
             return fail(Error.SdlRenderer);
@@ -117,6 +126,7 @@ pub const Sdl = struct {
         .title = setTitle,
         .toggle_fullscreen = toggleFullscreenVt,
         .fullscreen = fullscreenVt,
+        .position = position,
     };
 
     fn from(ctx: *anyopaque) *Sdl {
@@ -180,6 +190,15 @@ pub const Sdl = struct {
 
     fn fullscreenVt(ctx: *anyopaque) bool {
         return from(ctx).fullscreen();
+    }
+
+    /// Where the window sits on the screen (RA8EMU-966).
+    fn position(ctx: *anyopaque) ?gui.platform.Pos {
+        const self = from(ctx);
+        var x: c_int = 0;
+        var y: c_int = 0;
+        _ = c.SDL_GetWindowPosition(self.window, &x, &y);
+        return .{ .x = @intCast(x), .y = @intCast(y) };
     }
 
     /// The layout size in points, setting the renderer's scale to match

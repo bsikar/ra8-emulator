@@ -46,6 +46,7 @@ const shell_open = @import("open.zig");
 const colors = @import("../ui/colors.zig");
 const shell_layout = @import("layout_store.zig");
 const shell_settings = @import("settings_page.zig");
+const shell_window = @import("window_store.zig");
 
 const Env = proto.Client.Env;
 const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
@@ -193,7 +194,10 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         return 1;
     };
     render_driver.override = args.render_driver;
-    const window = opener.open() orelse {
+    // The window opens where it last sat, and its geometry saves on the
+    // way out (RA8EMU-966).
+    var window_store = shell_window.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    const window = opener.open(window_store.restore()) orelse {
         std.debug.print("ra8_gui could not open a window\n", .{});
         return 2;
     };
@@ -214,6 +218,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         },
         else => return err,
     };
+    window_store.save(shell_window.capture(window));
     return 0;
 }
 
