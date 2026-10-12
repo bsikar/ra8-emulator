@@ -192,10 +192,10 @@ fn reboot(self: *Session, live: *session_api.Session) !void {
     try live.load(live.currentCore(), image);
 }
 
-/// Frame and send one reply; false never ends the connection here.
+/// Frame and send one reply; false when the connection has ended.
 fn sendReply(self: *Session, c: *Session.Client, body: []const u8) bool {
     const framed = rsp.packet.frame(&c.framed, body) catch return false;
-    _ = self.send(c, framed);
+    if (!self.send(c, framed)) return false;
     c.last = body;
     return true;
 }

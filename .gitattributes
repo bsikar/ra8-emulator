@@ -1,1 +1,4 @@
 *.zig text eol=lf
+*.zon text eol=lf
+tools/*_expected.md text eol=lf
+tests/chip/core/cpu/conformance/coverage.md text eol=lf

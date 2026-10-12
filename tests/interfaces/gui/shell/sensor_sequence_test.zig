@@ -295,9 +295,10 @@ test "the shell drives unplug, replug, fault and clear on a running image" {
     const nacks = watch.counts[2];
 
     try plugIn(&watch, &link, body);
-    watch.wait = .{ .flips = 3, .ack_above = 0, .events_len = 3 };
+    watch.wait = .{ .flips = 3, .ack_above = 0, .events_len = 3, .listed = true };
     try pumpUntil(&link, &watch, met);
     try pumpListSettled(&link, &watch);
+    try std.testing.expect(!watch.plug.refused);
     try pressFault(&watch, &link, try rowOf(&watch.devices));
     watch.wait = .{ .flips = 4, .nack_above = nacks, .events_len = 4, .mode = 1 };
     try pumpUntil(&link, &watch, met);
