@@ -64,7 +64,7 @@ pub const Core = struct {
     /// Ticks owed to owners past `limits.slots`.
     other: u64 = 0,
 
-    fn running(self: *const Core) Owner {
+    pub fn running(self: *const Core) Owner {
         if (self.depth == 0) return self.thread;
         if (self.waiting == self.depth) return .{ .kind = .idle };
         const top = @min(self.depth, limits.depth) - 1;
@@ -87,7 +87,7 @@ pub const Core = struct {
         self.len += 1;
     }
 
-    fn take(self: *Core, one: rtos_trace.Event) void {
+    pub fn take(self: *Core, one: rtos_trace.Event) void {
         switch (one.kind) {
             .switch_to => {
                 self.thread = .{ .kind = .thread, .id = one.thread };
