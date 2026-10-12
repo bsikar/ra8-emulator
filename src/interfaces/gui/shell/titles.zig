@@ -27,11 +27,40 @@ pub fn titleAt(layout: *const pane_layout.Layout, solved: *const pane_layout.Sol
     return null;
 }
 
-/// Step the kind of the leaf titled at (`x`, `y`). Returns whether a title
-/// took the press.
+/// Step the kind of the leaf titled at (`x`, `y`). A press on a deck
+/// child's tab row instead switches the shown child (RA8EMU-958). Returns
+/// whether a title took the press.
 pub fn press(layout: *pane_layout.Layout, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
     const index = titleAt(layout, solved, x, y) orelse return false;
+    if (layout.deckParent(index)) |parent| return deckPress(layout, solved, index, parent, x, y);
     const pane = layout.pane(index) orelse return false;
     layout.setKind(index, nextKind(pane.kind)) catch return false;
     return true;
+}
+
+/// A press on a deck child's tab row: over the tab that holds the point,
+/// show that child; anywhere else on the row, take the press anyway.
+fn deckPress(layout: *pane_layout.Layout, solved: *const pane_layout.Solved, child: pane_layout.Index, parent: pane_layout.Index, x: i32, y: i32) bool {
+    const deck = layout.deckAt(parent) orelse return false;
+    // Only the active child is placed, and it covers the deck's area.
+    const area = placedAt(solved, child) orelse return false;
+    const title = shell_frame.titleOf(area);
+    var panes: [pane_layout.max_deck]pane_layout.Pane = undefined;
+    for (0..deck.count) |at| panes[at] = layout.pane(deck.children[at]) orelse .{ .kind = .empty, .core = .cpu0 };
+    var shown = deck;
+    for (0..deck.count) |at| {
+        const cell = shell_frame.tabAt(title, panes[0..deck.count], at) orelse continue;
+        if (cell.contains(x, y)) {
+            shown.active = @intCast(at);
+            layout.setDeck(parent, shown) catch return false;
+            return true;
+        }
+    }
+    return true;
+}
+
+/// The area `solved` gave the node at `index`, when it was placed.
+fn placedAt(solved: *const pane_layout.Solved, index: pane_layout.Index) ?pane_layout.Rect {
+    for (solved.panes.items) |placed| if (placed.index == index) return placed.area;
+    return null;
 }

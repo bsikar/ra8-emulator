@@ -75,6 +75,7 @@ test {
     _ = @import("interfaces/gui/window/keys_test.zig");
     _ = @import("interfaces/gui/window/layout_test.zig");
     _ = @import("interfaces/gui/camera/panel_test.zig");
+    _ = @import("interfaces/gui/ui/deck_test.zig");
     _ = @import("interfaces/gui/ui/registers_pane_test.zig");
     _ = @import("interfaces/gui/register_edit_test.zig");
     _ = @import("interfaces/gui/settings_page_test.zig");
