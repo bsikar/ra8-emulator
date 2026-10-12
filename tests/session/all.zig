@@ -6,6 +6,7 @@ test {
     _ = @import("symbols_test.zig");
     _ = @import("run_policy_test.zig");
     _ = @import("breakpoint_test.zig");
+    _ = @import("history_test.zig");
     _ = @import("breaks/table_test.zig");
     _ = @import("breaks/session_test.zig");
     _ = @import("stop_machine_test.zig");

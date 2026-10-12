@@ -1,5 +1,4 @@
 //! The core-addressed debugger API, shared by the script and GDB fronts.
-//!
 //! It keeps image construction with the board front end, but every operation
 //! on a loaded image goes through this interface and names CPU0 or CPU1.
 const std = @import("std");
@@ -25,10 +24,11 @@ const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const tap_part = @import("tap_part.zig");
 const session_speed = @import("speed.zig");
+const history_mod = @import("history.zig");
 const event_sources = @import("event/sources.zig");
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers };
+pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("breaks/table.zig").Id;
@@ -43,8 +43,7 @@ pub const Loader = struct {
     context: *anyopaque,
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
 };
-/// Puts the catalog part `name` on `at`, or takes whatever is there off it
-/// when `name` is null (RA8EMU-212). The board owns the lines, so it plugs.
+/// Puts the catalog part `name` on `at`, or clears it when null (RA8EMU-212); the board plugs.
 pub const PlugHook = struct {
     context: *anyopaque,
     plugFn: *const fn (*anyopaque, endpoint.Endpoint, ?[]const u8) anyerror!void,
@@ -52,6 +51,7 @@ pub const PlugHook = struct {
 pub const Endpoint = endpoint.Endpoint;
 pub const FaultMode = fault_spec.Mode;
 pub const SpeedHook = session_speed.Hook;
+pub const History = history_mod.History;
 pub const EventClock = struct { context: *anyopaque, nowFn: *const fn (*anyopaque) u64 };
 pub const Event = @import("event/stream.zig").Event;
 const BoardRun = struct { tick: BoardTick, guest: Guest };
@@ -63,14 +63,15 @@ pub const Session = struct {
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
     display: ?session_display.Display = null,
-    /// Sets or clears a fault mode on a part the board has on an endpoint
-    /// (RA8EMU-520). The board owns the parts, so it does the wrapping.
+    /// Sets or clears a fault mode on a board part on an endpoint (RA8EMU-520).
     faults: ?*board_faults.Faults = null,
     plugs: ?PlugHook = null,
     speed: ?SpeedHook = null,
     widget_tree_addresses: [2]?u32 = .{ null, null },
     event_stream: EventStream = .{},
     event_sources: event_sources.Sources = .{},
+    /// The rewind history (RA8EMU-1170), when the harness attached one.
+    history: ?*history_mod.History = null,
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
@@ -143,10 +144,7 @@ pub const Session = struct {
         try self.select(core);
         const loader = self.loader orelse return Error.NoLoader;
         try loader.loadFn(loader.context, core, image);
-        const tree_address = if (elf.Image.init(image)) |parsed|
-            symbols.addressOf(parsed, widget_tree.symbol)
-        else |_|
-            null;
+        const tree_address = if (elf.Image.init(image)) |parsed| symbols.addressOf(parsed, widget_tree.symbol) else |_| null;
         self.widget_tree_addresses[@backingInt(core)] = tree_address;
         self.publish(.{ .core = core, .kind = .loaded });
     }
@@ -215,27 +213,32 @@ pub const Session = struct {
         const ended = try self.live.go(command);
         if (self.live.boundary == null) try self.advanceBoard(core, cpu.retired - retired_before);
         self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
+        if (self.history) |h| try h.capture(self.live.core.cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
         if (ended == .core) {
             const address: ?u32 = switch (ended.core) {
                 .count => null,
                 .unknown => |instruction| instruction.address,
                 inline else => |at| at,
             };
-            self.publish(.{
-                .core = core,
-                .kind = .fault,
-                .address = address,
-                .payload = .{ .fault = .{
-                    .cause = @backingInt(std.meta.activeTag(ended.core)),
-                    .address = address,
-                } },
-            });
+            self.publish(.{ .core = core, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
         }
         return ended;
     }
 
     pub fn step(self: *Session, core: Core) anyerror!Ended {
         return self.run(core, .step);
+    }
+
+    /// Puts the run back `back` recorded stops (RA8EMU-1170); forward replays.
+    pub fn rewind(self: *Session, core: Core, back: u32) anyerror!void {
+        try self.select(core);
+        const h = self.history orelse return Error.NoHistory;
+        try h.restore(back);
+        self.publish(.{ .core = core, .kind = .rewound });
+    }
+
+    pub fn stepBack(self: *Session, core: Core) anyerror!void {
+        return self.rewind(core, 1);
     }
 
     pub fn interrupt(self: *Session, core: Core) anyerror!stop_machine.Stop {
