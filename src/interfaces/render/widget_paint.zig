@@ -32,7 +32,15 @@ pub const Target = struct {
     failed: bool = false,
 
     pub fn paint(self: *Target) widget.types.Paint {
-        return .{ .user = self, .fill_rect = fillRect, .draw_text = drawText, .text_size = textSize, .draw_line = drawLine };
+        return .{
+            .user = self,
+            .fill_rect = fillRect,
+            .draw_text = drawText,
+            .text_size = textSize,
+            .draw_line = drawLine,
+            .push_clip = pushClip,
+            .pop_clip = popClip,
+        };
     }
 };
 
@@ -65,6 +73,15 @@ fn drawText(user: ?*anyopaque, x: i32, y: i32, str: [*:0]const u8, fg: u32, _: u
     font.draw(target.list, x, y, std.mem.span(str), colorOf(fg)) catch {
         target.failed = true;
     };
+}
+
+/// The list's own clip stack, so a pane can clip through the table (RA8EMU-1157).
+fn pushClip(user: ?*anyopaque, x: i32, y: i32, w: i32, h: i32) callconv(.c) void {
+    targetOf(user).list.pushClip(.{ .x = x, .y = y, .w = w, .h = h }) catch {};
+}
+
+fn popClip(user: ?*anyopaque) callconv(.c) void {
+    targetOf(user).list.popClip();
 }
 
 fn textSize(_: ?*anyopaque, str: [*:0]const u8, out_w: *i32, out_h: *i32) callconv(.c) void {

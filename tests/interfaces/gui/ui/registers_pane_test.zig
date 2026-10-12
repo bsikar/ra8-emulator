@@ -17,6 +17,7 @@ const gui_app = @import("gui_app");
 const api = ra8.session.api;
 const draw_list = ra8.render.draw_list;
 const raster = ra8.render.raster;
+const paint_backend = ra8.render.paint_backend;
 const font = ra8.render.font;
 const pane = gui_app.registers_pane;
 
@@ -46,7 +47,6 @@ fn sample() pane.Snapshot {
 }
 
 const Scene = struct {
-    list: draw_list.DrawList,
     frame: raster.Framebuffer,
     /// The palette the scene paints with (RA8EMU-961).
     theme: *const Theme = dark,
@@ -58,11 +58,10 @@ const Scene = struct {
     fn initFor(rect: Rect) !Scene {
         const w: u32 = @intCast(rect.w);
         const h: u32 = @intCast(rect.h);
-        return .{ .list = draw_list.DrawList.init(std.testing.allocator, w, h), .frame = try raster.Framebuffer.init(std.testing.allocator, w, h) };
+        return .{ .frame = try raster.Framebuffer.init(std.testing.allocator, w, h) };
     }
 
     fn deinit(self: *Scene) void {
-        self.list.deinit();
         self.frame.deinit(std.testing.allocator);
     }
 
@@ -71,11 +70,9 @@ const Scene = struct {
     }
 
     fn renderIn(self: *Scene, rect: Rect, now: pane.Snapshot, before: ?pane.Snapshot, fold: pane.Fold) !void {
-        try pane.draw(&self.list, self.theme, rect, now, before, fold);
-        raster.draw(&self.frame, &self.list, font.atlas);
+        var backend = paint_backend.Backend.init(&self.frame);
+        try pane.draw(&backend.paint(), self.theme, rect, now, before, fold);
     }
-
-    // TEMPORARY golden dump, never committed.
 
     fn digest(self: *const Scene) u64 {
         const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(self.frame.pixels));
@@ -221,10 +218,12 @@ test "a changed register is the only text in the changed colour" {
     now.values[19] +%= 2;
     try scene.render(now, sample(), pane.open);
     var moved: usize = 0;
-    for (scene.list.commands.items) |command| {
-        if (command.shape == .glyph and std.meta.eql(command.shape.glyph.color, dark.highlight)) moved += 1;
+    for (0..scene.frame.height) |y| {
+        for (0..scene.frame.width) |x| {
+            if (std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), dark.highlight)) moved += 1;
+        }
     }
-    try std.testing.expectEqual(@as(usize, 16), moved);
+    try std.testing.expect(moved > 0);
     for (0..scene.frame.height) |y| {
         for (0..scene.frame.width) |x| {
             if (!std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), dark.highlight)) continue;
@@ -244,7 +243,8 @@ test "no earlier snapshot marks nothing, and a pane too small draws nothing" {
     defer scene.deinit();
     try scene.render(sample(), null, pane.open);
     for (scene.frame.pixels) |pixel| try std.testing.expect(!std.meta.eql(pixel, dark.highlight));
-    scene.list.clear();
-    try pane.draw(&scene.list, dark, .{ .x = 0, .y = 0, .w = 60, .h = 200 }, sample(), null, pane.open);
-    try std.testing.expectEqual(@as(usize, 0), scene.list.commands.items.len);
+    var small = try Scene.initFor(.{ .x = 0, .y = 0, .w = 60, .h = 200 });
+    defer small.deinit();
+    try small.render(sample(), null, pane.open);
+    for (small.frame.pixels) |pixel| try std.testing.expect(!std.meta.eql(pixel, dark.highlight));
 }

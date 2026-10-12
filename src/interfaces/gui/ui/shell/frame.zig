@@ -51,7 +51,9 @@ pub fn tabAt(title: Rect, panes: []const pane_layout.Pane, which: usize) ?Rect {
 /// Fills one leaf's body. The frame has already cleared it and clipped to it.
 pub const Painter = struct {
     context: *anyopaque,
-    paint: *const fn (context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pane: Pane, body: Rect) anyerror!void,
+    /// `table` is the shared Paint table over the desktop framebuffer
+    /// (RA8EMU-1157); `list` stays until every pane draws through the table.
+    paint: *const fn (context: *anyopaque, list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: Pane, body: Rect) anyerror!void,
 };
 
 /// Everything one frame of the shell shows.
@@ -184,7 +186,7 @@ fn drawLeaf(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: 
         if (!body.empty()) {
             try list.pushClip(body);
             defer list.popClip();
-            try p.paint(p.context, list, theme, pane, body);
+            try p.paint(p.context, list, table, theme, pane, body);
         }
     }
     drawBorder(table, area, theme.border);

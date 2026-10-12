@@ -15,6 +15,7 @@
 //! instructions from its core's PC.
 //! An empty leaf stays blank.
 const Theme = @import("../ui/colors.zig").Theme;
+const widget = @import("ra8_widget");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -98,7 +99,7 @@ pub fn noteAt(body: Rect) ?struct { x: i32, y: i32, room: u32 } {
     return .{ .x = body.x + shell_frame.pad, .y = body.y + @divTrunc(body.h - glyph, 2), .room = @intCast(room) };
 }
 
-fn paint(context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pane: pane_layout.Pane, body: Rect) anyerror!void {
+fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: pane_layout.Pane, body: Rect) anyerror!void {
     const self: *Panes = @ptrCast(@alignCast(context));
     if (pane.kind == .console) if (self.console) |console| {
         if (console.hasOutput()) {
@@ -123,7 +124,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pa
     if (pane.kind == .registers) if (self.registers) |pair| {
         const model = pair.of(pane.core);
         if (model.now) |now| {
-            try registers_pane.draw(list, theme, body, now, model.before, model.fold);
+            try registers_pane.draw(table, theme, body, now, model.before, model.fold);
             if (self.edit) |edit| try edit.draw(list, theme, body, model.fold, model.core);
             return;
         }
