@@ -11,7 +11,7 @@ const Win32Error = std.os.windows.Win32Error;
 
 const Live = if (builtin.os.tag == .windows) struct {
     const windows = std.os.windows;
-    const kernel32 = windows.kernel32;
+    const win32 = ra8.host.win32;
     const generic_write: windows.DWORD = 0x4000_0000;
     const open_existing: windows.DWORD = 3;
 
@@ -28,9 +28,9 @@ const Live = if (builtin.os.tag == .windows) struct {
             var wide: [256:0]u16 = undefined;
             const len = try std.unicode.utf8ToUtf16Le(&wide, full);
             wide[len] = 0;
-            const handle = kernel32.CreateFileW(wide[0..len :0], generic_write, 0, null, open_existing, 0, null);
+            const handle = win32.CreateFileW(wide[0..len :0], generic_write, 0, null, open_existing, 0, null);
             if (handle == windows.INVALID_HANDLE_VALUE) {
-                std.debug.print("CreateFileW for camera pipe failed: {d}\n", .{@backingInt(kernel32.GetLastError())});
+                std.debug.print("CreateFileW for camera pipe failed: {d}\n", .{@backingInt(windows.GetLastError())});
                 return error.OpenFailed;
             }
             return .{ .handle = handle };
@@ -38,8 +38,8 @@ const Live = if (builtin.os.tag == .windows) struct {
 
         fn write(self: Client, bytes: []const u8) !void {
             var written: windows.DWORD = 0;
-            if (kernel32.WriteFile(self.handle, bytes.ptr, @intCast(bytes.len), &written, null) == 0) {
-                std.debug.print("WriteFile to camera pipe failed: {d}\n", .{@backingInt(kernel32.GetLastError())});
+            if (!win32.WriteFile(self.handle, bytes.ptr, @intCast(bytes.len), &written, null).toBool()) {
+                std.debug.print("WriteFile to camera pipe failed: {d}\n", .{@backingInt(windows.GetLastError())});
                 return error.WriteFailed;
             }
             if (written != bytes.len) {

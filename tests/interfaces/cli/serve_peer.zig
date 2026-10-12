@@ -88,3 +88,12 @@ pub fn listen(spec: []const u8, line: []u8) !Listening {
     try std.testing.expect(std.mem.startsWith(u8, said, prefix));
     return .{ .child = child, .bound = said[prefix.len..] };
 }
+
+/// Unix fixtures must stay shorter than sockaddr_un even in a long worktree.
+pub fn socketPath(gpa: std.mem.Allocator, sub: []const u8, name: []const u8) ![]u8 {
+    if (@import("builtin").os.tag != .windows) return std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/{s}", .{ sub, name });
+    const env: std.process.Environ = .{ .block = .global };
+    const temp = try env.getAlloc(gpa, "TEMP");
+    defer gpa.free(temp);
+    return std.fmt.allocPrint(gpa, "{s}\\ra8_{s}_{s}", .{ temp, sub, name });
+}

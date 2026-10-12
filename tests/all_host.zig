@@ -2,10 +2,13 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("host/pipe_pair_test.zig");
     _ = @import("host/socket_flags_test.zig");
     _ = @import("host/sock/sock_test.zig");
     _ = @import("host/sock/windows_test.zig");
     _ = @import("host/sock/ready_test.zig");
+    _ = @import("host/sock/afd_test.zig");
+    _ = @import("host/sock/path_test.zig");
     _ = @import("host/win32_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/host/bytes_test.zig");
@@ -183,6 +186,8 @@ test {
     _ = @import("interfaces/rpc/stdio_transport_test.zig");
     _ = @import("interfaces/rpc/session/server_test.zig");
     _ = @import("interfaces/rpc/host_listener_test.zig");
+    _ = @import("interfaces/rpc/host_gdb_test.zig");
+    _ = @import("interfaces/rpc/socket_transport_test.zig");
     _ = @import("interfaces/rpc/served_setup_test.zig");
     _ = @import("interfaces/rpc/session_list_parts_test.zig");
     _ = @import("interfaces/rpc/session/camera_test.zig");

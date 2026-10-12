@@ -5,9 +5,7 @@
 //! pump and its stop reply goes out when the run ends (rsp_zig's pump
 //! mode). Nothing here blocks: every step peeks first.
 const std = @import("std");
-const builtin = @import("builtin");
 const sock_ready = @import("ra8_host").sock.ready;
-const win32 = @import("ra8_host").win32;
 const rsp = @import("ra8_gdb").rsp;
 const session_api = @import("ra8_session").api;
 
@@ -47,7 +45,7 @@ pub const Session = struct {
         if (self.client == null) self.accept();
         const c = &(self.client orelse return);
         self.drain(c);
-        self.tick(c);
+        if (self.client != null) self.tick(c);
     }
 
     /// Close everything the session's gdb side holds.
@@ -58,7 +56,7 @@ pub const Session = struct {
 
     fn accept(self: *Session) void {
         const fd = self.listener.socket.handle;
-        const ready = sock_ready.wait(fd, 0) catch return;
+        const ready = sock_ready.wait(self.io, fd, 0) catch return;
         if (!ready.any()) return;
         const stream = self.listener.accept(self.io) catch return;
         const live = self.live orelse {
@@ -72,7 +70,7 @@ pub const Session = struct {
             .incoming = undefined,
             .payload = undefined,
             .framed = undefined,
-            .socket = .{ .handle = stream.socket.handle },
+            .socket = .{ .handle = stream.socket.handle, .io = self.io },
         };
         const c = &(self.client.?);
         c.wire = rsp.packet.Reader.init(&c.incoming);
@@ -85,9 +83,9 @@ pub const Session = struct {
         const fd = c.stream.socket.handle;
         var byte: [1]u8 = undefined;
         while (true) {
-            const ready = sock_ready.wait(fd, 0) catch return;
+            const ready = sock_ready.wait(self.io, fd, 0) catch return;
             if (!ready.any()) return;
-            const got = read(fd, &byte) orelse {
+            const got = sock_ready.takeByte(self.io, fd, &byte, false) orelse {
                 self.drop();
                 return;
             };
@@ -100,9 +98,9 @@ pub const Session = struct {
                 .ack, .interrupt => {},
                 .resend => if (c.last.len > 0) {
                     const again = rsp.packet.frame(&c.framed, c.last) catch return;
-                    self.send(c, again);
+                    if (!self.send(c, again)) return;
                 },
-                .corrupt, .overflow => self.send(c, &[_]u8{rsp.packet.resend}),
+                .corrupt, .overflow => if (!self.send(c, &[_]u8{rsp.packet.resend})) return,
                 .packet => |request| if (!self.answer(c, request)) return,
             }
         }
@@ -115,7 +113,7 @@ pub const Session = struct {
             return false;
         }
         if (request.len > 0 and request[0] == 'D') {
-            self.send(c, "$OK#8e");
+            _ = self.send(c, "$OK#8e");
             self.drop();
             return false;
         }
@@ -124,7 +122,7 @@ pub const Session = struct {
         // for the stop reply, and the pump delivers it when the run ends.
         if (reply.len == 0 and resumes(request)) return true;
         const framed = rsp.packet.frame(&c.framed, reply) catch return false;
-        self.send(c, framed);
+        if (!self.send(c, framed)) return false;
         c.last = reply;
         return true;
     }
@@ -133,24 +131,21 @@ pub const Session = struct {
     fn tick(self: *Session, c: *Client) void {
         if (!c.target.pending) return;
         const reply = rsp.dispatch.zig_run.pumpTick(&c.target, &c.payload) catch {
-            self.send(c, "$E00#a9");
+            _ = self.send(c, "$E00#a9");
             return;
         };
         if (reply.len == 0) return;
         const framed = rsp.packet.frame(&c.framed, reply) catch return;
-        self.send(c, framed);
+        if (!self.send(c, framed)) return;
         c.last = framed;
     }
 
-    fn send(self: *Session, c: *Client, bytes: []const u8) void {
-        var at: usize = 0;
-        while (at < bytes.len) {
-            const wrote = write(c.stream.socket.handle, bytes[at..]) orelse {
-                self.drop();
-                return;
-            };
-            at += wrote;
-        }
+    fn send(self: *Session, c: *Client, bytes: []const u8) bool {
+        sock_ready.sendAll(self.io, c.stream.socket.handle, bytes, 20) catch {
+            self.drop();
+            return false;
+        };
+        return true;
     }
 
     fn drop(self: *Session) void {
@@ -170,26 +165,4 @@ fn resumes(request: []const u8) bool {
         return first.len > 0 and (first[0] == 'c' or first[0] == 'C' or first[0] == 's' or first[0] == 'S');
     }
     return false;
-}
-
-fn read(fd: std.posix.socket_t, byte: *[1]u8) ?usize {
-    if (builtin.os.tag == .windows) {
-        const got = win32.recv(fd, byte, 1, 0);
-        if (got < 0) return null;
-        return @intCast(got);
-    }
-    const got = std.c.read(fd, byte, 1);
-    if (got < 0) return null;
-    return @intCast(got);
-}
-
-fn write(fd: std.posix.socket_t, bytes: []const u8) ?usize {
-    if (builtin.os.tag == .windows) {
-        const got = win32.send(fd, bytes.ptr, @intCast(bytes.len), 0);
-        if (got < 0) return null;
-        return @intCast(got);
-    }
-    const got = std.c.write(fd, bytes.ptr, bytes.len);
-    if (got < 0) return null;
-    return @intCast(got);
 }

@@ -17,7 +17,14 @@ const Env = proto.Client.Env;
 /// A fresh home under /tmp for one test.
 fn tempHome(gpa: std.mem.Allocator) ![]u8 {
     var prng = std.Random.DefaultPrng.init(@intCast(std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds()));
-    const path = try std.fmt.allocPrint(gpa, "/tmp/ra8_listener_{d}", .{prng.random().int(u64)});
+    const parent = if (@import("builtin").os.tag == .windows)
+        try (std.process.Environ{ .block = .global }).getAlloc(gpa, "TEMP")
+    else
+        try gpa.dupe(u8, "/tmp");
+    defer gpa.free(parent);
+    const name = try std.fmt.allocPrint(gpa, "ra8_listener_{d}", .{prng.random().int(u64)});
+    defer gpa.free(name);
+    const path = try std.fs.path.join(gpa, &.{ parent, name });
     errdefer gpa.free(path);
     try std.Io.Dir.cwd().createDirPath(std.testing.io, path);
     return path;
@@ -50,9 +57,14 @@ test "the discovery file lists the rpc address and the sessions" {
 
     var lines = std.mem.splitScalar(u8, std.mem.trim(u8, text, "\n"), '\n');
     const rpc_line = lines.next().?;
-    try std.testing.expect(std.mem.endsWith(u8, rpc_line, "rpc.sock"));
     const spec = try cli_app.serve.listen.Spec.parse(rpc_line["rpc ".len..]);
-    try std.testing.expectEqualStrings(bound.socket_path.?, spec.unix);
+    switch (bound.address) {
+        .unix => |path_name| try std.testing.expectEqualStrings(path_name, spec.unix),
+        .tcp => |address| {
+            try std.testing.expect(spec.tcp.eql(&address));
+            try std.testing.expect(bound.socket_path == null);
+        },
+    }
     var port_buf: [32]u8 = undefined;
     const port_line = try std.fmt.bufPrint(&port_buf, "session {d} /some/image.elf", .{port});
     try std.testing.expectEqualStrings(port_line, lines.next().?);
@@ -80,7 +92,7 @@ test "a client over the socket is served on the opened session" {
 
     const tx = try gpa.alloc(u8, Env.max_frame);
     defer gpa.free(tx);
-    var connection = try Connection.unix(std.testing.io, bound.socket_path.?);
+    var connection = try connect(bound.address);
     defer connection.close();
     const peer = try serve_peer.Peer.init(gpa, connection.transport());
     defer peer.deinit();
@@ -108,14 +120,14 @@ test "a hung-up client is dropped and the next one is taken" {
 
     const tx = try gpa.alloc(u8, Env.max_frame);
     defer gpa.free(tx);
-    var first = try Connection.unix(std.testing.io, bound.socket_path.?);
+    var first = try connect(bound.address);
     try bound.answer(&opened.context, tx);
     try std.testing.expect(bound.client != null);
     first.close();
     try bound.answer(&opened.context, tx);
     try std.testing.expect(bound.client == null);
 
-    var second = try Connection.unix(std.testing.io, bound.socket_path.?);
+    var second = try connect(bound.address);
     defer second.close();
     try bound.answer(&opened.context, tx);
     try std.testing.expect(bound.client != null);
@@ -178,4 +190,11 @@ test "a focus connection is taken once and the second launch hands off" {
     // With no running app, focusRunning fails and the caller runs on.
     std.Io.Dir.cwd().deleteFile(std.testing.io, bound.discovery_path) catch {};
     try std.testing.expectError(error.NotRunning, listener_mod.focusRunning(gpa, std.testing.io, &env));
+}
+
+fn connect(address: listener_mod.Address) !Connection {
+    return switch (address) {
+        .unix => |path| Connection.unix(std.testing.io, path),
+        .tcp => |ip| Connection.tcp(std.testing.io, ip),
+    };
 }

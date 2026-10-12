@@ -13,9 +13,9 @@ fn send(fd: std.posix.fd_t, bytes: []const u8) !void {
 }
 
 test "host input waiting on stdin reaches console SCI receive" {
-    const fds = try std.Io.Threaded.pipe2(.{});
-    defer std.Io.Threaded.closeFd(fds[0]);
-    defer std.Io.Threaded.closeFd(fds[1]);
+    const fds = try ra8.host.pipe_pair.create(.{});
+    defer ra8.host.read.close(fds[0]);
+    defer ra8.host.read.close(fds[1]);
 
     try send(fds[1], "hi");
     var unit = sci.Sci.init();

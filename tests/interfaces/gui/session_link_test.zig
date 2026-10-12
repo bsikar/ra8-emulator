@@ -56,6 +56,7 @@ const Far = struct {
     context: served.Context = undefined,
     io: Stdio = .{},
     near: Stdio = .{},
+    far_open: bool = true,
     host: served.Host = undefined,
     buffers: [4][]u8 = undefined,
 
@@ -68,8 +69,8 @@ const Far = struct {
         try self.cpu.reset(0);
         self.session = .{ .live = .{ .core = .{ .cpu = &self.cpu }, .machine = &self.machine, .budget = 100 } };
         self.context = .{ .session = &self.session, .scratch = &self.scratch };
-        const down = try std.Io.Threaded.pipe2(.{});
-        const up = try std.Io.Threaded.pipe2(.{});
+        const down = try ra8.host.pipe_pair.create(.{});
+        const up = try ra8.host.pipe_pair.create(.{});
         self.io = .{ .input = up[0], .output = down[1] };
         self.near = .{ .input = down[0], .output = up[1] };
         self.host = served.Host.init(self.io.transport(), self.buffers[0], &self.context);
@@ -78,18 +79,18 @@ const Far = struct {
 
     fn deinit(self: *Far) void {
         self.hangUp();
-        std.Io.Threaded.closeFd(self.near.input);
-        std.Io.Threaded.closeFd(self.near.output);
+        ra8.host.read.close(self.near.input);
+        ra8.host.read.close(self.near.output);
         for (self.buffers) |buffer| self.gpa.free(buffer);
         self.gpa.destroy(self);
     }
 
     /// The far end goes away, as a session that exits does.
     fn hangUp(self: *Far) void {
-        if (self.io.output < 0) return;
-        std.Io.Threaded.closeFd(self.io.output);
-        std.Io.Threaded.closeFd(self.io.input);
-        self.io = .{ .input = -1, .output = -1 };
+        if (!self.far_open) return;
+        ra8.host.read.close(self.io.output);
+        ra8.host.read.close(self.io.input);
+        self.far_open = false;
     }
 
     fn openLink(self: *Far, link: *Link) void {
@@ -99,7 +100,7 @@ const Far = struct {
     /// Let both ends take turns until the link pumps something out.
     fn turn(self: *Far, link: *Link) ?Arrival {
         for (0..64) |_| {
-            if (self.io.output >= 0) _ = self.host.poll(self.buffers[1]) catch {};
+            if (self.far_open) _ = self.host.poll(self.buffers[1]) catch {};
             if (link.pump()) |arrival| return arrival;
             if (link.state == .failed or link.state == .closed) return null;
         }

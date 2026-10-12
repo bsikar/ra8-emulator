@@ -13,7 +13,9 @@ pub const Connection = struct {
         return .{ .stream = try address.connect(io, .{ .mode = .stream }), .io = io };
     }
     pub fn unix(io: std.Io, path: []const u8) !Connection {
-        const address = try std.Io.net.UnixAddress.init(path);
+        var buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const name = try @import("ra8_host").sock.path.unix(io, path, &buffer);
+        const address = try std.Io.net.UnixAddress.init(name);
         return .{ .stream = try address.connect(io), .io = io };
     }
     pub fn transport(self: *Connection) rpc.Transport {
@@ -28,12 +30,11 @@ pub const Connection = struct {
     }
     fn send(ctx: *anyopaque, bytes: []const u8) rpc.Transport.Error!void {
         const self = from(ctx);
-        var out = self.stream.writer(self.io, &.{});
-        out.interface.writeAll(bytes) catch return error.LinkDown;
+        sock_ready.sendAll(self.io, self.stream.socket.handle, bytes, 100) catch return error.LinkDown;
     }
     fn receive(ctx: *anyopaque, into: []u8) rpc.Transport.Error!usize {
         const self = from(ctx);
-        const ready = sock_ready.wait(self.stream.socket.handle, 0) catch return error.LinkDown;
+        const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return error.LinkDown;
         if (!ready.any()) return 0;
         var vec = [_][]u8{into};
         const got = self.stream.readWithControl(self.io, &vec, &.{}) catch return error.LinkDown;
@@ -41,7 +42,7 @@ pub const Connection = struct {
     }
     fn poll(ctx: *anyopaque) usize {
         const self = from(ctx);
-        const ready = sock_ready.wait(self.stream.socket.handle, 0) catch return 0;
+        const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return 0;
         return @intFromBool(ready.any());
     }
 };

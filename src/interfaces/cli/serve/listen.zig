@@ -35,8 +35,9 @@ pub const Spec = union(enum) {
 
 /// Bind `spec` and answer clients one after another until a stop signal.
 pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buffers) !void {
+    var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
     var server = switch (spec) {
-        .unix => |path| try (try std.Io.net.UnixAddress.init(path)).listen(io, .{}),
+        .unix => |path| try (try std.Io.net.UnixAddress.init(try @import("ra8_host").sock.path.unix(io, path, &path_buffer))).listen(io, .{}),
         .tcp => |*tcp| try tcp.listen(io, .{ .reuse_address = true }),
     };
     defer server.deinit(io);
@@ -50,19 +51,19 @@ pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buf
         .tcp => std.debug.print("serve: listening on tcp:{f}\n", .{server.socket.address}),
     }
     while (!loop.stopping.load(.acquire)) {
-        if (!try ready(server.socket.handle)) continue;
+        if (!try ready(io, server.socket.handle)) continue;
         const client = try server.accept(io);
         var connection: Connection = .{ .stream = client, .io = io };
         defer connection.close();
-        loop.answer(context, connection.transport(), client.socket.handle, .socket, buffers) catch |err| {
+        loop.answer(io, context, connection.transport(), client.socket.handle, .socket, buffers) catch |err| {
             std.debug.print("serve: client dropped: {s}\n", .{@errorName(err)});
         };
     }
 }
 
 /// True when a client is waiting on the listening socket.
-fn ready(fd: std.posix.fd_t) !bool {
-    return (try sock_ready.wait(fd, accept_wait_ms)).any();
+fn ready(io: std.Io, fd: std.posix.fd_t) !bool {
+    return (try sock_ready.wait(io, fd, accept_wait_ms)).any();
 }
 
 /// SIGINT and SIGTERM end the serve cleanly at the next idle check. Windows

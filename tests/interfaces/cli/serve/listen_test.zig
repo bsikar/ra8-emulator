@@ -8,6 +8,50 @@ const Connection = ra8.rpc.socket_transport.Connection;
 const serve_peer = @import("../serve_peer.zig");
 const image_path = serve_peer.image_path;
 const Term = std.process.Child.Term;
+const on_windows = @import("builtin").os.tag == .windows;
+const win32 = ra8.host.win32;
+
+/// A hidden console belongs only to this child, so Ctrl+Break cannot reach
+/// the build runner or another application. The std spawn API lacks this flag.
+fn listen(spec: []const u8, line: []u8) !serve_peer.Listening {
+    if (!on_windows) return serve_peer.listen(spec, line);
+    const gpa = std.testing.allocator;
+    const command = try std.fmt.allocPrint(gpa, "\"{s}\" serve --listen \"{s}\" \"{s}\"", .{ test_paths.emulator, spec, image_path });
+    defer gpa.free(command);
+    const wide = try std.unicode.utf8ToUtf16LeAllocZ(gpa, command);
+    defer gpa.free(wide);
+    const ends = try ra8.host.pipe_pair.create(.{});
+    errdefer ra8.host.read.close(ends[0]);
+    defer ra8.host.read.close(ends[1]);
+    try std.testing.expect(win32.SetHandleInformation(ends[1], 1, 1).toBool());
+    var startup: std.os.windows.STARTUPINFOW = std.mem.zeroes(std.os.windows.STARTUPINFOW);
+    startup.cb = @sizeOf(@TypeOf(startup));
+    startup.dwFlags = std.os.windows.STARTF_USESTDHANDLES | std.os.windows.STARTF_USESHOWWINDOW;
+    startup.wShowWindow = 0;
+    startup.hStdError = ends[1];
+    var info: win32.ProcessInfo = undefined;
+    try std.testing.expect(win32.CreateProcessW(null, wide, null, null, .TRUE, @bitCast(std.os.windows.CreateProcessFlags{ .create_new_console = true, .create_new_process_group = true }), null, null, &startup, &info).toBool());
+    var child: std.process.Child = .{ .id = info.process, .thread_handle = info.thread, .stdin = null, .stdout = null, .stderr = .{ .handle = ends[0], .flags = .{ .nonblocking = false } }, .request_resource_usage_statistics = false };
+    errdefer child.kill(std.testing.io);
+    var reader = child.stderr.?.reader(std.testing.io, line);
+    const said = try reader.interface.takeDelimiterExclusive('\n');
+    const prefix = "serve: listening on ";
+    try std.testing.expect(std.mem.startsWith(u8, said, prefix));
+    return .{ .child = child, .bound = said[prefix.len..] };
+}
+
+fn stop(child: *std.process.Child) !void {
+    if (!on_windows) return std.posix.kill(child.id.?, .TERM);
+    const pid = win32.GetProcessId(child.id.?);
+    try std.testing.expect(pid != 0);
+    _ = win32.FreeConsole();
+    try std.testing.expect(win32.AttachConsole(pid).toBool());
+    defer {
+        _ = win32.FreeConsole();
+        _ = win32.AttachConsole(std.math.maxInt(u32));
+    }
+    try std.testing.expect(win32.GenerateConsoleCtrlEvent(1, pid).toBool());
+}
 
 /// Drive one session over `connection`, hang up, then stop serve with SIGTERM.
 fn session(gpa: std.mem.Allocator, child: *std.process.Child, connection: *Connection) !void {
@@ -15,14 +59,15 @@ fn session(gpa: std.mem.Allocator, child: *std.process.Child, connection: *Conne
     defer peer.deinit();
     try peer.drive();
     connection.close();
-    try std.posix.kill(child.id.?, .TERM);
+    try stop(child);
     try std.testing.expectEqual(Term{ .exited = 0 }, try child.wait(std.testing.io));
 }
 
 test "serve --listen tcp::0 binds localhost, serves a client and exits 0 on SIGTERM" {
     const gpa = std.testing.allocator;
     var line: [128]u8 = undefined;
-    var started = try serve_peer.listen("tcp::0", &line);
+    var started = try listen("tcp::0", &line);
+    errdefer started.child.kill(std.testing.io);
     try std.testing.expect(std.mem.startsWith(u8, started.bound, "tcp:127.0.0.1:"));
     const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
     const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
@@ -34,16 +79,18 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/serve.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "serve.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
-    var started = try serve_peer.listen(spec, &line);
+    var started = try listen(spec, &line);
+    errdefer started.child.kill(std.testing.io);
     try std.testing.expectEqualStrings(spec, started.bound);
     var connection = try Connection.unix(std.testing.io, path);
     try session(gpa, &started.child, &connection);
-    try std.testing.expectError(error.FileNotFound, tmp.dir.access(std.testing.io, "serve.sock", .{}));
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(std.testing.io, path, .{}));
 }
 
 test "serve --listen with a bad spec prints its usage and exits 2" {

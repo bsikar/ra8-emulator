@@ -16,9 +16,10 @@ fn openAnswering(arg: []const u8, grant: webcam.consent.Grant, answer: []const u
 test "a refused question opens nothing" {
     var said = std.Io.Writer.Allocating.init(allocator);
     defer said.deinit();
-    const arg = if (builtin.os.tag == .macos) "0" else "/nonexistent/video9";
+    const indexed = builtin.os.tag == .macos or builtin.os.tag == .windows;
+    const arg = if (indexed) "0" else "/nonexistent/video9";
     try std.testing.expectError(error.WebcamRefused, openAnswering(arg, .ask, "n\n", &said));
-    const question = if (builtin.os.tag == .macos) "webcam 0" else "open the host camera /nonexistent/video9?";
+    const question = if (indexed) "webcam 0" else "open the host camera /nonexistent/video9?";
     try std.testing.expect(std.mem.indexOf(u8, said.written(), question) != null);
 }
 

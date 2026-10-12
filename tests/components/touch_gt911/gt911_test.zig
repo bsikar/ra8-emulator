@@ -12,7 +12,7 @@ const host_bytes = cli_app.cli.host.bytes;
 
 /// Writes all of `bytes` to a pipe end, as the host side of the test.
 fn send(fd: std.posix.fd_t, bytes: []const u8) !void {
-    const end: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = true } };
+    const end: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = @import("builtin").os.tag != .windows } };
     try end.writeStreamingAll(std.testing.io, bytes);
 }
 
@@ -215,10 +215,10 @@ fn frame(panel: *gt911.Panel) ?gt911.Contact {
 }
 
 test "host touches on a pipe reach the panel's point reads during a run" {
-    const ends = try std.Io.Threaded.pipe2(.{ .NONBLOCK = true });
-    defer std.Io.Threaded.closeFd(ends[1]);
+    const ends = try ra8.host.pipe_pair.create(.{ .nonblocking = true });
+    defer ra8.host.read.close(ends[1]);
     var input = gt911.host.Input{ .source = host_bytes.of(ends[0]) };
-    defer std.Io.Threaded.closeFd(ends[0]);
+    defer ra8.host.read.close(ends[0]);
     var panel = gt911.Panel{};
     var pins = gpio.Gpio.init();
     try send(ends[1], "down 120,340\nmove 130,3");
@@ -255,13 +255,13 @@ test "a drained queue starts over, so a live source never fills it" {
 }
 
 test "the end of a host touch file stops the polling" {
-    const ends = try std.Io.Threaded.pipe2(.{ .NONBLOCK = true });
+    const ends = try ra8.host.pipe_pair.create(.{ .nonblocking = true });
     var input = gt911.host.Input{ .source = host_bytes.of(ends[0]) };
-    defer std.Io.Threaded.closeFd(ends[0]);
+    defer ra8.host.read.close(ends[0]);
     var panel = gt911.Panel{};
     var pins = gpio.Gpio.init();
     try send(ends[1], "1,2\n");
-    std.Io.Threaded.closeFd(ends[1]);
+    ra8.host.read.close(ends[1]);
     input.poll(&panel, &pins);
     try std.testing.expect(input.source == null);
     try std.testing.expectEqual(gt911.Contact{ .x = 1, .y = 2 }, frame(&panel).?);
