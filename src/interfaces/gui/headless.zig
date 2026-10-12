@@ -10,6 +10,7 @@ pub const Headless = struct {
     allocator: std.mem.Allocator,
     drawable: Size,
     dpi: f32 = 1.0,
+    visible: bool = true,
     queue: std.ArrayListUnmanaged(Event) = .empty,
     next: usize = 0,
     /// A copy of the last presented frame.
@@ -41,7 +42,7 @@ pub const Headless = struct {
     }
 
     pub fn platform(self: *Headless) platform_mod.Platform {
-        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .appearance = appearance, .focus = focus, .open_image = openImage, .title = setTitle } };
+        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .appearance = appearance, .focus = focus, .open_image = openImage, .title = setTitle, .visible = isVisible } };
     }
 
     pub fn title(self: *const Headless) []const u8 {
@@ -64,6 +65,11 @@ pub const Headless = struct {
     fn size(ctx: *anyopaque) Size {
         const self: *Headless = @ptrCast(@alignCast(ctx));
         return self.drawable;
+    }
+
+    fn isVisible(ctx: *anyopaque) bool {
+        const self: *Headless = @ptrCast(@alignCast(ctx));
+        return self.visible;
     }
 
     fn scale(ctx: *anyopaque) f32 {

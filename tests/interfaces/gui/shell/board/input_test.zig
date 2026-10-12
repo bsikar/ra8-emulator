@@ -49,6 +49,7 @@ const Bench = struct {
     /// Inputs the session has scheduled, and requests it has refused.
     scheduled: u32 = 0,
     refused: u32 = 0,
+    no_core: u32 = 0,
 
     fn open(self: *Bench) !void {
         const gpa = std.testing.allocator;
@@ -60,6 +61,7 @@ const Bench = struct {
         self.now_ns = 0;
         self.scheduled = 0;
         self.refused = 0;
+        self.no_core = 0;
         self.body = for (self.solved.panes.items) |placed| {
             const pane = self.layout.pane(placed.index) orelse continue;
             if (pane.kind == .board) break frame.bodyOf(placed.area);
@@ -69,7 +71,11 @@ const Bench = struct {
         try self.exchange();
         // The served session's answer reports the same board; lay out from it.
         self.parts = board_pane.Layout.of(self.body, self.board.parts);
-        try std.testing.expectEqual(@as(u32, 0), self.refused);
+        // Optional CPU1 board subscriptions are refused on this single-core fixture.
+        try std.testing.expectEqual(@as(u32, 2), self.refused);
+        try std.testing.expectEqual(self.refused, self.no_core);
+        self.refused = 0;
+        self.no_core = 0;
     }
 
     fn deinit(self: *Bench) void {
@@ -87,7 +93,10 @@ const Bench = struct {
             try self.board.observe(arrival, 0);
             switch (arrival) {
                 .response => |response| switch (response.result) {
-                    .err => self.refused += 1,
+                    .err => |code| {
+                        self.refused += 1;
+                        if (@backingInt(code) == proto.app_codes.no_core) self.no_core += 1;
+                    },
                     .ok => |bytes| if (proto.decode(proto.Advanced, bytes)) |done| {
                         self.now_ns = done.to_ns;
                     } else |_| {},

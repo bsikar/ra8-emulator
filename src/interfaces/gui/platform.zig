@@ -108,6 +108,8 @@ pub const Platform = struct {
         toggle_fullscreen: ?*const fn (ctx: *anyopaque) void = null,
         /// Whether the window is full screen (RA8EMU-966); null is never.
         fullscreen: ?*const fn (ctx: *anyopaque) bool = null,
+        /// False while minimized or hidden; null means drawable.
+        visible: ?*const fn (ctx: *anyopaque) bool = null,
         /// Where the window sits on the screen (RA8EMU-966); null when the
         /// backend does not say.
         position: ?*const fn (ctx: *anyopaque) ?Pos = null,
@@ -121,6 +123,12 @@ pub const Platform = struct {
     /// The drawable size in pixels.
     pub fn size(self: Platform) Size {
         return self.vtable.size(self.ctx);
+    }
+
+    /// Whether painting can reach a visible window. Transport still pumps.
+    pub fn visible(self: Platform) bool {
+        const get = self.vtable.visible orelse return true;
+        return get(self.ctx);
     }
 
     /// Pixels per logical point (2.0 on a Retina display).

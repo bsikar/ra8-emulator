@@ -35,6 +35,7 @@ const Models = struct {
     field: speed_field.Field = .{},
     readout: time_readout.Readout = .{},
     texts: capture.Texts = .{},
+    run: Run = .{},
 
     fn sample() Models {
         var models: Models = .{};
@@ -46,7 +47,7 @@ const Models = struct {
     }
 
     fn view(self: *Models, editing: bool) bar.View {
-        return capture.view(&self.texts, &self.status, &self.field, &self.readout, editing);
+        return capture.view(&self.texts, &self.status, &self.field, &self.readout, &self.run, editing);
     }
 };
 
@@ -105,14 +106,13 @@ test "a click lands on the control under it, and nothing in the gaps or the cloc
     try std.testing.expectEqual(@as(?bar.Control, null), bar.hit(area, layout.run.x + 1, area.y));
 }
 
-// RA8EMU-941: the readout used to clip its tail segment mid-word at 480;
-// these goldens were re-pinned with the speed segment dropped whole.
+// Whole segments, muted disabled controls and the requested Speed label.
 test "the bar rasterises to the pinned golden frame" {
     var scene = try Scene.init(480, bar.height);
     defer scene.deinit();
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 9662044992334524907), scene.digest());
+    try std.testing.expectEqual(@as(u64, 7603158565226785860), scene.digest());
 }
 
 test "the bar rasterises to the pinned golden frame in the light theme" {
@@ -121,7 +121,7 @@ test "the bar rasterises to the pinned golden frame in the light theme" {
     scene.theme = light;
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 10813881438780127614), scene.digest());
+    try std.testing.expectEqual(@as(u64, 16531255294835256462), scene.digest());
 }
 
 test "the editing field rasterises to its pinned golden frame" {
@@ -129,9 +129,10 @@ test "the editing field rasterises to its pinned golden frame" {
     defer scene.deinit();
     var models = Models.sample();
     models.status.run = .running;
+    models.run.lit = true;
     models.field.typed("5");
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(true));
-    try std.testing.expectEqual(@as(u64, 9144866937343458358), scene.digest());
+    try std.testing.expectEqual(@as(u64, 9663047869982207366), scene.digest());
 }
 
 test "the bar with an RTC date rasterises to its pinned golden frame, wide enough for the whole line" {
@@ -140,10 +141,10 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
     var models = Models.sample();
     models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
     try scene.render(.{ .x = 0, .y = 0, .w = 800, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 784415439429954224), scene.digest());
+    try std.testing.expectEqual(@as(u64, 7600191303540114803), scene.digest());
 }
 
-test "the bar at 480x20 with a date and a short speed shows only whole segments" {
+test "a short bar hides incomplete controls and keeps the whole clock line" {
     const cell: i32 = @intCast(font.cell_w);
     var scene = try Scene.init(480, 20);
     defer scene.deinit();
@@ -152,31 +153,23 @@ test "the bar at 480x20 with a date and a short speed shows only whole segments"
     const view = models.view(false);
     const area: Rect = .{ .x = 0, .y = 0, .w = 480, .h = 20 };
     try scene.render(area, view);
-    {
-        var out: std.ArrayListUnmanaged(u8) = .empty;
-        defer out.deinit(std.testing.allocator);
-        try out.print(std.testing.allocator, "P6\n{d} {d}\n255\n", .{ scene.frame.width, scene.frame.height });
-        for (scene.frame.pixels) |p| try out.appendSlice(std.testing.allocator, &.{ p.r, p.g, p.b });
-        const file = std.c.fopen("/tmp/clock941.ppm", "wb") orelse return error.Open;
-        _ = std.c.fwrite(out.items.ptr, 1, out.items.len, file);
-        _ = std.c.fclose(file);
-    }
     const clock = bar.Layout.of(area).clock;
     const cells: usize = @intCast(@divFloor(clock.w - 2 * bar.pad, cell));
     const elapsed = view.clock;
     const date = view.clock_date orelse return error.NoDate;
-    // date | elapsed does not fit, so both the speed and the date drop whole
-    // and the elapsed segment alone is the line.
-    try std.testing.expect(elapsed.len <= cells);
-    try std.testing.expect(date.len + 3 + elapsed.len > cells);
+    // No control fits vertically, leaving the clock its complete line.
+    try std.testing.expect(bar.Layout.of(area).run.empty());
+    const speed = view.clock_speed.?;
+    const shown_len = date.len + 3 + elapsed.len + 3 + speed.len;
+    try std.testing.expect(shown_len <= cells);
     try std.testing.expectEqualStrings(date, "2026-10-08 09:47:05");
     const left = clock.x + bar.pad;
-    var x = left + @as(i32, @intCast(elapsed.len)) * cell;
+    var x = left + @as(i32, @intCast(shown_len)) * cell;
     while (x < area.w) : (x += 1) {
         var y: i32 = 0;
         while (y < area.h) : (y += 1) try std.testing.expect(!std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), dark.muted));
     }
-    try std.testing.expectEqual(@as(u64, 279912207663143675), scene.digest());
+    try std.testing.expectEqual(@as(u64, 574503664485954541), scene.digest());
 }
 
 /// The first row inside `area` with a pixel of `color`, or null.
@@ -367,4 +360,30 @@ test "a click on step drives a served session, and run and pause light and unlig
 
     local.end();
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}
+
+test "control boundaries have only whole buttons and never actionable slivers" {
+    const controls = [_]bar.Control{ .run, .pause, .step, .field };
+    var edge: i32 = bar.pad;
+    for (controls) |control| {
+        edge += bar.width(control);
+        for ([_]i32{ -1, 0, 1 }) |delta| {
+            const reserve = if (control == .field) bar.gap + bar.clock_min else 0;
+            const area: Rect = .{ .x = 23, .y = 17, .w = edge + bar.pad + reserve + delta, .h = bar.height };
+            const rect = bar.Layout.of(area).rect(control);
+            if (delta < 0) {
+                try std.testing.expect(rect.empty());
+            } else {
+                try std.testing.expectEqual(bar.width(control), rect.w);
+                try std.testing.expectEqual(@as(i32, bar.control_h), rect.h);
+                const point = middle(rect);
+                try std.testing.expectEqual(@as(?bar.Control, control), bar.hit(area, point[0], point[1]));
+            }
+        }
+        edge += bar.gap;
+    }
+    for ([_]Rect{ .{ .x = 23, .y = 17, .w = 0, .h = bar.height }, .{ .x = 23, .y = 17, .w = 480, .h = 0 }, .{ .x = 23, .y = 17, .w = 480, .h = bar.control_h - 1 } }) |area| {
+        for (controls) |control| try std.testing.expect(bar.Layout.of(area).rect(control).empty());
+        try std.testing.expectEqual(@as(?bar.Control, null), bar.hit(area, 27, 18));
+    }
 }
