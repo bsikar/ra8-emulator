@@ -1,0 +1,7 @@
+# A mid-size 7" 800x480 RGB565 LCD (a very common bare panel size).
+name   = "Generic 7in 800x480"
+type   = "tft"
+width  = 800
+height = 480
+format = "rgb565"
+ppi    = 133

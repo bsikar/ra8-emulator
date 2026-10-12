@@ -1,0 +1,7 @@
+# A portrait grayscale e-ink panel, the e-reader display shape (RA8EMU-1151).
+name   = "E-ink 1072x1448"
+type   = "eink"
+width  = 1072
+height = 1448
+format = "grayscale4"
+ppi    = 300

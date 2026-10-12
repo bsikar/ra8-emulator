@@ -25,6 +25,17 @@ const Rig = @import("../../local_rig.zig").Rig;
 const Board = shell_board.Board;
 const Color = draw_list.Color;
 
+/// The EK-RA8D2's parts, as the session's board_parts answer reports them.
+const ek_shape: board_pane.Parts = .{
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+    .panel = .{ .width = 1024, .height = 600 },
+};
+
 fn dirty(board: *Board, rect: proto.DirtyRect) !void {
     var bytes: [4096]u8 = undefined;
     const payload = try proto.encode(proto.DirtyRect, rect, &bytes);
@@ -107,13 +118,14 @@ fn led(board: *Board, event: proto.SessionEvent) !void {
 test "an LED change for cpu0 on the session topic sets its LED, and nothing else on it does" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
+    board.setParts(ek_shape.leds, ek_shape.switch_names, ek_shape.panel);
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x102 });
-    try std.testing.expectEqual([_]bool{ true, false, true }, board.leds.on);
+    try std.testing.expectEqual([_]bool{ true, false, true }, board.leds.on[0..3].*);
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x000 });
     try led(&board, .{ .core = .cpu1, .kind = .led_changed, .address = 0x101 });
     try led(&board, .{ .core = .cpu0, .kind = .plugged, .address = 0x101 });
-    try std.testing.expectEqual([_]bool{ false, false, true }, board.leds.on);
+    try std.testing.expectEqual([_]bool{ false, false, true }, board.leds.on[0..3].*);
     try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = "x" } }, 0);
     try std.testing.expect(!board.hasFrame());
 }
@@ -135,7 +147,7 @@ test "once the session greets, the feed subscribes the panel and the session top
     board.attach(&rig.link);
     try rig.session.answer();
     while (rig.link.pump()) |_| answers += 1;
-    try std.testing.expectEqual(@as(usize, 2), answers);
+    try std.testing.expectEqual(@as(usize, 3), answers);
 }
 
 /// The two-core layout's frame with `board` behind its board leaf, drawn at
@@ -173,14 +185,15 @@ const Drawn = struct {
 test "the board leaf draws the board pane: the panel image in its slot and the LEDs as reported" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
+    board.setParts(ek_shape.leds, ek_shape.switch_names, ek_shape.panel);
     try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 6, .virtual_ns = 1, .pixels = &(@as([24]u8, @splat(200))) });
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
     var drawn = try Drawn.of(&board, 640, 480);
     defer drawn.pixels.deinit(std.testing.allocator);
-    const parts = board_pane.Layout.of(drawn.body, board_pane.profile);
+    const parts = board_pane.Layout.of(drawn.body, board.parts);
     try std.testing.expect(!parts.board.empty());
     try std.testing.expectEqual(gray(200), drawn.middle(board_touch.shownIn(parts, 4, 6)));
-    try std.testing.expectEqual(board_pane.lampOf(board_pane.led_rgb565[0]), drawn.middle(parts.leds[0]));
+    try std.testing.expectEqual(board_pane.lampOf(ek_shape.leds[0].rgb565), drawn.middle(parts.leds[0]));
     try std.testing.expectEqual(dark.led_off, drawn.middle(parts.leds[1]));
     try std.testing.expectEqual(dark.face, drawn.middle(parts.switches[0]));
 }
@@ -188,13 +201,14 @@ test "the board leaf draws the board pane: the panel image in its slot and the L
 test "with no panel frame the board leaf still shows the board and its LEDs" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
+    board.setParts(ek_shape.leds, ek_shape.switch_names, ek_shape.panel);
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x101 });
     var drawn = try Drawn.of(&board, 640, 480);
     defer drawn.pixels.deinit(std.testing.allocator);
-    const parts = board_pane.Layout.of(drawn.body, board_pane.profile);
+    const parts = board_pane.Layout.of(drawn.body, board.parts);
     try std.testing.expectEqual(colors_mod.unseen, drawn.middle(parts.panel));
     try std.testing.expectEqual(dark.led_off, drawn.middle(parts.leds[0]));
-    try std.testing.expectEqual(board_pane.lampOf(board_pane.led_rgb565[1]), drawn.middle(parts.leds[1]));
+    try std.testing.expectEqual(board_pane.lampOf(ek_shape.leds[1].rgb565), drawn.middle(parts.leds[1]));
 }
 
 test "a leaf too small for the board shows the panel image alone, or its note" {
@@ -202,7 +216,7 @@ test "a leaf too small for the board shows the panel image alone, or its note" {
     defer board.deinit();
     var waiting = try Drawn.of(&board, 300, 200);
     defer waiting.pixels.deinit(std.testing.allocator);
-    try std.testing.expect(board_pane.Layout.of(waiting.body, board_pane.profile).board.empty());
+    try std.testing.expect(board_pane.Layout.of(waiting.body, board.parts).board.empty());
     try std.testing.expect(holds(&waiting.pixels, waiting.body, dark.muted));
 
     try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 4, .height = 6, .virtual_ns = 1, .pixels = &(@as([24]u8, @splat(200))) });

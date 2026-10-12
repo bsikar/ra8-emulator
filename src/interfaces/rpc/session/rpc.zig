@@ -5,8 +5,8 @@ pub const protocol_version: u16 = 1;
 /// Bit 0: LCD dirty rectangles. Bit 1: plug, unplug and fault methods.
 /// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack. Bit 7: rtc.
 /// Bit 8: input. Bit 9: backtrace. Bit 10: periph. Bit 11: folded.
-/// Bit 12: break by name.
-pub const capabilities: u32 = 0x0000_1FFF;
+/// Bit 12: break by name. Bit 13: board parts.
+pub const capabilities: u32 = 0x0000_3FFF;
 pub const max_payload = 1_048_576;
 
 /// Refusal codes this message set adds above the library's own.
@@ -59,6 +59,7 @@ pub const Method = enum(u16) {
     load_begin = 0x0124,
     load_chunk = 0x0125,
     load_end = 0x0126,
+    board_parts = 0x0127,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -165,6 +166,22 @@ pub const PartSpec = struct {
 pub const PartList = struct {
     text: []const u8,
     pub const max_len = .{ .text = 4096 };
+};
+/// The served board's front-panel parts (RA8EMU-1151): LED labels one per
+/// line in the chip's led_changed order with one lamp colour per LED as 2
+/// little-endian RGB565 bytes, switch labels one per line in the board's
+/// switch order, and the panel profile the pre-frame slot fits (or no
+/// panel). The GUI reads the board only through this, so the pane and the
+/// CLI see the same parts.
+pub const BoardParts = struct {
+    /// The panel profile's stem; empty for no panel.
+    panel: []const u8,
+    panel_width: u32,
+    panel_height: u32,
+    led_names: []const u8,
+    led_colors: []const u8,
+    switch_names: []const u8,
+    pub const max_len = .{ .panel = 64, .led_names = 256, .led_colors = 32, .switch_names = 256 };
 };
 /// A camera source in `--camera-source` syntax (RA8EMU-795); a webcam
 /// opens only when `allow_webcam` is 1, the client's user having consented.

@@ -16,6 +16,17 @@ const Env = proto.Client.Env;
 
 const elf_path = "tests/fixtures/gpio/buttons.elf";
 
+const sample: pane.Parts = .{
+    .panel = .{ .width = 1024, .height = 600 },
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+};
+const ek_leds: usize = sample.leds.len;
+
 fn clock() i64 {
     return std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds();
 }
@@ -35,7 +46,7 @@ fn answer(link: *Link, leds: *pane.Leds, id: u32) ![]const u8 {
                 .err => error.Refused,
             },
             .event => |event| if (event.topic == @backingInt(proto.Topic.session)) {
-                capture.observe(leds, try proto.decode(proto.SessionEvent, event.payload));
+                capture.observe(leds, ek_leds, try proto.decode(proto.SessionEvent, event.payload));
             },
         }
     }
@@ -70,7 +81,7 @@ test "clicking SW1 on the board pane reaches the firmware" {
     try run(&link, &leds, .run, 2_000);
     try std.testing.expect(!leds.on[0]);
 
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, sample);
     const sw1 = layout.switches[0];
     const x = sw1.x + @divTrunc(sw1.w, 2);
     const y = sw1.y + @divTrunc(sw1.h, 2);

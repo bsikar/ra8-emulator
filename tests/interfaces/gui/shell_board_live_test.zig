@@ -19,12 +19,15 @@ test "an image with no LCD output shows the board, its LEDs dark, and a pressed 
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
-    const parts = board_pane.Layout.of(try live.boardBody(), board_pane.profile);
+    // The session reports the board's parts (RA8EMU-1151); the pane lays out
+    // from the answer, here the served board's three LEDs and two switches.
+    try std.testing.expectEqual(@as(usize, 3), live.board.parts.leds.len);
+    const parts = board_pane.Layout.of(try live.boardBody(), live.board.parts);
     try std.testing.expect(!parts.board.empty());
     try live.step();
     try std.testing.expect(!live.board.hasFrame());
     try std.testing.expectEqual(colors_mod.unseen, live.middle(parts.panel));
-    for (parts.leds) |led| try std.testing.expectEqual(dark.led_off, live.middle(led));
+    for (parts.leds[0..parts.led_count]) |led| try std.testing.expectEqual(dark.led_off, live.middle(led));
     try std.testing.expectEqual(dark.face, live.middle(parts.switches[0]));
 
     const sw1 = parts.switches[0];
@@ -42,7 +45,7 @@ test "with the image running, a click on SW1 lights LED1 in the board pane" {
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
-    const parts = board_pane.Layout.of(try live.boardBody(), board_pane.profile);
+    const parts = board_pane.Layout.of(try live.boardBody(), live.board.parts);
     try live.click(.run);
     for (0..2) |_| try live.step();
     try std.testing.expect(live.shell.status.run == .running);
@@ -56,7 +59,7 @@ test "with the image running, a click on SW1 lights LED1 in the board pane" {
     }
     try std.testing.expect(live.board.leds.on[0]);
     try live.step();
-    try std.testing.expectEqual(board_pane.lampOf(board_pane.led_rgb565[0]), live.middle(parts.leds[0]));
+    try std.testing.expectEqual(board_pane.lampOf(live.board.parts.leds[0].rgb565), live.middle(parts.leds[0]));
     try std.testing.expectEqual(dark.led_off, live.middle(parts.leds[1]));
     try std.testing.expect(live.shell.status.run == .running);
 }

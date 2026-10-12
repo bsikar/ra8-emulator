@@ -1,7 +1,9 @@
 //! The shell's board feed (RA8EMU-790, RA8EMU-1119): the panel image the
 //! session streams as lcd_dirty rectangles of grayscale pixels (RA8EMU-789),
 //! and the user LEDs it reports as led_changed events on the session topic
-//! (RA8EMU-811). Once the link is connected it subscribes both for cpu0.
+//! (RA8EMU-811), and asks the session for the board's front-panel parts
+//! (RA8EMU-1151), which the pane lays out and lights. Once the link is
+//! connected it subscribes both for cpu0 and asks once for the parts.
 //! Each rectangle is copied into an RGBA image that grows to cover every
 //! rectangle seen, and pixels no rectangle has reached yet stay black. The
 //! LEDs need no panel, so an image with no LCD output still shows them.
@@ -28,6 +30,17 @@ pub const Board = struct {
     /// The union of the rectangles that arrived since the pane last drew
     /// them, in image pixels (RA8EMU-823); null until one arrives.
     dirty: ?draw_list.Rect = null,
+    /// The board's parts as the session reported them (RA8EMU-1151); empty
+    /// until the board_parts answer lands.
+    parts: board_pane.Parts = .{},
+    /// The owned label storage the reported parts point into, so the wire's
+    /// bytes can die with the frame that carried them.
+    led_store: [board_pane.max_leds]board_pane.Led = undefined,
+    led_names: [board_pane.max_leds][board_pane.name_max]u8 = undefined,
+    switch_names: [board_pane.max_switches][board_pane.name_max]u8 = undefined,
+    switch_ptrs: [board_pane.max_switches][]const u8 = @splat(""),
+    /// The id of the board_parts request still waiting for its answer.
+    parts_id: u32 = 0,
     subscribed: bool = false,
     /// The pane's pacing model (RA8EMU-824): arrivals queue into it, and a
     /// frame shows at most once per refresh cap.
@@ -53,18 +66,25 @@ pub const Board = struct {
             _ = link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = topic }) catch return;
         }
         self.subscribed = true;
+        // An older server without board parts refuses it; the pane then
+        // draws an empty board until a server that answers serves one.
+        self.parts_id = link.send(proto.CoreOnly, .board_parts, .{ .core = .cpu0 }) catch 0;
     }
 
     /// Copy an lcd_dirty rectangle into the image, or fold an LED change
     /// into the LEDs.
     pub fn observe(self: *Board, arrival: session_link.Arrival, now_ns: u64) error{OutOfMemory}!void {
-        const event = switch (arrival) {
-            .event => |event| event,
-            .response => return,
-        };
+        switch (arrival) {
+            .event => |event| try self.fold(event, now_ns),
+            .response => |answer| if (answer.id == self.parts_id and self.parts_id != 0) self.takeParts(answer.result),
+        }
+    }
+
+    /// Folds one session event into the LEDs or the panel image.
+    fn fold(self: *Board, event: session_link.Env.Event, now_ns: u64) error{OutOfMemory}!void {
         if (event.topic == @backingInt(proto.Topic.session)) {
             const change = proto.decode(proto.SessionEvent, event.payload) catch return;
-            if (change.core == .cpu0) board_capture.observe(&self.leds, change);
+            if (change.core == .cpu0) board_capture.observe(&self.leds, self.parts.leds.len, change);
             return;
         }
         if (event.topic != @backingInt(proto.Topic.lcd_dirty)) return;
@@ -88,6 +108,71 @@ pub const Board = struct {
         self.pacer.present(decision.generation, @as(i128, now_ns));
         self.skipped = decision.skipped;
     }
+
+    /// Gives the board its parts (RA8EMU-1151), copied into the owned
+    /// stores; the wire answer and the tests both land here.
+    pub fn setParts(self: *Board, leds: []const board_pane.Led, switch_names: []const []const u8, panel: board_pane.Profile) void {
+        const count = @min(leds.len, board_pane.max_leds);
+        for (0..count) |index| {
+            self.led_names[index] = @splat(0);
+            self.led_store[index] = .{ .rgb565 = leds[index].rgb565, .name = keep(&self.led_names[index], leds[index].name) };
+        }
+        const switch_count = @min(switch_names.len, board_pane.max_switches);
+        for (0..switch_count) |index| {
+            self.switch_names[index] = @splat(0);
+            self.switch_ptrs[index] = keep(&self.switch_names[index], switch_names[index]);
+        }
+        self.parts = .{ .leds = self.led_store[0..count], .switch_names = self.switch_ptrs[0..switch_count], .panel = panel };
+    }
+
+    /// Takes the board_parts answer into the owned stores (RA8EMU-1151).
+    fn takeParts(self: *Board, result: session_link.Env.Result) void {
+        const ok = switch (result) {
+            .ok => |bytes| bytes,
+            .err => return,
+        };
+        const parts = proto.decode(proto.BoardParts, ok) catch return;
+        const names = Lines{ .text = std.mem.trimEnd(u8, parts.led_names, "\n") };
+        var leds: [board_pane.max_leds]board_pane.Led = undefined;
+        const count = @min(@min(parts.led_colors.len / 2, names.count()), board_pane.max_leds);
+        for (0..count) |index| {
+            leds[index] = .{
+                .rgb565 = std.mem.readInt(u16, parts.led_colors[index * 2 ..][0..2], .little),
+                .name = names.at(index),
+            };
+        }
+        const switches = Lines{ .text = std.mem.trimEnd(u8, parts.switch_names, "\n") };
+        var given: [board_pane.max_switches][]const u8 = undefined;
+        const switch_count = @min(switches.count(), board_pane.max_switches);
+        for (0..switch_count) |index| given[index] = switches.at(index);
+        self.setParts(leds[0..count], given[0..switch_count], .{ .width = parts.panel_width, .height = parts.panel_height });
+    }
+
+    /// The lines of a parts answer's name field, one per '\n'.
+    const Lines = struct {
+        text: []const u8,
+
+        fn count(self: Lines) usize {
+            if (self.text.len == 0) return 0;
+            var total: usize = 1;
+            for (self.text) |byte| {
+                if (byte == '\n') total += 1;
+            }
+            return total;
+        }
+
+        fn at(self: Lines, index: usize) []const u8 {
+            var start: usize = 0;
+            var seen: usize = 0;
+            for (self.text, 0..) |byte, end| {
+                if (byte != '\n') continue;
+                if (seen == index) return self.text[start..end];
+                seen += 1;
+                start = end + 1;
+            }
+            return if (seen == index) self.text[start..] else "";
+        }
+    };
 
     /// Whether any rectangle has arrived yet.
     pub fn hasFrame(self: *const Board) bool {
@@ -124,3 +209,10 @@ pub const Board = struct {
         self.height = tall;
     }
 };
+
+/// Copies `text` into `store` and returns the kept prefix.
+fn keep(store: *[board_pane.name_max]u8, text: []const u8) []const u8 {
+    const n = @min(text.len, store.len);
+    @memcpy(store[0..n], text[0..n]);
+    return store[0..n];
+}

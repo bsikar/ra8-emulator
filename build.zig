@@ -156,6 +156,7 @@ fn libraries(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
         .{ .name = "ra8_components", .module = components },
         .{ .name = "ra8_host", .module = host },
         .{ .name = "ra8_board", .module = board },
+        .{ .name = "ra8_chip", .module = chip },
         .{ .name = "ra8_rpc_wire", .module = firmware.module("ra8_rpc") },
     });
     const gdb = library(b, target, optimize, "ra8_gdb", "src/interfaces/gdb/root.zig", &.{
@@ -188,9 +189,8 @@ const Apps = struct {
     gui: *std.Build.Module,
 };
 
-/// The CLI is given every library. The GUI is given the session, the
-/// adapters it talks and draws through, and the host, and neither ra8_board
-/// nor ra8_chip, so the compiler keeps it on the Session API (RA8EMU-984).
+/// The CLI is given every library. The GUI gets the session, the adapters
+/// it talks and draws through, and the host, never ra8_board/ra8_chip (RA8EMU-984).
 fn applications(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libs: Libraries, firmware: *std.Build.Dependency) Apps {
     const wire = firmware.module("ra8_rpc");
     const cli = b.createModule(.{ .root_source_file = b.path("src/interfaces/cli/root.zig"), .target = target, .optimize = optimize, .link_libc = true });
@@ -307,7 +307,7 @@ fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
 
 /// tools/terms.zig over everything we write.
 fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "panels", "README.md", "AGENTS.md" };
+    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "README.md", "AGENTS.md" };
     const checker = b.addExecutable(.{
         .name = "terms",
         .root_module = b.createModule(.{
