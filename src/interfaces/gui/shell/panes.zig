@@ -125,7 +125,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         const model = pair.of(pane.core);
         if (model.now) |now| {
             try registers_pane.draw(table, theme, body, now, model.before, model.fold);
-            if (self.edit) |edit| try edit.draw(list, theme, body, model.fold, model.core);
+            if (self.edit) |edit| edit.draw(table, theme, body, model.fold, model.core);
             return;
         }
     };

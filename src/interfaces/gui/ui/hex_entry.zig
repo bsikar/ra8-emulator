@@ -3,6 +3,7 @@
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 
 const Color = draw_list.Color;
@@ -73,9 +74,46 @@ pub fn caretRect(x: i32, y: i32, field: *const Field) Rect {
     return .{ .x = x + @as(i32, @intCast(font.textWidth(field.len))), .y = y, .w = 1, .h = @intCast(font.cell_h) };
 }
 
+/// `area` filled with `color` through the shared Paint table.
+pub fn fillArea(table: *const widget.types.Paint, area: Rect, color: Color) void {
+    table.fill_rect.?(table.user, area.x, area.y, area.w, area.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell.
+pub fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: Color, bg: Color) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+pub fn word(color: Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
+}
+
 /// Draws the field over a value whose text starts at (x, y).
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, x: i32, y: i32, field: *const Field) !void {
-    try list.fill(bandRect(x, y, field), theme.band);
-    try font.draw(list, x, y, field.text(), theme.highlight);
-    try list.fill(caretRect(x, y, field), theme.ink);
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, x: i32, y: i32, field: *const Field) void {
+    fillArea(table, bandRect(x, y, field), theme.band);
+    drawText(table, x, y, field.text(), theme.highlight, theme.band);
+    fillArea(table, caretRect(x, y, field), theme.ink);
 }
