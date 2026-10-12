@@ -22,12 +22,14 @@ const shell_fault = @import("fault.zig");
 const shell_camera = @import("camera/camera.zig");
 const shell_plug = @import("plug.zig");
 const shell_camera_file = @import("camera/file.zig");
+const shell_server = @import("server.zig");
 const shell_startup = @import("startup.zig");
 const window_stills = @import("../window/stills.zig");
 const source_spec = @import("ra8_host").camera.source_spec;
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
+const shell_breaks = @import("breaks.zig");
 const shell_memory_field = @import("memory_field.zig");
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
@@ -216,9 +218,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
 
 /// Serve the image in-process and run the shell on it.
 fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
-    const path = args.image;
     var session: local_session.LocalSession = undefined;
-    try session.open(allocator, io, path);
+    try session.open(allocator, io, args.image);
     defer session.deinit();
     session.setup.stageApps(io, allocator, args.apps[0..args.app_count]) catch |err| {
         std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
@@ -243,9 +244,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.server = served(&session);
     if (host_listener.Listener.bind(allocator, io, env)) |bound| {
         hosted = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = try allocator.alloc(u8, Env.max_frame), .gpa = allocator };
-        const h = &hosted.?;
-        h.announce(path, session.setup.owner.session());
-        shell.listener = .{ .context = h, .answerFn = answerHosted };
+        hosted.?.announce(args.image, session.setup.owner.session());
+        shell.listener = .{ .context = &hosted.?, .answerFn = answerHosted };
     } else |_| {}
     var host_clock = wall_clock.Host.init(io);
     shell.clock = host_clock.clock();
@@ -288,11 +288,13 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.memory_field = &memory_field;
     var code: shell_memory.Pair = .{ .follows = .pc };
     shell.code = &code;
+    var breaks: shell_breaks.Breaks = .{};
+    shell.breaks = &breaks;
     var files: shell_open.Open = .{ .io = io, .allocator = allocator };
     shell.files = &files;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .stack = &stack };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .breaks = &breaks, .stack = &stack };
     shell.painter = panes.painter();
-    try drive(io, &shell, window, path, bytes, args.frames);
+    try drive(io, &shell, window, args.image, bytes, args.frames);
     link.close();
 }
 
@@ -329,7 +331,7 @@ fn answerHosted(context: *anyopaque) anyerror!void {
 }
 
 /// `session` as the shell answers it: in this process, on the shell's thread.
-pub fn served(session: *local_session.LocalSession) shell_loop.Server {
+pub fn served(session: *local_session.LocalSession) shell_server.Server {
     return .{ .context = session, .answerFn = answerLocal };
 }
 
