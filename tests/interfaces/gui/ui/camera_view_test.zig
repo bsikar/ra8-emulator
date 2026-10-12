@@ -8,6 +8,7 @@ const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
 const draw_list = ra8.render.draw_list;
 const raster = ra8.render.raster;
+const widget_paint = ra8.render.widget_paint;
 const view = gui_app.camera_view;
 const Panel = gui_app.camera.panel.Panel;
 const Rect = draw_list.Rect;
@@ -38,7 +39,9 @@ fn render(panel: Panel) !raster.Framebuffer {
 fn renderIn(theme: *const gui_app.colors.Theme, panel: Panel) !raster.Framebuffer {
     var list = draw_list.DrawList.init(std.testing.allocator, 256, 128);
     defer list.deinit();
-    try view.draw(&list, theme, layout, panel);
+    var into = widget_paint.Target{ .list = &list };
+    const paint = into.paint();
+    try view.draw(&paint, theme, layout, panel);
     var frame = try raster.Framebuffer.init(std.testing.allocator, 256, 128);
     raster.draw(&frame, &list, ra8.render.font.atlas);
     return frame;
