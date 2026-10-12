@@ -113,6 +113,8 @@ test "the page draws over the shell" {
     page.ask();
     var list = draw_list.DrawList.init(gpa, 800, 600);
     defer list.deinit();
-    try page.draw(&list, &themes, colors.of(.dark), 800, 600);
-    try page.draw(&list, &themes, colors.of(.light), 800, 600);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try page.draw(&paint, &themes, colors.of(.dark), 800, 600);
+    try page.draw(&paint, &themes, colors.of(.light), 800, 600);
 }
