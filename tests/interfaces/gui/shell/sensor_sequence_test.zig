@@ -153,6 +153,21 @@ fn pumpUntil(link: *Link, watch: *Watch, comptime done: fn (*const Watch, *const
     return error.Timeout;
 }
 
+/// Pump until the devices listing has no ask in flight: after a board
+/// change (a replug) the shell's re-list must land before a press reads
+/// rows from it (RA8EMU-1179).
+fn pumpListSettled(link: *Link, watch: *Watch) !void {
+    const deadline = nowMs() + 10_000;
+    while (nowMs() < deadline) {
+        if (link.state != .connecting and link.state != .connected) return error.LinkDown;
+        watch.devices.attach(link);
+        while (link.pump()) |arrival| watch.observe(arrival);
+        if (!watch.devices.want and watch.devices.asked == null) return;
+        try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+    }
+    return error.Timeout;
+}
+
 fn connected(_: *const Watch, link: *const Link) bool {
     return link.state == .connected;
 }
@@ -282,6 +297,7 @@ test "the shell drives unplug, replug, fault and clear on a running image" {
     try plugIn(&watch, &link, body);
     watch.wait = .{ .flips = 3, .ack_above = 0, .events_len = 3 };
     try pumpUntil(&link, &watch, met);
+    try pumpListSettled(&link, &watch);
     try pressFault(&watch, &link, try rowOf(&watch.devices));
     watch.wait = .{ .flips = 4, .nack_above = nacks, .events_len = 4, .mode = 1 };
     try pumpUntil(&link, &watch, met);
