@@ -127,6 +127,7 @@ pub const Sdl = struct {
         .toggle_fullscreen = toggleFullscreenVt,
         .fullscreen = fullscreenVt,
         .position = position,
+        .visible = visible,
     };
 
     fn from(ctx: *anyopaque) *Sdl {
@@ -241,6 +242,11 @@ pub const Sdl = struct {
             c.SDL_SYSTEM_THEME_DARK => .dark,
             else => .unknown,
         };
+    }
+
+    fn visible(ctx: *anyopaque) bool {
+        const flags = c.SDL_GetWindowFlags(from(ctx).window);
+        return flags & (c.SDL_WINDOW_MINIMIZED | c.SDL_WINDOW_HIDDEN) == 0;
     }
 
     fn interval(ctx: *anyopaque) u64 {

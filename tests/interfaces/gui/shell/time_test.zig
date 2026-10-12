@@ -191,3 +191,63 @@ test "the clock is read once while the image is halted and again every poll whil
     try bench.frame();
     try std.testing.expectEqual(bench.time.run.board_ns, bench.time.readout.virtual_ns);
 }
+
+test "button availability follows halted running unknown and pending commands" {
+    var status: Status = .{};
+    var time: Time = .{};
+    var view = time.view(&status);
+    try std.testing.expect(!view.run_enabled and !view.pause_enabled and !view.step_enabled);
+    try std.testing.expectEqualStrings("Load an image", view.note.?);
+    status.haltedAt(0x100);
+    view = time.view(&status);
+    try std.testing.expect(view.run_enabled and view.step_enabled and !view.pause_enabled);
+    status.load_id = 7;
+    view = time.view(&status);
+    try std.testing.expect(!view.run_enabled and !view.step_enabled);
+    status.load_id = null;
+    status.run_id = 8;
+    try std.testing.expect(!time.view(&status).step_enabled);
+    status.run_id = null;
+    time.run.start(0x100);
+    status.running();
+    view = time.view(&status);
+    try std.testing.expect(view.pause_enabled and !view.run_enabled and !view.step_enabled);
+    time.run.pause();
+    time.run.slice_id = 9;
+    view = time.view(&status);
+    try std.testing.expect(!view.pause_enabled and !view.run_enabled and !view.step_enabled);
+}
+
+test "failed mouse and keyboard command sends retain the halt and report refusal" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const halt = bench.status.run.halted;
+    bench.rig.link.close();
+    try std.testing.expect(bench.click(.step));
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .run), bench.status.refused);
+    try std.testing.expectEqualDeep(halt, bench.status.run.halted);
+    try std.testing.expectEqual(@as(?u32, null), bench.status.run_id);
+    bench.status.refused = null;
+    bench.time.pressCommand(.run, &bench.rig.link, &bench.status);
+    try std.testing.expect(!bench.time.run.lit);
+    try std.testing.expectEqualDeep(halt, bench.status.run.halted);
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .run), bench.status.refused);
+    try std.testing.expectEqualStrings("Run refused", bench.time.view(&bench.status).note.?);
+    try std.testing.expect(bench.time.view(&bench.status).command_refused);
+}
+
+test "a failed sliced run send settles at its last address with refusal" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const address = bench.status.run.halted.address;
+    try std.testing.expect(bench.click(.run));
+    bench.time.frame(&bench.rig.link, 0);
+    bench.rig.link.close();
+    try std.testing.expect(!bench.time.run.next(&bench.rig.link, 0));
+    try std.testing.expect(bench.time.settle(&bench.status));
+    try std.testing.expectEqual(address, bench.status.run.halted.address);
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .run), bench.status.refused);
+    try std.testing.expect(!bench.time.run.lit);
+}

@@ -41,11 +41,7 @@ pub const Time = struct {
         const control = time_bar.hit(bar, x, y);
         self.editing = control != null and control.? == .field;
         const found = control orelse return bar.contains(x, y);
-        const was_lit = self.run.lit;
-        time_bar_capture.press(found, status, &self.run, link) catch {};
-        // A run's speed is measured from where it starts, not across a halt.
-        if (self.run.lit != was_lit) self.readout.achieved_milli = null;
-        if (self.run.lit and !was_lit) self.readout.last = null;
+        self.pressCommand(found, link, status);
         return true;
     }
 
@@ -53,7 +49,10 @@ pub const Time = struct {
     /// (RA8EMU-957): the button's press without the hit test.
     pub fn pressCommand(self: *Time, control: time_bar.Control, link: *Link, status: *Status) void {
         const was_lit = self.run.lit;
-        time_bar_capture.press(control, status, &self.run, link) catch return;
+        time_bar_capture.press(control, status, &self.run, link) catch {
+            status.refused = .run;
+            return;
+        };
         if (self.run.lit != was_lit) self.readout.achieved_milli = null;
         if (self.run.lit and !was_lit) self.readout.last = null;
     }
@@ -124,7 +123,7 @@ pub const Time = struct {
 
     /// The bar's view. Its text lives in `self` until the next call.
     pub fn view(self: *Time, status: *const Status) time_bar.View {
-        return time_bar_capture.view(&self.texts, status, &self.field, &self.readout, self.editing);
+        return time_bar_capture.view(&self.texts, status, &self.field, &self.readout, &self.run, self.editing);
     }
 };
 

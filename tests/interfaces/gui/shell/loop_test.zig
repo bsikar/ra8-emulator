@@ -254,3 +254,24 @@ test "a click off the open popover folds it and goes no further, and so does Esc
     try std.testing.expect(!s.themes.open);
     try std.testing.expectEqual(dark, s.themes.active);
 }
+
+test "a minimized window pumps commands and presents nothing until restored" {
+    var window = Headless.init(std.testing.allocator, width, height);
+    defer window.deinit();
+    window.visible = false;
+    var s = try shell();
+    defer s.deinit();
+    s.themes.choose(.system);
+    try window.feed(.appearance);
+    window.os = .light;
+    for (0..4) |_| try std.testing.expect(try s.step(window.platform()));
+    try std.testing.expectEqual(@as(u32, 0), window.presents);
+    try std.testing.expectEqual(gui_app.colors.palettes.light.ink, s.themes.active.ink);
+    window.visible = true;
+    try std.testing.expect(try s.step(window.platform()));
+    try std.testing.expectEqual(@as(u32, 1), window.presents);
+    window.visible = false;
+    try window.feed(.quit);
+    try std.testing.expect(!try s.step(window.platform()));
+    try std.testing.expectEqual(@as(u32, 1), window.presents);
+}

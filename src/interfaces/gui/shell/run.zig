@@ -149,7 +149,10 @@ pub const Run = struct {
         if (now_ns >= self.until_ns or self.sent == max_slices) return false;
         const want = if (self.owed_ns) |owed| @min(owed, self.unit_ns) else self.unit_ns;
         if (want == 0) return false;
-        self.slice_id = link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want }) catch return false;
+        self.slice_id = link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want }) catch {
+            self.refuse();
+            return false;
+        };
         self.asked_ns = want;
         self.sent_ns = now_ns;
         self.sent += 1;

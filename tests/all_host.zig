@@ -140,6 +140,7 @@ test {
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/layout_store_test.zig");
     _ = @import("interfaces/gui/shell/window_store_test.zig");
+    _ = @import("interfaces/gui/shell/frame_buffer_test.zig");
     _ = @import("interfaces/gui/shell/loop_test.zig");
     _ = @import("interfaces/gui/wall_clock_test.zig");
     _ = @import("interfaces/gui/shell/run_test.zig");
