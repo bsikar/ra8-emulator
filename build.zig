@@ -94,11 +94,11 @@ pub fn build(b: *std.Build) void {
     guiTest(b, target, optimize, emu, gui, sdl_mod, gui_exe);
 
     const imports: TestImports = .{ .emu = emu, .cli = apps.cli, .gui = apps.gui, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod };
-    // Two roots, compiled one after the other under -j1, so the peak memory of
-    // a test build is the larger half's (RA8EMU-785).
+    // Three roots, one after the other under -j1, so peak memory is the largest half's (RA8EMU-785).
     const tests = [_]*std.Build.Step.Compile{
         testBinary(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe),
         testBinary(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe),
+        testBinary(b, "ra8_gui_link_tests", "tests/interfaces/gui/link_test.zig", target, optimize, imports, exe), // RA8EMU-1176
     };
     unitTests(b, &tests, target, optimize, emu, &exe.step);
 
