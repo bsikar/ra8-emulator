@@ -13,6 +13,7 @@ const pane_layout = gui_app.pane_layout;
 const status_bar = gui_app.status.bar;
 const strip = gui_app.status_strip;
 const time_bar = gui_app.time_bar;
+const menu_bar = gui_app.menu_bar;
 const frame = gui_app.shell.frame;
 const State = gui_app.session_link.State;
 
@@ -70,15 +71,16 @@ test "panes and pane titles name each kind and core" {
     try std.testing.expectEqualStrings("CPU1", frame.coreName(.cpu1));
 }
 
-test "the panes take the window above the time bar and the status strip" {
+test "the panes take the window under the menu strip and above the time bar and the status strip" {
     const area = frame.panesArea(width, height);
-    try std.testing.expectEqual(draw_list.Rect{ .x = 0, .y = 0, .w = width, .h = height - strip.height - time_bar.height }, area);
+    try std.testing.expectEqual(draw_list.Rect{ .x = 0, .y = menu_bar.height, .w = width, .h = height - menu_bar.height - strip.height - time_bar.height }, area);
     try std.testing.expectEqual(@as(i32, 0), frame.panesArea(width, 4).h);
 }
 
 test "the time bar's row sits on top of the status strip, under the panes" {
     const row = frame.barArea(width, height);
-    try std.testing.expectEqual(frame.panesArea(width, height).h, row.y);
+    const panes = frame.panesArea(width, height);
+    try std.testing.expectEqual(panes.y + panes.h, row.y);
     try std.testing.expectEqual(strip.area(width, height).y, row.y + row.h);
     try std.testing.expectEqual(@as(i32, width), row.w);
 }
@@ -141,7 +143,7 @@ test "the perimeter border is retained when a painter fills the body" {
 test "shell frame edge: panesArea and barArea under constrained heights" {
     const strip_h = strip.height;
     const time_h = time_bar.height;
-    const chrome_h = strip_h + time_h;
+    const chrome_h = menu_bar.height + strip_h + time_h;
 
     const zero_panes = frame.panesArea(480, 10);
     try std.testing.expectEqual(@as(i32, 0), zero_panes.h);
@@ -155,7 +157,7 @@ test "shell frame edge: panesArea and barArea under constrained heights" {
 
     const bar = frame.barArea(480, 100);
     try std.testing.expectEqual(time_h, bar.h);
-    try std.testing.expectEqual(100 - chrome_h, bar.y);
+    try std.testing.expectEqual(100 - time_h - strip_h, bar.y);
 }
 
 test "shell frame edge: titleOf and bodyOf never invert or exceed area" {
