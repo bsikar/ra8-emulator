@@ -42,6 +42,8 @@ pub const Event = union(enum) {
         down: bool,
         /// The OS's shortcut modifier was held: Cmd on macOS, Ctrl elsewhere.
         primary: bool = false,
+        /// The shift modifier was held with the key.
+        shift: bool = false,
     },
     text: Text,
     pointer: struct { x: i32, y: i32 },

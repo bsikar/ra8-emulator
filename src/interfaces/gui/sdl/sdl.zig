@@ -266,7 +266,7 @@ fn translate(ev: *const c.SDL_Event) ?Event {
         c.SDL_EVENT_QUIT, c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => .quit,
         c.SDL_EVENT_WINDOW_EXPOSED => .expose,
         c.SDL_EVENT_SYSTEM_THEME_CHANGED => .appearance,
-        c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{ .code = ev.key.key, .down = ev.key.down, .primary = window_keys.primary(mods(ev.key.mod), mac) } },
+        c.SDL_EVENT_KEY_DOWN, c.SDL_EVENT_KEY_UP => .{ .key = .{ .code = ev.key.key, .down = ev.key.down, .primary = window_keys.primary(mods(ev.key.mod), mac), .shift = mods(ev.key.mod).shift } },
         c.SDL_EVENT_TEXT_INPUT => .{ .text = gui.platform.Text.of(std.mem.span(ev.text.text)) },
         c.SDL_EVENT_MOUSE_MOTION => .{ .pointer = .{ .x = @intFromFloat(ev.motion.x), .y = @intFromFloat(ev.motion.y) } },
         c.SDL_EVENT_MOUSE_BUTTON_DOWN, c.SDL_EVENT_MOUSE_BUTTON_UP => .{ .button = .{

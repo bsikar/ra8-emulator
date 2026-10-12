@@ -1,18 +1,13 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains
-//! the window's events (quit, gutter drags), pumps the session link into the
-//! status bar model, the console (RA8EMU-787), the board (RA8EMU-790), the device list (RA8EMU-792) and the camera
-//! picker (RA8EMU-796), whose leaf also takes clicks, as does the board leaf
-//! for its switches and its panel (RA8EMU-1119), and the plug picker
-//! (RA8EMU-802), a device row's fault cell (RA8EMU-817), and the camera leaf's file field (RA8EMU-799), which take
-//! typing, and the registers leaves (RA8EMU-821), read again after a load
-//! or a stop, with the memory leaves following each core's SP and the
-//! disassembly leaves its PC; a press on a leaf's
-//! title changes what it shows (RA8EMU-800). The time bar (RA8EMU-1118)
-//! takes its clicks and typing, and while Run is lit each frame pays the
-//! board its slices here: a session served in this process answers on this
-//! thread between them, so the frame never waits on more than one slice.
-//! Then it draws the shell frame (RA8EMU-764) and shows it through the
-//! platform seam, so SDL and the headless platform run it alike.
+//! the window's events (quit, the menu strip RA8EMU-957, gutter drags) and
+//! pumps the session link into the status bar, console, board, device,
+//! camera and plug models, whose leaves take clicks and typing, and the
+//! registers leaves, read again after a load or a stop. The menu strip
+//! (RA8EMU-968) and the pane titles (RA8EMU-800) take their presses, and
+//! while Run is lit each frame pays the board its slices on the shell's
+//! own thread, so the frame never waits on more than one slice. Then it
+//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL
+//! and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const raster = @import("ra8_render").raster;
@@ -42,6 +37,8 @@ const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
 const shell_theme = @import("theme.zig");
+const menu_bar = @import("../menu_bar.zig");
+const menu_actions = @import("menu_actions.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session
 /// cannot starve the window.
@@ -108,6 +105,9 @@ pub const Shell = struct {
     bar: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
     /// The splitter being dragged, from its button press to its release.
     held: ?pane_layout.Gutter = null,
+    /// The menu strip's state (RA8EMU-957) and the window's width.
+    menu: menu_bar.Menu = .{},
+    width: i32 = 0,
     /// Where the pointer last was, for the wheel and page keys.
     pointer_at: struct { x: i32, y: i32 } = .{ .x = -1, .y = -1 },
     open: bool = true,
@@ -137,6 +137,7 @@ pub const Shell = struct {
         var solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         defer solved.deinit(self.allocator);
         self.bar = shell_frame.barArea(width, height);
+        menu_actions.observe(self, width);
         while (window.poll()) |event| {
             if (event == .appearance) self.themes.restyle(window.appearance());
             self.handle(event, &solved);
@@ -155,6 +156,7 @@ pub const Shell = struct {
             .solved = &solved,
             .strip = status_capture.strip(&self.status, self.state()),
             .bar = if (self.time) |time| time.view(&self.status) else .{},
+            .menu = self.menu,
             .width = width,
             .height = height,
             .painter = self.painter,
@@ -169,11 +171,11 @@ pub const Shell = struct {
 
     /// Apply one input event against this frame's layout.
     pub fn handle(self: *Shell, event: platform.Event, solved: *const pane_layout.Solved) void {
-        if (self.files) |files| if (files.key(event)) return;
         switch (event) {
             .quit => self.open = false,
             .button => |press| {
                 if (press.button != 1) return;
+                if (press.down and menu_actions.press(self, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down) return self.releaseBoard(press.x, press.y);
@@ -202,6 +204,7 @@ pub const Shell = struct {
                 _ = console.wheelIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, turn.dy);
             },
             .text, .key => {
+                if (menu_actions.key(self, event)) return;
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (self.pageConsole(event, solved)) return;

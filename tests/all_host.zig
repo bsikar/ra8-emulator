@@ -129,6 +129,7 @@ test {
     _ = @import("interfaces/gui/shell_frame_test.zig");
     _ = @import("interfaces/gui/menu_test.zig");
     _ = @import("interfaces/gui/menu_bar_test.zig");
+    _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/loop_test.zig");
     _ = @import("interfaces/gui/wall_clock_test.zig");
     _ = @import("interfaces/gui/shell/run_test.zig");

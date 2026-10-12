@@ -49,6 +49,15 @@ pub const Time = struct {
         return true;
     }
 
+    /// One of the bar's commands from the menu strip or a shortcut key
+    /// (RA8EMU-957): the button's press without the hit test.
+    pub fn pressCommand(self: *Time, control: time_bar.Control, link: *Link, status: *Status) void {
+        const was_lit = self.run.lit;
+        time_bar_capture.press(control, status, &self.run, link) catch return;
+        if (self.run.lit != was_lit) self.readout.achieved_milli = null;
+        if (self.run.lit and !was_lit) self.readout.last = null;
+    }
+
     /// Typing and keys for the speed field while it has the keyboard.
     /// Returns whether the event was taken.
     pub fn handle(self: *Time, event: platform.Event, link: *Link) bool {

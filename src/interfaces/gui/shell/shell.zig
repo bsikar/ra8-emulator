@@ -9,6 +9,7 @@ pub const fault = @import("fault.zig");
 pub const field = @import("../ui/shell/field.zig");
 pub const frame = @import("../ui/shell/frame.zig");
 pub const loop = @import("loop.zig");
+pub const menu_actions = @import("menu_actions.zig");
 pub const main = @import("main.zig");
 pub const memory = @import("memory.zig");
 pub const memory_field = @import("memory_field.zig");
