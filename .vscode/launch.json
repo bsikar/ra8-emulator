@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Attach to hosted session (cortex-debug)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "external",
+            "gdbTarget": "127.0.0.1:PORT",
+            "executable": "${command:ra8.sessionElf}",
+            "overrideLaunchCommands": [
+                "target extended-remote 127.0.0.1:PORT"
+            ],
+            "postLaunchCommands": [
+                "monitor reset halt"
+            ]
+        },
+        {
+            "name": "Attach to hosted session (extended-remote)",
+            "type": "cppdbg",
+            "request": "launch",
+            "MIMode": "gdb",
+            "miDebuggerServerAddress": "127.0.0.1:PORT",
+            "program": "${command:ra8.sessionElf}"
+        }
+    ]
+}

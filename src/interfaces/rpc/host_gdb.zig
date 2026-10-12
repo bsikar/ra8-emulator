@@ -119,6 +119,7 @@ pub const Session = struct {
             self.drop();
             return false;
         }
+        if (std.mem.startsWith(u8, request, "qRcmd")) return monitor(self, c, request);
         const reply = c.stub.answer(request, &c.payload) catch return false;
         // A pumped resume that has not stopped yet sends nothing: gdb waits
         // for the stop reply, and the pump delivers it when the run ends.
@@ -159,6 +160,50 @@ pub const Session = struct {
         self.client = null;
     }
 };
+
+/// The largest image a monitor reload reads, in bytes.
+const max_image = 16 * 1024 * 1024;
+
+/// A monitor command (RA8EMU-1155). `monitor reset halt`, `monitor reset`
+/// and `monitor reload` all reboot the hosted session from the ELF it was
+/// booted from, so a rebuild-and-relaunch from the IDE lands without
+/// restarting the app. Anything else gets the empty reply, which gdb
+/// reads as an unsupported monitor command. The replies carry no console
+/// output, so gdb prints nothing.
+fn monitor(self: *Session, c: *Session.Client, request: []const u8) bool {
+    if (!std.mem.startsWith(u8, request, "qRcmd,")) return sendReply(self, c, "");
+    const hex = request["qRcmd,".len..];
+    var text: [64]u8 = undefined;
+    if (hex.len == 0 or hex.len % 2 != 0 or hex.len / 2 > text.len) return sendReply(self, c, "");
+    const len = hex.len / 2;
+    for (0..len) |at| {
+        text[at] = std.fmt.parseInt(u8, hex[at * 2 .. at * 2 + 2], 16) catch return sendReply(self, c, "");
+    }
+    const command = std.mem.trim(u8, text[0..len], " ");
+    const known = std.mem.eql(u8, command, "reset halt") or
+        std.mem.eql(u8, command, "reset") or std.mem.eql(u8, command, "reload");
+    if (!known) return sendReply(self, c, "");
+    const live = self.live orelse return sendReply(self, c, "");
+    reboot(self, live) catch return sendReply(self, c, "");
+    return sendReply(self, c, "OK");
+}
+
+/// Re-boot one live session from its ELF on disk (RA8EMU-1155). The load
+/// resets the machine and leaves it paused, the same path ctl's `load`
+/// takes against a served session.
+fn reboot(self: *Session, live: *session_api.Session) !void {
+    const image = try std.Io.Dir.cwd().readFileAlloc(self.io, self.elf, self.gpa, .limited(max_image));
+    defer self.gpa.free(image);
+    try live.load(live.currentCore(), image);
+}
+
+/// Frame and send one reply; false never ends the connection here.
+fn sendReply(self: *Session, c: *Session.Client, body: []const u8) bool {
+    const framed = rsp.packet.frame(&c.framed, body) catch return false;
+    self.send(c, framed);
+    c.last = body;
+    return true;
+}
 
 /// Whether a request is run control a pumped resume would answer with a
 /// stop reply only later.

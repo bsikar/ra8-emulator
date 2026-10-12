@@ -11,6 +11,7 @@ pub const usb_disk_option = @import("usb_disk_option.zig");
 pub const card = @import("card/card.zig");
 pub const map_main = @import("map_main.zig");
 pub const session_ctl = @import("session_ctl.zig");
+pub const ctl = @import("ctl/ctl.zig");
 pub const host = @import("host/host.zig");
 pub const video_out = @import("video_out.zig");
 pub const gif_out = @import("gif_out.zig");
