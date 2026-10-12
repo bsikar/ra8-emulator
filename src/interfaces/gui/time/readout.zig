@@ -94,23 +94,49 @@ pub const Readout = struct {
         };
     }
 
-    /// "yyyy-mm-dd hh:mm:ss | " when the RTC holds a date, "T+h:mm:ss.mmm", then "| 0.42x of 1x" when short of the request.
-    pub fn text(self: *const Readout, requested_milli: u64, buf: []u8) ![]const u8 {
-        var stream: std.Io.Writer = .fixed(buf);
-        const w = &stream;
-        if (self.date) |date| {
-            var date_buf: [19]u8 = undefined;
-            try w.print("{s} | ", .{date.format(&date_buf)});
-        }
+    /// The line's segments, so the bar can drop whole ones that do not fit
+    /// (RA8EMU-941) instead of clipping one partway: the achieved speed goes
+    /// first, then the date, keeping the elapsed time.
+    pub const Pieces = struct {
+        /// "yyyy-mm-dd hh:mm:ss" when the RTC holds a date.
+        date: ?[]const u8 = null,
+        /// "T+h:mm:ss.mmm", or "T+--" before the first answer.
+        elapsed: []const u8 = "",
+        /// "0.42x of 1x" when the achieved speed falls short of the request.
+        speed: ?[]const u8 = null,
+    };
+
+    /// The segments into caller-owned buffers, which outlive the result.
+    pub fn pieces(self: *const Readout, requested_milli: u64, date_buf: *[19]u8, elapsed_buf: []u8, speed_buf: []u8) !Pieces {
+        var out: Pieces = .{};
+        if (self.date) |date| out.date = date.format(date_buf);
+        var elapsed: std.Io.Writer = .fixed(elapsed_buf);
         if (self.virtual_ns) |ns| {
             const ms = ns / std.time.ns_per_ms;
-            try w.print("T+{d}:{d:0>2}:{d:0>2}.{d:0>3}", .{ ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000 });
-        } else try w.writeAll("T+--");
+            try elapsed.print("T+{d}:{d:0>2}:{d:0>2}.{d:0>3}", .{ ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000 });
+        } else try elapsed.writeAll("T+--");
+        out.elapsed = elapsed.buffered();
         if (self.achieved_milli) |got| if (short(got, requested_milli)) {
             var got_buf: [24]u8 = undefined;
             var want_buf: [24]u8 = undefined;
-            try w.print(" | {s} of {s}", .{ try speed_field.format(got, &got_buf), try speed_field.format(requested_milli, &want_buf) });
+            var speed: std.Io.Writer = .fixed(speed_buf);
+            try speed.print("{s} of {s}", .{ try speed_field.format(got, &got_buf), try speed_field.format(requested_milli, &want_buf) });
+            out.speed = speed.buffered();
         };
+        return out;
+    }
+
+    /// "yyyy-mm-dd hh:mm:ss | " when the RTC holds a date, "T+h:mm:ss.mmm", then "| 0.42x of 1x" when short of the request.
+    pub fn text(self: *const Readout, requested_milli: u64, buf: []u8) ![]const u8 {
+        var date_buf: [19]u8 = undefined;
+        var elapsed_buf: [32]u8 = undefined;
+        var speed_buf: [56]u8 = undefined;
+        const p = try self.pieces(requested_milli, &date_buf, &elapsed_buf, &speed_buf);
+        var stream: std.Io.Writer = .fixed(buf);
+        const w = &stream;
+        if (p.date) |date| try w.print("{s} | ", .{date});
+        try w.writeAll(p.elapsed);
+        if (p.speed) |speed| try w.print(" | {s}", .{speed});
         return stream.buffered();
     }
 };
