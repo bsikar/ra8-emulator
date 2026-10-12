@@ -235,6 +235,7 @@ test "shell frame edge: draw renders across extreme window dimensions without pa
                 .line => {},
                 .glyph => {},
                 .image => {},
+                .panel => {},
             }
         }
 

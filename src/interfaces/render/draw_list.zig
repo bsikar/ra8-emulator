@@ -40,6 +40,18 @@ pub const Rect = struct {
     pub fn contains(self: Rect, x: i32, y: i32) bool {
         return x >= self.x and y >= self.y and x < self.x + self.w and y < self.y + self.h;
     }
+
+    /// The smallest rect covering both.
+    pub fn unionWith(self: Rect, other: Rect) Rect {
+        const x = @min(self.x, other.x);
+        const y = @min(self.y, other.y);
+        return .{
+            .x = x,
+            .y = y,
+            .w = @max(self.x + self.w, other.x + other.w) - x,
+            .h = @max(self.y + self.h, other.y + other.h) - y,
+        };
+    }
 };
 
 /// Where a span `size` long starts, from the start of a span `room` long it
@@ -67,12 +79,16 @@ pub const Glyph = struct { area: Rect, cell_x: u32, cell_y: u32, color: Color };
 /// `smooth` samples filtered instead of nearest (RA8EMU-965): for an image
 /// shown at a fractional scale, where nearest would make text shimmer.
 pub const Quad = struct { area: Rect, image: Image, smooth: bool = false };
+/// The LCD panel's streaming texture (RA8EMU-823): the image drawn over
+/// `area`, with `dirty` the image part that changed since the last present.
+pub const Panel = struct { area: Rect, image: Image, dirty: Rect, smooth: bool = false };
 
 pub const Shape = union(enum) {
     fill: Fill,
     line: Line,
     glyph: Glyph,
     image: Quad,
+    panel: Panel,
 };
 
 pub const Command = struct { shape: Shape, clip: Rect };
@@ -135,6 +151,13 @@ pub const DrawList = struct {
     pub fn scaledImage(self: *DrawList, area: Rect, source: Image, smooth: bool) !void {
         if (area.intersect(self.clip()).empty()) return;
         try self.add(.{ .image = .{ .area = area, .image = source, .smooth = smooth } });
+    }
+
+    /// The panel texture drawn over `area`; the GPU path refills only
+    /// `dirty`, the CPU path scales it like an image quad (RA8EMU-823).
+    pub fn panel(self: *DrawList, area: Rect, source: Image, dirty: Rect, smooth: bool) !void {
+        if (area.intersect(self.clip()).empty()) return;
+        try self.add(.{ .panel = .{ .area = area, .image = source, .dirty = dirty, .smooth = smooth } });
     }
 
     fn add(self: *DrawList, shape: Shape) !void {

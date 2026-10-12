@@ -106,6 +106,28 @@ test "in the light palette the board pane frame is pinned to its own golden" {
     try std.testing.expectEqual(@as(u64, 3783149903112210438), try boardDigest(light));
 }
 
+/// The board pane with a dirty panel sub-rect, at `area`'s scale.
+fn dirtyDigest(theme: *const gui_app.colors.Theme, area: Rect) !u64 {
+    var list = draw_list.DrawList.init(std.testing.allocator, @intCast(area.w), @intCast(area.h));
+    defer list.deinit();
+    var frame = try raster.Framebuffer.init(std.testing.allocator, @intCast(area.w), @intCast(area.h));
+    defer frame.deinit(std.testing.allocator);
+    var pixels: [64 * 36]Color = undefined;
+    for (&pixels, 0..) |*pixel, index| {
+        const shade: u8 = @intCast((index % 64) * 4);
+        pixel.* = Color.rgb(shade, shade, shade);
+    }
+    var leds: pane.Leds = .{};
+    try pane.draw(&list, theme, area, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels }, .dirty = .{ .x = 16, .y = 8, .w = 32, .h = 16 } });
+    raster.draw(&frame, &list, font.atlas);
+    return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
+}
+
+test "the pane with a dirty panel sub-rect is pinned at two scales" {
+    try std.testing.expectEqual(@as(u64, 15748600615838582525), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 480, .h = 320 }));
+    try std.testing.expectEqual(@as(u64, 15710792123985740739), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 900, .h = 400 }));
+}
+
 test "the pane's LED count and lamp colours are the chip's" {
     const gpio = ra8.chip.periph.gpio;
     try std.testing.expectEqual(gpio.led_count, pane.led_count);

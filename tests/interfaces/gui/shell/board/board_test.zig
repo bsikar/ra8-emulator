@@ -144,7 +144,7 @@ const Drawn = struct {
     pixels: raster.Framebuffer,
     body: draw_list.Rect,
 
-    fn of(board: *const Board, width: u32, height: u32) !Drawn {
+    fn of(board: *Board, width: u32, height: u32) !Drawn {
         const gpa = std.testing.allocator;
         var layout = try pane_layout.twoCore(gpa);
         defer layout.deinit();

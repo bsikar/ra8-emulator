@@ -90,6 +90,7 @@ pub const Backend = struct {
                 },
                 .glyph => |shape| if (atlas) |cells| raster.glyph(self.fb, cells, shape, self.clip()),
                 .image => |shape| raster.image(self.fb, shape, self.clip()),
+                .panel => |shape| raster.image(self.fb, .{ .area = shape.area, .image = shape.image, .smooth = shape.smooth }, self.clip()),
             }
         }
     }

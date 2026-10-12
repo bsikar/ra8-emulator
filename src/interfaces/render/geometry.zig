@@ -22,12 +22,17 @@ pub const Vertex = extern struct {
 };
 
 /// What a run samples: nothing, the glyph atlas, or one image.
+/// The panel's streaming texture and the part to refill (RA8EMU-823).
+pub const PanelTex = struct { image: draw_list.Image, dirty: draw_list.Rect };
+
 pub const Texture = union(enum) {
     none,
     atlas,
     image: draw_list.Image,
     /// The same pixels sampled filtered (RA8EMU-965).
     smooth: draw_list.Image,
+    /// The LCD panel, refilled only in its dirty rect (RA8EMU-823).
+    panel: PanelTex,
 
     pub fn eql(self: Texture, other: Texture) bool {
         return switch (self) {
@@ -35,6 +40,7 @@ pub const Texture = union(enum) {
             .atlas => other == .atlas,
             .image => |mine| other == .image and same(mine, other.image),
             .smooth => |mine| other == .smooth and same(mine, other.smooth),
+            .panel => |mine| other == .panel and same(mine.image, other.panel.image) and std.meta.eql(mine.dirty, other.panel.dirty),
         };
     }
 };
@@ -89,6 +95,7 @@ pub const Batch = struct {
                 .line => |shape| try self.line(clip, shape),
                 .glyph => |shape| if (atlas) |cells| try self.glyph(clip, cells, shape),
                 .image => |shape| try self.image(clip, shape),
+                .panel => |shape| try self.panel(clip, shape),
             }
         }
     }
@@ -176,6 +183,22 @@ pub const Batch = struct {
         };
         const texture: Texture = if (shape.smooth) .{ .smooth = shape.image } else .{ .image = shape.image };
         try self.quad(texture, clip, area, Color.rgb(255, 255, 255), uv);
+    }
+
+    /// The panel scales into its area like an image quad; the run carries
+    /// the dirty rect the GPU path refills (RA8EMU-823).
+    fn panel(self: *Batch, clip: Rect, shape: draw_list.Panel) !void {
+        const area = shape.area.intersect(clip);
+        if (area.empty() or shape.image.width == 0 or shape.image.height == 0) return;
+        const span_w = float(shape.area.w);
+        const span_h = float(shape.area.h);
+        const uv = Uv{
+            .u0 = float(area.x - shape.area.x) / span_w,
+            .v0 = float(area.y - shape.area.y) / span_h,
+            .u1 = float(area.x + area.w - shape.area.x) / span_w,
+            .v1 = float(area.y + area.h - shape.area.y) / span_h,
+        };
+        try self.quad(.{ .panel = .{ .image = shape.image, .dirty = shape.dirty } }, clip, area, Color.rgb(255, 255, 255), uv);
     }
 
     /// Two triangles over `area`, in the run for `texture` and `clip`.

@@ -51,6 +51,13 @@ pub fn digest(list: *const draw_list.DrawList) u64 {
                 std.hash.autoHash(&hasher, quad.image.height);
                 hasher.update(std.mem.sliceAsBytes(quad.image.pixels));
             },
+            .panel => |panel| {
+                std.hash.autoHash(&hasher, panel.area);
+                std.hash.autoHash(&hasher, panel.dirty);
+                std.hash.autoHash(&hasher, panel.image.width);
+                std.hash.autoHash(&hasher, panel.image.height);
+                hasher.update(std.mem.sliceAsBytes(panel.image.pixels));
+            },
             inline else => |shape| std.hash.autoHash(&hasher, shape),
         }
     }
