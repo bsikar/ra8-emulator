@@ -12,8 +12,11 @@
 //! does that), which is why the trip is followed and not just compared.
 //!
 //! A decision can only change through the flags. A flag setter fed by a
-//! moving value is fine when nothing reads its flags before the next setter
-//! (dead). Otherwise it must be a CMP, ADD, SUB or MOVS of one moving
+//! moving value is fine when a later setter in the same trip replaces all of
+//! its flags before anything reads them (dead). Flags that reach the head
+//! are not dead: a skip ends there with the traced trip's xPSR, so they have
+//! to be the ones every skipped trip leaves. A live setter must be a CMP,
+//! ADD, SUB or MOVS of one moving
 //! value against a still one; its flags then stay put until the value
 //! reaches one of a few points around that still value or the sign and
 //! carry boundaries. The answer is the whole trips strictly before the
@@ -167,14 +170,19 @@ fn zeroTest(self: *State, s: td.Step, now: [16]u32) bool {
 }
 
 /// Whether nothing reads the flags step `i` sets before something sets them
-/// again, going round the trip.
+/// again before this trip ends. Flags reaching its head remain observable.
+/// Only ADDS, SUBS and CMP write all of NZCV: a MOVS or a logical op after
+/// step `i` leaves its carry and overflow standing, so the scan goes on.
 fn dead(steps: []const td.Step, i: usize) bool {
-    for (1..steps.len) |k| {
-        const next = steps[(i + k) % steps.len];
+    for (steps[i + 1 ..]) |next| {
         if (next.reads_flags) return false;
-        if (next.sets_flags) return true;
+        if (next.sets_flags and writesAll(next.form)) return true;
     }
-    return true;
+    return false;
+}
+
+fn writesAll(form: td.Form) bool {
+    return form == .add or form == .sub or form == .compare;
 }
 
 /// Trips after the traced one before `x`, moving by `delta` a trip, reaches a

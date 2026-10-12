@@ -83,6 +83,55 @@ test "sev sets the event register in both widths" {
     try std.testing.expect(cpu.event);
 }
 
+fn peerEvent(context: *anyopaque) void {
+    const peer: *ra8.chip.core.cpu.cpu.Cpu = @ptrCast(@alignCast(context));
+    peer.event = true;
+}
+
+test "CPU foundation SEV broadcasts both widths and wakes a peer without a peer slot" {
+    const fixture = @import("../exception/ram.zig");
+    const Fake = @import("../exception/fake_source.zig").Fake;
+    for ([_]bool{ false, true }) |wide_sev| {
+        var a_ram = fixture.Ram{};
+        var b_ram = fixture.Ram{};
+        var a = try fixture.boot(&a_ram);
+        var b = try fixture.boot(&b_ram);
+        var fake = Fake{};
+        b.source = fake.source();
+        b_ram.putHalf(fixture.code, 0xBF20); // WFE.
+        b_ram.putHalf(fixture.code + 2, 0x3301);
+        a.event_sender = .{ .context = &b, .sendFn = peerEvent };
+        a_ram.putHalf(fixture.code, if (wide_sev) 0xF3AF else 0xBF40);
+        if (wide_sev) a_ram.putHalf(fixture.code + 2, 0x8004);
+        _ = b.run(100);
+        try std.testing.expect(b.waiting != null);
+        try std.testing.expectEqual(@as(u64, 1), b.slots);
+        try std.testing.expect(a.step() == null);
+        try std.testing.expect(a.event and b.event);
+        _ = b.runToCount(100, 1);
+        try std.testing.expect(b.waiting == null and !b.event);
+        try std.testing.expectEqual(@as(u64, 1), b.slots);
+        try std.testing.expectEqual(@as(u32, 0), b.regs.low[3]);
+        try a.reset(fixture.base);
+        try std.testing.expect(a.event_sender != null);
+        try std.testing.expect(a.step() == null);
+        try std.testing.expect(b.event);
+    }
+}
+
+test "CPU foundation a condition-failed SEV does not broadcast" {
+    const fixture = @import("../exception/ram.zig");
+    var ram = fixture.Ram{};
+    var a = try fixture.boot(&ram);
+    var b = try fixture.boot(&ram);
+    a.event_sender = .{ .context = &b, .sendFn = peerEvent };
+    ram.putHalf(fixture.code, 0xBF40);
+    a.regs.xpsr = ra8.chip.core.cpu.it_state.put(a.regs.xpsr, 0x08); // IT EQ, Z clear.
+    try std.testing.expect(a.step() == null);
+    try std.testing.expect(!a.event and !b.event);
+    try std.testing.expectEqual(@as(u64, 1), a.slots);
+}
+
 test "wfe with the event set clears it and completes" {
     var cpu: ra8.chip.core.cpu.cpu.Cpu = .{ .bus = undefined, .event = true };
     cpu.regs.pc = 0x100;

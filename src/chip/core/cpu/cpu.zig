@@ -17,7 +17,7 @@ const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
 const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
-const park = @import("park.zig");
+const count_mod = @import("count.zig");
 pub const fixed_trip = @import("fixed_trip.zig");
 pub const trip_decode = @import("trip_decode.zig");
 pub const counted = @import("counted/counted.zig");
@@ -78,8 +78,12 @@ pub const Cpu = struct {
     bus: bus.Bus,
     /// S0-S31/D0-D15 and FPSCR, for the FPU groups (RA8EMU-26).
     fp: fp_state.State = .{},
-    /// Instructions retired since reset.
+    /// Cumulative instruction retirements; warm reset preserves them.
     retired: u64 = 0,
+    /// Architectural slots, including synchronous entries, across warm reset.
+    slots: u64 = 0,
+    /// Slots which entered a synchronous exception without retiring.
+    sync_entries: u64 = 0,
     /// Optional observer for each retired instruction (profiling/debugging).
     retire_listener: ?RetireListener = null,
     /// Optional check before each instruction; a held one ends the stretch.
@@ -126,6 +130,11 @@ pub const Cpu = struct {
     /// The event register WFE waits on: set by SEV and by exception entry
     /// and return, cleared by a WFE that finds it set.
     event: bool = false,
+    /// Embedding wiring for SEV broadcast; excluded from architectural state.
+    event_sender: ?@import("ops/hint.zig").EventSender = null,
+    /// Whether reset has run. The first one keeps the SCS configuration the
+    /// board seeded; every later one is a warm reboot that clears it.
+    booted: bool = false,
     /// What a WFI or WFE left the core waiting for, or null while it runs.
     waiting: ?exception.sleep.Wait = null,
     /// Which encodings this core implements: an M85's unless the board
@@ -135,13 +144,7 @@ pub const Cpu = struct {
     trip: fixed_trip.Watch = .{},
 
     pub fn reset(self: *Cpu, vtor: u32) bus.Error!void {
-        try reset_mod.fromVectorTable(&self.regs, self.bus, vtor);
-        self.retired = 0;
-        self.vtor = vtor;
-        self.raised = null;
-        self.active = .{};
-        self.event = false;
-        self.waiting = null;
+        try reset_mod.cpu(self, vtor);
     }
 
     /// The instruction at `address` and its decode: from the block cache
@@ -156,6 +159,14 @@ pub const Cpu = struct {
 
     /// One instruction, or the reason there was none.
     pub fn step(self: *Cpu) ?Stop {
+        const before = self.retired;
+        if (self.execute()) |stopped| return stopped;
+        self.slots += 1;
+        if (self.retired == before) self.sync_entries += 1;
+        return null;
+    }
+
+    fn execute(self: *Cpu) ?Stop {
         const address = self.regs.pc;
         if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
         if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
@@ -219,9 +230,10 @@ pub const Cpu = struct {
         // An instruction an IT block governs moves the block on whether it
         // ran or not. IT itself leaves the state it just wrote.
         if (it_state.active(it)) self.regs.xpsr = it_state.put(self.regs.xpsr, it_state.advance(it));
+        if (self.finish(address)) |stopped| return stopped;
         self.retired += 1;
         if (self.retire_listener) |listener| listener.instruction(address);
-        return self.finish(address);
+        return null;
     }
 
     /// What an instruction leaves for after it retires and its IT state has
@@ -316,37 +328,13 @@ pub const Cpu = struct {
     }
 
     pub fn run(self: *Cpu, count: u64) Stop {
-        if (self.quiet) |q| q.stir();
-        defer self.trip.drop(self);
-        var left = count;
-        self.trip.parked = false;
-        while (left > 0) : (left -= 1) {
-            const lent = self.trip.lend(self);
-            const taken = exception.dispatch.poll(self) catch return .{ .bus_fault = self.regs.pc };
-            self.trip.reclaim(self, lent, taken);
-            if (taken) self.waiting = null;
-            if (self.waiting) |why| {
-                const up = exception.sleep.wakes(self, why) catch return .{ .bus_fault = self.regs.pc };
-                // Asleep with nothing to wake it: nothing changes before the
-                // next boundary, so the rest of the stretch goes by at once.
-                if (!up) return .count;
-                self.waiting = null;
-            }
-            // Whole trips of a park loop (RA8EMU-450) or of a loop whose
-            // trip changes nothing (RA8EMU-463) go by at once.
-            // A guard sees every arrival, so no trips are skipped under one.
-            if (self.fetch_guard) |guard| if (guard.holds(self.regs.pc)) return .count;
-            const trips = if (self.fetch_guard == null) park.trips(self, left) else 0;
-            if (trips != 0) {
-                self.retired += trips;
-                left -= trips - 1;
-                continue;
-            }
-            if (self.step()) |stopped| return stopped;
-            if (self.until) |wait| if (wait.met()) return .count;
-            if (self.cut) |edge| if (edge.fired) return .count;
-        }
-        return .count;
+        return count_mod.run(self, count, null);
+    }
+
+    /// Stop at the first awake polled gap at or after absolute `target`.
+    /// Exhausting this phase's budget leaves its last gap unpolled.
+    pub fn runToCount(self: *Cpu, count: u64, target: u64) Stop {
+        return count_mod.run(self, count, target);
     }
 };
 

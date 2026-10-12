@@ -35,6 +35,8 @@ test {
     _ = @import("chip/core/cpu/cortex_test.zig");
     _ = @import("chip/core/cpu/memory/all_test.zig");
     _ = @import("chip/core/cpu/cpu_test.zig");
+    _ = @import("chip/core/cpu/count_test.zig");
+    _ = @import("chip/core/cpu/exception/reset_scs_test.zig");
     _ = @import("chip/core/cpu/decode/decode_test.zig");
     _ = @import("chip/core/cpu/decode/cache_test.zig");
     _ = @import("chip/core/cpu/text/all_test.zig");
