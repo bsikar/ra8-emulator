@@ -37,6 +37,7 @@ const shell_open = @import("open.zig");
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
+const shell_memory_field = @import("memory_field.zig");
 const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
@@ -84,6 +85,9 @@ pub const Shell = struct {
     /// Register edits from the registers leaves (RA8EMU-946).
     edit: ?*shell_register_edit.Editor = null,
     memory: ?*shell_memory.Pair = null,
+    /// The memory leaf's address field, whose image typed symbols
+    /// resolve against (RA8EMU-934).
+    memory_field: ?*shell_memory_field.Pin = null,
     code: ?*shell_memory.Pair = null,
     /// The call stack leaves, walked again after a load and every stop.
     stack: ?*shell_stack.Pair = null,
@@ -201,11 +205,10 @@ pub const Shell = struct {
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (self.pageConsole(event, solved)) return;
-                if (self.time) |time| if (self.link) |link| {
-                    if (time.handle(event, link)) return;
-                };
+                if (self.time) |time| if (self.link) |link| if (time.handle(event, link)) return;
                 if (self.plug) |plug| _ = plug.handle(event);
                 if (self.camera_file) |file| _ = file.handle(event);
+                if (self.memory_field) |field| _ = field.handle(event);
             },
             .picked => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
             else => {},
@@ -236,7 +239,8 @@ pub const Shell = struct {
     fn pressFields(self: *Shell, x: i32, y: i32) bool {
         const in_plug = if (self.plug) |plug| plug.press(x, y) else false;
         const in_file = if (self.camera_file) |file| file.press(x, y) else false;
-        return self.pressBar(x, y) or in_plug or in_file;
+        const in_memory = if (self.memory_field) |field| field.press(x, y) else false;
+        return self.pressBar(x, y) or in_plug or in_file or in_memory;
     }
 
     fn pressBar(self: *Shell, x: i32, y: i32) bool {
@@ -329,6 +333,7 @@ pub const Shell = struct {
         if (self.plug) |plug| _ = plug.attach(link);
         if (self.startup) |startup| if (self.loaded) startup.attach(link);
         if (self.registers) |registers| registers.attach(link);
+        if (self.memory_field) |field| _ = field.submit(self.memory);
         if (self.memory) |memory| memory.attach(link);
         if (self.code) |code| code.attach(link);
         if (self.stack) |stack| stack.attach(link);

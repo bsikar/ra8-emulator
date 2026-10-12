@@ -28,6 +28,7 @@ const source_spec = @import("ra8_host").camera.source_spec;
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
+const shell_memory_field = @import("memory_field.zig");
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
 const card_apps = @import("ra8_rpc").card_apps;
@@ -220,8 +221,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
         return err;
     };
     // Outside clients (ctl, IDEs) reach the same session the panes show
-    // (RA8EMU-1156). Nothing auto-starts: no bind, no hosting, and the
-    // file stays away; a client then starts ra8_gui itself.
+    // (RA8EMU-1156): no bind, no hosting, and the file stays away.
     var hosted: ?Hosted = null;
     defer if (hosted) |*h| h.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
@@ -279,11 +279,14 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.stack = &stack;
     var memory: shell_memory.Pair = .{};
     shell.memory = &memory;
+    var memory_field: shell_memory_field.Pin = .{};
+    try memory_field.init();
+    shell.memory_field = &memory_field;
     var code: shell_memory.Pair = .{ .follows = .pc };
     shell.code = &code;
     var files: shell_open.Open = .{ .io = io, .allocator = allocator };
     shell.files = &files;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .code = &code, .stack = &stack };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .stack = &stack };
     shell.painter = panes.painter();
     try drive(io, &shell, window, path, bytes, args.frames);
     link.close();
@@ -338,6 +341,7 @@ fn answerLocal(context: *anyopaque) anyerror!void {
 pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, frames: ?u32) !void {
     var sent = false;
     var drawn: u32 = 0;
+    if (shell.memory_field) |field| field.image = shell_memory_field.Image.init(bytes) catch null;
     var pace = wall_clock.Host.init(io);
     const clock = pace.clock();
     while (true) {

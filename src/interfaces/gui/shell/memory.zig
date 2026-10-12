@@ -153,6 +153,8 @@ pub const Pair = struct {
     cores: [2]Memory = .{ .{ .core = .cpu0 }, .{ .core = .cpu1 } },
     /// The register each core's batch starts from.
     follows: shell_registers.Register = .sp,
+    /// The pinned address (RA8EMU-934), or null to follow `follows`.
+    pin: ?u32 = null,
 
     pub fn of(self: *const Pair, core: pane_layout.Core) *const Memory {
         return &self.cores[@backingInt(core)];
@@ -163,9 +165,22 @@ pub const Pair = struct {
     pub fn follow(self: *Pair, registers: *const shell_registers.Pair) void {
         for (&self.cores, registers.cores) |*model, core| {
             if (core.serial == model.seen) continue;
-            const address = core.value(self.follows) orelse continue;
+            const address = self.pin orelse (core.value(self.follows) orelse continue);
             model.follow(address, core.serial);
         }
+    }
+
+    /// Pin the leaf to `address`, or when null follow `follows` again.
+    /// Either way the rows re-read at once: a pin starts its next batch
+    /// there, and unpinning lets the next registers publish re-follow.
+    pub fn pinTo(self: *Pair, address: ?u32) void {
+        self.pin = address;
+        if (address) |pinned| {
+            for (&self.cores) |*model| {
+                model.address = pinned;
+                model.want = true;
+            }
+        } else for (&self.cores) |*model| model.seen = 0;
     }
 
     pub fn attach(self: *Pair, link: *session_link.Link) void {

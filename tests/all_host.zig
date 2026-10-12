@@ -146,6 +146,7 @@ test {
     _ = @import("interfaces/gui/shell/plug_test.zig");
     _ = @import("interfaces/gui/shell/registers_test.zig");
     _ = @import("interfaces/gui/shell/memory_test.zig");
+    _ = @import("interfaces/gui/shell/memory_field_test.zig");
     _ = @import("interfaces/gui/shell/stack_test.zig");
     _ = @import("interfaces/gui/shell/stack_live_test.zig");
     _ = @import("interfaces/gui/shell_live_test.zig");
