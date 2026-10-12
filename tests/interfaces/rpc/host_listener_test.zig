@@ -1,7 +1,5 @@
-//! Tests for src/interfaces/rpc/host_listener.zig (RA8EMU-1156): the
-//! discovery file round-trips the address through ctl's listen spec, a
-//! client over the socket is served on the same Served context the panes
-//! use, and a hung-up client is dropped for the next one.
+//! Host listener discovery, served RPC, GDB and reconnect tests (RA8EMU-1156).
+//! They use the same Served context as the panes and real host sockets.
 const std = @import("std");
 const ra8 = @import("ra8");
 const cli_app = @import("cli_app");
@@ -151,7 +149,7 @@ test "a gdb client breaks, continues, hits it and reads registers" {
 
     const tx = try gpa.alloc(u8, Env.max_frame);
     defer gpa.free(tx);
-    var connection = try Connection.unix(std.testing.io, bound.socket_path.?);
+    var connection = try connect(bound.address);
     defer connection.close();
     const peer = try serve_peer.Peer.init(gpa, connection.transport());
     defer peer.deinit();
@@ -172,12 +170,10 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     try gdb.init(port);
     defer gdb.deinit();
 
-    // gdb's first packet is a register read; pc() sends it and parses
-    // the bytes rsp sends back in target order.
+    // pc() sends a register read and parses the reply in target order.
     try std.testing.expectEqual(pc0.value, try gdb.pc(&bound));
 
-    // A breakpoint at the pc the core sits at, then continue: the hit
-    // stops the run and the pump delivers its stop reply.
+    // Continuing from this breakpoint delivers the hit's stop reply.
     var point: [32]u8 = undefined;
     const where = try std.fmt.bufPrint(&point, "Z0,{x},1", .{pc0.value});
     try gdb.send(where);
@@ -187,8 +183,7 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     try std.testing.expect(stop.len > 0 and (stop[0] == 'T' or stop[0] == 'S'));
     try std.testing.expectEqual(pc0.value, try gdb.pc(&bound));
 
-    // The monitor commands the IDE flow uses: reset halt reboots the
-    // session from its ELF and leaves it paused at the reset vector.
+    // The IDE's reset halt reboots from the ELF and pauses at its vector.
     const halt = try monitorHex(gpa, "reset halt");
     defer gpa.free(halt);
     try gdb.send(halt);
@@ -200,6 +195,14 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     try gdb.send(reload);
     try std.testing.expectEqualStrings("OK", try gdb.reply(&bound));
     try std.testing.expectEqual(pc1, try gdb.pc(&bound));
+
+    // A monitor reply to a peer that stopped reading drops the client.
+    const host = bound.gdb.items[0];
+    try blockReply(host.client.?.stream, gdb.stream);
+    try gdb.send("qRcmd,");
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 2000;
+    while (host.client != null and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) bound.pumpGdb();
+    try std.testing.expect(host.client == null);
 }
 
 test "ctl's discovery reader reads what the app announced" {
@@ -235,16 +238,14 @@ test "ctl's discovery reader reads what the app announced" {
     try std.testing.expectEqualStrings("/work/my fw.elf", snapshot.sessions[1].elf);
 }
 
-/// One gdb client over the session's loopback port, packets pumped by the
-/// host between frames.
+/// One gdb client over the session's loopback port, pumped between frames.
 const Gdb = struct {
     stream: std.Io.net.Stream,
     wire: ra8.gdb.rsp.packet.Reader,
     incoming: [0x1000]u8,
     reply_buf: [0x1000]u8,
 
-    /// The buffers must not move once the reader holds them, so the
-    /// caller declares the struct and this fills it in place.
+    /// Fill in place: the reader holds the buffers' addresses.
     fn init(self: *Gdb, port: u16) !void {
         const ip = try std.Io.net.IpAddress.parse("127.0.0.1", port);
         self.stream = try ip.connect(std.testing.io, .{ .mode = .stream });
@@ -260,8 +261,7 @@ const Gdb = struct {
     fn send(self: *Gdb, payload: []const u8) !void {
         var framed: [0x1100]u8 = undefined;
         const bytes = try ra8.gdb.rsp.packet.frame(&framed, payload);
-        var out = self.stream.writer(std.testing.io, &.{});
-        out.interface.writeAll(bytes) catch return error.Socket;
+        ra8.host.sock.ready.sendAll(std.testing.io, self.stream.socket.handle, bytes, 1000) catch return error.Socket;
     }
 
     /// The next packet the stub sends, pumping the host between polls.
@@ -270,9 +270,11 @@ const Gdb = struct {
         const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
         while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
             bound.pumpGdb();
-            while ((ra8.host.sock.ready.wait(std.testing.io, fd, 0) catch return error.Socket).any()) {
+            while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline and
+                (ra8.host.sock.ready.wait(std.testing.io, fd, 0) catch return error.Socket).any())
+            {
                 var byte: [1]u8 = undefined;
-                const got = std.posix.read(fd, &byte) catch return error.Socket;
+                const got = ra8.host.sock.ready.takeByte(std.testing.io, fd, &byte, false) orelse return error.Socket;
                 if (got == 0) return error.Closed;
                 if (self.wire.push(byte[0])) |event| switch (event) {
                     .packet => |packet| {
@@ -299,6 +301,26 @@ const Gdb = struct {
     }
 };
 
+/// Fill the real peer queue and prove even a small reply meets backpressure.
+fn blockReply(stream: std.Io.net.Stream, peer: std.Io.net.Stream) !void {
+    const io = std.testing.io;
+    if (@import("builtin").os.tag != .windows) {
+        const size: c_int = 4096;
+        try std.posix.setsockopt(stream.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.SNDBUF, std.mem.asBytes(&size));
+        try std.posix.setsockopt(peer.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVBUF, std.mem.asBytes(&size));
+    }
+    const bytes: [64 * 1024]u8 = @splat('g');
+    var chunk: []const u8 = &bytes;
+    const deadline = std.Io.Timestamp.now(io, .awake).toMilliseconds() + 2000;
+    while (std.Io.Timestamp.now(io, .awake).toMilliseconds() < deadline) {
+        ra8.host.sock.ready.sendAll(io, stream.socket.handle, chunk, 20) catch |err| {
+            try std.testing.expectEqual(error.Timeout, err);
+            if (chunk.len == 1) return;
+            chunk = "g";
+        };
+    }
+    return error.Timeout;
+}
 /// A monitor command as the wire sees it: qRcmd, plus the hex text.
 fn monitorHex(gpa: std.mem.Allocator, text: []const u8) ![]u8 {
     var out = try gpa.alloc(u8, "qRcmd,".len + text.len * 2);

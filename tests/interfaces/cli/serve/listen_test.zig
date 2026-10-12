@@ -34,11 +34,21 @@ fn listen(spec: []const u8, line: []u8) !serve_peer.Listening {
     try std.testing.expect(win32.CreateProcessW(null, wide, null, null, .TRUE, @bitCast(std.os.windows.CreateProcessFlags{ .create_new_console = true, .create_new_process_group = true }), null, null, &startup, &info).toBool());
     var child: std.process.Child = .{ .id = info.process, .thread_handle = info.thread, .stdin = null, .stdout = null, .stderr = .{ .handle = ends[0], .flags = .{ .nonblocking = false } }, .request_resource_usage_statistics = false };
     errdefer child.kill(std.testing.io);
-    var reader = child.stderr.?.reader(std.testing.io, line);
-    const said = try reader.interface.takeDelimiterExclusive('\n');
     const prefix = "serve: listening on ";
-    try std.testing.expect(std.mem.startsWith(u8, said, prefix));
-    return .{ .child = child, .bound = said[prefix.len..] };
+    var at: usize = 0;
+    while (true) {
+        var one: [1]u8 = undefined;
+        var slices = [_][]u8{&one};
+        if (try child.stderr.?.readStreaming(std.testing.io, &slices) == 0) return error.EndOfStream;
+        if (one[0] == '\n') {
+            if (std.mem.startsWith(u8, line[0..at], prefix)) return .{ .child = child, .bound = line[prefix.len..at] };
+            at = 0;
+            continue;
+        }
+        if (at == line.len) return error.LineTooLong;
+        line[at] = one[0];
+        at += 1;
+    }
 }
 
 fn stop(child: *std.process.Child) !void {
@@ -120,7 +130,8 @@ test "listen specs: an empty host and localhost bind loopback, a bracketed v6 li
 test "snapshot is refused on a non-loopback TCP listener (RA8EMU-1175)" {
     const gpa = std.testing.allocator;
     var line: [128]u8 = undefined;
-    var started = try serve_peer.listen("tcp:0.0.0.0:0", &line);
+    var started = try listen("tcp:0.0.0.0:0", &line);
+    errdefer started.child.kill(std.testing.io);
     const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
     const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
     var connection = try Connection.tcp(std.testing.io, try std.Io.net.IpAddress.parse("127.0.0.1", port));
@@ -130,6 +141,6 @@ test "snapshot is refused on a non-loopback TCP listener (RA8EMU-1175)" {
     try std.testing.expectEqual(proto.capabilities, (try peer.next()).ready);
     try std.testing.expectError(error.Refused, peer.call(proto.Ack, proto.StatePath, .snapshot, .{ .path = "/tmp/x.ra8snap" }));
     connection.close();
-    try std.posix.kill(started.child.id.?, .TERM);
+    try stop(&started.child);
     try std.testing.expectEqual(Term{ .exited = 0 }, try started.child.wait(std.testing.io));
 }

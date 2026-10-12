@@ -58,14 +58,39 @@ test "native partial send progresses through the host send loop without changing
     const timeout = (std.Io.Timeout{ .duration = .{ .raw = .fromMilliseconds(2000), .clock = .awake } }).toDeadline(io);
     const wrote = try afd.send(io, client.socket.handle, sent, timeout);
     try std.testing.expect(wrote > 0 and wrote < sent.len);
-    try ready.sendAll(io, client.socket.handle, sent[wrote..], 2000);
-    var at: usize = 0;
-    while (at < received.len) {
-        const got = try afd.receive(io, peer.socket.handle, received[at..], false, timeout);
-        try std.testing.expect(got > 0);
-        at += got;
+    std.debug.print("native first partial progress: {d}/{d}bytes\n", .{ wrote, sent.len });
+    var drain: Drain = .{ .handle = peer.socket.handle, .bytes = received, .timeout = timeout };
+    {
+        // The peer must read while the remaining sends meet backpressure.
+        const receiving = try @import("ra8").host.worker.spawn(Drain.run, &drain);
+        defer @import("ra8").host.worker.join(receiving);
+        try ready.sendAll(io, client.socket.handle, sent[wrote..], 2000);
     }
+    const at = try drain.result;
+    try std.testing.expectEqual(sent.len, at);
     try std.testing.expectEqualSlices(u8, sent, received);
     try std.testing.expect(!(try ready.wait(io, peer.socket.handle, 0)).any());
     std.debug.print("native partial progress: first{d}/{d}, exact received{d}bytes\n", .{ wrote, sent.len, at });
 }
+
+const Drain = struct {
+    handle: std.posix.fd_t,
+    bytes: []u8,
+    timeout: std.Io.Timeout,
+    result: afd.Error!usize = error.Unexpected,
+
+    fn run(arg: *anyopaque) void {
+        const self: *Drain = @ptrCast(@alignCast(arg));
+        self.result = self.receive();
+    }
+
+    fn receive(self: *Drain) afd.Error!usize {
+        var at: usize = 0;
+        while (at < self.bytes.len) {
+            const got = try afd.receive(io, self.handle, self.bytes[at..], false, self.timeout);
+            if (got == 0) return error.BrokenPipe;
+            at += got;
+        }
+        return at;
+    }
+};
