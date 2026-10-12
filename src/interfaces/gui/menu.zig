@@ -11,7 +11,7 @@ const shell_frame = @import("ui/shell/frame.zig");
 const Kind = pane_layout.Kind;
 
 /// The fixed commands. Run, Pause and Step are the time bar's controls.
-pub const Command = enum { open_elf, close, settings, quit, run, pause, step, reset };
+pub const Command = enum { open_elf, close, settings, quit, run, pause, step, reset, toggle_fullscreen };
 
 pub const Action = union(enum) {
     command: Command,
@@ -64,7 +64,7 @@ pub const run = [_]Item{
 /// One toggle per pane kind, in Kind order, on Cmd/Ctrl+1 and up.
 pub const view = views: {
     const kinds = std.enums.values(Kind);
-    var items: [kinds.len - 1]Item = undefined;
+    var items: [kinds.len]Item = undefined;
     var next: usize = 0;
     for (kinds) |kind| {
         if (kind == .empty) continue;
@@ -75,6 +75,13 @@ pub const view = views: {
         };
         next += 1;
     }
+    // Full screen is the View menu's own entry under a divider (RA8EMU-966);
+    // the F11 and Ctrl+Cmd+F keys are the window's, not the model's.
+    items[next] = .{
+        .label = "Enter Full Screen",
+        .action = .{ .command = .toggle_fullscreen },
+        .divided = true,
+    };
     break :views items;
 };
 
@@ -133,14 +140,30 @@ pub const State = struct {
     loaded: bool = false,
     /// The cores are running rather than halted.
     running: bool = false,
+    /// The window is full screen (RA8EMU-966).
+    fullscreen: bool = false,
 };
+
+/// The text `item` draws: "Enter"/"Exit Full Screen" follows the window's
+/// state (RA8EMU-966); every other item keeps its own label.
+pub fn label(item: Item, state: State) []const u8 {
+    switch (item.action) {
+        .command => |command| {
+            if (command == .toggle_fullscreen) {
+                return if (state.fullscreen) "Exit Full Screen" else "Enter Full Screen";
+            }
+        },
+        .toggle => {},
+    }
+    return item.label;
+}
 
 /// Whether `action` can fire now. Disabled items draw muted and never fire.
 pub fn enabled(action: Action, state: State) bool {
     return switch (action) {
         .toggle => true,
         .command => |command| switch (command) {
-            .open_elf, .settings, .quit => true,
+            .open_elf, .settings, .quit, .toggle_fullscreen => true,
             .close, .reset => state.loaded,
             .run, .step => state.loaded and !state.running,
             .pause => state.running,

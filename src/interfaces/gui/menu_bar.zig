@@ -202,7 +202,7 @@ fn drawItem(list: *draw_list.DrawList, theme: *const Theme, view: Menu, width: i
     }
     const ok = menu.enabled(item.action, view.state);
     const top = area.y + @divFloor(area.h - @as(i32, font.glyph_h), 2);
-    try font.draw(list, area.x + pad, top, item.label, if (ok) theme.ink else theme.muted);
+    try font.draw(list, area.x + pad, top, menu.label(item, view.state), if (ok) theme.ink else theme.muted);
     const bound = item.shortcut orelse return;
     var buf: [16]u8 = undefined;
     const text = menu.text(bound, view.os, &buf) catch return;

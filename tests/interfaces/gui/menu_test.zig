@@ -24,14 +24,34 @@ test "File opens an ELF, closes it and quits" {
 }
 
 test "View toggles every pane kind but empty" {
-    try std.testing.expectEqual(@as(usize, 8), menu.view.len);
+    try std.testing.expectEqual(@as(usize, 9), menu.view.len);
     try std.testing.expectEqualStrings("Board", menu.view[0].label);
     try std.testing.expect(menu.view[0].action.eql(.{ .toggle = .board }));
     try std.testing.expectEqualStrings("Disassembly", menu.view[6].label);
     try std.testing.expectEqual(@as(u8, '7'), menu.view[6].shortcut.?.key);
     try std.testing.expectEqualStrings("Call stack", menu.view[7].label);
     try std.testing.expectEqual(@as(u8, '8'), menu.view[7].shortcut.?.key);
-    for (menu.view) |item| try std.testing.expect(item.action.toggle != .empty);
+    for (menu.view) |item| switch (item.action) {
+        .toggle => |kind| try std.testing.expect(kind != .empty),
+        .command => {},
+    };
+}
+
+test "View's full-screen entry under a divider with no key" {
+    const item = menu.view[8];
+    try std.testing.expectEqualStrings("Enter Full Screen", item.label);
+    try std.testing.expect(item.action.eql(.{ .command = .toggle_fullscreen }));
+    try std.testing.expect(item.divided);
+    try std.testing.expectEqual(@as(?menu.Shortcut, null), item.shortcut);
+    // Full screen is window-level: it fires whether or not an ELF is loaded.
+    try std.testing.expect(menu.enabled(item.action, menu.State{}));
+}
+
+test "full-screen label follows the window's state" {
+    const item = menu.view[8];
+    try std.testing.expectEqualStrings("Enter Full Screen", menu.label(item, menu.State{}));
+    try std.testing.expectEqualStrings("Exit Full Screen", menu.label(item, .{ .fullscreen = true }));
+    try std.testing.expectEqualStrings("Board", menu.label(menu.view[0], .{ .fullscreen = true }));
 }
 
 test "no two items share a shortcut" {

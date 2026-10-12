@@ -43,11 +43,11 @@ test "a shortcut key toggles the pane kind empty and takes it back" {
     defer s.deinit();
     var placed = try solved(&s);
     defer placed.deinit(std.testing.allocator);
-    menu_actions.observe(&s, width);
+    menu_actions.observe(&s, window.platform(), width);
     try std.testing.expectEqual(@as(usize, 1), boards(&s));
-    s.handle(.{ .key = .{ .code = '1', .down = true, .primary = true } }, &placed);
+    s.handle(window.platform(), .{ .key = .{ .code = '1', .down = true, .primary = true } }, &placed);
     try std.testing.expectEqual(@as(usize, 0), boards(&s));
-    s.handle(.{ .key = .{ .code = '1', .down = true, .primary = true } }, &placed);
+    s.handle(window.platform(), .{ .key = .{ .code = '1', .down = true, .primary = true } }, &placed);
     try std.testing.expectEqual(@as(usize, 1), boards(&s));
 }
 
@@ -58,7 +58,7 @@ test "the quit shortcut closes the shell" {
     defer s.deinit();
     var placed = try solved(&s);
     defer placed.deinit(std.testing.allocator);
-    s.handle(.{ .key = .{ .code = 'q', .down = true, .primary = true } }, &placed);
+    s.handle(window.platform(), .{ .key = .{ .code = 'q', .down = true, .primary = true } }, &placed);
     try std.testing.expect(!s.open);
 }
 
@@ -71,16 +71,16 @@ test "the open command asks the picker from the key and the strip" {
     defer placed.deinit(std.testing.allocator);
     var open: shell_open.Open = .{ .io = std.testing.io, .allocator = std.testing.allocator };
     s.files = &open;
-    menu_actions.observe(&s, width);
-    s.handle(.{ .key = .{ .code = 'o', .down = true, .primary = true } }, &placed);
+    menu_actions.observe(&s, window.platform(), width);
+    s.handle(window.platform(), .{ .key = .{ .code = 'o', .down = true, .primary = true } }, &placed);
     try std.testing.expect(open.asked);
     // The strip's own item fires the same ask.
     open.asked = false;
     const title = menu_bar.title(width, 0);
-    s.handle(.{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 0), s.menu.bar.open);
     const item = menu_bar.row(width, 0, 0, builtin.os.tag);
-    s.handle(.{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
     try std.testing.expect(open.asked);
     try std.testing.expectEqual(@as(?usize, null), s.menu.bar.open);
 }
@@ -92,12 +92,12 @@ test "a disabled item keeps its drop-down out" {
     defer s.deinit();
     var placed = try solved(&s);
     defer placed.deinit(std.testing.allocator);
-    menu_actions.observe(&s, width);
+    menu_actions.observe(&s, window.platform(), width);
     const title = menu_bar.title(width, 1);
-    s.handle(.{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 1), s.menu.bar.open);
     // Run with no image loaded is disabled: the drop-down stays out.
     const item = menu_bar.row(width, 1, 0, builtin.os.tag);
-    s.handle(.{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 1), s.menu.bar.open);
 }
