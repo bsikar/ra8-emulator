@@ -25,6 +25,7 @@ pub fn observe(shell: *Shell, width: i32) void {
 /// closed, and a press off the closed strip falls through. Returns whether
 /// the press was taken.
 pub fn press(shell: *Shell, x: i32, y: i32) bool {
+    if (shell.settings.press(&shell.themes, shell.width, shell.height, x, y)) return true;
     switch (menu_bar.press(&shell.menu.bar, shell.menu, shell.width, x, y)) {
         .fire => |action| fire(shell, action),
         .taken => return true,
@@ -37,6 +38,7 @@ pub fn press(shell: *Shell, x: i32, y: i32) bool {
 /// elsewhere): the menu model binds letters and digits. Keys the menu does
 /// not bind fall through. Returns whether the key was taken.
 pub fn key(shell: *Shell, event: platform.Event) bool {
+    if (shell.settings.key(event)) return true;
     const pressed = switch (event) {
         .key => |pressed| pressed,
         else => return false,
@@ -54,6 +56,7 @@ pub fn fire(shell: *Shell, action: menu.Action) void {
     switch (action) {
         .command => |command| switch (command) {
             .open_elf => if (shell.files) |files| files.ask(),
+            .settings => shell.settings.ask(),
             // The wire has no unload or reset method yet; those items wait
             // for the methods to land.
             .close, .reset => {},

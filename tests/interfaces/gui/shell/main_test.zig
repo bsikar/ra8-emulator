@@ -148,7 +148,7 @@ test "ra8_gui IMAGE opens the shell on the image in-process and ends when the wi
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     Window.reset(3);
-    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.open, .close = Window.close });
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.open, .close = Window.close }, null);
     try std.testing.expectEqual(@as(u8, 0), code);
     try std.testing.expectEqual(@as(u32, 3), Window.presents);
     try std.testing.expectEqual(@as(u32, 1), Window.opens);
@@ -159,7 +159,7 @@ test "--frames ends a window nobody closes, after that many frames with the imag
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     Window.reset(null);
-    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "--frames", "4", image }, .{ .open = Window.open, .close = Window.close });
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "--frames", "4", image }, .{ .open = Window.open, .close = Window.close }, null);
     try std.testing.expectEqual(@as(u8, 0), code);
     try std.testing.expect(Window.presents >= 4);
     try std.testing.expectEqual(@as(u32, 1), Window.closes);
@@ -192,8 +192,8 @@ test "a bad command line or an unreadable image never opens the window" {
     defer arena.deinit();
     Window.reset(null);
     const opener: platform.Opener = .{ .open = Window.open, .close = Window.close };
-    try std.testing.expectEqual(@as(u8, 2), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image, "--instructions", "5" }, opener));
-    try std.testing.expectEqual(@as(u8, 1), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "tests/fixtures/no-such.elf" }, opener));
+    try std.testing.expectEqual(@as(u8, 2), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image, "--instructions", "5" }, opener, null));
+    try std.testing.expectEqual(@as(u8, 1), try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "tests/fixtures/no-such.elf" }, opener, null));
     try std.testing.expectEqual(@as(u32, 0), Window.opens);
 }
 
@@ -201,7 +201,7 @@ test "with no window to open the shell says 2 and loads nothing" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     Window.reset(null);
-    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.none, .close = Window.close });
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", image }, .{ .open = Window.none, .close = Window.close }, null);
     try std.testing.expectEqual(@as(u8, 2), code);
     try std.testing.expectEqual(@as(u32, 1), Window.opens);
     try std.testing.expectEqual(@as(u32, 0), Window.closes);

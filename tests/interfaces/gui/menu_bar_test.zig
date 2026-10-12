@@ -91,10 +91,12 @@ test "hover moves the open drop-down across the titles" {
 test "rows stack with two pixels of air over a divided row" {
     const first = menu_bar.row(width, 0, 0, linux);
     const second = menu_bar.row(width, 0, 1, linux);
-    const quit = menu_bar.row(width, 0, 2, linux);
+    const settings = menu_bar.row(width, 0, 2, linux);
+    const quit = menu_bar.row(width, 0, 3, linux);
     try std.testing.expectEqual(first.y + menu_bar.row_h, second.y);
-    try std.testing.expectEqual(second.y + menu_bar.row_h + menu_bar.divide, quit.y);
-    try std.testing.expectEqual(1 + 3 * menu_bar.row_h + menu_bar.divide, menu_bar.drop(width, 0, linux).h);
+    try std.testing.expectEqual(second.y + menu_bar.row_h, settings.y);
+    try std.testing.expectEqual(settings.y + menu_bar.row_h + menu_bar.divide, quit.y);
+    try std.testing.expectEqual(1 + 4 * menu_bar.row_h + menu_bar.divide, menu_bar.drop(width, 0, linux).h);
     try std.testing.expect(menu_bar.drop(width, 0, linux).contains(quit.x + 2, quit.y + 1));
 }
 

@@ -14,6 +14,21 @@ const render = @import("ra8_render");
 pub const c = @import("c.zig").c;
 pub const geometry = @import("geometry.zig");
 pub const opener = @import("opener.zig").opener;
+
+/// The app's per-user state directory (SDL's pref path), or null when SDL
+/// gives none: the shell's settings page (RA8EMU-963) saves the theme
+/// choice there. The path is `allocator`-owned; the caller frees it.
+pub fn prefDir(allocator: std.mem.Allocator) ?[]const u8 {
+    const raw = c.SDL_GetPrefPath("bsikar", "ra8-emulator") orelse return null;
+    var path = raw[0..std.mem.len(raw)];
+    if (path.len > 0 and (path[path.len - 1] == '/' or path[path.len - 1] == '\\')) path = path[0 .. path.len - 1];
+    const owned = allocator.dupe(u8, path) catch {
+        c.SDL_free(raw);
+        return null;
+    };
+    c.SDL_free(raw);
+    return owned;
+}
 pub const dialog = @import("dialog.zig");
 
 const Event = gui.platform.Event;

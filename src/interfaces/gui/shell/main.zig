@@ -42,6 +42,7 @@ const chunked = @import("ra8_rpc").session.load_chunks;
 const shell_stack = @import("stack.zig");
 const shell_open = @import("open.zig");
 const colors = @import("../ui/colors.zig");
+const shell_settings = @import("settings_page.zig");
 
 const Env = proto.Client.Env;
 const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
@@ -80,6 +81,8 @@ pub const Args = struct {
     /// `--theme dark|light|system`: the palette the window paints with
     /// (RA8EMU-961); system follows the OS setting live (RA8EMU-962).
     theme: colors.Choice = .dark,
+    /// Whether --theme was on the command line: it overrides the saved choice.
+    theme_set: bool = false,
     /// `--render-driver NAME`: the only render driver tried (RA8EMU-226).
     render_driver: ?[]const u8 = null,
 };
@@ -138,6 +141,7 @@ fn take(args: *Args, flag: []const u8, value: []const u8) !void {
         args.stills_every = try count(value);
     } else if (std.mem.eql(u8, flag, "--theme")) {
         args.theme = std.meta.stringToEnum(colors.Choice, value) orelse return error.BadValue;
+        args.theme_set = true;
     } else if (std.mem.eql(u8, flag, "--render-driver")) {
         args.render_driver = value;
     } else {
@@ -162,7 +166,7 @@ pub fn pick(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.En
 
 /// Run the shell in the window `opener` opens; 2 when the command line,
 /// host, or window is unusable. `allocator` is main's arena.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8, opener: platform.Opener) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8, opener: platform.Opener, prefs: ?[]const u8) !u8 {
     const args = parse(argv) catch {
         std.debug.print(usage, .{});
         return 2;
@@ -196,7 +200,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
     const shown = if (stills_dir != null) recorder.platform() else window;
     var startup = args.startup;
-    local(allocator, io, env, shown, args, &startup, bytes) catch |err| switch (err) {
+    local(allocator, io, env, shown, args, &startup, bytes, prefs) catch |err| switch (err) {
         error.ImageNotLoaded => {
             std.debug.print("ra8_gui: the session did not load {s}\n", .{args.image});
             return 1;
@@ -211,7 +215,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
 }
 
 /// Serve the image in-process and run the shell on it.
-fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8) !void {
+fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
     const path = args.image;
     var session: local_session.LocalSession = undefined;
     try session.open(allocator, io, path);
@@ -220,8 +224,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
         std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
         return err;
     };
-    // Outside clients (ctl, IDEs) reach the same session the panes show
-    // (RA8EMU-1156): no bind, no hosting, and the file stays away.
+    // Outside clients (ctl, IDEs) reach the same session (RA8EMU-1156).
     var hosted: ?Hosted = null;
     defer if (hosted) |*h| h.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
@@ -231,7 +234,10 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     var render_buf: [64]u8 = undefined;
     shell.status.render = render_driver.status(&render_buf, render_driver.active, render_driver.gpu);
-    shell.themes.choose(args.theme);
+    var settings_store = shell_settings.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    // An explicit --theme wins over the saved choice (RA8EMU-963).
+    shell.themes.choose(if (args.theme_set) args.theme else settings_store.load());
+    shell.settings = .{ .store = &settings_store };
     defer shell.deinit();
     shell.link = &link;
     shell.server = served(&session);
@@ -247,7 +253,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.time = &time;
     var console = shell_console.Console.init(allocator);
     defer console.deinit();
-    // Saves go to the project directory, where ra8_gui was started.
     console.save_to = .{ .io = io, .dir = std.Io.Dir.cwd() };
     shell.console = &console;
     var board = shell_board.Board.init(allocator);
@@ -260,7 +265,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var faults: shell_fault.Faults = .{};
     shell.faults = &faults;
     var camera: shell_camera.Camera = .{};
-    // The project is the directory ra8_gui was started in (RA8EMU-1124).
     camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
     if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
