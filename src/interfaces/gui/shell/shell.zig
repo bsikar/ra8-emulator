@@ -1,6 +1,7 @@
 //! shell: the files of src/interfaces/gui/shell/.
 
 pub const board = @import("board/board.zig");
+pub const breaks = @import("breaks.zig");
 pub const camera = @import("camera/camera.zig");
 pub const console = @import("console.zig");
 pub const devices = @import("devices.zig");

@@ -11,6 +11,8 @@ const draw_list = @import("ra8_render").draw_list;
 const raster = @import("ra8_render").raster;
 const font = @import("ra8_render").font;
 const platform = @import("../platform.zig");
+/// A session served in this process, answering on the shell's own thread.
+const Server = @import("server.zig").Server;
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const status_capture = @import("../status/capture.zig");
@@ -30,6 +32,7 @@ const shell_open = @import("open.zig");
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
+const shell_breaks = @import("breaks.zig");
 const shell_memory_field = @import("memory_field.zig");
 const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
@@ -41,16 +44,6 @@ const shell_settings = @import("settings_page.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
-
-/// A session served in this process (local_session.zig), answering on the shell's own thread.
-pub const Server = struct {
-    context: *anyopaque,
-    answerFn: *const fn (context: *anyopaque) anyerror!void,
-
-    pub fn answer(self: Server) !void {
-        return self.answerFn(self.context);
-    }
-};
 
 pub const Shell = struct {
     allocator: std.mem.Allocator,
@@ -83,6 +76,8 @@ pub const Shell = struct {
     /// The memory leaf's address field for typed symbols (RA8EMU-934).
     memory_field: ?*shell_memory_field.Pin = null,
     code: ?*shell_memory.Pair = null,
+    /// The run-to points clicked on the disassembly leaves (RA8EMU-1171).
+    breaks: ?*shell_breaks.Breaks = null,
     /// The call stack leaves, walked again after a load and every stop.
     stack: ?*shell_stack.Pair = null,
     /// The time bar's models: the run, the speed field and the clock.
@@ -184,10 +179,7 @@ pub const Shell = struct {
                 if (self.pressValue(press.x, press.y, solved)) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.pressBoard(solved, press.x, press.y)) return;
-                if (self.link) |link| if (self.devices) |devices| {
-                    if (self.faults) |faults| if (faults.clickIn(link, devices, &self.layout, solved, press.x, press.y)) return;
-                    if (devices.clickIn(link, &self.layout, solved, press.x, press.y)) return;
-                };
+                if (self.link) |link| if (self.pressLink(link, solved, press.x, press.y)) return;
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
                 if (self.console) |console| if (console.clickIn(&self.layout, solved, press.x, press.y)) return;
                 const camera = self.camera orelse return;
@@ -256,6 +248,20 @@ pub const Shell = struct {
         return time.boardNow();
     }
 
+    /// A pane changed the device list: the shell's rows are stale.
+    fn wants(self: *Shell) void {
+        if (self.devices) |devices| devices.want = true;
+    }
+
+    /// Offer a press to the session-backed panes: faults, devices, run-to points.
+    fn pressLink(self: *Shell, link: *session_link.Link, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
+        const devices = self.devices orelse return false;
+        if (self.faults) |faults| if (faults.clickIn(link, devices, &self.layout, solved, x, y)) return true;
+        if (devices.clickIn(link, &self.layout, solved, x, y)) return true;
+        if (self.breaks) |breaks| if (self.code) |code| if (breaks.clickIn(link, code, &self.layout, solved, x, y)) return true;
+        return false;
+    }
+
     /// Offer a left press to the board leaf: a switch, or the panel.
     fn pressBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
         const pointer = self.board_input orelse return false;
@@ -294,10 +300,8 @@ pub const Shell = struct {
     }
 
     /// Pay what this frame owes a lit run (shell_run.zig), one slice at a
-    /// time: each is answered and taken before the next goes out, and none
-    /// goes out while the session's earlier output is still unread. A
-    /// session in another process answers in its own time, so it gets one
-    /// slice a frame.
+    /// time, each answered and taken before the next goes out; a session
+    /// in another process answers in its own time, one slice a frame.
     fn paySlices(self: *Shell) !void {
         const time = self.time orelse return;
         const link = self.link orelse return;
@@ -326,16 +330,17 @@ pub const Shell = struct {
         if (self.console) |console| console.attach(link);
         if (self.board) |board| board.attach(link);
         if (self.devices) |devices| devices.attach(link);
-        if (self.camera) |camera| {
-            if (self.camera_file) |file| _ = file.apply(camera);
-            camera.attach(link);
-        }
+        if (self.camera_file) |file| if (self.camera) |camera| {
+            _ = file.apply(camera);
+        };
+        if (self.camera) |camera| camera.attach(link);
         if (self.plug) |plug| _ = plug.attach(link);
         if (self.startup) |startup| if (self.loaded) startup.attach(link);
         if (self.registers) |registers| registers.attach(link);
         if (self.memory_field) |field| _ = field.submit(self.memory);
         if (self.memory) |memory| memory.attach(link);
         if (self.code) |code| code.attach(link);
+        if (self.breaks) |breaks| breaks.attach(link);
         if (self.stack) |stack| stack.attach(link);
         self.drained = false;
         var taken: usize = 0;
@@ -355,23 +360,16 @@ pub const Shell = struct {
             if (self.console) |console| try console.observe(arrival);
             if (self.board) |board| try board.observe(arrival);
             if (self.devices) |devices| devices.observe(arrival);
-            if (self.faults) |faults| if (faults.observe(arrival)) if (self.devices) |devices| {
-                devices.want = true;
-            };
+            if (self.faults) |faults| if (faults.observe(arrival)) self.wants();
             if (self.camera) |camera| camera.observe(arrival);
-            if (self.plug) |plug| if (plug.observe(arrival)) if (self.devices) |devices| {
-                devices.want = true;
-            };
-            if (self.startup) |startup| if (startup.observe(arrival)) if (self.devices) |devices| {
-                devices.want = true;
-            };
+            if (self.plug) |plug| if (plug.observe(arrival)) self.wants();
+            if (self.startup) |startup| if (startup.observe(arrival)) self.wants();
         }
         self.settle();
     }
 
-    /// The stack, registers, memory and code leaves: all start over after a load,
-    /// then take the arrival, and memory and code follow each core's fresh
-    /// registers.
+    /// The stack, registers, memory and code leaves: start over after a
+    /// load, take the arrival, and follow each core's fresh registers.
     fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
         if (self.stack) |stack| {
             if (loaded) stack.reload();

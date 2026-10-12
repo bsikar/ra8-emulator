@@ -32,6 +32,7 @@ const shell_camera = @import("camera/camera.zig");
 const shell_plug = @import("plug.zig");
 const shell_camera_file = @import("camera/file.zig");
 const shell_registers = @import("registers.zig");
+const shell_breaks = @import("breaks.zig");
 const registers_pane = @import("../ui/registers_pane.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
@@ -77,6 +78,8 @@ pub const Panes = struct {
     memory: ?*const shell_memory.Pair = null,
     /// The memory leaf's address field (RA8EMU-934).
     memory_field: ?*shell_memory_field.Pin = null,
+    /// The run-to points clicked on the disassembly leaves (RA8EMU-1171).
+    breaks: ?*const shell_breaks.Breaks = null,
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
@@ -133,7 +136,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pa
     };
     if (pane.kind == .disasm) if (self.code) |pair| {
         const model = pair.of(pane.core);
-        if (model.now) |*read| return drawCode(list, theme, body, model.from, read);
+        if (model.now) |*read| {
+            const marks = if (self.breaks) |breaks| breaks.marks(pane.core) else null;
+            return drawCode(list, theme, body, model.from, read, marks);
+        }
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
         if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, body, now, 0);
@@ -156,12 +162,19 @@ fn drawFaults(self: *const Panes, list: *draw_list.DrawList, theme: *const Theme
     try shell_fault.draw(list, theme, rows, devices, faults);
 }
 
-/// Instructions decoded forward from `pc` out of the rows read around it.
-/// The link carries no breakpoint list yet, so none are marked.
-fn drawCode(list: *draw_list.DrawList, theme: *const Theme, body: Rect, pc: u32, read: *const shell_memory.Snapshot) !void {
+/// Instructions decoded forward from `pc` out of the rows read around it,
+/// with `marks` drawing the run-to points when the shell keeps them
+/// (RA8EMU-1171).
+fn drawCode(list: *draw_list.DrawList, theme: *const Theme, body: Rect, pc: u32, read: *const shell_memory.Snapshot, marks: ?[]const u32) !void {
+    return disasm_pane.draw(list, theme, body, &codeSnapshotFrom(pc, read, body), marks orelse &.{});
+}
+
+/// The snapshot a code leaf shows (RA8EMU-1171): decoded forward from
+/// `pc` out of the rows read around it. The run-to point's click path
+/// shares it, so a click lands on the line the pane drew.
+pub fn codeSnapshotFrom(pc: u32, read: *const shell_memory.Snapshot, body: Rect) disasm_pane.Snapshot {
     const length = read.count * memory_pane.per_row;
-    const lines = disasm_capture.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
-    return disasm_pane.draw(list, theme, body, &lines, &.{});
+    return disasm_capture.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
 }
 
 /// The note a leaf shows: the device list's, the registers', memory's or
