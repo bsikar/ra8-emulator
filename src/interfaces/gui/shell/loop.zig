@@ -1,13 +1,11 @@
-//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains
-//! the window's events (quit, the menu strip RA8EMU-957, gutter drags) and
-//! pumps the session link into the status bar, console, board, device,
-//! camera and plug models, whose leaves take clicks and typing, and the
-//! registers leaves, read again after a load or a stop. The menu strip
-//! (RA8EMU-968) and the pane titles (RA8EMU-800) take their presses, and
-//! while Run is lit each frame pays the board its slices on the shell's
-//! own thread, so the frame never waits on more than one slice. Then it
-//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL
-//! and the headless platform run it alike.
+//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
+//! (quit, the menu strip RA8EMU-957, gutter drags) and pumps the session link into the status bar,
+//! console, board, device, camera and plug models, whose leaves take clicks and typing, and the
+//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968) and the pane
+//! titles (RA8EMU-800) take their presses, and while Run is lit each frame pays the board its
+//! slices on the shell's own thread, so the frame never waits on more than one slice. Then it
+//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform
+//! run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const raster = @import("ra8_render").raster;
@@ -40,8 +38,7 @@ const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
 
-/// Most arrivals taken off the link in one frame, so a chatty session
-/// cannot starve the window.
+/// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
 
 /// A session served in this process (local_session.zig): asked, it answers
