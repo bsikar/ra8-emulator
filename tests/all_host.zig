@@ -124,6 +124,7 @@ test {
     _ = @import("interfaces/gui/session_button_wire_test.zig");
     _ = @import("interfaces/gui/session_touch_wire_test.zig");
     _ = @import("interfaces/gui/shell_frame_test.zig");
+    _ = @import("interfaces/gui/menu_test.zig");
     _ = @import("interfaces/gui/shell/loop_test.zig");
     _ = @import("interfaces/gui/wall_clock_test.zig");
     _ = @import("interfaces/gui/shell/run_test.zig");
