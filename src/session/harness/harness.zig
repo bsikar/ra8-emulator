@@ -21,7 +21,7 @@ const second_core = @import("ra8_chip").core.second.core;
 const session_display = @import("../board/display.zig");
 const session_state = @import("../board/state.zig");
 const chunk_clock = @import("../chunk_clock.zig");
-const files = @import("files.zig");
+pub const files = @import("files.zig");
 const debug_session = @import("../session.zig");
 const session_api = @import("../api.zig");
 const stop_machine = @import("../stop_machine.zig");
@@ -46,6 +46,9 @@ pub const Options = struct {
     elf_path: []const u8,
     device: part.Part = .ra8p1,
     input_script: ?[]const u8 = null,
+    /// Where snapshots live (RA8EMU-1175); null keeps bare names in the
+    /// working directory.
+    state_dir: ?[]const u8 = null,
     settle_window_ns: u64 = 50_000_000,
 };
 
@@ -252,6 +255,12 @@ pub const Harness = struct {
         return self.state.state_file.hook();
     }
 
+    /// Keep snapshots under `dir` (RA8EMU-1175); null returns to the working
+    /// directory. `dir` must outlive the harness.
+    pub fn setStateDir(self: *Harness, dir: ?[]const u8) void {
+        self.state.state_file.dir = dir;
+    }
+
     /// Let the boundary tick CPU1's board edge and take its reset requests.
     pub fn bindSecond(self: *Harness, second: *second_core.Second, second_guest: Guest) void {
         self.state.edge.second = second;
@@ -338,7 +347,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk };
     state.session.live.boundary = state.edge.hook();
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
-    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files };
+    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
     state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });

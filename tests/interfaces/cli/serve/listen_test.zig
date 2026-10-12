@@ -6,6 +6,7 @@ const cli_app = @import("cli_app");
 const test_paths = @import("test_paths");
 const Connection = ra8.rpc.socket_transport.Connection;
 const serve_peer = @import("../serve_peer.zig");
+const proto = ra8.rpc.session.rpc;
 const image_path = serve_peer.image_path;
 const Term = std.process.Child.Term;
 
@@ -67,4 +68,21 @@ test "listen specs: an empty host and localhost bind loopback, a bracketed v6 li
     try std.testing.expect((try Spec.parse("tcp:[::1]:7000")).tcp.eql(&(try std.Io.net.IpAddress.parse("::1", 7000))));
     try std.testing.expectEqualStrings("/tmp/s", (try Spec.parse("unix:/tmp/s")).unix);
     try std.testing.expectError(error.BadListen, Spec.parse("tcp::70000"));
+}
+
+test "snapshot is refused on a non-loopback TCP listener (RA8EMU-1175)" {
+    const gpa = std.testing.allocator;
+    var line: [128]u8 = undefined;
+    var started = try serve_peer.listen("tcp:0.0.0.0:0", &line);
+    const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
+    const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
+    var connection = try Connection.tcp(std.testing.io, try std.Io.net.IpAddress.parse("127.0.0.1", port));
+    const peer = try serve_peer.Peer.init(gpa, connection.transport());
+    defer peer.deinit();
+    try peer.client.greet(peer.tx);
+    try std.testing.expectEqual(proto.capabilities, (try peer.next()).ready);
+    try std.testing.expectError(error.Refused, peer.call(proto.Ack, proto.StatePath, .snapshot, .{ .path = "/tmp/x.ra8snap" }));
+    connection.close();
+    try std.posix.kill(started.child.id.?, .TERM);
+    try std.testing.expectEqual(Term{ .exited = 0 }, try started.child.wait(std.testing.io));
 }

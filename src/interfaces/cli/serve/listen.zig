@@ -89,3 +89,12 @@ fn onConsoleStop(_: win32.DWORD) callconv(.winapi) win32.BOOL {
     loop.stopping.store(true, .release);
     return .TRUE;
 }
+
+/// True when `address` is loopback, the only TCP listener that may serve
+/// state files without --allow-state-files (RA8EMU-1175).
+pub fn isLoopback(address: std.Io.net.IpAddress) bool {
+    return switch (address) {
+        .ip4 => |v| v.bytes[0] == 127,
+        .ip6 => |v| std.mem.allEqual(u8, v.bytes[0..15], 0) and v.bytes[15] == 1,
+    };
+}

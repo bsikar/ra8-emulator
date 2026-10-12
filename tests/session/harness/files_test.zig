@@ -11,6 +11,12 @@ test "restoring from a missing file fails and the session keeps running" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path });
     defer opened.deinit();
     try opened.session().waitSettled(2_000_000_000);
-    try std.testing.expectError(error.FileNotFound, opened.stateFiles().restore("tests/fixtures/display/missing.ra8snap"));
+    try std.testing.expectError(error.FileNotFound, opened.stateFiles().restore("missing.ra8snap"));
+    // Paths that leave the state directory are refused before any file call
+    // (RA8EMU-1175).
+    for ([_][]const u8{ "/tmp/x.ra8snap", "../x.ra8snap", "a/b.ra8snap", "..", "." }) |path| {
+        try std.testing.expectError(error.BadStatePath, opened.stateFiles().save(path));
+        try std.testing.expectError(error.BadStatePath, opened.stateFiles().restore(path));
+    }
     try opened.session().waitSettled(2_000_000_000);
 }
