@@ -24,6 +24,9 @@ pub const Board = struct {
     height: u32 = 0,
     /// The user LEDs as the session last reported them.
     leds: board_pane.Leds = .{},
+    /// The union of the rectangles that arrived since the pane last drew
+    /// them, in image pixels (RA8EMU-823); null until one arrives.
+    dirty: ?draw_list.Rect = null,
     subscribed: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) Board {
@@ -65,6 +68,8 @@ pub const Board = struct {
             const into = self.pixels[(rect.y + row) * self.width + rect.x ..][0..rect.width];
             for (into, rect.pixels[row * rect.width ..][0..rect.width]) |*pixel, gray| pixel.* = Color.rgb(gray, gray, gray);
         }
+        const landed = draw_list.Rect{ .x = @intCast(rect.x), .y = @intCast(rect.y), .w = @intCast(rect.width), .h = @intCast(rect.height) };
+        self.dirty = if (self.dirty) |old| old.unionWith(landed) else landed;
     }
 
     /// Whether any rectangle has arrived yet.
@@ -77,9 +82,13 @@ pub const Board = struct {
     }
 
     /// What the board pane draws: the LEDs, the panel once a frame has
-    /// arrived, and the switch the pointer holds down.
-    pub fn view(self: *const Board, pressed: ?usize) board_pane.View {
-        return .{ .leds = &self.leds, .panel = if (self.hasFrame()) self.image() else null, .pressed = pressed };
+    /// arrived with the rectangles that arrived since the last draw
+    /// (RA8EMU-823), and the switch the pointer holds down.
+    pub fn view(self: *Board, pressed: ?usize) board_pane.View {
+        const blank = draw_list.Rect{ .x = 0, .y = 0, .w = 0, .h = 0 };
+        const dirty = self.dirty orelse blank;
+        self.dirty = null;
+        return .{ .leds = &self.leds, .panel = if (self.hasFrame()) self.image() else null, .dirty = dirty, .pressed = pressed };
     }
 
     /// Grow the image to at least `width` by `height`, keeping what it holds.

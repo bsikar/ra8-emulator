@@ -63,7 +63,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
 /// The feeds the panes draw from; a missing one leaves its note up.
 pub const Panes = struct {
     console: ?*const shell_console.Console = null,
-    board: ?*const shell_board.Board = null,
+    board: ?*shell_board.Board = null,
     /// The pointer on the board leaf, for the switch it holds down.
     board_input: ?*const shell_board_input.Pointer = null,
     devices: ?*const shell_devices.Devices = null,

@@ -91,6 +91,8 @@ pub const Layout = struct {
 pub const View = struct {
     leds: *const Leds,
     panel: ?draw_list.Image = null,
+    /// The panel part that changed since the last draw (RA8EMU-823).
+    dirty: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
     /// The switch held down by the pointer (RA8EMU-814), drawn pressed.
     pressed: ?usize = null,
 };
@@ -107,7 +109,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: Vi
     const image = view.panel orelse return drawParts(list, theme, layout, view, unseen);
     try list.fill(layout.panel, theme.background);
     const shown = fit.fitIn(layout.panel, image.width, image.height);
-    try list.scaledImage(shown, image, !wholeScale(shown, image.width, image.height));
+    try list.panel(shown, image, view.dirty, !wholeScale(shown, image.width, image.height));
     try drawParts(list, theme, layout, view, null);
 }
 

@@ -21,12 +21,16 @@ comptime {
 
 const Key = struct { ptr: usize, width: u32, height: u32 };
 const Entry = struct { texture: *c.SDL_Texture, frame: u64 };
+/// The panel texture stays until its pane does; `whole` uploads the next
+/// refill in full (RA8EMU-823).
+const PanelEntry = struct { texture: *c.SDL_Texture, frame: u64, whole: bool };
 
 pub const Textures = struct {
     allocator: std.mem.Allocator,
     renderer: *c.SDL_Renderer,
     atlas: ?*c.SDL_Texture = null,
     images: std.AutoHashMapUnmanaged(Key, Entry) = .{},
+    panels: std.AutoHashMapUnmanaged(Key, PanelEntry) = .{},
     frame: u64 = 0,
 
     pub fn init(allocator: std.mem.Allocator, renderer: *c.SDL_Renderer) Textures {
@@ -38,6 +42,9 @@ pub const Textures = struct {
         var it = self.images.valueIterator();
         while (it.next()) |entry| c.SDL_DestroyTexture(entry.texture);
         self.images.deinit(self.allocator);
+        var pit = self.panels.valueIterator();
+        while (pit.next()) |entry| c.SDL_DestroyTexture(entry.texture);
+        self.panels.deinit(self.allocator);
     }
 
     /// Upload the glyph atlas once: white texels whose alpha is coverage.
@@ -66,6 +73,15 @@ pub const Textures = struct {
         for (stale.items) |key| {
             if (self.images.fetchRemove(key)) |kv| c.SDL_DestroyTexture(kv.value.texture);
         }
+        var stale_panels: std.ArrayListUnmanaged(Key) = .empty;
+        defer stale_panels.deinit(self.allocator);
+        var pan = self.panels.iterator();
+        while (pan.next()) |kv| {
+            if (kv.value_ptr.frame != self.frame) try stale_panels.append(self.allocator, kv.key_ptr.*);
+        }
+        for (stale_panels.items) |key| {
+            if (self.panels.fetchRemove(key)) |kv| c.SDL_DestroyTexture(kv.value.texture);
+        }
         self.frame += 1;
     }
 
@@ -83,6 +99,28 @@ pub const Textures = struct {
         if (slot.value_ptr.frame != self.frame) {
             try upload(slot.value_ptr.texture, source.pixels, source.width);
             slot.value_ptr.frame = self.frame;
+        }
+        return slot.value_ptr.texture;
+    }
+
+    /// The panel's streaming texture: created once, refilled only in
+    /// `dirty` (RA8EMU-823); a fresh texture uploads whole.
+    fn panel(self: *Textures, source: draw_list.Image, dirty: draw_list.Rect) Error!*c.SDL_Texture {
+        const key = Key{ .ptr = @intFromPtr(source.pixels.ptr), .width = source.width, .height = source.height };
+        const slot = try self.panels.getOrPut(self.allocator, key);
+        if (!slot.found_existing) {
+            const texture = createStreaming(self.renderer, source.width, source.height) catch |err| {
+                self.panels.removeByPtr(slot.key_ptr);
+                return err;
+            };
+            slot.value_ptr.* = .{ .texture = texture, .frame = self.frame -% 1, .whole = true };
+        }
+        if (slot.value_ptr.frame != self.frame) {
+            const within = draw_list.Rect{ .x = 0, .y = 0, .w = @intCast(source.width), .h = @intCast(source.height) };
+            const refill = if (slot.value_ptr.whole) within else dirty;
+            try refillPanel(slot.value_ptr.texture, source, refill);
+            slot.value_ptr.frame = self.frame;
+            slot.value_ptr.whole = false;
         }
         return slot.value_ptr.texture;
     }
@@ -139,6 +177,7 @@ pub fn draw(renderer: *c.SDL_Renderer, textures: *Textures, batch: *const geomet
             .none => null,
             .atlas => textures.atlas orelse continue,
             .image, .smooth => |source| sampled(try textures.image(source), run.texture == .smooth),
+            .panel => |tex| sampled(try textures.panel(tex.image, tex.dirty), false),
         };
         const clip = c.SDL_Rect{ .x = run.clip.x, .y = run.clip.y, .w = run.clip.w, .h = run.clip.h };
         if (!c.SDL_SetRenderClipRect(renderer, &clip)) return fail(Error.SdlDraw);
@@ -153,6 +192,32 @@ pub fn draw(renderer: *c.SDL_Renderer, textures: *Textures, batch: *const geomet
 fn sampled(texture: *c.SDL_Texture, smooth: bool) *c.SDL_Texture {
     _ = c.SDL_SetTextureScaleMode(texture, if (smooth) c.SDL_SCALEMODE_LINEAR else c.SDL_SCALEMODE_NEAREST);
     return texture;
+}
+
+/// A streaming RGBA32 texture, refilled in place (RA8EMU-823).
+fn createStreaming(renderer: *c.SDL_Renderer, width: u32, height: u32) Error!*c.SDL_Texture {
+    const texture = c.SDL_CreateTexture(
+        renderer,
+        c.SDL_PIXELFORMAT_RGBA32,
+        c.SDL_TEXTUREACCESS_STREAMING,
+        @intCast(width),
+        @intCast(height),
+    ) orelse return fail(Error.SdlTexture);
+    _ = c.SDL_SetTextureScaleMode(texture, c.SDL_SCALEMODE_NEAREST);
+    _ = c.SDL_SetTextureBlendMode(texture, c.SDL_BLENDMODE_BLEND);
+    return texture;
+}
+
+/// Refill only `dirty` of the panel texture, logging the rect (RA8EMU-823).
+fn refillPanel(texture: *c.SDL_Texture, source: draw_list.Image, dirty: draw_list.Rect) Error!void {
+    if (dirty.empty()) return;
+    const within = dirty.intersect(.{ .x = 0, .y = 0, .w = @intCast(source.width), .h = @intCast(source.height) });
+    if (within.empty()) return;
+    const rect = c.SDL_Rect{ .x = within.x, .y = within.y, .w = within.w, .h = within.h };
+    const pitch: c_int = @intCast(source.width * 4);
+    const offset: usize = @as(usize, @intCast(within.y)) * source.width + @as(usize, @intCast(within.x));
+    std.log.info("gui: panel upload rect {d}x{d} at ({d}, {d})", .{ within.w, within.h, within.x, within.y });
+    if (!c.SDL_UpdateTexture(texture, &rect, source.pixels.ptr + offset, pitch)) return fail(Error.SdlTexture);
 }
 
 /// A static RGBA32 texture sampled nearest and blended source-over.
