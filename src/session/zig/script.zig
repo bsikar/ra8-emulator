@@ -27,6 +27,9 @@ pub const ZigScript = struct {
     /// The parked core's image and temporary breaks, swapped in by `core`.
     other_image: ?elf.Image = null,
     other_temporary: Temporary = .{},
+    /// Stops behind the live end the run sits on (RA8EMU-1170); a forward
+    /// run clears it, matching the reverse packets' window cursor.
+    back: u32 = 0,
 
     /// Carry out one command. A command that fails prints why and the
     /// script carries on.
@@ -58,6 +61,9 @@ pub const ZigScript = struct {
             .step => try self.go(.step, out),
             .next => try self.go(.next, out),
             .finish => try self.go(.finish, out),
+            .step_back => try self.rewind(1, out),
+            .rewind => |count| if (count) |n| try self.rewind(n, out) else try self.rewindBreak(out),
+            .timeline => try self.timeline(out),
             .registers => try session_view.registers(out, view),
             .examine => |want| try session_view.words(out, view, try self.resolve(want.place), want.words),
             .print => |text| try session_view.word(out, view, text, try self.resolve(text)),
@@ -104,6 +110,57 @@ pub const ZigScript = struct {
         try session_report.line(view, self.image, try view.register(.pc), out);
     }
 
+    /// `step-back` and `rewind COUNT` (RA8EMU-1170): the run goes back
+    /// COUNT recorded stops from where it sits and lands where that stop
+    /// showed it. A count that runs past the window's oldest lands there.
+    fn rewind(self: *ZigScript, count: u32, out: anytype) !void {
+        const history = self.session.history orelse return session_api.Error.NoHistory;
+        if (history.len() == 0) return session_api.Error.NoHistory;
+        const at = @min(self.back + count, history.len() - 1);
+        if (at <= self.back) return out.writeAll("The run is at the oldest recorded stop\n");
+        const moved = at - self.back;
+        try self.session.rewind(self.session.currentCore(), at);
+        self.back = at;
+        const view = try self.session.view(self.session.currentCore());
+        try out.print("Rewound {d}, ", .{moved});
+        try session_report.line(view, self.image, try view.register(.pc), out);
+    }
+
+    /// `rewind` with no count: to the newest breakpoint or fault behind the
+    /// run in the recorded window, the window's oldest stop when it finds
+    /// neither (the reverse packets' `bc`, RA8EMU-1170).
+    fn rewindBreak(self: *ZigScript, out: anytype) !void {
+        const history = self.session.history orelse return session_api.Error.NoHistory;
+        if (history.len() == 0) return session_api.Error.NoHistory;
+        var at = self.back + 1;
+        while (at < history.len()) : (at += 1) {
+            const frame = try history.frame(at);
+            if (frame.tag == 1 or self.breakAt(frame.pc)) break;
+        }
+        if (at >= history.len()) at = history.len() - 1;
+        return self.rewind(at - self.back, out);
+    }
+
+    /// Whether the selected core holds a breakpoint at `pc`.
+    fn breakAt(self: *ZigScript, pc: u32) bool {
+        const machine = self.session.machine(self.session.currentCore()) catch return false;
+        return machine.breaks.hit(pc) != null;
+    }
+
+    /// `timeline`: the recorded stops, newest first (RA8EMU-1170).
+    fn timeline(self: *ZigScript, out: anytype) !void {
+        const history = self.session.history orelse return session_api.Error.NoHistory;
+        if (history.len() == 0) return out.writeAll("The recorded window is empty\n");
+        for (0..history.len()) |back| {
+            const frame = try history.frame(@intCast(back));
+            const kind: []const u8 = if (frame.tag == 1) "stop" else "count";
+            try out.print("#{d} 0x{x:0>8} {s} {d}.{d:0>3} ms\n", .{
+                back,                                                    frame.pc, kind, frame.at_ns / std.time.ns_per_ms,
+                (frame.at_ns % std.time.ns_per_ms) / std.time.ns_per_us,
+            });
+        }
+    }
+
     fn resolve(self: *ZigScript, text: []const u8) !u32 {
         return session_place.resolve(try self.session.view(self.session.currentCore()), self.image, text);
     }
@@ -141,6 +198,7 @@ pub const ZigScript = struct {
 
     /// Run under `command` and say how it ended, in session.zig's words.
     fn go(self: *ZigScript, command: session_api.Run, out: anytype) !void {
+        self.back = 0;
         const core = self.session.currentCore();
         const ended = try self.session.run(core, command);
         const view = try self.session.view(core);

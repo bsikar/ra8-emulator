@@ -106,3 +106,17 @@ test "speed takes a factor and leaves the range to the session" {
     try std.testing.expectError(commands.Error.BadNumber, commands.parse("speed fast"));
     try std.testing.expectError(commands.Error.MissingArgument, commands.parse("speed"));
 }
+
+test "the reverse commands parse (RA8EMU-1170)" {
+    try expectParsed(.step_back, "step-back");
+    try expectParsed(.step_back, "reverse-step");
+    try expectParsed(.step_back, "rs");
+    try expectParsed(.{ .rewind = null }, "rewind");
+    try expectParsed(.{ .rewind = 2 }, "rewind 2");
+    try expectParsed(.{ .rewind = null }, "reverse-continue");
+    try expectParsed(.{ .rewind = 3 }, "rc 0x3");
+    try expectParsed(.timeline, "timeline");
+    try std.testing.expectError(error.ExtraArgument, commands.parse("step-back 1"));
+    try std.testing.expectError(error.ExtraArgument, commands.parse("timeline now"));
+    try std.testing.expectError(error.BadNumber, commands.parse("rewind later"));
+}
