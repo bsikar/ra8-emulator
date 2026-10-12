@@ -82,7 +82,7 @@ fn listen(io: std.Io, live: *session_api.Session, port: u16) !u8 {
     std.debug.print("gdb: listening on 127.0.0.1:{d}\n", .{port});
     const stream = try server.accept(io);
     defer stream.close(io);
-    var socket = rsp_poll.Socket{ .handle = stream.socket.handle };
+    var socket = rsp_poll.Socket{ .handle = stream.socket.handle, .io = io };
     try live.setRunBudget(live.currentCore(), rsp_poll.chunk);
     var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll() };
     const stub = rsp_dispatch.Dispatch{ .zig = &target };

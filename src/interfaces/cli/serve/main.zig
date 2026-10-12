@@ -147,7 +147,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx };
     const context = &setup.context;
     const done = switch (asked.where) {
-        .stdio => loop.answerStdio(context, buffers),
+        .stdio => loop.answerStdio(io, context, buffers),
         .listen => |spec| listen.serve(io, spec, context, buffers),
     };
     done catch |err| {

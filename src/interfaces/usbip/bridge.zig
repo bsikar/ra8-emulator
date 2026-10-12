@@ -82,7 +82,7 @@ pub const Bridge = struct {
     }
 
     fn accept(self: *Bridge, listener: *std.Io.net.Server) !Event {
-        if (!readable(listener.socket.handle)) return .none;
+        if (!readable(self.io, listener.socket.handle)) return .none;
         const conn = self.connect(try listener.accept(self.io));
         const imported = server.serve(&conn.reader.interface, &conn.writer.interface, &self.exports) catch null;
         if (imported == null) {
@@ -103,7 +103,7 @@ pub const Bridge = struct {
     fn traffic(self: *Bridge, conn: *Conn, device: *usbfs.Device) !Event {
         const reader = &conn.reader.interface;
         const writer = &conn.writer.interface;
-        while (reader.bufferedLen() > 0 or readable(conn.stream.socket.handle)) {
+        while (reader.bufferedLen() > 0 or readable(self.io, conn.stream.socket.handle)) {
             const more = self.live.receive(reader, writer) catch false;
             if (!more) return self.hangUp(conn);
         }
@@ -121,7 +121,7 @@ pub const Bridge = struct {
 };
 
 /// A read will not block: bytes waiting or the peer hung up.
-fn readable(handle: std.posix.socket_t) bool {
-    const ready = sock_ready.wait(handle, 0) catch return false;
+fn readable(io: std.Io, handle: std.posix.socket_t) bool {
+    const ready = sock_ready.wait(io, handle, 0) catch return false;
     return ready.any();
 }

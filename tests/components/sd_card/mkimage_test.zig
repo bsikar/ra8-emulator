@@ -119,11 +119,28 @@ test "the same folder, written in another order, builds the same bytes" {
     try std.testing.expectEqualSlices(u8, a, again);
 }
 
-test "a symlink is refused rather than left out" {
+/// Junctions are real Windows reparse points and need no symlink privilege.
+fn junction(dir: std.Io.Dir) !void {
+    try dir.createDir(io, "target", .default_dir);
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const root = path_buf[0..try dir.realPath(io, &path_buf)];
+    const link = try std.fs.path.join(A, &.{ root, "link" });
+    defer A.free(link);
+    const target = try std.fs.path.join(A, &.{ root, "target" });
+    defer A.free(target);
+    const result = try std.process.run(A, io, .{ .argv = &.{ "cmd.exe", "/c", "mklink", "/J", link, target } });
+    defer A.free(result.stdout);
+    defer A.free(result.stderr);
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, result.term);
+}
+
+test "a symlink or junction is refused rather than left out" {
     var tmp = std.testing.tmpDir(.{ .iterate = true });
     defer tmp.cleanup();
     try tmp.dir.writeFile(io, .{ .sub_path = "A.TXT", .data = "a" });
-    try tmp.dir.symLink(io, "A.TXT", "link", .{});
+    if (@import("builtin").os.tag == .windows) {
+        try junction(tmp.dir);
+    } else try tmp.dir.symLink(io, "A.TXT", "link", .{});
     var img = sd_image.Image.init(A);
     defer img.deinit();
     try std.testing.expectError(error.UnsupportedEntry, mk.build(A, &img, Folder.of(io, tmp.dir), "X"));

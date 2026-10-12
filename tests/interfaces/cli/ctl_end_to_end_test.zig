@@ -14,8 +14,9 @@ test "ctl alone loads a corpus image, speeds it up, waits for its banner, checks
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/e2e.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "e2e.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;

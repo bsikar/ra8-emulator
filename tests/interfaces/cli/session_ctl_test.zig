@@ -20,8 +20,9 @@ test "ctl --json drives load, run, step, pause, regs and mem against a running s
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/ctl.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "ctl.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
@@ -90,8 +91,9 @@ test "ctl --json sets speed, breakpoints and watchpoints, and a breakpoint stops
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/ctl.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "ctl.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
@@ -201,8 +203,9 @@ test "ctl load takes a firmware image with option-setting segments and resets to
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/load.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "load.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
@@ -224,8 +227,9 @@ test "ctl events waits for a UART line and times out on one that never comes" {
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/events.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "events.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;
@@ -266,8 +270,9 @@ test "ctl --json plugs a part, faults it, clears it, unplugs it and refuses a ty
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    const path = try std.fmt.allocPrint(gpa, ".zig-cache/tmp/{s}/parts.sock", .{tmp.sub_path});
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "parts.sock");
     defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
     const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
     defer gpa.free(spec);
     var line: [256]u8 = undefined;

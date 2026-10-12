@@ -11,7 +11,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const sock_ready = @import("ra8_host").sock.ready;
-const win32 = @import("ra8_host").win32;
 pub const served = @import("session/server.zig");
 const proto = @import("session/rpc.zig");
 const socket_transport = @import("socket_transport.zig");
@@ -192,7 +191,7 @@ pub const Listener = struct {
     /// connected to the focus address, so the app raises its window.
     pub fn takeFocus(self: *Listener) bool {
         if (self.focus_server) |*server| {
-            if (ready(server.socket.handle) catch false) {
+            if (ready(self.io, server.socket.handle) catch false) {
                 const stream = server.accept(self.io) catch return false;
                 stream.close(self.io);
                 self.focus_requested = true;
@@ -214,7 +213,7 @@ pub const Listener = struct {
             self.dropClient();
             return;
         };
-        if (gone(client.conn.stream.socket.handle)) self.dropClient();
+        if (gone(self.io, client.conn.stream.socket.handle)) self.dropClient();
     }
 
     /// Close everything: the client, the listener, the discovery file and
@@ -239,7 +238,7 @@ pub const Listener = struct {
     }
 
     fn acceptClient(self: *Listener, context: *served.Context) !void {
-        if (!(try ready(self.server.socket.handle))) return;
+        if (!(try ready(self.io, self.server.socket.handle))) return;
         const stream = try self.server.accept(self.io);
         errdefer stream.close(self.io);
         const rx = try self.gpa.alloc(u8, rx_size);
@@ -285,7 +284,7 @@ fn focusAddressOf(text: []const u8) !Address {
         const spec = std.mem.trim(u8, rest["focus ".len..], " ");
         if (std.mem.startsWith(u8, spec, "unix:")) return .{ .unix = spec["unix:".len..] };
         if (std.mem.startsWith(u8, spec, "tcp:")) {
-            const ip = std.Io.net.IpAddress.parse(spec["tcp:".len..], 0) catch return error.BadAddress;
+            const ip = std.Io.net.IpAddress.parseLiteral(spec["tcp:".len..]) catch return error.BadAddress;
             return .{ .tcp = ip };
         }
         return error.BadAddress;
@@ -309,21 +308,15 @@ fn homeOf(env: *const std.process.Environ.Map) ?[]const u8 {
 }
 
 /// True when a client is waiting on the listening socket.
-fn ready(fd: std.posix.fd_t) !bool {
-    return (try sock_ready.wait(fd, 0)).any();
+fn ready(io: std.Io, fd: std.posix.fd_t) !bool {
+    return (try sock_ready.wait(io, fd, 0)).any();
 }
 
 /// True when the peer closed its end (zero bytes behind the peek) or the
 /// socket failed in a way that is not "nothing to read yet".
-fn gone(fd: std.posix.fd_t) bool {
+fn gone(io: std.Io, fd: std.posix.fd_t) bool {
+    const ready_now = sock_ready.wait(io, fd, 0) catch return true;
+    if (!ready_now.any()) return false;
     var byte: [1]u8 = undefined;
-    if (builtin.os.tag == .windows) {
-        const got = win32.recv(fd, &byte, byte.len, win32.msg_peek);
-        if (got < 0) return win32.WSAGetLastError() != win32.wsa_would_block;
-        return got == 0;
-    }
-    const flags = std.posix.MSG.PEEK | std.posix.MSG.DONTWAIT;
-    const got = std.c.recv(fd, &byte, byte.len, @intCast(flags));
-    if (got < 0) return std.c.errno(got) != .AGAIN;
-    return got == 0;
+    return (sock_ready.takeByte(io, fd, &byte, true) orelse return true) == 0;
 }

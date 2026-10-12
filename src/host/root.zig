@@ -9,6 +9,7 @@ pub const sock = @import("sock/sock.zig");
 pub const win32 = @import("win32.zig");
 pub const console = @import("console.zig");
 pub const read = @import("read.zig");
+pub const pipe_pair = @import("pipe_pair.zig");
 pub const tape_dir = @import("tape_dir.zig");
 pub const worker = @import("worker.zig");
 pub const disk_file = @import("disk_file.zig");

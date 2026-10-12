@@ -14,6 +14,7 @@ pub const chunk: usize = 200_000;
 
 pub const Socket = struct {
     handle: std.posix.socket_t,
+    io: std.Io,
 
     pub fn poll(self: *Socket) debug_session.Poll {
         return .{ .context = self, .check = check };
@@ -21,12 +22,12 @@ pub const Socket = struct {
 
     fn check(context: *anyopaque) bool {
         const self: *Socket = @ptrCast(@alignCast(context));
-        const ready = sock_ready.wait(self.handle, 0) catch return false;
+        const ready = sock_ready.wait(self.io, self.handle, 0) catch return false;
         if (!ready.any()) return false;
         var byte: [1]u8 = undefined;
-        const peeked = sock_ready.takeByte(self.handle, &byte, true) orelse return false;
+        const peeked = sock_ready.takeByte(self.io, self.handle, &byte, true) orelse return false;
         if (peeked == 0 or byte[0] != packet.interrupt) return false;
-        _ = sock_ready.takeByte(self.handle, &byte, false) orelse return false;
+        _ = sock_ready.takeByte(self.io, self.handle, &byte, false) orelse return false;
         return true;
     }
 };

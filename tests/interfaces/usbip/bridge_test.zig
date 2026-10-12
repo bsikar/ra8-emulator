@@ -97,11 +97,12 @@ test "a host imports, submits an IN URB and gets the firmware's packet" {
     const script = enumerated();
     try std.testing.expectEqual(bridge.Event.listening, try link.poll(&board, &script));
     try std.testing.expectEqual(@as(u16, 0x5310), link.exported().?.device.product);
+    for (0..16) |_| try std.testing.expectEqual(bridge.Event.none, try link.poll(&board, &script));
     var seen = Seen{};
     const thread = try std.Thread.spawn(.{}, host, .{ link.port().?, &seen });
     var attached = false;
-    var polls: usize = 0;
-    while (!seen.done.load(.acquire) and polls < 50_000_000) : (polls += 1) {
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while (!seen.done.load(.acquire) and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
         const event = try link.poll(&board, &script);
         if (event == .attached) {
             attached = true;
@@ -111,7 +112,11 @@ test "a host imports, submits an IN URB and gets the firmware's packet" {
         }
         if (event == .none) std.Thread.yield() catch {};
     }
+    if (!seen.done.load(.acquire)) {
+        if (link.conn) |*conn| conn.stream.shutdown(std.testing.io, .both) catch {};
+    }
     thread.join();
+    try std.testing.expect(seen.done.load(.acquire));
     try std.testing.expect(attached);
     try std.testing.expectEqual(@as(u32, 2), seen.actual);
     try std.testing.expectEqualSlices(u8, "hi", &seen.data);

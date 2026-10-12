@@ -18,17 +18,21 @@ pub const Link = enum { pipe, socket };
 pub var stopping = std.atomic.Value(bool).init(false);
 
 /// Answer the client on stdin and stdout until stdin closes.
-pub fn answerStdio(context: *served.Context, buffers: Buffers) !void {
+pub fn answerStdio(io: std.Io, context: *served.Context, buffers: Buffers) !void {
     var stdio = Stdio.process();
-    try answer(context, stdio.transport(), stdio.input, .pipe, buffers);
+    try answer(io, context, stdio.transport(), stdio.input, .pipe, buffers);
 }
 
 /// Answer frames on `wire` until the peer behind `fd` closes or a stop is asked.
-pub fn answer(context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
+pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
     var host = served.Host.init(wire, buffers.rx, context);
     while (true) {
-        if (try host.poll(buffers.tx) != .idle) continue;
-        if (stopping.load(.acquire) or try closed(fd, link)) return;
+        const polled = host.poll(buffers.tx) catch |err| {
+            if (err == error.LinkDown and try closed(io, fd, link)) return;
+            return err;
+        };
+        if (polled != .idle) continue;
+        if (stopping.load(.acquire) or try closed(io, fd, link)) return;
     }
 }
 
@@ -37,12 +41,12 @@ pub fn answer(context: *served.Context, wire: served.rpc_lib.Transport, fd: std.
 /// is peeked. A pipe reports HUP: alone on Linux once it is drained, but with
 /// readable beside it on Darwin whether or not bytes are left, so a pipe that
 /// reads as both is asked what it still holds.
-pub fn closed(fd: std.posix.fd_t, link: Link) !bool {
+pub fn closed(io: std.Io, fd: std.posix.fd_t, link: Link) !bool {
     if (on_windows and link == .pipe) return pipeClosed(fd);
-    const ready = try sock_ready.wait(fd, idle_wait_ms);
+    const ready = try sock_ready.wait(io, fd, idle_wait_ms);
     if (!ready.readable) return ready.hung_up;
     if (link == .pipe) return ready.hung_up and pipeDrained(fd);
-    return peerGone(fd);
+    return peerGone(io, fd);
 }
 
 const on_windows = builtin.os.tag == .windows;
@@ -65,15 +69,7 @@ fn pipeClosed(pipe: std.posix.fd_t) bool {
 }
 
 /// Peek one byte: zero bytes means the peer closed its end.
-fn peerGone(fd: std.posix.fd_t) bool {
+fn peerGone(io: std.Io, fd: std.posix.fd_t) bool {
     var byte: [1]u8 = undefined;
-    if (on_windows) {
-        const got = win32.recv(fd, &byte, byte.len, win32.msg_peek);
-        if (got < 0) return win32.WSAGetLastError() != win32.wsa_would_block;
-        return got == 0;
-    }
-    const flags = std.posix.MSG.PEEK | std.posix.MSG.DONTWAIT;
-    const got = std.c.recv(fd, &byte, byte.len, @intCast(flags));
-    if (got < 0) return std.c.errno(got) != .AGAIN;
-    return got == 0;
+    return (sock_ready.takeByte(io, fd, &byte, true) orelse return true) == 0;
 }

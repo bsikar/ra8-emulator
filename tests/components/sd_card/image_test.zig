@@ -178,6 +178,18 @@ test "write back: an unchanged card leaves the image byte-identical" {
     try std.testing.expectEqualSlices(u8, bytes, back);
 }
 
+/// A reader that denies delete-sharing forces Windows replacement to fail.
+fn preventReplace(dir: std.Io.Dir) !std.os.windows.HANDLE {
+    const win32 = @import("ra8").host.win32;
+    var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = path_buf[0..try dir.realPathFile(io, "ro/card.img", &path_buf)];
+    const wide = try std.unicode.utf8ToUtf16LeAllocZ(std.testing.allocator, path);
+    defer std.testing.allocator.free(wide);
+    const handle = win32.CreateFileW(wide, 0x8000_0000, 0x3, null, 3, 0, null);
+    if (handle == win32.invalid_handle) return error.OpenFailed;
+    return handle;
+}
+
 test "write back: a write that fails leaves the original image intact" {
     if (@import("builtin").os.tag == .linux and std.os.linux.geteuid() == 0) return error.SkipZigTest;
     var tmp = std.testing.tmpDir(.{});
@@ -193,9 +205,14 @@ test "write back: a write that fails leaves the original image intact" {
     try std.testing.expect(img.write(3, &written));
     var ro = try tmp.dir.openDir(io, "ro", .{ .iterate = true });
     defer ro.close(io);
-    try ro.setPermissions(io, .fromMode(0o555));
-    defer ro.setPermissions(io, .fromMode(0o755)) catch {};
-    try std.testing.expectError(error.AccessDenied, disk_file.replace(io, tmp.dir, "ro/card.img", &img));
+    const windows = @import("builtin").os.tag == .windows;
+    const held: ?std.os.windows.HANDLE = if (windows) try preventReplace(tmp.dir) else null;
+    defer if (held) |handle| @import("ra8").host.read.close(handle);
+    if (!windows) try ro.setPermissions(io, .fromMode(0o555));
+    defer if (!windows) ro.setPermissions(io, .fromMode(0o755)) catch {};
+    // Zig 0.17 maps NTSTATUS SHARING_VIOLATION during rename to Unexpected.
+    const refusal = if (windows) error.Unexpected else error.AccessDenied;
+    try std.testing.expectError(refusal, disk_file.replace(io, tmp.dir, "ro/card.img", &img));
     const back = try tmp.dir.readFileAlloc(io, "ro/card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);

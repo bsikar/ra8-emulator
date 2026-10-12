@@ -1,8 +1,7 @@
 //! The build for the RA8D2 board emulator.
 //!
-//! One language, one build. The emulator is Zig, CPU and disassembler
-//! included; no C library is linked beyond libc, nothing here is exported
-//! back to C and there is no C ABI of our own.
+//! The emulator, CPU and disassembler use Zig. Only libc links to C;
+//! nothing is exported back to C and there is no C ABI of our own.
 //!
 //!   zig build         the emulator into zig-out/bin
 //!   zig build run     build and run it
@@ -30,10 +29,8 @@
 //!   src/interfaces/cli/     cli_app         ra8_emulator, which never links SDL
 //!   src/interfaces/gui/     gui_app         ra8_gui, built under -Dgui
 //!
-//! src/root.zig is the `ra8` umbrella over the libraries. Tests live in
-//! tests/ on mirrored paths, never in a `test` block at the bottom of a
-//! source file; tests/all.zig and tests/all_host.zig are the roots that pull
-//! them in.
+//! src/root.zig re-exports libraries. Tests mirror source under tests/;
+//! tests/all.zig and tests/all_host.zig collect them, with no inline tests.
 //!
 //! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
@@ -246,6 +243,10 @@ fn testBinary(b: *std.Build, name: []const u8, root: []const u8, target: std.Bui
 fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile) void {
     const paths = b.addOptions();
     paths.addOptionPath("emulator", exe.getEmittedBin());
+    if (exe.root_module.resolved_target.?.result.os.tag == .windows) {
+        const fixture = b.addExecutable(.{ .name = "ssh_fixture", .root_module = toolModule(b, exe.root_module.resolved_target.?, exe.root_module.optimize.?, "tests/interfaces/cli/ctl_host_test.zig") });
+        paths.addOptionPath("ssh_fixture", fixture.getEmittedBin());
+    }
     @import("tests/fixtures/guests.zig").add(b, paths);
     tests.root_module.addOptions("test_paths", paths);
 }

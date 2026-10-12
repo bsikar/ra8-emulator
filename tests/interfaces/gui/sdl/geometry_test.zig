@@ -19,6 +19,11 @@ const sdl = @import("gui_sdl");
 
 const c = sdl.c;
 const render = ra8.render;
+
+// The presenter links firmware widgets through their existing host exports.
+comptime {
+    _ = render.widget_paint;
+}
 const draw_list = render.draw_list;
 const raster = render.raster;
 const Color = draw_list.Color;
