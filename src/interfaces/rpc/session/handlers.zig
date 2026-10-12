@@ -68,6 +68,16 @@ pub const ThreadNames = struct {
     nameFn: *const fn (*anyopaque, usize, u32, []u8) ?[]const u8,
 };
 
+/// The dirty rectangle one core's lcd_dirty feed holds between sends
+/// (RA8EMU-822), merged across the frames since the last send.
+pub const LcdDue = struct { rect: api.Event.Rect, virtual_ns: u64 };
+
+/// The host clock the lcd_dirty rate measures against (RA8EMU-822).
+pub const HostClock = struct {
+    context: *anyopaque,
+    nowFn: *const fn (*anyopaque) u64,
+};
+
 const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
@@ -84,6 +94,20 @@ pub const Context = struct {
     /// The event-stream queue panel refreshes are read from while any core
     /// wants lcd_dirty (RA8EMU-789).
     lcd_feed: ?usize = null,
+    /// Frames per second each core's lcd_dirty subscriber wants
+    /// (RA8EMU-822); zero is every frame.
+    lcd_rate: [2]u16 = .{ 0, 0 },
+    /// The dirty rectangle a rate-limited lcd_dirty subscriber holds
+    /// between sends, merged to the latest frame (RA8EMU-822).
+    lcd_pending: [2]?LcdDue = .{ null, null },
+    /// Host time of the last lcd_dirty send per core, for the rate
+    /// (RA8EMU-822).
+    lcd_last_ns: [2]u64 = .{ 0, 0 },
+    /// Panel captures skipped while no lcd_dirty subscriber was due
+    /// (RA8EMU-822).
+    lcd_holds: u32 = 0,
+    /// The host clock for the lcd_dirty rate (RA8EMU-822); without one a rate sends every pass.
+    host_clock: ?HostClock = null,
     /// The event-stream queue session events are read from while any core
     /// wants the session topic (RA8EMU-942).
     session_feed: ?usize = null,
@@ -291,12 +315,17 @@ pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
         // A GLCDC panel is scanned only for a viewer: this client is one now.
         display.watch(true);
     }
+    if (args.topic == .lcd_dirty) context.lcd_rate[@backingInt(args.core)] = args.rate;
     context.topics[@backingInt(args.core)] |= bit(args.topic);
     return ack;
 }
 
 pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
     context.topics[@backingInt(args.core)] &= ~bit(args.topic);
+    if (!context.wants(args.core, .lcd_dirty)) {
+        context.lcd_rate[@backingInt(args.core)] = 0;
+        context.lcd_pending[@backingInt(args.core)] = null;
+    }
     if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) release(context, &context.uart_feed);
     if (!context.wants(.cpu0, .lcd_dirty) and !context.wants(.cpu1, .lcd_dirty)) unwatch(context);
     if (!context.wants(.cpu0, .session) and !context.wants(.cpu1, .session)) release(context, &context.session_feed);
@@ -308,6 +337,9 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
 pub fn forget(context: *Context) void {
     context.topics = .{ 0, 0 };
     context.pending = null;
+    context.lcd_rate = .{ 0, 0 };
+    context.lcd_pending = .{ null, null };
+    context.lcd_holds = 0;
     release(context, &context.uart_feed);
     unwatch(context);
     release(context, &context.session_feed);

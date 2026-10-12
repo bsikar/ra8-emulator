@@ -4,7 +4,12 @@
 //! box of each core's rectangles, captures the panel once and sends each
 //! box's grayscale pixels as lcd_dirty events, split by rows so no event
 //! carries more than DirtyRect's pixel cap. The stream coalesces queued
-//! frames per core, so after a drop the whole panel goes out instead.
+//! frames per core, so after a drop the whole panel goes out instead. A
+//! subscriber can ask for a frames-per-second rate (RA8EMU-822): between
+//! sends its rectangles are merged into one bounding box of the latest
+//! frame and the panel is not captured until the rate's next send falls
+//! due, so a rate nobody meets costs no conversion. The server supplies the
+//! host clock through its context; without one a rate sends every pass.
 const std = @import("std");
 const proto = @import("rpc.zig");
 const api = @import("ra8_session").api;
@@ -16,7 +21,7 @@ const batch = 32;
 pub const max_pixels: usize = proto.DirtyRect.max_len.pixels;
 
 const Rect = api.Event.Rect;
-const Due = struct { rect: Rect, virtual_ns: u64 };
+const Due = @import("handlers.zig").LcdDue;
 
 /// Send the pixels of every panel change a subscribed core saw through `server`.
 pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
@@ -28,6 +33,25 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
         if (read.dropped != 0) whole = true;
         for (events[0..read.count]) |event| note(context, &due, event);
         if (read.count < batch) break;
+    }
+    // A rate-limited subscriber holds its rectangles merged between sends
+    // (RA8EMU-822); a due one takes them, and a dropped stream sends whole.
+    const now_ns = hostNow(context);
+    for (due, 0..) |fresh, index| {
+        const slot = &context.lcd_pending[index];
+        if (fresh) |f| slot.* = if (slot.*) |held|
+            .{ .rect = merge(held.rect, f.rect), .virtual_ns = f.virtual_ns }
+        else
+            f;
+        const held = slot.* orelse continue;
+        const limited = context.host_clock != null and context.lcd_rate[index] != 0;
+        if (whole or !limited or now_ns >= context.lcd_last_ns[index] + interval(context.lcd_rate[index])) {
+            due[index] = held;
+            slot.* = null;
+        } else {
+            context.lcd_holds += 1;
+            due[index] = null;
+        }
     }
     if (due[0] == null and due[1] == null) return;
     const gpa = context.gpa orelse return;
@@ -41,7 +65,20 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
         const rect = clip(if (whole) full(frame) else held.rect, frame);
         if (rect.width == 0 or rect.height == 0) continue;
         try send(server, @fromBackingInt(@intCast(index)), rect, held.virtual_ns, frame, chunk, tx);
+        context.lcd_last_ns[index] = now_ns;
     }
+}
+
+/// The host clock in nanoseconds, through the context's clock hook (RA8EMU-822).
+fn hostNow(context: *const Context) u64 {
+    const clock = context.host_clock orelse return 0;
+    return clock.nowFn(clock.context);
+}
+
+/// The host interval between sends at `rate` frames per second; 0 sends every pass.
+fn interval(rate: u16) u64 {
+    if (rate == 0) return 0;
+    return (@as(u64, std.time.ns_per_s) + rate - 1) / rate;
 }
 
 fn skip(what: []const u8, err: anyerror) void {
