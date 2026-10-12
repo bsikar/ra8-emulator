@@ -35,6 +35,7 @@ const shell_registers = @import("registers.zig");
 const registers_pane = @import("../ui/registers_pane.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
+const shell_memory_field = @import("memory_field.zig");
 const memory_pane = @import("../ui/memory_pane.zig");
 const disasm_pane = @import("../ui/disasm_pane.zig");
 const disasm_capture = @import("../disasm_capture.zig");
@@ -74,6 +75,8 @@ pub const Panes = struct {
     /// The open register field and a refused write's note (RA8EMU-946).
     edit: ?*const shell_register_edit.Editor = null,
     memory: ?*const shell_memory.Pair = null,
+    /// The memory leaf's address field (RA8EMU-934).
+    memory_field: ?*shell_memory_field.Pin = null,
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
@@ -123,7 +126,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pa
         }
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
-        if (pair.of(pane.core).now) |*now| return memory_pane.draw(list, theme, body, now);
+        if (pair.of(pane.core).now) |*now| {
+            if (self.memory_field) |field| return shell_memory_field.draw(list, theme, body, now, field);
+            return memory_pane.draw(list, theme, body, now);
+        }
     };
     if (pane.kind == .disasm) if (self.code) |pair| {
         const model = pair.of(pane.core);
