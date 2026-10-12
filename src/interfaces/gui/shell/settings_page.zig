@@ -7,6 +7,7 @@
 //! and a broken save both follow the OS.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
+const widget = @import("ra8_widget");
 const font = @import("ra8_render").font;
 const platform = @import("../platform.zig");
 const colors = @import("../ui/colors.zig");
@@ -125,23 +126,24 @@ pub const Page = struct {
         return true;
     }
 
-    /// Paints the panel over the shell: the title, then one row per theme
-    /// choice, the active choice marked.
-    pub fn draw(self: *const Page, list: *draw_list.DrawList, themes: *const Themes, theme: *const Theme, width: i32, height: i32) !void {
+    /// Paints the panel over the shell through the handed Paint table
+    /// (RA8EMU-1157): the title, then one row per theme choice, the active
+    /// choice marked.
+    pub fn draw(self: *const Page, table: *const widget.types.Paint, themes: *const Themes, theme: *const Theme, width: i32, height: i32) !void {
         if (!self.open) return;
         const panel = panelOf(width, height);
-        try list.fill(panel, theme.surface);
-        try border(list, panel, theme.border);
+        fillArea(table, panel, word(theme.surface));
+        border(table, panel, theme.border);
         const title = Rect{ .x = panel.x + pad, .y = panel.y + pad, .w = panel.w - 2 * pad, .h = row_h };
-        try font.draw(list, title.x, title.y + draw_list.centre(title.h, font.glyph_h), "Settings", theme.muted);
+        drawText(table, title.x, title.y + draw_list.centre(title.h, font.glyph_h), "Settings", word(theme.muted), word(theme.surface));
         const active = themes.choice();
         for (rows, 0..) |picked, index| {
             const area = rowArea(panel, index);
-            if (picked == active) try list.fill(area, theme.band);
+            if (picked == active) fillArea(table, area, word(theme.band));
             const top = area.y + draw_list.centre(area.h, font.glyph_h);
             const color = if (picked == active) theme.highlight else theme.ink;
-            try font.draw(list, area.x + mark + gap, top, labels[index], color);
-            if (picked == active) try list.fill(.{ .x = area.x, .y = top + @divFloor(font.glyph_h - mark, 2), .w = mark, .h = mark }, theme.highlight);
+            drawText(table, area.x + mark + gap, top, labels[index], word(color), word(theme.surface));
+            if (picked == active) fillArea(table, .{ .x = area.x, .y = top + @divFloor(font.glyph_h - mark, 2), .w = mark, .h = mark }, word(theme.highlight));
         }
     }
 };
@@ -177,9 +179,46 @@ fn hit(panel: Rect, x: i32, y: i32) ?Choice {
     return null;
 }
 
-fn border(list: *draw_list.DrawList, panel: Rect, color: draw_list.Color) !void {
-    try list.fill(.{ .x = panel.x, .y = panel.y, .w = panel.w, .h = 1 }, color);
-    try list.fill(.{ .x = panel.x, .y = panel.y + panel.h - 1, .w = panel.w, .h = 1 }, color);
-    try list.fill(.{ .x = panel.x, .y = panel.y, .w = 1, .h = panel.h }, color);
-    try list.fill(.{ .x = panel.x + panel.w - 1, .y = panel.y, .w = 1, .h = panel.h }, color);
+fn border(table: *const widget.types.Paint, panel: Rect, color: draw_list.Color) void {
+    fillArea(table, .{ .x = panel.x, .y = panel.y, .w = panel.w, .h = 1 }, word(color));
+    fillArea(table, .{ .x = panel.x, .y = panel.y + panel.h - 1, .w = panel.w, .h = 1 }, word(color));
+    fillArea(table, .{ .x = panel.x, .y = panel.y, .w = 1, .h = panel.h }, word(color));
+    fillArea(table, .{ .x = panel.x + panel.w - 1, .y = panel.y, .w = 1, .h = panel.h }, word(color));
+}
+
+/// `area` filled with `color` through the shared Paint table (RA8EMU-1157).
+fn fillArea(table: *const widget.types.Paint, area: Rect, color: u32) void {
+    table.fill_rect.?(table.user, area.x, area.y, area.w, area.h, color);
+}
+
+/// One line of text as the firmware's label widget (RA8EMU-1157), the pane
+/// pattern: pad 0, left-aligned, rect = the text's own cell.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, label: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(label.len, buffer.len - 1);
+    @memcpy(buffer[0..n], label[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(label.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word (RA8EMU-1157).
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }

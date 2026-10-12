@@ -1,12 +1,11 @@
-//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
-//! (quit, the menu strip RA8EMU-957, gutter drags) and pumps the session link into the status bar,
-//! console, board, device, camera and plug models, whose leaves take clicks and typing, and the
-//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane
-//! titles (RA8EMU-800) and the settings page (RA8EMU-963) take their presses, and while Run is
-//! lit each frame pays the board its slices on the shell's own thread, so the frame never waits
-//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
+//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events (quit, the menu strip RA8EMU-957, gutter drags)
+//! and pumps the session link into the status bar, console, board, device, camera and plug models, whose leaves take clicks and typing, and the
+//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane titles (RA8EMU-800) and the settings page (RA8EMU-963)
+//! take their presses, and while Run is lit each frame pays the board its slices on the shell's own thread, so the frame never waits on more than
+//! one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
+const widget_paint = @import("ra8_render").widget_paint;
 const raster = @import("ra8_render").raster;
 const font = @import("ra8_render").font;
 const platform = @import("../platform.zig");
@@ -40,7 +39,6 @@ const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
 const shell_settings = @import("settings_page.zig");
-
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
 
@@ -157,7 +155,9 @@ pub const Shell = struct {
             .painter = self.painter,
             .themes = self.themes.view(),
         });
-        try shell_settings.Page.draw(&self.settings, &list, &self.themes, self.themes.active, width, height);
+        var target = widget_paint.Target{ .list = &list };
+        const paint = target.paint();
+        try shell_settings.Page.draw(&self.settings, &paint, &self.themes, self.themes.active, width, height);
         if (try window.show(&list, font.atlas)) return true;
         // raster.draw is the documented temporary composite (RA8EMU-1157).
         const frame = try self.fitFrame(size);
