@@ -12,6 +12,7 @@ test {
     _ = @import("host/win32_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/host/bytes_test.zig");
+    _ = @import("interfaces/cli/host/spawn_test.zig");
     _ = @import("interfaces/cli/probe_ctl_test.zig");
     _ = @import("interfaces/cli/serve/listen_test.zig");
     _ = @import("interfaces/cli/serve/loop_test.zig");

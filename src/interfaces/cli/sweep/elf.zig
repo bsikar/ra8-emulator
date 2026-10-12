@@ -5,6 +5,8 @@
 //! its row comes from the child's JSON report: wall time, the CPU's stall
 //! on both regions, and the external_regions counters.
 const std = @import("std");
+const builtin = @import("builtin");
+const win32 = @import("ra8_host").win32;
 const external = @import("ra8_board").external.memory;
 const matrix = @import("ra8_board").sizing.matrix;
 const sweep = @import("ra8_board").sizing.sweep;
@@ -25,7 +27,8 @@ pub const Job = struct {
 /// The EK profile with `config`'s OSPI, SDRAM and window lines.
 pub fn profileText(out: anytype, config: external.Config) !void {
     var lines = std.mem.splitScalar(u8, ek_profile, '\n');
-    while (lines.next()) |line| {
+    while (lines.next()) |raw_line| {
+        const line = std.mem.trimEnd(u8, raw_line, "\r");
         if (std.mem.startsWith(u8, line, "ospi=")) {
             try region(out, "ospi", config.ospi);
         } else if (std.mem.startsWith(u8, line, "sdram=")) {
@@ -102,15 +105,119 @@ fn number(value: ?std.json.Value, field: []const u8) !u64 {
 pub fn all(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, job: Job, target_ns: ?u64, rows: *[matrix.count]sweep.Row) !void {
     const exe = try std.process.executablePathAlloc(io, gpa);
     defer gpa.free(exe);
+    return allWithExe(gpa, io, env, exe, job, target_ns, rows);
+}
+
+/// The same lifecycle with an explicit child, also used by embedding tests.
+pub fn allWithExe(gpa: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, exe: []const u8, job: Job, target_ns: ?u64, rows: *[matrix.count]sweep.Row) !void {
+    var stops = try Stops.install();
+    defer stops.restore();
     var tag: [8]u8 = undefined;
     io.random(&tag);
-    const scratch = try std.fmt.allocPrint(gpa, "{s}/ra8-sweep-{x}.board", .{ env.get("TMPDIR") orelse "/tmp", std.mem.readInt(u64, &tag, .little) });
+    const scratch = try scratchPath(gpa, env, builtin.os.tag, std.mem.readInt(u64, &tag, .little));
     defer gpa.free(scratch);
-    defer std.Io.Dir.cwd().deleteFile(io, scratch) catch {};
+    const reserved = try reserveScratch(gpa, io, scratch);
+    std.debug.print("sweep: scratch profile ready\n", .{});
+    const result = runRows(gpa, io, exe, job, target_ns, rows, scratch);
+    reserved.close(io);
+    std.Io.Dir.cwd().deleteFile(io, scratch) catch |err| {
+        if (builtin.os.tag == .windows and err == error.FileNotFound) return result;
+        if (result) {} else |first| {
+            std.debug.print("sweep: scratch cleanup failed: {s}\n", .{@errorName(err)});
+            return first;
+        }
+        return err;
+    };
+    return result;
+}
+
+/// Exclusive reservation held through the sweep. Windows also removes the
+/// file when the process terminates without running Zig cleanup.
+pub fn reserveScratch(gpa: std.mem.Allocator, io: std.Io, path: []const u8) !std.Io.File {
+    if (builtin.os.tag != .windows) return std.Io.Dir.cwd().createFile(io, path, .{ .exclusive = true });
+    const wide = try std.unicode.utf8ToUtf16LeAllocZ(gpa, path);
+    defer gpa.free(wide);
+    const handle = win32.CreateFileW(wide, WindowsScratch.access, WindowsScratch.share, null, WindowsScratch.create_new, WindowsScratch.flags, null);
+    if (handle == win32.invalid_handle) return error.ScratchCreateFailed;
+    return .{ .handle = handle, .flags = .{ .nonblocking = false } };
+}
+
+const WindowsScratch = struct {
+    // GENERIC_WRITE | DELETE, with read/write/delete sharing for children.
+    pub const access = 0x40000000 | 0x00010000;
+    pub const share = 7;
+    pub const create_new = 1;
+    // FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE.
+    pub const flags = 0x00000100 | 0x04000000;
+};
+
+fn runRows(gpa: std.mem.Allocator, io: std.Io, exe: []const u8, job: Job, target_ns: ?u64, rows: *[matrix.count]sweep.Row, scratch: []const u8) !void {
     for (rows, 0..) |*row, index| {
+        if (stopping.load(.acquire)) return error.Interrupted;
         const config = matrix.at(index);
-        const result = try runOne(gpa, io, exe, job, config, scratch);
+        const result = runOne(gpa, io, exe, job, config, scratch) catch |err| {
+            if (stopping.load(.acquire)) return error.Interrupted;
+            return err;
+        };
+        if (stopping.load(.acquire)) return error.Interrupted;
         const meets = if (target_ns) |target| result.total_ns <= target else true;
         row.* = .{ .config = config, .result = result, .meets = meets };
     }
+}
+
+/// Native temp conventions, ignoring empty environment values.
+pub fn scratchPath(gpa: std.mem.Allocator, env: *const std.process.Environ.Map, os: std.Target.Os.Tag, tag: u64) ![]u8 {
+    const name = try std.fmt.allocPrint(gpa, "ra8-sweep-{x}.board", .{tag});
+    defer gpa.free(name);
+    if (os == .windows) {
+        const base = nonempty(env, "TMP") orelse nonempty(env, "TEMP");
+        if (base) |dir| return std.fs.path.join(gpa, &.{ dir, name });
+        const home = nonempty(env, "USERPROFILE") orelse return error.NoTempDirectory;
+        return std.fs.path.join(gpa, &.{ home, "AppData", "Local", "Temp", name });
+    }
+    return std.fs.path.join(gpa, &.{ nonempty(env, "TMPDIR") orelse "/tmp", name });
+}
+
+fn nonempty(env: *const std.process.Environ.Map, key: []const u8) ?[]const u8 {
+    const value = env.get(key) orelse return null;
+    return if (value.len == 0) null else value;
+}
+
+var stopping = std.atomic.Value(bool).init(false);
+
+const Stops = struct {
+    int: if (builtin.os.tag == .windows) void else std.posix.Sigaction = undefined,
+    term: if (builtin.os.tag == .windows) void else std.posix.Sigaction = undefined,
+
+    fn install() !Stops {
+        stopping.store(false, .release);
+        var self: Stops = .{};
+        if (builtin.os.tag == .windows) {
+            if (!win32.SetConsoleCtrlHandler(onConsoleStop, .TRUE).toBool()) return error.StopHandlerFailed;
+        } else {
+            const action: std.posix.Sigaction = .{ .handler = .{ .handler = onStop }, .mask = std.posix.sigemptyset(), .flags = 0 };
+            std.posix.sigaction(std.posix.SIG.INT, &action, &self.int);
+            std.posix.sigaction(std.posix.SIG.TERM, &action, &self.term);
+        }
+        return self;
+    }
+
+    fn restore(self: *const Stops) void {
+        if (builtin.os.tag == .windows) {
+            if (!win32.SetConsoleCtrlHandler(onConsoleStop, .FALSE).toBool()) std.debug.print("sweep: stop handler removal failed\n", .{});
+        } else {
+            std.posix.sigaction(std.posix.SIG.INT, &self.int, null);
+            std.posix.sigaction(std.posix.SIG.TERM, &self.term, null);
+        }
+    }
+};
+
+fn onStop(_: std.posix.SIG) callconv(.c) void {
+    stopping.store(true, .release);
+}
+
+fn onConsoleStop(event: win32.DWORD) callconv(.winapi) win32.BOOL {
+    if (event != 0 and event != 1) return .FALSE;
+    stopping.store(true, .release);
+    return .TRUE;
 }
