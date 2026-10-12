@@ -8,6 +8,7 @@
 //! places the pane.
 //! gui/board.capture.zig folds the session's events into `Leds`; this pane
 //! never imports the session or the chip.
+const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const fit = @import("fit.zig");
@@ -111,6 +112,9 @@ pub const View = struct {
     dirty: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
     /// The switch held down by the pointer (RA8EMU-814), drawn pressed.
     pressed: ?usize = null,
+    /// Frames passed over since the last present (RA8EMU-824), drawn in the
+    /// panel's top-right corner.
+    skipped: u64 = 0,
 };
 
 /// Paints the pane into `area`; an area under the minimum draws nothing.
@@ -126,6 +130,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: Vi
     try list.fill(layout.panel, theme.background);
     const shown = fit.fitIn(layout.panel, image.width, image.height);
     try list.panel(shown, image, view.dirty, !wholeScale(shown, image.width, image.height));
+    if (view.skipped > 0) try cornerSkipped(list, shown, view.skipped, theme);
     try drawParts(list, theme, layout, view, null);
 }
 
@@ -159,6 +164,14 @@ fn drawParts(list: *draw_list.DrawList, theme: *const Theme, layout: Layout, vie
         try list.fill(inset(button), if (is_pressed) theme.pressed_face else theme.face);
         try label(list, button, switch_names[index], if (is_pressed) theme.accent else theme.ink);
     }
+}
+
+/// The skipped count in the panel's top-right corner (RA8EMU-824).
+fn cornerSkipped(list: *draw_list.DrawList, panel: Rect, skipped: u64, theme: *const Theme) !void {
+    var text: [24]u8 = undefined;
+    const shown = std.fmt.bufPrint(&text, "skipped {d}", .{skipped}) catch return;
+    const w: i32 = @intCast(font.textWidth(shown.len));
+    try font.draw(list, panel.x + panel.w - w - 4, panel.y + 4, shown, theme.ink);
 }
 
 /// An LED's lit colour from the board's RGB565 word.

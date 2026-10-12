@@ -105,6 +105,31 @@ test "in the light palette the board pane frame is pinned to its own golden" {
     try std.testing.expectEqual(@as(u64, 14153086348725203933), try boardDigest(light));
 }
 
+/// The board pane frame with the skipped count in the panel's corner
+/// (RA8EMU-824).
+fn skippedDigest(theme: *const gui_app.colors.Theme) !u64 {
+    const w = 480;
+    const h = 320;
+    var list = draw_list.DrawList.init(std.testing.allocator, w, h);
+    defer list.deinit();
+    var frame = try raster.Framebuffer.init(std.testing.allocator, w, h);
+    defer frame.deinit(std.testing.allocator);
+    var pixels: [64 * 36]Color = undefined;
+    for (&pixels, 0..) |*pixel, index| {
+        const shade: u8 = @intCast((index % 64) * 4);
+        pixel.* = Color.rgb(shade, shade, shade);
+    }
+    var leds: pane.Leds = .{};
+    capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
+    try pane.draw(&list, theme, .{ .x = 0, .y = 0, .w = w, .h = h }, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels }, .skipped = 11 }, pane.profile);
+    raster.draw(&frame, &list, font.atlas);
+    return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
+}
+
+test "the skipped count in the panel's corner is pinned" {
+    try std.testing.expectEqual(@as(u64, 17505556107302423028), try skippedDigest(dark));
+}
+
 /// The board pane with a dirty panel sub-rect, at `area`'s scale.
 fn dirtyDigest(theme: *const gui_app.colors.Theme, area: Rect) !u64 {
     var list = draw_list.DrawList.init(std.testing.allocator, @intCast(area.w), @intCast(area.h));

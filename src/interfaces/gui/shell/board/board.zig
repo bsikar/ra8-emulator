@@ -12,6 +12,7 @@ const draw_list = @import("ra8_render").draw_list;
 const colors = @import("../../ui/colors.zig");
 const board_pane = @import("../../ui/board_pane.zig");
 const board_capture = @import("../../board/capture.zig");
+const lcd_pacing = @import("../../lcd_pacing.zig");
 pub const input = @import("input.zig");
 
 const Color = draw_list.Color;
@@ -28,6 +29,12 @@ pub const Board = struct {
     /// them, in image pixels (RA8EMU-823); null until one arrives.
     dirty: ?draw_list.Rect = null,
     subscribed: bool = false,
+    /// The pane's pacing model (RA8EMU-824): arrivals queue into it, and a
+    /// frame shows at most once per refresh cap.
+    pacer: lcd_pacing.Pacer = .{},
+    /// Arrivals passed over since the last present (RA8EMU-824), for the
+    /// pane's corner.
+    skipped: u64 = 0,
 
     pub fn init(allocator: std.mem.Allocator) Board {
         return .{ .allocator = allocator };
@@ -50,7 +57,7 @@ pub const Board = struct {
 
     /// Copy an lcd_dirty rectangle into the image, or fold an LED change
     /// into the LEDs.
-    pub fn observe(self: *Board, arrival: session_link.Arrival) error{OutOfMemory}!void {
+    pub fn observe(self: *Board, arrival: session_link.Arrival, now_ns: u64) error{OutOfMemory}!void {
         const event = switch (arrival) {
             .event => |event| event,
             .response => return,
@@ -68,8 +75,18 @@ pub const Board = struct {
             const into = self.pixels[(rect.y + row) * self.width + rect.x ..][0..rect.width];
             for (into, rect.pixels[row * rect.width ..][0..rect.width]) |*pixel, gray| pixel.* = Color.rgb(gray, gray, gray);
         }
+        self.pacer.arrive(rect.virtual_ns, now_ns);
         const landed = draw_list.Rect{ .x = @intCast(rect.x), .y = @intCast(rect.y), .w = @intCast(rect.width), .h = @intCast(rect.height) };
         self.dirty = if (self.dirty) |old| old.unionWith(landed) else landed;
+    }
+
+    /// The pacer's decision at `now_ns` (RA8EMU-824): a frame shows whenever
+    /// the refresh cap allows, and everything passed over rides along in
+    /// `skipped` for the pane's corner.
+    pub fn pace(self: *Board, now_ns: u64) void {
+        const decision = self.pacer.due(@as(i128, now_ns)) orelse return;
+        self.pacer.present(decision.generation, @as(i128, now_ns));
+        self.skipped = decision.skipped;
     }
 
     /// Whether any rectangle has arrived yet.
@@ -88,7 +105,7 @@ pub const Board = struct {
         const blank = draw_list.Rect{ .x = 0, .y = 0, .w = 0, .h = 0 };
         const dirty = self.dirty orelse blank;
         self.dirty = null;
-        return .{ .leds = &self.leds, .panel = if (self.hasFrame()) self.image() else null, .dirty = dirty, .pressed = pressed };
+        return .{ .leds = &self.leds, .panel = if (self.hasFrame()) self.image() else null, .dirty = dirty, .pressed = pressed, .skipped = self.skipped };
     }
 
     /// Grow the image to at least `width` by `height`, keeping what it holds.

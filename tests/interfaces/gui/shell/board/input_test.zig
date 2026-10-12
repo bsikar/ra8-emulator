@@ -71,7 +71,7 @@ const Bench = struct {
     fn exchange(self: *Bench) !void {
         try self.rig.session.answer();
         while (self.rig.link.pump()) |arrival| {
-            try self.board.observe(arrival);
+            try self.board.observe(arrival, 0);
             switch (arrival) {
                 .response => |response| switch (response.result) {
                     .err => self.refused += 1,
@@ -107,7 +107,7 @@ const Bench = struct {
         var bytes: [64 + @as(usize, w) * h]u8 = undefined;
         const pixels: [@as(usize, w) * h]u8 = @splat(128);
         const payload = try proto.encode(proto.DirtyRect, .{ .core = .cpu0, .x = 0, .y = 0, .width = w, .height = h, .virtual_ns = 0, .pixels = &pixels }, &bytes);
-        try self.board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.lcd_dirty), .payload = payload } });
+        try self.board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.lcd_dirty), .payload = payload } }, 0);
     }
 };
 

@@ -33,7 +33,7 @@ test "a rectangle updates only its sub-rect of the panel buffer" {
     defer feed.deinit();
     const grays = [_]u8{ 200, 150, 100, 50, 20, 10, 5, 180 };
     var buf: [256]u8 = undefined;
-    try feed.observe(lcdEvent(&buf, 2, 1, 4, 2, &grays));
+    try feed.observe(lcdEvent(&buf, 2, 1, 4, 2, &grays), 0);
     try std.testing.expect(feed.hasFrame());
     try std.testing.expectEqual(@as(u32, 6), feed.width);
     try std.testing.expectEqual(@as(u32, 3), feed.height);
@@ -49,8 +49,8 @@ test "arriving rectangles fold into the union since the last draw" {
     defer feed.deinit();
     var grays: [12]u8 = @splat(9);
     var buf: [256]u8 = undefined;
-    try feed.observe(lcdEvent(&buf, 0, 0, 6, 2, &grays));
-    try feed.observe(lcdEvent(&buf, 10, 5, 2, 2, grays[0..4]));
+    try feed.observe(lcdEvent(&buf, 0, 0, 6, 2, &grays), 0);
+    try feed.observe(lcdEvent(&buf, 10, 5, 2, 2, grays[0..4]), 0);
     try std.testing.expectEqual(Rect{ .x = 0, .y = 0, .w = 12, .h = 7 }, feed.dirty.?);
 }
 
@@ -59,7 +59,7 @@ test "a draw hands the union over and the next one sees nothing" {
     defer feed.deinit();
     const grays = [_]u8{ 1, 1, 1, 1 };
     var buf: [256]u8 = undefined;
-    try feed.observe(lcdEvent(&buf, 0, 0, 2, 2, &grays));
+    try feed.observe(lcdEvent(&buf, 0, 0, 2, 2, &grays), 0);
     const view = feed.view(null);
     try std.testing.expectEqual(Rect{ .x = 0, .y = 0, .w = 2, .h = 2 }, view.dirty);
     try std.testing.expect(feed.dirty == null);
