@@ -14,6 +14,7 @@ const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const camera_panel = @import("../camera/panel.zig");
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -118,25 +119,25 @@ pub const Layout = struct {
 };
 
 /// Appends the panel as it stands to `list`.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, layout: Layout, panel: Panel) !void {
-    try list.fill(layout.area(), theme.preview);
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, layout: Layout, panel: Panel) !void {
+    fillArea(table, layout.area(), word(theme.preview));
     for (Layout.kinds) |kind| {
         const at = layout.source(kind);
         if (kind == panel.active) {
-            try list.fill(.{ .x = at.x - 2, .y = at.y - 2, .w = at.w + 4, .h = at.h + 4 }, theme.ink);
+            fillArea(table, .{ .x = at.x - 2, .y = at.y - 2, .w = at.w + 4, .h = at.h + 4 }, word(theme.ink));
         }
-        try list.fill(at, colorOf(theme, kind));
-        try font.centred(list, at, labelOf(kind), inkOn(theme, colorOf(theme, kind)));
+        fillArea(table, at, word(colorOf(theme, kind)));
+        drawCentred(table, at, labelOf(kind), word(inkOn(theme, colorOf(theme, kind))), word(colorOf(theme, kind)));
     }
-    try list.fill(layout.indicator(), if (panel.cameraOn()) theme.recording else theme.border);
+    fillArea(table, layout.indicator(), word(if (panel.cameraOn()) theme.recording else theme.border));
     if (panel.always) {
-        try list.fill(layout.withdraw(), theme.hue.blue);
-        try font.centred(list, layout.withdraw(), withdraw_label, inkOn(theme, theme.hue.blue));
+        fillArea(table, layout.withdraw(), word(theme.hue.blue));
+        drawCentred(table, layout.withdraw(), withdraw_label, word(inkOn(theme, theme.hue.blue)), word(theme.hue.blue));
     }
     if (!panel.asking) return;
     for (std.enums.values(Answer)) |reply| {
-        try list.fill(layout.dialog(reply), answerColor(theme, reply));
-        try font.centred(list, layout.dialog(reply), answerLabel(reply), inkOn(theme, answerColor(theme, reply)));
+        fillArea(table, layout.dialog(reply), word(answerColor(theme, reply)));
+        drawCentred(table, layout.dialog(reply), answerLabel(reply), word(inkOn(theme, answerColor(theme, reply))), word(answerColor(theme, reply)));
     }
 }
 
@@ -164,4 +165,50 @@ pub fn click(panel: *Panel, layout: Layout, x: i32, y: i32) bool {
         }
     }
     return layout.area().contains(x, y);
+}
+
+/// `area` filled with `color` through the shared Paint table.
+fn fillArea(table: *const widget.types.Paint, area: Rect, color: u32) void {
+    table.fill_rect.?(table.user, area.x, area.y, area.w, area.h, color);
+}
+
+/// `text`, cut to whole cells that fit with a pixel spare each side, centred
+/// in `area` through the shared Paint table; `bg` is the fill already under
+/// the text's cell.
+fn drawCentred(table: *const widget.types.Paint, area: Rect, text: []const u8, fg: u32, bg: u32) void {
+    const shown = font.fit(text, @intCast(@max(area.w - 2, 0)));
+    if (shown.len == 0) return;
+    const x = area.x + draw_list.centre(area.w, @intCast(font.textWidth(shown.len)));
+    const y = area.y + draw_list.centre(area.h, font.glyph_h);
+    drawText(table, x, y, shown, fg, bg);
+}
+
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }

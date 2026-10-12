@@ -10,6 +10,7 @@ const gui_app = @import("gui_app");
 const proto = ra8.rpc.session.rpc;
 const Stdio = ra8.rpc.stdio_transport.Stdio;
 const draw_list = ra8.render.draw_list;
+const widget_paint = ra8.render.widget_paint;
 const platform = gui_app.platform;
 const session_link = gui_app.session_link;
 const shell_camera = gui_app.shell.camera;
@@ -49,7 +50,9 @@ const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 200 };
 fn submit(file: *CameraFile, camera: *const Camera, path: []const u8) !void {
     var list = draw_list.DrawList.init(std.testing.allocator, 300, 200);
     defer list.deinit();
-    try file_field.draw(&list, dark, body, camera, file);
+    var into = widget_paint.Target{ .list = &list };
+    const paint = into.paint();
+    try file_field.draw(&paint, dark, body, camera, file);
     const rect = file_field.fieldRect(body);
     try std.testing.expect(file.press(rect.x + 2, rect.y + 2));
     if (path.len > 0) try std.testing.expect(file.handle(.{ .text = platform.Text.of(path) }));
@@ -145,6 +148,8 @@ test "the field sits at the leaf's foot only when it fits under the panel" {
     try file.init();
     var list = draw_list.DrawList.init(std.testing.allocator, 300, 40);
     defer list.deinit();
-    try file_field.draw(&list, dark, short, &camera, &file);
+    var into = widget_paint.Target{ .list = &list };
+    const paint = into.paint();
+    try file_field.draw(&paint, dark, short, &camera, &file);
     try std.testing.expect(!file.press(rect.x + 2, rect.y + 2));
 }
