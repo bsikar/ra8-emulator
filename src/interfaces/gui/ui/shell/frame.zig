@@ -15,6 +15,8 @@ const status_strip = @import("../status_strip.zig");
 const time_bar = @import("../time_bar.zig");
 const theme_picker = @import("../theme_picker.zig");
 const menu_bar = @import("../../menu_bar.zig");
+const widget_paint = @import("ra8_render").widget_paint;
+const widget = @import("ra8_widget");
 const colors = @import("../colors.zig");
 const Theme = colors.Theme;
 
@@ -124,7 +126,9 @@ pub fn solve(layout: *const Layout, allocator: std.mem.Allocator, width: i32, he
 }
 
 pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void {
-    for (shell.solved.gutters.items) |found| try list.fill(found.area, theme.gutter);
+    var target = widget_paint.Target{ .list = list };
+    const paint = target.paint();
+    for (shell.solved.gutters.items) |found| fillArea(&paint, found.area, word(theme.gutter));
     var deck_buf: [pane_layout.max_deck]pane_layout.Pane = undefined;
     for (shell.solved.panes.items) |placed| {
         const pane = shell.layout.pane(placed.index) orelse continue;
@@ -137,7 +141,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
                 tabs = .{ .panes = deck_buf[0..deck.count], .active = deck.active };
             }
         }
-        try drawLeaf(list, theme, pane, placed.area, shell.painter, tabs);
+        try drawLeaf(list, &paint, theme, pane, placed.area, shell.painter, tabs);
     }
     try time_bar.draw(list, theme, barArea(shell.width, shell.height), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
@@ -149,31 +153,31 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
     try menu_bar.draw(list, theme, shell.menu, shell.width);
 }
 
-fn drawLeaf(list: *draw_list.DrawList, theme: *const Theme, pane: Pane, area: Rect, painter: ?Painter, tabs: ?Tabs) !void {
+fn drawLeaf(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: Pane, area: Rect, painter: ?Painter, tabs: ?Tabs) !void {
     if (area.empty()) return;
     try list.pushClip(area);
     defer list.popClip();
-    try list.fill(area, theme.background);
+    fillArea(table, area, word(theme.background));
     const title = titleOf(area);
-    try list.fill(title, theme.face);
-    try list.fill(.{ .x = title.x, .y = title.y + title.h - 1, .w = title.w, .h = 1 }, theme.border);
+    fillArea(table, title, word(theme.face));
+    fillArea(table, .{ .x = title.x, .y = title.y + title.h - 1, .w = title.w, .h = 1 }, word(theme.border));
     const top = title.y + draw_list.centre(title.h, font.glyph_h);
     if (tabs) |row| {
         for (row.panes, 0..) |tab, at| {
             const cell = tabAt(title, row.panes, at) orelse continue;
             const lit = at == row.active;
-            if (lit) try list.fill(cell, theme.background);
+            if (lit) fillArea(table, cell, word(theme.background));
             const label = kindName(tab.kind);
             const mid = cell.x + draw_list.centre(cell.w, @intCast(font.textWidth(label.len)));
-            try font.draw(list, mid, top, label, if (lit) theme.ink else theme.muted);
+            drawText(table, mid, top, label, word(if (lit) theme.ink else theme.muted), word(if (lit) theme.background else theme.face));
         }
     } else {
         const core = coreName(pane.core);
         const core_w: i32 = @intCast(font.textWidth(core.len));
         const room = title.w - 2 * pad;
-        if (room > 0) try font.draw(list, title.x + pad, top, font.fit(kindName(pane.kind), @intCast(room)), theme.ink);
+        if (room > 0) drawText(table, title.x + pad, top, font.fit(kindName(pane.kind), @intCast(room)), word(theme.ink), word(theme.face));
         const name_w: i32 = @intCast(font.textWidth(kindName(pane.kind).len));
-        if (room >= name_w + pad + core_w) try font.draw(list, title.x + title.w - pad - core_w, top, core, theme.muted);
+        if (room >= name_w + pad + core_w) drawText(table, title.x + title.w - pad - core_w, top, core, word(theme.muted), word(theme.face));
     }
     if (painter) |p| {
         const body = bodyOf(area);
@@ -183,13 +187,50 @@ fn drawLeaf(list: *draw_list.DrawList, theme: *const Theme, pane: Pane, area: Re
             try p.paint(p.context, list, theme, pane, body);
         }
     }
-    try drawBorder(list, area, theme.border);
+    drawBorder(table, area, theme.border);
 }
 
-fn drawBorder(list: *draw_list.DrawList, area: Rect, color: Color) !void {
+fn drawBorder(table: *const widget.types.Paint, area: Rect, color: Color) void {
     if (area.w <= 0 or area.h <= 0) return;
-    try list.fill(.{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
-    try list.fill(.{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, word(color));
+    fillArea(table, .{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, word(color));
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, word(color));
+    fillArea(table, .{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, word(color));
+}
+
+/// `area` filled with `color` through the shared Paint table (RA8EMU-1157).
+fn fillArea(table: *const widget.types.Paint, area: Rect, color: u32) void {
+    table.fill_rect.?(table.user, area.x, area.y, area.w, area.h, color);
+}
+
+/// One line of title text as the firmware's label widget (RA8EMU-1157), the
+/// pane pattern: pad 0, left-aligned, rect = the text's own cell.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
