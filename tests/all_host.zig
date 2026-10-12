@@ -132,6 +132,8 @@ test {
     _ = @import("interfaces/gui/menu_test.zig");
     _ = @import("interfaces/gui/menu_bar_test.zig");
     _ = @import("interfaces/gui/lcd_pacing_test.zig");
+    _ = @import("interfaces/gui/lcd_scrubber_test.zig");
+    _ = @import("interfaces/gui/lcd_history_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/layout_store_test.zig");
