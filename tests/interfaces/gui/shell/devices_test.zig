@@ -183,7 +183,9 @@ test "a refused unplug keeps the rows and leaves a note under them" {
     var list = draw_list.DrawList.init(gpa, 240, 120);
     defer list.deinit();
     const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 240, .h = 120 };
-    try shell_devices.draw(&list, dark, body, &devices);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try shell_devices.draw(&paint, dark, body, &devices);
     var pixels = try raster.Framebuffer.init(gpa, 240, 120);
     defer pixels.deinit(gpa);
     raster.draw(&pixels, &list, font.atlas);

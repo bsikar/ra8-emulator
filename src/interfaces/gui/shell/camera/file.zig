@@ -8,6 +8,7 @@
 const Theme = @import("../../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget_paint = @import("ra8_render").widget_paint;
 const platform = @import("../../platform.zig");
 const shell_frame = @import("../../ui/shell/frame.zig");
 const shell_field = @import("../../ui/shell/field.zig");
@@ -99,5 +100,8 @@ pub fn fits(body: Rect) bool {
 /// field at the foot when it fits.
 pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: Rect, camera: *const shell_camera.Camera, file: *CameraFile) !void {
     try shell_camera.draw(list, theme, body, camera);
-    if (fits(body)) try file.field.draw(list, theme, fieldRect(body));
+    if (!fits(body)) return;
+    var into = widget_paint.Target{ .list = list };
+    const paint = into.paint();
+    try file.field.draw(&paint, theme, fieldRect(body));
 }

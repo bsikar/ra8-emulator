@@ -9,7 +9,6 @@ const widget = @import("ra8_widget");
 const platform = @import("../../platform.zig");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
-const widget_paint = @import("ra8_render").widget_paint;
 const Theme = @import("../colors.zig").Theme;
 
 const text_field = widget.text_field;
@@ -97,19 +96,17 @@ pub const Field = struct {
         return submitted;
     }
 
-    /// Paint the field into `rect` of `list` in `theme`'s ink on its well
-    /// with a highlight caret, and remember `rect` for presses.
-    pub fn draw(self: *Field, list: *draw_list.DrawList, theme: *const Theme, rect: draw_list.Rect) !void {
+    /// Paint the field into `rect` through the handed shared Paint table
+    /// in `theme`'s ink on its well with a highlight caret, and remember
+    /// `rect` for presses.
+    pub fn draw(self: *Field, table: *const widget.types.Paint, theme: *const Theme, rect: draw_list.Rect) !void {
         self.descriptor.fg = word(theme.ink);
         self.descriptor.bg = word(theme.well);
         self.descriptor.caret = word(theme.highlight);
         self.widget.rect = .{ .x = rect.x, .y = rect.y, .w = rect.w, .h = rect.h };
-        var target = widget_paint.Target{ .list = list };
-        const paint = target.paint();
-        self.descriptor.paint = &paint;
+        self.descriptor.paint = table;
         defer self.descriptor.paint = null;
         self.widget.vt.?.render.?(&self.widget);
-        if (target.failed) return error.OutOfMemory;
     }
 };
 

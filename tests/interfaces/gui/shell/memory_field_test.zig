@@ -67,7 +67,9 @@ fn published(core: usize, which: shell_registers.Register, value: u32) shell_reg
 fn typed(pin: *shell_memory_field.Pin, list: *draw_list.DrawList, snapshot: *const shell_memory.Snapshot, text: []const u8) !void {
     try pin.init();
     pin.image = image;
-    try shell_memory_field.draw(list, dark, body, snapshot, pin);
+    var target = ra8.render.widget_paint.Target{ .list = list };
+    const paint = target.paint();
+    try shell_memory_field.draw(list, &paint, dark, body, snapshot, pin);
     const field = shell_memory_field.fieldRect(body);
     try std.testing.expect(pin.press(field.x + 2, field.y + 2));
     var left = text;
@@ -154,6 +156,8 @@ test "a leaf too short for the field keeps its rows whole and takes no press" {
     const snapshot: shell_memory.Snapshot = .{ .base = 0x2200_0000, .count = rows };
     var pin: shell_memory_field.Pin = .{};
     try pin.init();
-    try shell_memory_field.draw(&list, dark, .{ .x = 0, .y = 0, .w = body.w, .h = 24 }, &snapshot, &pin);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try shell_memory_field.draw(&list, &paint, dark, .{ .x = 0, .y = 0, .w = body.w, .h = 24 }, &snapshot, &pin);
     try std.testing.expect(!pin.press(4, 4));
 }

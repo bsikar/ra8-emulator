@@ -11,6 +11,7 @@ const session_link = @import("../session_link.zig");
 const Theme = @import("../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const shell_devices = @import("devices.zig");
@@ -142,7 +143,7 @@ pub fn rowAt(body: draw_list.Rect, x: i32, y: i32) ?usize {
 /// Draw each listed row's mode in its fault cell: a mode in ink, none muted.
 /// A refused ask leaves its note on the line under the rows (and under the
 /// unplug refusal when that is up too).
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect, devices: *const shell_devices.Devices, faults: *const Faults) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_list.Rect, devices: *const shell_devices.Devices, faults: *const Faults) !void {
     var rows = devices.lines();
     var row: usize = 0;
     while (rows.next()) |text| : (row += 1) {
@@ -150,12 +151,41 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect
         if (at.x < body.x + shell_frame.pad or at.y + font.glyph_h > body.y + body.h) return;
         const mode = faults.modeOf(shell_devices.split(text).at);
         const color = if (mode == 0) theme.muted else theme.ink;
-        try font.draw(list, at.x, at.y, label(mode), color);
+        drawText(table, at.x, at.y, label(mode), word(color), word(theme.background));
     }
     if (!faults.refused) return;
     if (devices.unplug_refused) row += 1;
     const y = body.y + shell_frame.pad + @as(i32, @intCast(row)) * shell_devices.row_h;
     const room = body.w - 2 * shell_frame.pad;
     if (room <= 0 or y + font.glyph_h > body.y + body.h) return;
-    try font.draw(list, body.x + shell_frame.pad, y, font.fit(refused_note, @intCast(room)), theme.muted);
+    drawText(table, body.x + shell_frame.pad, y, font.fit(refused_note, @intCast(room)), word(theme.muted), word(theme.background));
+}
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }

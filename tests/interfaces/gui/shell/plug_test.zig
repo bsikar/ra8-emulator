@@ -45,7 +45,9 @@ const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 120 };
 /// (one text event holds at most 8 bytes).
 fn typed(plug: *shell_plug.Plug, list: *draw_list.DrawList, devices: *const shell_devices.Devices, spec: []const u8) !void {
     try plug.init();
-    try shell_plug.draw(list, dark, body, devices, plug);
+    var target = ra8.render.widget_paint.Target{ .list = list };
+    const paint = target.paint();
+    try shell_plug.draw(&paint, dark, body, devices, plug);
     const field = shell_plug.fieldRect(body);
     try std.testing.expect(plug.press(field.x + 2, field.y + 2));
     if (spec.len > 0) try std.testing.expect(plug.handle(.{ .text = platform.Text.of(spec) }));
@@ -135,7 +137,9 @@ test "the leaf draws its note, then the field's placeholder" {
     const devices: shell_devices.Devices = .{ .answered = true };
     var plug: shell_plug.Plug = .{};
     try plug.init();
-    try shell_plug.draw(&list, dark, body, &devices, &plug);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try shell_plug.draw(&paint, dark, body, &devices, &plug);
     var glyphs: usize = 0;
     for (list.commands.items) |command| {
         if (command.shape == .glyph) glyphs += 1;

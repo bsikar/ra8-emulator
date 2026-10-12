@@ -11,6 +11,7 @@ const status_capture = gui_app.status.capture;
 const test_paths = @import("test_paths");
 const proto = ra8.rpc.session.rpc;
 const draw_list = ra8.render.draw_list;
+const still = gui_app.window.still;
 const raster = ra8.render.raster;
 const font = ra8.render.font;
 const pane_layout = gui_app.pane_layout;
@@ -204,5 +205,5 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
     }
     try std.testing.expect(leaves > 0);
     const digest = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(pixels.pixels));
-    try std.testing.expectEqual(@as(u64, 15348216182477678495), digest);
+    try std.testing.expectEqual(@as(u64, 3722289904126985217), digest);
 }

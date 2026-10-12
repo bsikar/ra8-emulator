@@ -220,7 +220,9 @@ fn devicesBody(gpa: std.mem.Allocator) !draw_list.Rect {
 fn plugIn(watch: *Watch, link: *Link, body: draw_list.Rect) !void {
     var list = draw_list.DrawList.init(std.testing.allocator, width, height);
     defer list.deinit();
-    try shell_plug.draw(&list, &gui_app.colors.palettes.dark, body, &watch.devices, &watch.plug);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try shell_plug.draw(&paint, &gui_app.colors.palettes.dark, body, &watch.devices, &watch.plug);
     const field = shell_plug.fieldRect(body);
     try std.testing.expect(watch.plug.press(field.x + 2, field.y + 2));
     var rest: []const u8 = spec;

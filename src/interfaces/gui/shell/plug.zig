@@ -11,6 +11,7 @@ const session_link = @import("../session_link.zig");
 const Theme = @import("../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const platform = @import("../platform.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const shell_field = @import("../ui/shell/field.zig");
@@ -81,14 +82,43 @@ pub fn rowsRect(body: Rect) Rect {
 
 /// Draw a devices leaf with the picker: the rows (or the list's note) above,
 /// the refusal note, then the field at the foot.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: Rect, devices: *const shell_devices.Devices, plug: *Plug) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: Rect, devices: *const shell_devices.Devices, plug: *Plug) !void {
     if (body.h < shell_field.height + 2 * shell_frame.pad) return;
     const rows = rowsRect(body);
     const room = body.w - 2 * shell_frame.pad;
     if (devices.note()) |note| {
-        if (room > 0 and rows.h >= font.glyph_h + shell_frame.pad) try font.draw(list, rows.x + shell_frame.pad, rows.y + shell_frame.pad, font.fit(note, @intCast(room)), theme.muted);
-    } else try shell_devices.draw(list, theme, rows, devices);
+        if (room > 0 and rows.h >= font.glyph_h + shell_frame.pad) drawText(table, rows.x + shell_frame.pad, rows.y + shell_frame.pad, font.fit(note, @intCast(room)), word(theme.muted), word(theme.background));
+    } else try shell_devices.draw(table, theme, rows, devices);
     const field = fieldRect(body);
-    if (plug.refused and room > 0) try font.draw(list, field.x, field.y - shell_devices.row_h, font.fit(refusal, @intCast(room)), theme.muted);
-    try plug.field.draw(list, theme, field);
+    if (plug.refused and room > 0) drawText(table, field.x, field.y - shell_devices.row_h, font.fit(refusal, @intCast(room)), word(theme.muted), word(theme.background));
+    try plug.field.draw(table, theme, field);
+}
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }

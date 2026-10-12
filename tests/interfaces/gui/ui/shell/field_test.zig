@@ -16,7 +16,9 @@ fn key(code: u32) platform.Event {
 
 fn ready(field: *shell_field.Field, list: *draw_list.DrawList) !void {
     try field.init("type here");
-    try field.draw(list, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
+    var target = ra8.render.widget_paint.Target{ .list = list };
+    const paint = target.paint();
+    try field.draw(&paint, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
     try std.testing.expect(field.press(20, 12));
 }
 
@@ -25,7 +27,9 @@ test "a field ignores typing until a press focuses it" {
     defer list.deinit();
     var field: shell_field.Field = .{};
     try field.init("type here");
-    try field.draw(&list, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try field.draw(&paint, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
     try std.testing.expect(!field.handle(typed("a")));
     try std.testing.expect(!field.press(5, 5));
     try std.testing.expect(!field.focused());
@@ -80,7 +84,9 @@ test "the field paints its fill, its text and a caret while focused" {
     try ready(&field, &list);
     _ = field.handle(typed("cam"));
     list.clear();
-    try field.draw(&list, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try field.draw(&paint, dark, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
     var fills: usize = 0;
     var glyphs: usize = 0;
     for (list.commands.items) |command| switch (command.shape) {
@@ -98,7 +104,9 @@ test "the field paints in the theme it is drawn with: its well behind its ink" {
     defer list.deinit();
     var field: shell_field.Field = .{};
     try field.init("type here");
-    try field.draw(&list, light, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    try field.draw(&paint, light, .{ .x = 10, .y = 10, .w = 200, .h = shell_field.height });
     const first = list.commands.items[0].shape;
     try std.testing.expectEqual(light.well, first.fill.color);
     for (list.commands.items) |command| switch (command.shape) {
