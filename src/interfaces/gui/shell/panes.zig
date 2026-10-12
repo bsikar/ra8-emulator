@@ -146,7 +146,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, theme: *const Theme, pa
     };
     if (pane.kind == .board) if (self.board) |board| {
         const pressed = if (self.board_input) |pointer| pointer.press.held else null;
-        if (!board_pane.Layout.of(body).board.empty()) return board_pane.draw(list, theme, body, board.view(pressed));
+        if (!board_pane.Layout.of(body, board_pane.profile).board.empty()) return board_pane.draw(list, theme, body, board.view(pressed), board_pane.profile);
         // A leaf too small for the board still shows the panel by itself.
         if (board.hasFrame()) return list.image(fit.fitIn(body, board.width, board.height), board.image());
     };

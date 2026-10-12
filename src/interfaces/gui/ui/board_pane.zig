@@ -3,7 +3,9 @@
 //! feed builds from lcd_dirty (RA8EMU-790), the three user LEDs lit from the
 //! session's led_changed events (RA8EMU-811) and the two user switches as hit
 //! rects. Layout is a pure function of the area; the panel image keeps its
-//! own aspect inside its slot. The shell (RA8EMU-201) places the pane.
+//! own aspect inside its slot, and before (or without) a frame the slot is
+//! fitted to the loaded panel profile (RA8EMU-1150). The shell (RA8EMU-201)
+//! places the pane.
 //! gui/board.capture.zig folds the session's events into `Leds`; this pane
 //! never imports the session or the chip.
 const draw_list = @import("ra8_render").draw_list;
@@ -32,6 +34,19 @@ pub const switch_count: usize = 2;
 pub const switch_names = [switch_count][]const u8{ "SW1", "SW2" };
 pub const led_names = [led_count][]const u8{ "LED1", "LED2", "LED3" };
 
+/// The panel profile whose shape the pane draws the panel at before (or
+/// without) a frame (RA8EMU-1150): the ER-TFT070-6 glass in
+/// panels/ek_ra8d2.toml, 1024x600 rgb565 at 169 ppi. Pixels are square, so
+/// the physical shape is the pixel shape. Width and height 0 (unknown) keep
+/// the raw slot shape.
+pub const Profile = struct {
+    width: u32 = 0,
+    height: u32 = 0,
+};
+
+/// The EK-RA8D2's panel profile, the one board the pane draws.
+pub const profile: Profile = .{ .width = 1024, .height = 600 };
+
 /// What the LEDs show; gui/board.capture.zig folds the session's
 /// led_changed events into it.
 pub const Leds = struct {
@@ -45,7 +60,7 @@ pub const Layout = struct {
     leds: [led_count]Rect,
     switches: [switch_count]Rect,
 
-    pub fn of(area: Rect) Layout {
+    pub fn of(area: Rect, panel: Profile) Layout {
         var layout: Layout = .{ .board = none(area), .panel = none(area), .leds = @splat(none(area)), .switches = @splat(none(area)) };
         if (area.w < min_w or area.h < min_h) return layout;
         const inner: Rect = .{ .x = area.x + pad, .y = area.y + pad, .w = area.w - 2 * pad, .h = area.h - 2 * pad };
@@ -54,6 +69,7 @@ pub const Layout = struct {
         const column = @divTrunc(board.w, 4);
         layout.board = board;
         layout.panel = .{ .x = board.x + margin, .y = board.y + margin, .w = board.w - column - 2 * margin, .h = board.h - 2 * margin };
+        if (panel.width > 0 and panel.height > 0) layout.panel = fit.fitIn(layout.panel, panel.width, panel.height);
         // Three LEDs and two switches share the column, each with its label under it.
         const label_h = @as(i32, font.cell_h) + pad;
         const room = @divTrunc(board.h - 2 * margin, @as(i32, led_count + switch_count)) - label_h;
@@ -98,8 +114,8 @@ pub const View = struct {
 };
 
 /// Paints the pane into `area`; an area under the minimum draws nothing.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View) !void {
-    const layout = Layout.of(area);
+pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View, panel: Profile) !void {
+    const layout = Layout.of(area, panel);
     if (layout.board.empty()) return;
     try list.fill(area, theme.background);
     try list.pushClip(area);

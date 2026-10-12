@@ -19,7 +19,7 @@ test "an image with no LCD output shows the board, its LEDs dark, and a pressed 
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
-    const parts = board_pane.Layout.of(try live.boardBody());
+    const parts = board_pane.Layout.of(try live.boardBody(), board_pane.profile);
     try std.testing.expect(!parts.board.empty());
     try live.step();
     try std.testing.expect(!live.board.hasFrame());
@@ -42,7 +42,7 @@ test "with the image running, a click on SW1 lights LED1 in the board pane" {
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
-    const parts = board_pane.Layout.of(try live.boardBody());
+    const parts = board_pane.Layout.of(try live.boardBody(), board_pane.profile);
     try live.click(.run);
     for (0..2) |_| try live.step();
     try std.testing.expect(live.shell.status.run == .running);

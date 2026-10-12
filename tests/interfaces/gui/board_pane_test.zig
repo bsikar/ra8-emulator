@@ -25,7 +25,7 @@ fn overlap(a: Rect, b: Rect) bool {
 }
 
 fn checkLayout(area: Rect) !void {
-    const layout = pane.Layout.of(area);
+    const layout = pane.Layout.of(area, pane.profile);
     try std.testing.expect(!layout.board.empty());
     try std.testing.expect(inside(area, layout.board));
     try std.testing.expectEqual(@as(i64, layout.board.w) * 2, @as(i64, layout.board.h) * 3);
@@ -50,12 +50,12 @@ test "the board keeps its shape and every part sits inside it at two sizes" {
 
 test "an area under the minimum lays out nothing and draws nothing" {
     const area: Rect = .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = 200 };
-    const layout = pane.Layout.of(area);
+    const layout = pane.Layout.of(area, pane.profile);
     try std.testing.expect(layout.board.empty() and layout.panel.empty());
     var list = draw_list.DrawList.init(std.testing.allocator, 200, 200);
     defer list.deinit();
     const leds: pane.Leds = .{};
-    try pane.draw(&list, dark, area, .{ .leds = &leds });
+    try pane.draw(&list, dark, area, .{ .leds = &leds }, pane.profile);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
@@ -92,18 +92,17 @@ fn boardDigest(theme: *const gui_app.colors.Theme) !u64 {
     }
     var leds: pane.Leds = .{};
     capture.observe(&leds, .{ .core = .cpu0, .kind = .led_changed, .address = 0x100 });
-    try pane.draw(&list, theme, .{ .x = 0, .y = 0, .w = w, .h = h }, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels } });
+    try pane.draw(&list, theme, .{ .x = 0, .y = 0, .w = w, .h = h }, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels } }, pane.profile);
     raster.draw(&frame, &list, font.atlas);
-    const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
-    return hash;
+    return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
 }
 
 test "the board pane frame with LED1 on is pinned" {
-    try std.testing.expectEqual(@as(u64, 11036464702529386818), try boardDigest(dark));
+    try std.testing.expectEqual(@as(u64, 5371804794163368847), try boardDigest(dark));
 }
 
 test "in the light palette the board pane frame is pinned to its own golden" {
-    try std.testing.expectEqual(@as(u64, 3783149903112210438), try boardDigest(light));
+    try std.testing.expectEqual(@as(u64, 14153086348725203933), try boardDigest(light));
 }
 
 /// The board pane with a dirty panel sub-rect, at `area`'s scale.
@@ -118,18 +117,47 @@ fn dirtyDigest(theme: *const gui_app.colors.Theme, area: Rect) !u64 {
         pixel.* = Color.rgb(shade, shade, shade);
     }
     var leds: pane.Leds = .{};
-    try pane.draw(&list, theme, area, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels }, .dirty = .{ .x = 16, .y = 8, .w = 32, .h = 16 } });
+    try pane.draw(&list, theme, area, .{ .leds = &leds, .panel = .{ .width = 64, .height = 36, .pixels = &pixels }, .dirty = .{ .x = 16, .y = 8, .w = 32, .h = 16 } }, pane.profile);
     raster.draw(&frame, &list, font.atlas);
     return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
 }
 
 test "the pane with a dirty panel sub-rect is pinned at two scales" {
-    try std.testing.expectEqual(@as(u64, 15748600615838582525), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 480, .h = 320 }));
-    try std.testing.expectEqual(@as(u64, 15710792123985740739), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 900, .h = 400 }));
+    try std.testing.expectEqual(@as(u64, 11573746499262727056), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 480, .h = 320 }));
+    try std.testing.expectEqual(@as(u64, 534472301902845135), try dirtyDigest(dark, .{ .x = 0, .y = 0, .w = 900, .h = 400 }));
 }
 
 test "the pane's LED count and lamp colours are the chip's" {
     const gpio = ra8.chip.periph.gpio;
     try std.testing.expectEqual(gpio.led_count, pane.led_count);
     for (gpio.leds, pane.led_rgb565) |led, rgb565| try std.testing.expectEqual(led.rgb565, rgb565);
+}
+
+test "the panel slot keeps the loaded profile's aspect before a frame" {
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
+    try std.testing.expect(!layout.panel.empty());
+    try std.testing.expect(@abs(@as(i64, layout.panel.w) * 600 - @as(i64, layout.panel.h) * 1024) <= 1024);
+    try std.testing.expect(inside(layout.board, layout.panel));
+}
+
+test "the panel slot keeps an alternate profile's aspect" {
+    const area: Rect = .{ .x = 0, .y = 0, .w = 480, .h = 320 };
+    const small = pane.Layout.of(area, .{ .width = 480, .height = 272 }).panel;
+    try std.testing.expect(@abs(@as(i64, small.w) * 272 - @as(i64, small.h) * 480) <= 480);
+    const wide = pane.Layout.of(area, .{ .width = 800, .height = 480 }).panel;
+    try std.testing.expect(@abs(@as(i64, wide.w) * 480 - @as(i64, wide.h) * 800) <= 800);
+}
+
+test "the panel slot keeps a portrait glass' aspect" {
+    const slot = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, .{ .width = 1072, .height = 1448 }).panel;
+    try std.testing.expect(slot.h > slot.w);
+    try std.testing.expect(@abs(@as(i64, slot.w) * 1448 - @as(i64, slot.h) * 1072) <= 1448);
+}
+
+test "an unknown profile keeps the raw slot" {
+    const area: Rect = .{ .x = 0, .y = 0, .w = 480, .h = 320 };
+    const raw = pane.Layout.of(area, .{}).panel;
+    const known = pane.Layout.of(area, pane.profile).panel;
+    try std.testing.expect(!raw.empty() and !known.empty());
+    try std.testing.expect(inside(raw, known));
 }

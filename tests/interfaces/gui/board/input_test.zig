@@ -20,7 +20,7 @@ fn middle(rect: Rect) [2]i32 {
 }
 
 test "a press released over the same switch clicks it" {
-    const layout = pane.Layout.of(area);
+    const layout = pane.Layout.of(area, pane.profile);
     for (layout.switches, 0..) |button, index| {
         var press: input.Press = .{};
         const at = middle(button);
@@ -32,7 +32,7 @@ test "a press released over the same switch clicks it" {
 }
 
 test "a release off the pressed switch, or a press off every switch, clicks nothing" {
-    const layout = pane.Layout.of(area);
+    const layout = pane.Layout.of(area, pane.profile);
     const sw1 = middle(layout.switches[0]);
     const sw2 = middle(layout.switches[1]);
     const panel = middle(layout.panel);
@@ -52,14 +52,14 @@ fn faceAt(view: pane.View, button: Rect) !Color {
     defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, area.w, area.h);
     defer frame.deinit(std.testing.allocator);
-    try pane.draw(&list, dark, area, view);
+    try pane.draw(&list, dark, area, view, pane.profile);
     raster.draw(&frame, &list, font.atlas);
     const at = middle(button);
     return frame.pixels[@intCast(at[1] * area.w + at[0])];
 }
 
 test "only the held switch draws pressed" {
-    const layout = pane.Layout.of(area);
+    const layout = pane.Layout.of(area, pane.profile);
     const leds: pane.Leds = .{};
     try std.testing.expectEqual(dark.face, try faceAt(.{ .leds = &leds }, layout.switches[0]));
     try std.testing.expectEqual(dark.pressed_face, try faceAt(.{ .leds = &leds, .pressed = 0 }, layout.switches[0]));

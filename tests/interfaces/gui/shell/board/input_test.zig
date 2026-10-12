@@ -53,7 +53,7 @@ const Bench = struct {
             const pane = self.layout.pane(placed.index) orelse continue;
             if (pane.kind == .board) break frame.bodyOf(placed.area);
         } else return error.NoBoardLeaf;
-        self.parts = board_pane.Layout.of(self.body);
+        self.parts = board_pane.Layout.of(self.body, board_pane.profile);
         self.board.attach(&self.rig.link);
         try self.exchange();
         try std.testing.expectEqual(@as(u32, 0), self.refused);

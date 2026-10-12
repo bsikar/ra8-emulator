@@ -97,7 +97,7 @@ test "a touch on the board pane's panel reaches the firmware's touch driver" {
     try run(&link, .run, 2_000);
     try std.testing.expectEqual(@as(u32, 0), (try report(&link)).count);
 
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 });
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
     const shown = touch.shownIn(layout, width, height);
     const mid_x = shown.x + @divTrunc(shown.w, 2);
     const mid_y = shown.y + @divTrunc(shown.h, 2);
