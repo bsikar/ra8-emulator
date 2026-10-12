@@ -1,7 +1,8 @@
 //! Host tests for the shell's side of File > Open ELF (RA8EMU-959): the
 //! shortcut asks for the picker once, the frame puts it up and keeps the
-//! window's title on the image in use, and a file that cannot be read or is
-//! too long for a load is turned back before the session link is touched.
+//! window's title on the image in use, and a file that cannot be read is
+//! turned back before the session link is touched. A file longer than one
+//! load carries streams in chunks on the link (RA8EMU-1174).
 //! shell_open_live_test.zig loads picked images into a real session.
 const std = @import("std");
 const gui_app = @import("gui_app");
@@ -81,7 +82,7 @@ test "a file that cannot be read never reaches the session" {
     try std.testing.expectEqualStrings("app.elf", status.image.?.name());
 }
 
-test "a file longer than one load carries is turned back before the link" {
+test "a file longer than one load carries streams on the link (RA8EMU-1174)" {
     const gpa = std.testing.allocator;
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
@@ -95,9 +96,12 @@ test "a file longer than one load carries is turned back before the link" {
     var open = model();
     var status: Status = .{};
     var link: Link = undefined;
+    link.state = .closed;
     open.picked(path, &link, &status);
-    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .too_large), status.refused);
+    // The bar no longer turns a long image back at the bar (RA8EMU-1174):
+    // the load reached the link, which refused because it is not connected.
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .load), status.refused);
     try std.testing.expectEqual(@as(?u32, null), status.load_id);
     var line: [256]u8 = undefined;
-    try std.testing.expect(std.mem.endsWith(u8, try status.text(.connecting, &line), "| the image is too large for the session (1 MiB at most)"));
+    try std.testing.expect(std.mem.endsWith(u8, try status.text(.connecting, &line), "| the session refused the image"));
 }

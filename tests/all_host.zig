@@ -193,6 +193,7 @@ test {
     _ = @import("interfaces/rpc/session/lcd_feed_test.zig");
     _ = @import("interfaces/rpc/session/advance_test.zig");
     _ = @import("interfaces/rpc/session/files_test.zig");
+    _ = @import("interfaces/rpc/session/load_chunks_test.zig");
     _ = @import("interfaces/rpc/session/stack_test.zig");
     _ = @import("interfaces/rpc/session/rtc_test.zig");
     _ = @import("interfaces/rpc/session/input_test.zig");

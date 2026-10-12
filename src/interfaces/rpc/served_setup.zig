@@ -133,6 +133,7 @@ pub const Served = struct {
             cpu1.close(self.gpa);
             self.gpa.destroy(cpu1);
         }
+        self.context.chunks.drop();
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);

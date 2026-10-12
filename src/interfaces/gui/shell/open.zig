@@ -72,7 +72,7 @@ pub const Open = struct {
         };
         defer self.allocator.free(bytes);
         status.load(link, path, bytes) catch |err| {
-            status.refused = if (err == error.ImageTooLarge) .too_large else .load;
+            status.refused = if (err == error.Oversize) .too_large else .load;
         };
     }
 };

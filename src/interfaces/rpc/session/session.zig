@@ -6,6 +6,7 @@ pub const event_feed = @import("event_feed.zig");
 pub const files = @import("files.zig");
 pub const input = @import("input.zig");
 pub const lcd_feed = @import("lcd_feed.zig");
+pub const load_chunks = @import("load_chunks.zig");
 pub const parts = @import("parts.zig");
 pub const rpc = @import("rpc.zig");
 pub const rtc = @import("rtc.zig");

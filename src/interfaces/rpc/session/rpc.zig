@@ -56,6 +56,9 @@ pub const Method = enum(u16) {
     periph = 0x0121,
     folded = 0x0122,
     set_breakpoint_name = 0x0123,
+    load_begin = 0x0124,
+    load_chunk = 0x0125,
+    load_end = 0x0126,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -69,6 +72,21 @@ pub const Load = struct {
     core: Core,
     image: []const u8,
     pub const max_len = .{ .image = max_payload };
+};
+
+/// The chunked load protocol (RA8EMU-1174): an image larger than one
+/// payload streams in ordered chunks and commits with load_end; small
+/// images keep the single Load wire format above.
+pub const LoadBegin = struct {
+    core: Core,
+    total_len: u64,
+    checksum: u32,
+};
+pub const LoadChunk = struct {
+    core: Core,
+    offset: u64,
+    bytes: []const u8,
+    pub const max_len = .{ .bytes = max_payload };
 };
 pub const Run = struct { core: Core, mode: RunMode, budget: u64 };
 pub const CoreOnly = struct { core: Core };

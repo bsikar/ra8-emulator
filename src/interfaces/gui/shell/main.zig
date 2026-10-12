@@ -37,6 +37,7 @@ const shell_run = @import("run.zig");
 const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
 const proto = @import("ra8_rpc").session.rpc;
+const chunked = @import("ra8_rpc").session.load_chunks;
 const shell_stack = @import("stack.zig");
 const shell_open = @import("open.zig");
 const colors = @import("../ui/colors.zig");
@@ -199,8 +200,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
             std.debug.print("ra8_gui: the session did not load {s}\n", .{args.image});
             return 1;
         },
-        error.ImageTooLarge => {
-            std.debug.print("ra8_gui: {s} is {d} bytes, and the session takes an image of at most {d}\n", .{ args.image, bytes.len, proto.Load.max_len.image });
+        error.Oversize => {
+            std.debug.print("ra8_gui: {s} is {d} bytes, and the session takes an image of at most {d}\n", .{ args.image, bytes.len, chunked.max_image });
             return 1;
         },
         else => return err,
