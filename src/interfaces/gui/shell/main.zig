@@ -26,6 +26,7 @@ const shell_startup = @import("startup.zig");
 const window_stills = @import("../window/stills.zig");
 const source_spec = @import("ra8_host").camera.source_spec;
 const shell_registers = @import("registers.zig");
+const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
@@ -271,6 +272,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.camera_file = &camera_file;
     var registers: shell_registers.Pair = .{};
     shell.registers = &registers;
+    var edit: shell_register_edit.Editor = .{};
+    shell.edit = &edit;
     var stack: shell_stack.Pair = .{};
     shell.stack = &stack;
     var memory: shell_memory.Pair = .{};
@@ -279,7 +282,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.code = &code;
     var files: shell_open.Open = .{ .io = io, .allocator = allocator };
     shell.files = &files;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .memory = &memory, .code = &code, .stack = &stack };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .code = &code, .stack = &stack };
     shell.painter = panes.painter();
     try drive(io, &shell, window, path, bytes, args.frames);
     link.close();
