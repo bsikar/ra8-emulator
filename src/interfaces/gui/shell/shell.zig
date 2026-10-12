@@ -14,6 +14,7 @@ pub const memory = @import("memory.zig");
 pub const open = @import("open.zig");
 pub const panes = @import("panes.zig");
 pub const plug = @import("plug.zig");
+pub const register_edit = @import("register_edit.zig");
 pub const registers = @import("registers.zig");
 pub const stack = @import("stack.zig");
 pub const run = @import("run.zig");

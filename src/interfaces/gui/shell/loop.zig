@@ -35,6 +35,7 @@ const shell_camera_file = @import("camera/file.zig");
 const shell_startup = @import("startup.zig");
 const shell_open = @import("open.zig");
 const shell_registers = @import("registers.zig");
+const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
 const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
@@ -80,6 +81,8 @@ pub const Shell = struct {
     /// Whether the session has answered the image load.
     loaded: bool = false,
     registers: ?*shell_registers.Pair = null,
+    /// Register edits from the registers leaves (RA8EMU-946).
+    edit: ?*shell_register_edit.Editor = null,
     memory: ?*shell_memory.Pair = null,
     code: ?*shell_memory.Pair = null,
     /// The call stack leaves, walked again after a load and every stop.
@@ -172,6 +175,7 @@ pub const Shell = struct {
                 if (!press.down) return self.releaseBoard(press.x, press.y);
                 if (self.held != null) return;
                 if (self.pressFields(press.x, press.y)) return;
+                if (self.pressValue(press.x, press.y, solved)) return;
                 if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.pressBoard(solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.devices) |devices| {
@@ -194,6 +198,7 @@ pub const Shell = struct {
                 _ = console.wheelIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, turn.dy);
             },
             .text, .key => {
+                if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (self.pageConsole(event, solved)) return;
                 if (self.time) |time| if (self.link) |link| {
@@ -216,6 +221,14 @@ pub const Shell = struct {
         const console = self.console orelse return false;
         if (!key.down) return false;
         return console.pageIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, key.code);
+    }
+
+    /// Offer a press to the register editor, which opens a field on a
+    /// value it lands on and lets an open one go otherwise.
+    fn pressValue(self: *Shell, x: i32, y: i32, solved: *const pane_layout.Solved) bool {
+        const edit = self.edit orelse return false;
+        const registers = self.registers orelse return false;
+        return edit.press(registers, &self.layout, solved, x, y);
     }
 
     /// Offer a press to the text fields and the time bar, so each one it
@@ -362,6 +375,7 @@ pub const Shell = struct {
         const registers = self.registers orelse return;
         if (loaded) registers.reload();
         registers.observe(arrival);
+        if (self.edit) |edit| _ = edit.observe(registers, arrival);
         for ([_]?*shell_memory.Pair{ self.memory, self.code }) |leaf| if (leaf) |memory| {
             if (loaded) memory.reload();
             memory.observe(arrival);
