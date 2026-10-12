@@ -2,7 +2,7 @@
 //! (RA8EMU-817): a spawned `serve --stdio` takes a click on a row's fault
 //! cell through every mode and back, and reports each one as a fault_set
 //! or fault_cleared session event; and a faulted row through raster.draw
-//! is pinned as a golden.
+//! has its fault cells and time bar pinned as region goldens.
 const std = @import("std");
 const dark = &@import("gui_app").colors.palettes.dark;
 const ra8 = @import("ra8");
@@ -11,7 +11,6 @@ const status_capture = gui_app.status.capture;
 const test_paths = @import("test_paths");
 const proto = ra8.rpc.session.rpc;
 const draw_list = ra8.render.draw_list;
-const still = gui_app.window.still;
 const raster = ra8.render.raster;
 const font = ra8.render.font;
 const pane_layout = gui_app.pane_layout;
@@ -169,6 +168,16 @@ fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_li
     return false;
 }
 
+fn regionDigest(pixels: *const raster.Framebuffer, area: draw_list.Rect) u64 {
+    var hash = std.hash.Fnv1a_64.init();
+    var y = area.y;
+    while (y < area.y + area.h) : (y += 1) {
+        const start = @as(usize, @intCast(y)) * pixels.width + @as(usize, @intCast(area.x));
+        hash.update(std.mem.sliceAsBytes(pixels.pixels[start..][0..@intCast(area.w)]));
+    }
+    return hash.final();
+}
+
 test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" {
     const gpa = std.testing.allocator;
     var devices: shell_devices.Devices = .{ .asked = 1 };
@@ -180,6 +189,10 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
     faults.pending.mode = 1;
     @memcpy(faults.pending.at[0..endpoint.len], endpoint);
     try std.testing.expect(faults.observe(.{ .response = .{ .id = 2, .result = .{ .ok = "" } } }));
+    try std.testing.expectEqual(@as(usize, 1), faults.modeOf(endpoint));
+    try std.testing.expectEqual(@as(usize, 0), faults.modeOf("i2c:riic@0x6b"));
+    try std.testing.expectEqual(@as(?u32, null), faults.asked);
+    try std.testing.expect(!faults.refused);
 
     var layout = try pane_layout.twoCore(gpa);
     defer layout.deinit();
@@ -202,8 +215,16 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
         try std.testing.expect(holds(&pixels, fault.cell(body, 0), dark.ink));
         try std.testing.expect(!holds(&pixels, fault.cell(body, 1), dark.ink));
         try std.testing.expect(holds(&pixels, fault.cell(body, 1), dark.muted));
+        // Pin the actual labels, without coupling to other panes' paint.
+        try std.testing.expectEqual(@as(u64, 4428745175363580309), regionDigest(&pixels, fault.cell(body, 0)));
+        try std.testing.expectEqual(@as(u64, 15326198716049576869), regionDigest(&pixels, fault.cell(body, 1)));
     }
     try std.testing.expect(leaves > 0);
-    const digest = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(pixels.pixels));
-    try std.testing.expectEqual(@as(u64, 3722289904126985217), digest);
+    const bar = frame.barArea(width, height);
+    const controls = gui_app.time_bar.Layout.of(bar);
+    for ([_]gui_app.time_bar.Control{ .run, .pause, .step }) |control| {
+        try std.testing.expect(holds(&pixels, controls.rect(control), dark.muted));
+        try std.testing.expect(!holds(&pixels, controls.rect(control), dark.ink));
+    }
+    try std.testing.expectEqual(@as(u64, 2685713462396192790), regionDigest(&pixels, bar));
 }

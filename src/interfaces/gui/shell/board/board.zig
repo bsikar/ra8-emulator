@@ -3,7 +3,7 @@
 //! and the user LEDs it reports as led_changed events on the session topic
 //! (RA8EMU-811), and asks the session for the board's front-panel parts
 //! (RA8EMU-1151), which the pane lays out and lights. Once the link is
-//! connected it subscribes both for cpu0 and asks once for the parts.
+//! connected it subscribes both cores and asks once for the board parts.
 //! Each rectangle is copied into an RGBA image that grows to cover every
 //! rectangle seen, and pixels no rectangle has reached yet stay black. The
 //! LEDs need no panel, so an image with no LCD output still shows them.
@@ -57,13 +57,15 @@ pub const Board = struct {
         self.allocator.free(self.pixels);
     }
 
-    /// Subscribe cpu0's panel changes and session events, once, after the
+    /// Subscribe both cores' board changes and session events, once, after the
     /// session greets. A session with no display refuses the first and
     /// still sends the second.
     pub fn attach(self: *Board, link: *session_link.Link) void {
         if (self.subscribed or link.state != .connected) return;
-        for ([_]proto.Topic{ .lcd_dirty, .session }) |topic| {
-            _ = link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = topic }) catch return;
+        for ([_]proto.Core{ .cpu0, .cpu1 }) |core| {
+            for ([_]proto.Topic{ .lcd_dirty, .session }) |topic| {
+                _ = link.send(proto.Subscription, .subscribe, .{ .core = core, .topic = topic }) catch return;
+            }
         }
         self.subscribed = true;
         // An older server without board parts refuses it; the pane then
@@ -84,12 +86,12 @@ pub const Board = struct {
     fn fold(self: *Board, event: session_link.Env.Event, now_ns: u64) error{OutOfMemory}!void {
         if (event.topic == @backingInt(proto.Topic.session)) {
             const change = proto.decode(proto.SessionEvent, event.payload) catch return;
-            if (change.core == .cpu0) board_capture.observe(&self.leds, self.parts.leds.len, change);
+            board_capture.observe(&self.leds, self.parts.leds.len, change);
             return;
         }
         if (event.topic != @backingInt(proto.Topic.lcd_dirty)) return;
         const rect = proto.decode(proto.DirtyRect, event.payload) catch return;
-        if (rect.core != .cpu0 or rect.pixels.len != @as(usize, rect.width) * rect.height) return;
+        if (rect.pixels.len != @as(usize, rect.width) * rect.height) return;
         try self.cover(@as(u32, rect.x) + rect.width, @as(u32, rect.y) + rect.height);
         for (0..rect.height) |row| {
             const into = self.pixels[(rect.y + row) * self.width + rect.x ..][0..rect.width];

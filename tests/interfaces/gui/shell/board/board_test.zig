@@ -81,12 +81,11 @@ test "the image grows to cover a rectangle past it, keeping what it held" {
     try std.testing.expectEqual(gray(0), at(&board, 2, 0));
 }
 
-test "responses, other topics, the other core and short payloads leave the image alone" {
+test "responses, other topics and short payloads leave the image alone" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     try board.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "x" } } }, 0);
     try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } }, 0);
-    try dirty(&board, .{ .core = .cpu1, .x = 0, .y = 0, .width = 1, .height = 1, .virtual_ns = 1, .pixels = &.{5} });
     try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 2, .height = 2, .virtual_ns = 1, .pixels = &.{5} });
     try std.testing.expect(!board.hasFrame());
 }
@@ -115,7 +114,7 @@ fn led(board: *Board, event: proto.SessionEvent) !void {
     try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = payload } }, 0);
 }
 
-test "an LED change for cpu0 on the session topic sets its LED, and nothing else on it does" {
+test "board LED changes from either core land in the same LEDs" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     board.setParts(ek_shape.leds, ek_shape.switch_names, ek_shape.panel);
@@ -125,7 +124,7 @@ test "an LED change for cpu0 on the session topic sets its LED, and nothing else
     try led(&board, .{ .core = .cpu0, .kind = .led_changed, .address = 0x000 });
     try led(&board, .{ .core = .cpu1, .kind = .led_changed, .address = 0x101 });
     try led(&board, .{ .core = .cpu0, .kind = .plugged, .address = 0x101 });
-    try std.testing.expectEqual([_]bool{ false, false, true }, board.leds.on[0..3].*);
+    try std.testing.expectEqual([_]bool{ false, true, true }, board.leds.on[0..3].*);
     try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = "x" } }, 0);
     try std.testing.expect(!board.hasFrame());
 }
@@ -136,18 +135,23 @@ test "once the session greets, the feed subscribes the panel and the session top
     defer rig.deinit();
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
+    var second: ra8.session.cpu1.bringup.Cpu1 = .{};
+    try second.open(std.testing.allocator, std.testing.io, &rig.session.setup.owner, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    defer second.close(std.testing.allocator);
     const context = &rig.session.setup.context;
     try std.testing.expect(!context.wants(.cpu0, .session));
     board.attach(&rig.link);
     try rig.session.answer();
     try std.testing.expect(context.wants(.cpu0, .session));
     try std.testing.expect(context.wants(.cpu0, .lcd_dirty));
+    try std.testing.expect(context.wants(.cpu1, .session));
+    try std.testing.expect(context.wants(.cpu1, .lcd_dirty));
     var answers: usize = 0;
     while (rig.link.pump()) |_| answers += 1;
     board.attach(&rig.link);
     try rig.session.answer();
     while (rig.link.pump()) |_| answers += 1;
-    try std.testing.expectEqual(@as(usize, 3), answers);
+    try std.testing.expectEqual(@as(usize, 5), answers);
 }
 
 /// The two-core layout's frame with `board` behind its board leaf, drawn at
@@ -224,4 +228,13 @@ test "a leaf too small for the board shows the panel image alone, or its note" {
     defer shown.pixels.deinit(std.testing.allocator);
     try std.testing.expectEqual(gray(200), shown.middle(fit.fitIn(shown.body, 4, 6)));
     try std.testing.expect(!holds(&shown.pixels, shown.body, dark.muted));
+}
+
+test "panel rectangles from either core update the shared board image" {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 2, .height = 1, .virtual_ns = 1, .pixels = &.{ 1, 2 } });
+    try dirty(&board, .{ .core = .cpu1, .x = 1, .y = 0, .width = 1, .height = 1, .virtual_ns = 2, .pixels = &.{9} });
+    try std.testing.expectEqual(gray(1), at(&board, 0, 0));
+    try std.testing.expectEqual(gray(9), at(&board, 1, 0));
 }

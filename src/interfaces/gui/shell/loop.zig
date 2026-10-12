@@ -1,13 +1,17 @@
-//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events (quit, the menu strip RA8EMU-957, gutter drags)
-//! and pumps the session link into the status bar, console, board, device, camera and plug models, whose leaves take clicks and typing, and the
-//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane titles (RA8EMU-800) and the settings page (RA8EMU-963)
-//! take their presses, and while Run is lit each frame pays the board its slices on the shell's own thread, so the frame never waits on more than
-//! one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
+//! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
+//! (quit, the menu strip RA8EMU-957, gutter drags) and pumps the session link into the status bar,
+//! console, board, device, camera and plug models, whose leaves take clicks and typing, and the
+//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane
+//! titles (RA8EMU-800) and the settings page (RA8EMU-963) take their presses, and while Run is
+//! lit each frame pays the board its slices on the shell's own thread, so the frame never waits
+//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam,
+//! so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const widget_paint = @import("ra8_render").widget_paint;
 const raster = @import("ra8_render").raster;
 const font = @import("ra8_render").font;
+pub const frame_buffer = @import("frame_buffer.zig");
 const platform = @import("../platform.zig");
 /// A session served in this process, answering on the shell's own thread.
 const Server = @import("server.zig").Server;
@@ -39,6 +43,7 @@ const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
 const shell_settings = @import("settings_page.zig");
+
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
 
@@ -139,6 +144,7 @@ pub const Shell = struct {
         try self.exchange();
         try self.paySlices();
         if (self.files) |files| files.frame(window, &self.status);
+        if (!window.visible()) return true;
         solved.deinit(self.allocator);
         solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
@@ -160,7 +166,7 @@ pub const Shell = struct {
         try shell_settings.Page.draw(&self.settings, &paint, &self.themes, self.themes.active, width, height);
         if (try window.show(&list, font.atlas)) return true;
         // raster.draw is the documented temporary composite (RA8EMU-1157).
-        const frame = try self.fitFrame(size);
+        const frame = try frame_buffer.fit(&self.frame, self.allocator, size);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);
         return true;
@@ -307,6 +313,7 @@ pub const Shell = struct {
     fn paySlices(self: *Shell) !void {
         const time = self.time orelse return;
         const link = self.link orelse return;
+        defer self.settle();
         time.frame(link, self.now());
         // No slice goes out behind a load: the image it would run may be gone.
         while (self.drained and self.status.load_id == null and time.run.next(link, self.now())) {
@@ -386,15 +393,5 @@ pub const Shell = struct {
             memory.observe(arrival);
             memory.follow(registers);
         };
-    }
-
-    fn fitFrame(self: *Shell, size: platform.Size) !*raster.Framebuffer {
-        if (self.frame) |*frame| {
-            if (frame.width == size.width and frame.height == size.height) return frame;
-            frame.deinit(self.allocator);
-            self.frame = null;
-        }
-        self.frame = try raster.Framebuffer.init(self.allocator, size.width, size.height);
-        return &self.frame.?;
     }
 };

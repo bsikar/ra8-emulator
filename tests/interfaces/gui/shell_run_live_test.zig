@@ -25,7 +25,7 @@ const owed_ns: u64 = frame_ns * slow / 1000;
 /// The board time one slice may land past its target: a few cycles.
 const slack_ns: u64 = 10;
 
-test "ra8_gui's image opens halted, with Pause lit and nothing run" {
+test "ra8_gui's image opens halted with Pause disabled and nothing run" {
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
@@ -37,7 +37,8 @@ test "ra8_gui's image opens halted, with Pause lit and nothing run" {
     try std.testing.expect(!live.time.run.lit);
     const pause = Live.barRect(.pause);
     const run = Live.barRect(.run);
-    try std.testing.expectEqual(dark.pauseLit(), live.pixel(pause.x + 1, pause.y + 1));
+    try std.testing.expectEqual(dark.face, live.pixel(pause.x + 1, pause.y + 1));
+    try std.testing.expect(!live.time.view(&live.shell.status).pause_enabled);
     try std.testing.expectEqual(dark.face, live.pixel(run.x + 1, run.y + 1));
 }
 
@@ -133,4 +134,28 @@ test "a speed typed into the bar's field scales what each frame pays" {
     try live.step();
     const moved = live.boardTime() - at;
     try std.testing.expect(moved >= 4 * owed_ns and moved < 4 * owed_ns + slack_ns);
+}
+
+test "minimized live shell keeps advancing and can pause without presenting" {
+    var live: Live = undefined;
+    try live.open(image, slow);
+    defer live.deinit();
+    const presents = live.window.presents;
+    live.window.visible = false;
+    try live.click(.run);
+    try live.step();
+    const at = live.boardTime();
+    for (0..4) |_| try live.step();
+    try std.testing.expect(live.boardTime() >= at + 4 * owed_ns);
+    try std.testing.expectEqual(presents, live.window.presents);
+    try live.click(.pause);
+    try live.step();
+    try std.testing.expect(live.shell.status.run == .halted);
+    const stopped = live.boardTime();
+    for (0..3) |_| try live.step();
+    try std.testing.expectEqual(stopped, live.boardTime());
+    try std.testing.expectEqual(presents, live.window.presents);
+    live.window.visible = true;
+    try live.step();
+    try std.testing.expectEqual(presents + 1, live.window.presents);
 }

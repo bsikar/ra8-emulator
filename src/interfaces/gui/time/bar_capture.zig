@@ -30,10 +30,15 @@ pub const Texts = struct {
 };
 
 /// The bar's view of `status`, `field` and `readout`, its text in `texts`.
-pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Field, readout: *const time_readout.Readout, editing: bool) bar.View {
+pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Field, readout: *const time_readout.Readout, run: *const shell_run.Run, editing: bool) bar.View {
     const p = readout.pieces(field.applied, &texts.date, &texts.elapsed, &texts.speed) catch time_readout.Readout.Pieces{};
     return .{
-        .run_lit = status.run == .running,
+        .run_lit = run.lit,
+        .run_enabled = enabled(.run, status, run),
+        .pause_enabled = enabled(.pause, status, run),
+        .step_enabled = enabled(.step, status, run),
+        .note = if (status.refused == .run) "Run refused" else if (status.load_id != null or status.pc_id != null) "Loading" else if (status.run == .unknown) "Load an image" else if (status.run_id != null or (!run.lit and run.slice_id != null)) "Waiting for stop" else null,
+        .command_refused = status.refused == .run,
         .pause_lit = status.run == .halted,
         .field = field.shown(&texts.field) catch texts.field[0..0],
         .field_refused = field.refused != null,
@@ -50,6 +55,8 @@ pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Fiel
 /// one instruction on a halted core. The field takes the keyboard in the
 /// shell, so a click on it sends nothing.
 pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *Link) !void {
+    if (!enabled(control, status, run)) return;
+    if ((control == .run or control == .step) and link.state != .connected) return error.NotConnected;
     switch (control) {
         .run => {
             const at = switch (status.run) {
@@ -59,8 +66,20 @@ pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *
             run.start(at);
             status.running();
         },
-        .step => if (!run.lit and status.run == .halted) try status.go(link, proto.RunMode.step, step_budget),
+        .step => {
+            try status.go(link, proto.RunMode.step, step_budget);
+            status.refused = null;
+        },
         .pause => run.pause(),
         .field => {},
     }
+}
+
+/// One policy for paint, mouse commands and menu/keyboard commands.
+pub fn enabled(control: bar.Control, status: *const Status, run: *const shell_run.Run) bool {
+    return switch (control) {
+        .run, .step => status.run == .halted and !run.lit and run.slice_id == null and run.settled == null and status.load_id == null and status.pc_id == null and status.run_id == null,
+        .pause => run.lit,
+        .field => true,
+    };
 }

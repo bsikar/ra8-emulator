@@ -21,6 +21,8 @@ pub const gap: i32 = 4;
 pub const control_h: i32 = font.glyph_h + 6;
 /// The controls, a pixel of border on top, and air around them.
 pub const height: i32 = control_h + 7;
+/// Room for a full elapsed segment before the optional speed field.
+pub const clock_min: i32 = 13 * font.cell_w + 2 * pad;
 /// The longest speed text the field shows; gui/time.bar_capture.zig pins it
 /// to the speed field's own limit.
 pub const field_chars: usize = 12;
@@ -54,17 +56,23 @@ pub const Layout = struct {
         const top = bar.y + 1 + draw_list.centre(bar.h - 1, control_h);
         var x = bar.x + pad;
         const run = place(bar, &x, top, .run);
-        const pause_at = place(bar, &x, top, .pause);
-        const step = place(bar, &x, top, .step);
-        const field = place(bar, &x, top, .field);
+        const pause_at = if (run.empty()) run else place(bar, &x, top, .pause);
+        const step = if (pause_at.empty()) pause_at else place(bar, &x, top, .step);
+        const field = if (step.empty() or bar.x + bar.w - pad - x < width(.field) + gap + clock_min)
+            Rect{ .x = x, .y = top, .w = 0, .h = 0 }
+        else
+            place(bar, &x, top, .field);
         const clock_rect = bar.intersect(.{ .x = x, .y = top, .w = bar.x + bar.w - pad - x, .h = control_h });
         return .{ .run = run, .pause = pause_at, .step = step, .field = field, .clock = clock_rect };
     }
 
-    /// The next control at `x.*`, cut to the bar; moves `x` past it and the gap.
+    /// Only whole controls have paint and hit targets. Leave room for the clock.
     fn place(bar: Rect, x: *i32, top: i32, control: Control) Rect {
         const w = width(control);
-        const at = bar.intersect(.{ .x = x.*, .y = top, .w = w, .h = control_h });
+        const wanted: Rect = .{ .x = x.*, .y = top, .w = w, .h = control_h };
+        const at = bar.intersect(wanted);
+        if (at.w != w or at.h != control_h or x.* + w > bar.x + bar.w - pad)
+            return .{ .x = x.*, .y = top, .w = 0, .h = 0 };
         x.* += w + gap;
         return at;
     }
@@ -90,6 +98,12 @@ pub const View = struct {
     /// Run lights while the core runs; Pause lights while it is halted.
     run_lit: bool = false,
     pause_lit: bool = false,
+    run_enabled: bool = false,
+    pause_enabled: bool = false,
+    step_enabled: bool = false,
+    /// Concise command refusal or unavailable reason, after elapsed time.
+    note: ?[]const u8 = null,
+    command_refused: bool = false,
     /// What the speed field shows.
     field: []const u8 = "",
     /// The session refused the last speed sent.
@@ -134,7 +148,13 @@ fn lights(control: Control, view: View) bool {
 /// descriptor, with the lit look on `face_pressed`.
 fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, control: Control, view: View) !void {
     if (area.empty()) return;
-    const on = lights(control, view);
+    const enabled = switch (control) {
+        .run => view.run_enabled,
+        .pause => view.pause_enabled,
+        .step => view.step_enabled,
+        .field => true,
+    };
+    const on = lights(control, view) and (enabled or control == .run);
     var descriptor = widget.button.Button{
         .paint = paint,
         .text = switch (control) {
@@ -144,7 +164,7 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .field => "",
         },
         .on_press = null,
-        .fg = word(if (on) theme.background else theme.ink),
+        .fg = word(if (on) theme.background else if (!enabled) theme.muted else theme.ink),
         .face = word(theme.face),
         .face_pressed = word(switch (control) {
             .run => theme.runLit(),
@@ -196,7 +216,7 @@ fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view
     var descriptor = widget.label.Label{
         .paint = paint,
         .text = buf[0..n :0].ptr,
-        .fg = word(theme.muted),
+        .fg = word(if (view.command_refused) theme.bad else theme.muted),
         .bg = word(theme.ribbon_bg),
         .pad = @intCast(down),
         .alignment = .left,
@@ -219,6 +239,23 @@ fn fitClock(view: View, room: i32, buf: []u8) []const u8 {
     const elapsed = view.clock;
     if (elapsed.len > cells) return font.fit(elapsed, @intCast(room));
     var stream: std.Io.Writer = .fixed(buf);
+    if (view.note) |note| {
+        if (elapsed.len + sep + note.len <= cells) {
+            stream.print("{s} | {s}", .{ elapsed, note }) catch return elapsed;
+            return stream.buffered();
+        }
+        if (view.command_refused and elapsed.len + 2 <= cells) {
+            stream.print("{s} !", .{elapsed}) catch return elapsed;
+            return stream.buffered();
+        }
+        return elapsed;
+    }
+    if (view.clock_date == null) if (view.clock_speed) |speed| {
+        if (elapsed.len + sep + speed.len <= cells) {
+            stream.print("{s} | {s}", .{ elapsed, speed }) catch return elapsed;
+            return stream.buffered();
+        }
+    };
     if (view.clock_date) |date| {
         if (view.clock_speed) |speed| {
             if (date.len + sep + elapsed.len + sep + speed.len <= cells) {
@@ -240,7 +277,13 @@ fn fieldBox(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: Vi
     try outline(list, area, if (view.field_refused) theme.bad else if (view.editing) theme.accent else theme.control_border);
     const shown = view.field;
     try text(list, area, shown, theme.ink);
-    if (!view.editing) return;
+    if (!view.editing) {
+        const label = "Speed";
+        const left = area.x + area.w - pad - @as(i32, @intCast(font.textWidth(label.len)));
+        if (left >= area.x + 2 * pad + @as(i32, @intCast(font.textWidth(shown.len))))
+            try font.draw(list, left, area.y + draw_list.centre(area.h, font.glyph_h), label, theme.muted);
+        return;
+    }
     const caret_x = area.x + pad + @as(i32, @intCast(font.textWidth(shown.len)));
     try list.fill(.{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
 }
