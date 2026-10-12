@@ -12,6 +12,7 @@ const pane_layout = gui_app.pane_layout;
 const shell_frame = gui_app.shell.frame;
 const shell_loop = gui_app.shell.loop;
 const Console = gui_app.shell.console.Console;
+const Headless = gui_app.headless.Headless;
 
 const io = std.testing.io;
 
@@ -87,15 +88,17 @@ test "a click on the save tab saves through the shell, elsewhere it does not" {
     shell.console = &console;
     var solved = try shell.layout.solve(std.testing.allocator, .{ .x = 0, .y = 0, .w = 1280, .h = 800 });
     defer solved.deinit(std.testing.allocator);
+    var window = Headless.init(std.testing.allocator, 1280, 800);
+    defer window.deinit();
     const tab = console_strip.saveTab(consoleBody(&shell, &solved));
     const x = tab.x + @divTrunc(tab.w, 2);
     const y = tab.y + @divTrunc(tab.h, 2);
-    shell.handle(.{ .button = .{ .button = 1, .down = true, .x = x, .y = y } }, &solved);
+    shell.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = x, .y = y } }, &solved);
     try std.testing.expectEqual(console_save.Outcome.none, console.saved);
     try console.log.feedAll("ready\n", 0);
-    shell.handle(.{ .button = .{ .button = 1, .down = true, .x = tab.x - 20, .y = y } }, &solved);
+    shell.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = tab.x - 20, .y = y } }, &solved);
     try std.testing.expectEqual(console_save.Outcome.none, console.saved);
-    shell.handle(.{ .button = .{ .button = 1, .down = true, .x = x, .y = y } }, &solved);
+    shell.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = x, .y = y } }, &solved);
     try std.testing.expectEqual(console_save.Outcome.saved, console.saved);
     var buffer: [64]u8 = undefined;
     try std.testing.expectEqualStrings("[   0.000000000] ready\n", try readBack(tmp.dir, &buffer));

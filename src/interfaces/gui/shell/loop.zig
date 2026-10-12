@@ -136,10 +136,10 @@ pub const Shell = struct {
         defer solved.deinit(self.allocator);
         self.bar = shell_frame.barArea(width, height);
         self.height = height;
-        menu_actions.observe(self, width);
+        menu_actions.observe(self, window, width);
         while (window.poll()) |event| {
             if (event == .appearance) self.themes.restyle(window.appearance());
-            self.handle(event, &solved);
+            self.handle(window, event, &solved);
         }
         if (!self.open) return false;
         if (!self.themes.styled) self.themes.restyle(window.appearance());
@@ -170,12 +170,12 @@ pub const Shell = struct {
     }
 
     /// Apply one input event against this frame's layout.
-    pub fn handle(self: *Shell, event: platform.Event, solved: *const pane_layout.Solved) void {
+    pub fn handle(self: *Shell, window: platform.Platform, event: platform.Event, solved: *const pane_layout.Solved) void {
         switch (event) {
             .quit => self.open = false,
             .button => |press| {
                 if (press.button != 1) return;
-                if (press.down and menu_actions.press(self, press.x, press.y)) return;
+                if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down) return self.releaseBoard(press.x, press.y);
@@ -204,7 +204,7 @@ pub const Shell = struct {
                 _ = console.wheelIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, turn.dy);
             },
             .text, .key => {
-                if (menu_actions.key(self, event)) return;
+                if (menu_actions.key(self, window, event)) return;
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (self.pageConsole(event, solved)) return;

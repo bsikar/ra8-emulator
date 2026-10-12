@@ -115,6 +115,8 @@ pub const Sdl = struct {
         .focus = focus,
         .open_image = openImage,
         .title = setTitle,
+        .toggle_fullscreen = toggleFullscreenVt,
+        .fullscreen = fullscreenVt,
     };
 
     fn from(ctx: *anyopaque) *Sdl {
@@ -164,8 +166,20 @@ pub const Sdl = struct {
     }
 
     fn toggleFullscreen(self: *Sdl) void {
-        const now = (c.SDL_GetWindowFlags(self.window) & c.SDL_WINDOW_FULLSCREEN) != 0;
-        _ = c.SDL_SetWindowFullscreen(self.window, !now);
+        _ = c.SDL_SetWindowFullscreen(self.window, !self.fullscreen());
+    }
+
+    fn toggleFullscreenVt(ctx: *anyopaque) void {
+        from(ctx).toggleFullscreen();
+    }
+
+    /// Whether the window is full screen right now (RA8EMU-966).
+    fn fullscreen(self: *Sdl) bool {
+        return (c.SDL_GetWindowFlags(self.window) & c.SDL_WINDOW_FULLSCREEN) != 0;
+    }
+
+    fn fullscreenVt(ctx: *anyopaque) bool {
+        return from(ctx).fullscreen();
     }
 
     /// The layout size in points, setting the renderer's scale to match

@@ -10,6 +10,7 @@ const pane_layout = gui_app.pane_layout;
 const shell_frame = gui_app.shell.frame;
 const shell_loop = gui_app.shell.loop;
 const Console = gui_app.shell.console.Console;
+const Headless = gui_app.headless.Headless;
 const Scroll = console_scroll.Scroll;
 
 fn lines(log: *console_log.Log, count: usize) !void {
@@ -75,8 +76,10 @@ const Fixture = struct {
     shell: shell_loop.Shell,
     console: Console,
     solved: pane_layout.Solved,
+    window: Headless = undefined,
 
     fn deinit(self: *Fixture) void {
+        self.window.deinit();
         self.solved.deinit(std.testing.allocator);
         self.console.deinit();
         self.shell.deinit();
@@ -95,6 +98,7 @@ const Fixture = struct {
 };
 
 fn fixture(fx: *Fixture) !void {
+    fx.window = Headless.init(std.testing.allocator, 1280, 800);
     fx.shell = shell_loop.Shell.init(std.testing.allocator, try pane_layout.twoCore(std.testing.allocator));
     fx.console = Console.init(std.testing.allocator);
     fx.shell.console = &fx.console;
@@ -107,12 +111,12 @@ test "the shell scrolls the console only with the pointer over a console leaf" {
     try fixture(&fx);
     defer fx.deinit();
     const board = fx.middle(.board);
-    fx.shell.handle(.{ .pointer = .{ .x = board[0], .y = board[1] } }, &fx.solved);
-    fx.shell.handle(.{ .wheel = .{ .dx = 0, .dy = 2 } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .pointer = .{ .x = board[0], .y = board[1] } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .wheel = .{ .dx = 0, .dy = 2 } }, &fx.solved);
     try std.testing.expectEqual(@as(usize, 0), fx.console.scroll.back);
     const at = fx.middle(.console);
-    fx.shell.handle(.{ .pointer = .{ .x = at[0], .y = at[1] } }, &fx.solved);
-    fx.shell.handle(.{ .wheel = .{ .dx = 0, .dy = 2 } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .pointer = .{ .x = at[0], .y = at[1] } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .wheel = .{ .dx = 0, .dy = 2 } }, &fx.solved);
     try std.testing.expectEqual(@as(usize, 6), fx.console.scroll.back);
 }
 
@@ -121,12 +125,12 @@ test "page up over a console leaf goes back the rows it shows" {
     try fixture(&fx);
     defer fx.deinit();
     const at = fx.middle(.console);
-    fx.shell.handle(.{ .pointer = .{ .x = at[0], .y = at[1] } }, &fx.solved);
-    fx.shell.handle(.{ .key = .{ .code = console_scroll.page_up, .down = true } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .pointer = .{ .x = at[0], .y = at[1] } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .key = .{ .code = console_scroll.page_up, .down = true } }, &fx.solved);
     try std.testing.expect(fx.console.scroll.back > 0);
     const shown = fx.console.scroll.back;
-    fx.shell.handle(.{ .key = .{ .code = console_scroll.page_up, .down = false } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .key = .{ .code = console_scroll.page_up, .down = false } }, &fx.solved);
     try std.testing.expectEqual(shown, fx.console.scroll.back);
-    fx.shell.handle(.{ .key = .{ .code = console_scroll.page_down, .down = true } }, &fx.solved);
+    fx.shell.handle(fx.window.platform(), .{ .key = .{ .code = console_scroll.page_down, .down = true } }, &fx.solved);
     try std.testing.expectEqual(@as(usize, 0), fx.console.scroll.back);
 }

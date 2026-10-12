@@ -88,6 +88,11 @@ pub const Platform = struct {
         open_image: ?*const fn (ctx: *anyopaque) void = null,
         /// Sets the window's title; null for a backend with none.
         title: ?*const fn (ctx: *anyopaque, text: []const u8) void = null,
+        /// Toggles the window's full-screen state (RA8EMU-966); null for a
+        /// backend with no window to toggle.
+        toggle_fullscreen: ?*const fn (ctx: *anyopaque) void = null,
+        /// Whether the window is full screen (RA8EMU-966); null is never.
+        fullscreen: ?*const fn (ctx: *anyopaque) bool = null,
     };
 
     /// The next input event, or null once this frame's events are drained.
@@ -146,6 +151,20 @@ pub const Platform = struct {
     }
 
     /// Set the window's title, on a backend that has one.
+    /// Ask the window to enter or leave full screen (RA8EMU-966); nothing
+    /// happens on a backend with no window to toggle.
+    pub fn toggleFullscreen(self: Platform) void {
+        const toggle = self.vtable.toggle_fullscreen orelse return;
+        toggle(self.ctx);
+    }
+
+    /// Whether the window is full screen (RA8EMU-966); false when the
+    /// backend does not say.
+    pub fn fullscreen(self: Platform) bool {
+        const get = self.vtable.fullscreen orelse return false;
+        return get(self.ctx);
+    }
+
     pub fn title(self: Platform, text: []const u8) void {
         const set = self.vtable.title orelse return;
         set(self.ctx, text);
