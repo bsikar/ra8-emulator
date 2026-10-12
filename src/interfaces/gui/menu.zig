@@ -11,7 +11,7 @@ const shell_frame = @import("ui/shell/frame.zig");
 const Kind = pane_layout.Kind;
 
 /// The fixed commands. Run, Pause and Step are the time bar's controls.
-pub const Command = enum { open_elf, close, quit, run, pause, step, reset };
+pub const Command = enum { open_elf, close, settings, quit, run, pause, step, reset };
 
 pub const Action = union(enum) {
     command: Command,
@@ -27,7 +27,8 @@ pub const Action = union(enum) {
 };
 
 /// A key pressed with the platform's primary modifier held: Cmd on macOS,
-/// Ctrl everywhere else. The key is an uppercase letter or a digit.
+/// Ctrl everywhere else. The key is an uppercase letter, a digit or the
+/// comma.
 pub const Shortcut = struct {
     key: u8,
     shift: bool = false,
@@ -49,6 +50,7 @@ pub const Menu = struct {
 pub const file = [_]Item{
     .{ .label = "Open ELF...", .action = .{ .command = .open_elf }, .shortcut = .{ .key = 'O' } },
     .{ .label = "Close", .action = .{ .command = .close }, .shortcut = .{ .key = 'W' } },
+    .{ .label = "Settings...", .action = .{ .command = .settings }, .shortcut = .{ .key = ',' } },
     .{ .label = "Quit", .action = .{ .command = .quit }, .shortcut = .{ .key = 'Q' }, .divided = true },
 };
 
@@ -138,7 +140,7 @@ pub fn enabled(action: Action, state: State) bool {
     return switch (action) {
         .toggle => true,
         .command => |command| switch (command) {
-            .open_elf, .quit => true,
+            .open_elf, .settings, .quit => true,
             .close, .reset => state.loaded,
             .run, .step => state.loaded and !state.running,
             .pause => state.running,

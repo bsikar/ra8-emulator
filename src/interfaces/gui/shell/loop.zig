@@ -1,11 +1,11 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
 //! (quit, the menu strip RA8EMU-957, gutter drags) and pumps the session link into the status bar,
 //! console, board, device, camera and plug models, whose leaves take clicks and typing, and the
-//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968) and the pane
-//! titles (RA8EMU-800) take their presses, and while Run is lit each frame pays the board its
-//! slices on the shell's own thread, so the frame never waits on more than one slice. Then it
-//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform
-//! run it alike.
+//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane
+//! titles (RA8EMU-800) and the settings page (RA8EMU-963) take their presses, and while Run is
+//! lit each frame pays the board its slices on the shell's own thread, so the frame never waits
+//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam,
+//! so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const raster = @import("ra8_render").raster;
@@ -37,12 +37,12 @@ const shell_stack = @import("stack.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
+const shell_settings = @import("settings_page.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
 
-/// A session served in this process (local_session.zig): asked, it answers
-/// everything the shell has sent, on the shell's own thread.
+/// A session served in this process (local_session.zig), answering on the shell's own thread.
 pub const Server = struct {
     context: *anyopaque,
     answerFn: *const fn (context: *anyopaque) anyerror!void,
@@ -58,9 +58,10 @@ pub const Shell = struct {
     status: status_bar.Status = .{},
     link: ?*session_link.Link = null,
     painter: ?shell_frame.Painter = null,
-    /// The palette in use, whether it follows the OS, and the picker on
-    /// the status strip that changes it (RA8EMU-1165).
+    /// The palette in use and the picker that changes it (RA8EMU-1165).
     themes: shell_theme.Themes = .{},
+    /// The settings page over the shell (RA8EMU-963).
+    settings: shell_settings.Page = .{},
     console: ?*shell_console.Console = null,
     board: ?*shell_board.Board = null,
     /// The pointer on the board leaf: switch clicks and panel touches.
@@ -79,8 +80,7 @@ pub const Shell = struct {
     /// Register edits from the registers leaves (RA8EMU-946).
     edit: ?*shell_register_edit.Editor = null,
     memory: ?*shell_memory.Pair = null,
-    /// The memory leaf's address field, whose image typed symbols
-    /// resolve against (RA8EMU-934).
+    /// The memory leaf's address field for typed symbols (RA8EMU-934).
     memory_field: ?*shell_memory_field.Pin = null,
     code: ?*shell_memory.Pair = null,
     /// The call stack leaves, walked again after a load and every stop.
@@ -91,8 +91,7 @@ pub const Shell = struct {
     files: ?*shell_open.Open = null,
     /// The session when it is served in this process; null for a remote one.
     server: ?Server = null,
-    /// The per-user listener outside clients (ctl, IDEs) connect to
-    /// (RA8EMU-1156); null when it could not bind.
+    /// The per-user listener outside clients connect to (RA8EMU-1156).
     listener: ?Server = null,
     /// The wall clock a run is paced against; without one time stands still.
     clock: ?wall_clock.Clock = null,
@@ -105,6 +104,8 @@ pub const Shell = struct {
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},
     width: i32 = 0,
+    /// The window's height this frame (RA8EMU-963).
+    height: i32 = 0,
     /// Where the pointer last was, for the wheel and page keys.
     pointer_at: struct { x: i32, y: i32 } = .{ .x = -1, .y = -1 },
     open: bool = true,
@@ -134,6 +135,7 @@ pub const Shell = struct {
         var solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         defer solved.deinit(self.allocator);
         self.bar = shell_frame.barArea(width, height);
+        self.height = height;
         menu_actions.observe(self, width);
         while (window.poll()) |event| {
             if (event == .appearance) self.themes.restyle(window.appearance());
@@ -159,6 +161,7 @@ pub const Shell = struct {
             .painter = self.painter,
             .themes = self.themes.view(),
         });
+        try shell_settings.Page.draw(&self.settings, &list, &self.themes, self.themes.active, width, height);
         if (try window.show(&list, font.atlas)) return true;
         const frame = try self.fitFrame(size);
         raster.draw(frame, &list, font.atlas);
@@ -226,16 +229,14 @@ pub const Shell = struct {
         return console.pageIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, key.code);
     }
 
-    /// Offer a press to the register editor, which opens a field on a
-    /// value it lands on and lets an open one go otherwise.
+    /// Offer a press to the register editor over a value cell.
     fn pressValue(self: *Shell, x: i32, y: i32, solved: *const pane_layout.Solved) bool {
         const edit = self.edit orelse return false;
         const registers = self.registers orelse return false;
         return edit.press(registers, &self.layout, solved, x, y);
     }
 
-    /// Offer a press to the text fields and the time bar, so each one it
-    /// misses lets the keyboard go.
+    /// Offer a press to the text fields and the time bar.
     fn pressFields(self: *Shell, x: i32, y: i32) bool {
         const in_plug = if (self.plug) |plug| plug.press(x, y) else false;
         const in_file = if (self.camera_file) |file| file.press(x, y) else false;
@@ -268,8 +269,7 @@ pub const Shell = struct {
         pointer.move(board, x, y);
     }
 
-    /// The left button came up: the board leaf sends the click or the touch
-    /// it had under way, if any.
+    /// The left button came up: the board leaf sends the click or touch under way.
     fn releaseBoard(self: *Shell, x: i32, y: i32) void {
         const pointer = self.board_input orelse return;
         const board = self.board orelse return;

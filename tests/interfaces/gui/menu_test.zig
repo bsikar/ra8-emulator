@@ -16,8 +16,11 @@ test "File opens an ELF, closes it and quits" {
     try std.testing.expectEqualStrings("Open ELF...", menu.file[0].label);
     try std.testing.expect(menu.file[0].action.eql(.{ .command = .open_elf }));
     try std.testing.expect(menu.file[1].action.eql(.{ .command = .close }));
-    try std.testing.expect(menu.file[2].action.eql(.{ .command = .quit }));
-    try std.testing.expect(menu.file[2].divided);
+    try std.testing.expectEqualStrings("Settings...", menu.file[2].label);
+    try std.testing.expect(menu.file[2].action.eql(.{ .command = .settings }));
+    try std.testing.expectEqual(@as(u8, ','), menu.file[2].shortcut.?.key);
+    try std.testing.expect(menu.file[3].action.eql(.{ .command = .quit }));
+    try std.testing.expect(menu.file[3].divided);
 }
 
 test "View toggles every pane kind but empty" {
@@ -59,7 +62,7 @@ test "a buffer too small for the text is an error" {
 }
 
 test "Quit leaves File on macOS only" {
-    const quit = menu.file[2];
+    const quit = menu.file[3];
     try std.testing.expect(!menu.shows(quit, .macos));
     try std.testing.expect(menu.shows(quit, .windows));
     try std.testing.expect(menu.shows(quit, .linux));
