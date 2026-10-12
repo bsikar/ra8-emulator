@@ -207,7 +207,6 @@ fn applications(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     } });
     return .{ .cli = cli, .gui = gui };
 }
-
 /// A tools/ program's module, shared by its executable and its tests.
 fn toolModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, path: []const u8) *std.Build.Module {
     return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });

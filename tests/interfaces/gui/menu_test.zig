@@ -5,11 +5,28 @@ const std = @import("std");
 const gui_app = @import("gui_app");
 const menu = gui_app.menu;
 
-test "the bar has File, Run and View in that order" {
-    try std.testing.expectEqual(@as(usize, 3), menu.bar.len);
+test "the bar has File, Run, View and Board in that order" {
+    try std.testing.expectEqual(@as(usize, 4), menu.bar.len);
     try std.testing.expectEqualStrings("File", menu.bar[0].title);
     try std.testing.expectEqualStrings("Run", menu.bar[1].title);
     try std.testing.expectEqualStrings("View", menu.bar[2].title);
+    try std.testing.expectEqualStrings("Board", menu.bar[3].title);
+}
+
+test "the Board menu lists the shipped profiles and the OS picker" {
+    // The board, then one panel per shipped panel, then the picker.
+    try std.testing.expectEqual(@as(usize, 1 + menu.board_profiles.panels.len + 1), menu.board.len);
+    const board_item = menu.board[0];
+    try std.testing.expectEqualStrings("Board: EK-RA8D2", board_item.label);
+    try std.testing.expect(board_item.action.eql(.{ .choice = .{ .kind = .board, .stem = "ek_ra8d2" } }));
+    const panel_item = menu.board[1];
+    try std.testing.expect(panel_item.action.eql(.{ .choice = .{ .kind = .panel, .stem = "" } }));
+    const eink = menu.board[menu.board.len - 2];
+    try std.testing.expect(eink.action.eql(.{ .choice = .{ .kind = .panel, .stem = "sample_eink" } }));
+    const picker = menu.board[menu.board.len - 1];
+    try std.testing.expectEqualStrings("Open Profile...", picker.label);
+    try std.testing.expect(picker.action.eql(.{ .command = .open_profile }));
+    try std.testing.expect(picker.divided);
 }
 
 test "File opens an ELF, closes it and quits" {
@@ -33,7 +50,7 @@ test "View toggles every pane kind but empty" {
     try std.testing.expectEqual(@as(u8, '8'), menu.view[7].shortcut.?.key);
     for (menu.view) |item| switch (item.action) {
         .toggle => |kind| try std.testing.expect(kind != .empty),
-        .command => {},
+        .command, .choice => {},
     };
 }
 

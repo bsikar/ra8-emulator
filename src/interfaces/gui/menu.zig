@@ -7,21 +7,32 @@
 const std = @import("std");
 const pane_layout = @import("ui/pane_layout.zig");
 const shell_frame = @import("ui/shell/frame.zig");
+pub const board_profiles = @import("shell/board_profiles.zig");
 
 const Kind = pane_layout.Kind;
 
 /// The fixed commands. Run, Pause and Step are the time bar's controls.
-pub const Command = enum { open_elf, close, settings, quit, run, pause, step, reset, toggle_fullscreen };
+pub const Command = enum { open_elf, open_profile, close, settings, quit, run, pause, step, reset, toggle_fullscreen };
+
+/// Pick a shipped board or panel profile (RA8EMU-1152). An empty panel
+/// stem means the board's own panel, "none" means no panel at all.
+pub const Choice = struct {
+    kind: enum { board, panel },
+    stem: []const u8,
+};
 
 pub const Action = union(enum) {
     command: Command,
     /// Show or hide a pane of this kind.
     toggle: Kind,
+    /// Open the shipped profile the choice names (RA8EMU-1152).
+    choice: Choice,
 
     pub fn eql(self: Action, other: Action) bool {
         return switch (self) {
             .command => |command| other == .command and other.command == command,
             .toggle => |kind| other == .toggle and other.toggle == kind,
+            .choice => |choice| other == .choice and other.choice.kind == choice.kind and std.mem.eql(u8, other.choice.stem, choice.stem),
         };
     }
 };
@@ -52,6 +63,28 @@ pub const file = [_]Item{
     .{ .label = "Close", .action = .{ .command = .close }, .shortcut = .{ .key = 'W' } },
     .{ .label = "Settings...", .action = .{ .command = .settings }, .shortcut = .{ .key = ',' } },
     .{ .label = "Quit", .action = .{ .command = .quit }, .shortcut = .{ .key = 'Q' }, .divided = true },
+};
+
+/// The shipped board profiles and panel profiles (RA8EMU-1152), then the
+/// OS picker for a profile of one's own.
+pub const board = board_menu: {
+    var items: [1 + board_profiles.panels.len + 1]Item = undefined;
+    var next: usize = 0;
+    items[next] = .{
+        .label = "Board: EK-RA8D2",
+        .action = .{ .choice = .{ .kind = .board, .stem = board_profiles.default_board } },
+        .divided = next > 0,
+    };
+    next += 1;
+    for (&board_profiles.panels) |*panel| {
+        items[next] = .{
+            .label = std.fmt.comptimePrint("Panel: {s}", .{panel.label}),
+            .action = .{ .choice = .{ .kind = .panel, .stem = panel.stem } },
+        };
+        next += 1;
+    }
+    items[next] = .{ .label = "Open Profile...", .action = .{ .command = .open_profile }, .divided = true };
+    break :board_menu items;
 };
 
 pub const run = [_]Item{
@@ -89,6 +122,7 @@ pub const bar = [_]Menu{
     .{ .title = "File", .items = &file },
     .{ .title = "Run", .items = &run },
     .{ .title = "View", .items = &view },
+    .{ .title = "Board", .items = &board },
 };
 
 pub const Modifier = enum {
@@ -153,7 +187,7 @@ pub fn label(item: Item, state: State) []const u8 {
                 return if (state.fullscreen) "Exit Full Screen" else "Enter Full Screen";
             }
         },
-        .toggle => {},
+        .toggle, .choice => {},
     }
     return item.label;
 }
@@ -161,9 +195,9 @@ pub fn label(item: Item, state: State) []const u8 {
 /// Whether `action` can fire now. Disabled items draw muted and never fire.
 pub fn enabled(action: Action, state: State) bool {
     return switch (action) {
-        .toggle => true,
+        .toggle, .choice => true,
         .command => |command| switch (command) {
-            .open_elf, .settings, .quit, .toggle_fullscreen => true,
+            .open_elf, .open_profile, .settings, .quit, .toggle_fullscreen => true,
             .close, .reset => state.loaded,
             .run, .step => state.loaded and !state.running,
             .pause => state.running,

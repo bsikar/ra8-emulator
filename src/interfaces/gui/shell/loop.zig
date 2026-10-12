@@ -31,6 +31,7 @@ const shell_plug = @import("plug.zig");
 const shell_camera_file = @import("camera/file.zig");
 const shell_startup = @import("startup.zig");
 const shell_open = @import("open.zig");
+const shell_pick = @import("board_pick.zig");
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_memory = @import("memory.zig");
@@ -85,8 +86,10 @@ pub const Shell = struct {
     stack: ?*shell_stack.Pair = null,
     /// The time bar's models: the run, the speed field and the clock.
     time: ?*shell_time.Time = null,
-    /// Opening another image from the OS's file picker (RA8EMU-959).
+    /// Opening another image from the OS's file picker (RA8EMU-959), and
+    /// the Board menu's pick (RA8EMU-1152).
     files: ?*shell_open.Open = null,
+    pick: ?*shell_pick.Pick = null,
     /// The session when it is served in this process; null for a remote one.
     server: ?Server = null,
     /// The per-user listener outside clients connect to (RA8EMU-1156).
@@ -118,13 +121,11 @@ pub const Shell = struct {
         if (self.frame) |*frame| frame.deinit(self.allocator);
         self.layout.deinit();
     }
-
     /// The link's state, or closed when the shell has none.
     pub fn state(self: *const Shell) session_link.State {
         const link = self.link orelse return .closed;
         return link.state;
     }
-
     /// Run one frame. False once the window has asked to close.
     pub fn step(self: *Shell, window: platform.Platform) !bool {
         const size = window.size();
@@ -145,6 +146,7 @@ pub const Shell = struct {
         try self.paySlices();
         if (self.files) |files| files.frame(window, &self.status);
         if (!window.visible()) return true;
+        if (self.pick) |pick| pick.frame(window);
         solved.deinit(self.allocator);
         solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
@@ -214,16 +216,14 @@ pub const Shell = struct {
                 if (self.memory_field) |field| _ = field.handle(event);
             },
             .picked => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
+            .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
             else => {},
         }
     }
 
     /// Page Up or Page Down over a console leaf (RA8EMU-1122).
     fn pageConsole(self: *Shell, event: platform.Event, solved: *const pane_layout.Solved) bool {
-        const key = switch (event) {
-            .key => |key| key,
-            else => return false,
-        };
+        const key = if (event == .key) event.key else return false;
         const console = self.console orelse return false;
         if (!key.down) return false;
         return console.pageIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, key.code);
@@ -235,7 +235,6 @@ pub const Shell = struct {
         const registers = self.registers orelse return false;
         return edit.press(registers, &self.layout, solved, x, y);
     }
-
     /// Offer a press to the text fields and the time bar.
     fn pressFields(self: *Shell, x: i32, y: i32) bool {
         const in_plug = if (self.plug) |plug| plug.press(x, y) else false;

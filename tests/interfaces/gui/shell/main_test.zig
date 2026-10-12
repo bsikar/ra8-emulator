@@ -5,6 +5,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
 const shell_main = gui_app.shell.main;
+const shell_server = gui_app.shell.server;
 const Profile = ra8.host.profiles.Profile;
 const platform = gui_app.platform;
 const Headless = gui_app.headless.Headless;
@@ -183,7 +184,7 @@ test "--frames fails once the session is gone instead of waiting for a load" {
     var shell = gui_app.shell.loop.Shell.init(gpa, try gui_app.pane_layout.twoCore(gpa));
     defer shell.deinit();
     shell.link = &link;
-    shell.server = shell_main.served(&session);
+    shell.server = shell_server.served(&session);
     var window = Headless.init(gpa, 480, 320);
     defer window.deinit();
     try std.testing.expectError(error.ImageNotLoaded, shell_main.drive(std.testing.io, &shell, window.platform(), image, "", 4));

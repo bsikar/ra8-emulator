@@ -53,7 +53,8 @@ pub const Sdl = struct {
     /// shell draws in points and SDL scales every frame up to the pixels.
     ui_scale: u32 = 1,
     /// The OS's file picker for a firmware image (RA8EMU-959).
-    files: dialog.Picker = .{ .kind = 0 },
+    files: dialog.Picker,
+    profiles: dialog.Picker,
 
     /// Opens at most of the screen it lands on (window_size.initial) and
     /// never shrinks under window_size.min (RA8EMU-966). The saved
@@ -91,7 +92,7 @@ pub const Sdl = struct {
 
         // Shifted characters reach the console pane as text events.
         _ = c.SDL_StartTextInput(window);
-        var self = Sdl{ .window = window, .renderer = renderer, .vsync = vsync, .files = .init() };
+        var self = Sdl{ .window = window, .renderer = renderer, .vsync = vsync, .files = .init(&dialog.image_filters), .profiles = .init(&dialog.profile_filters) };
         if (!cpuForced()) {
             self.presenter = geometry.Presenter.init(std.heap.page_allocator, renderer);
         }
@@ -102,6 +103,7 @@ pub const Sdl = struct {
         render_driver.active = "";
         render_driver.gpu = null;
         self.files.deinit();
+        self.profiles.deinit();
         if (self.presenter) |*p| p.deinit();
         if (self.texture) |t| c.SDL_DestroyTexture(t);
         c.SDL_DestroyRenderer(self.renderer);
@@ -123,6 +125,7 @@ pub const Sdl = struct {
         .appearance = appearance,
         .focus = focus,
         .open_image = openImage,
+        .open_profile = openProfile,
         .title = setTitle,
         .toggle_fullscreen = toggleFullscreenVt,
         .fullscreen = fullscreenVt,
@@ -149,6 +152,7 @@ pub const Sdl = struct {
         var ev: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&ev)) {
             if (self.files.take(&ev)) |path| return .{ .picked = path };
+            if (self.profiles.take(&ev)) |path| return .{ .picked_profile = path };
             if (ev.type == c.SDL_EVENT_KEY_DOWN and !ev.key.repeat and window_keys.togglesFullscreen(ev.key.key, mods(ev.key.mod), mac)) {
                 self.toggleFullscreen();
                 continue;
@@ -166,6 +170,12 @@ pub const Sdl = struct {
     fn openImage(ctx: *anyopaque) void {
         const self = from(ctx);
         self.files.show(self.window);
+    }
+
+    /// The Board menu's Open Profile picker (RA8EMU-1152).
+    fn openProfile(ctx: *anyopaque) void {
+        const self = from(ctx);
+        self.profiles.show(self.window);
     }
 
     fn setTitle(ctx: *anyopaque, text: []const u8) void {
