@@ -154,3 +154,50 @@ test "Dispatch with a Zig session reads the Zig core's registers and memory" {
     try std.testing.expectEqualStrings("T05thread:1;", try stub.answer("c", &out));
     try std.testing.expectEqualStrings("0e000000", try stub.answer("pf", &out));
 }
+
+test "the reverse packets walk the recorded window (RA8EMU-1170)" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    defer opened.deinit();
+    const session = opened.session();
+    var target: zig_run.Target = .{ .session = session };
+
+    var pcs: [4]u32 = undefined;
+    for (0..4) |i| {
+        _ = try session.run(.cpu0, .step);
+        pcs[i] = session.live.core.cpu.regs.pc;
+    }
+
+    // A reverse step lands where the previous stop was, then one further back.
+    try expectReply(&target, "bs", "T05thread:1;");
+    try std.testing.expectEqual(pcs[2], session.live.core.cpu.regs.pc);
+    try expectReply(&target, "bs", "T05thread:1;");
+    try std.testing.expectEqual(pcs[1], session.live.core.cpu.regs.pc);
+
+    // Reverse-continue with no breakpoints or faults behind stops at the
+    // window's oldest frame.
+    try expectReply(&target, "bc", "T05thread:1;");
+    try std.testing.expectEqual(pcs[0], session.live.core.cpu.regs.pc);
+
+    // Nothing recorded behind the oldest: the error says so.
+    try expectReply(&target, "bs", "E00");
+    try expectReply(&target, "bc", "E00");
+}
+
+test "reverse-continue stops at a breakpoint in the recorded window (RA8EMU-1170)" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    defer opened.deinit();
+    const session = opened.session();
+    var target: zig_run.Target = .{ .session = session };
+
+    var pcs: [4]u32 = undefined;
+    for (0..4) |i| {
+        _ = try session.run(.cpu0, .step);
+        pcs[i] = session.live.core.cpu.regs.pc;
+    }
+
+    // A break at the second recorded stop: reverse-continue from the newest
+    // lands there, not at the window's oldest.
+    _ = try session.setBreakpoint(.cpu0, .{ .address = pcs[1] });
+    try expectReply(&target, "bc", "T05thread:1;");
+    try std.testing.expectEqual(pcs[1], session.live.core.cpu.regs.pc);
+}

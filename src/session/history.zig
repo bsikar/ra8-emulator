@@ -88,6 +88,11 @@ pub const History = struct {
         return self.ring.items[(self.head + self.count - 1 - @as(usize, back)) % self.capacity];
     }
 
+    /// How many frames the window holds live; the reverse packets walk it.
+    pub fn len(self: *const History) u32 {
+        return self.count;
+    }
+
     /// The bytes the live frames hold, for whoever sizes or displays the ring.
     pub fn totalBytes(self: *const History) usize {
         var total: usize = 0;

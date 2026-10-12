@@ -7,7 +7,8 @@
 //! machine attached, `Z`/`z` set and clear breaks and watches
 //! (rsp_points.zig); without one they are not supported. With a Zig
 //! session attached, `c`, `s`, `vCont` and the thread requests resume and
-//! select cores through it (rsp_zig.zig).
+//! select cores through it, and `bc`/`bs` run it backwards through the
+//! recorded window (rsp_zig.zig, RA8EMU-1170).
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
@@ -42,7 +43,7 @@ pub const packet_size: usize = 0x1000;
 /// gdb's SIGTRAP: the machine stopped where the debugger asked it to.
 pub const halted = "S05";
 
-const supported = std.fmt.comptimePrint("PacketSize={x};qXfer:features:read+", .{packet_size});
+const supported = std.fmt.comptimePrint("PacketSize={x};qXfer:features:read+;ReverseContinue+;ReverseStep+", .{packet_size});
 const xfer = "qXfer:features:read:";
 const memory_error = "E01";
 const request_error = "E00";
