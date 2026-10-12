@@ -231,3 +231,43 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
     ;
     try std.testing.expectEqualStrings(want, out.written());
 }
+
+test "step-back, rewind and timeline walk the recorded window (RA8EMU-1170)" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf",
+    });
+    defer opened.deinit();
+    const open_session = opened.session();
+    var target: zig_script.ZigScript = .{ .image = opened.image(), .session = open_session };
+    var pcs: [3]u32 = undefined;
+    for (0..3) |i| {
+        _ = try open_session.run(.cpu0, .step);
+        pcs[i] = open_session.live.core.cpu.regs.pc;
+    }
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+
+    // One stop back lands the previous recorded stop, where it showed it.
+    try std.testing.expectEqual(.more, try target.apply(.step_back, &out.writer));
+    try std.testing.expectEqual(pcs[1], open_session.live.core.cpu.regs.pc);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "Rewound 1, ") != null);
+
+    // A rewind by count goes back that many recorded stops further.
+    out.clearRetainingCapacity();
+    try std.testing.expectEqual(.more, try target.apply(.{ .rewind = 1 }, &out.writer));
+    try std.testing.expectEqual(pcs[0], open_session.live.core.cpu.regs.pc);
+
+    // The timeline lists the recorded stops, newest first.
+    out.clearRetainingCapacity();
+    try std.testing.expectEqual(.more, try target.apply(.timeline, &out.writer));
+    try std.testing.expect(std.mem.startsWith(u8, out.written(), "#0 "));
+    try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, out.written(), "\n"));
+
+    // A rewind with no count stays on the window's oldest stop, the
+    // recorded run's first, when no breakpoint or fault sits behind it and
+    // the run is already there.
+    out.clearRetainingCapacity();
+    try std.testing.expectEqual(.more, try target.apply(.{ .rewind = null }, &out.writer));
+    try std.testing.expectEqual(pcs[0], open_session.live.core.cpu.regs.pc);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "oldest recorded stop") != null);
+}
