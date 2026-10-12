@@ -21,7 +21,7 @@ fn check(width: i32, height: i32) !void {
         try std.testing.expect(area.w >= pane_layout.min_size and area.h >= pane_layout.min_size);
         try std.testing.expect(area.h > frame.title_h);
         try std.testing.expect(area.x >= 0 and area.y >= 0);
-        try std.testing.expect(area.x + area.w <= room.w and area.y + area.h <= room.h);
+        try std.testing.expect(area.x + area.w <= room.x + room.w and area.y + area.h <= room.y + room.h);
         for (solved.panes.items[index + 1 ..]) |other| {
             const shared = area.intersect(other.area);
             try std.testing.expect(shared.w <= 0 or shared.h <= 0);

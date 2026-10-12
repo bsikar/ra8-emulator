@@ -2,7 +2,9 @@
 //! pane layout (RA8EMU-754). Each leaf gets a title bar naming its pane and
 //! the core it is bound to, the splitters show as gutters, and the time bar
 //! (RA8EMU-807) and the status strip (RA8EMU-759) run along the bottom, the
-//! strip ending in the theme picker (RA8EMU-1165) when the shell has one. What
+//! strip ending in the theme picker (RA8EMU-1165) when the shell has one, and
+//! the menu strip (RA8EMU-968) runs across the top, drawn last so an open
+//! drop-down covers the panes. What
 //! goes inside a leaf comes from a painter, so the window loop fills it and a
 //! test can leave it bare.
 const std = @import("std");
@@ -12,6 +14,7 @@ const pane_layout = @import("../pane_layout.zig");
 const status_strip = @import("../status_strip.zig");
 const time_bar = @import("../time_bar.zig");
 const theme_picker = @import("../theme_picker.zig");
+const menu_bar = @import("../../menu_bar.zig");
 const colors = @import("../colors.zig");
 const Theme = colors.Theme;
 
@@ -42,6 +45,9 @@ pub const Shell = struct {
     /// The theme picker at the strip's right end (RA8EMU-1165), from
     /// src/interfaces/gui/shell/theme.zig; a bare frame has none.
     themes: ?theme_picker.View = null,
+    /// The menu strip's view (RA8EMU-968): which drop-down is out and what
+    /// the enabled rules read; a bare frame has a closed bar.
+    menu: menu_bar.Menu = .{},
     width: i32,
     height: i32,
     painter: ?Painter = null,
@@ -68,10 +74,10 @@ pub fn coreName(core: pane_layout.Core) []const u8 {
     };
 }
 
-/// The panes' share of the window: everything above the time bar and the
-/// status strip.
+/// The panes' share of the window: everything under the menu strip and
+/// above the time bar and the status strip.
 pub fn panesArea(width: i32, height: i32) Rect {
-    return .{ .x = 0, .y = 0, .w = width, .h = @max(0, height - status_strip.height - time_bar.height) };
+    return .{ .x = 0, .y = menu_bar.height, .w = width, .h = @max(0, height - menu_bar.height - status_strip.height - time_bar.height) };
 }
 
 /// The time bar's row, on top of the status strip.
@@ -106,9 +112,12 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
     }
     try time_bar.draw(list, theme, barArea(shell.width, shell.height), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
-    const picker = shell.themes orelse return status_strip.draw(list, theme, strip, &shell.strip);
-    try status_strip.draw(list, theme, theme_picker.rest(strip), &shell.strip);
-    try theme_picker.draw(list, theme, strip, picker);
+    if (shell.themes) |picker| {
+        try status_strip.draw(list, theme, theme_picker.rest(strip), &shell.strip);
+        try theme_picker.draw(list, theme, strip, picker);
+    } else try status_strip.draw(list, theme, strip, &shell.strip);
+    // The strip draws last, so an open drop-down covers the panes.
+    try menu_bar.draw(list, theme, shell.menu, shell.width);
 }
 
 fn drawLeaf(list: *draw_list.DrawList, theme: *const Theme, pane: Pane, area: Rect, painter: ?Painter) !void {

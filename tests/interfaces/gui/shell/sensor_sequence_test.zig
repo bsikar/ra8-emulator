@@ -13,6 +13,7 @@ const draw_list = ra8.render.draw_list;
 const platform = gui_app.platform;
 const pane_layout = gui_app.pane_layout;
 const frame = gui_app.shell.frame;
+const menu_bar = gui_app.menu_bar;
 const shell_devices = gui_app.shell.devices;
 const fault = gui_app.shell.fault;
 const shell_plug = gui_app.shell.plug;
@@ -24,7 +25,7 @@ const image_path = "tests/fixtures/plug/gauge_uart.elf";
 const spec = "max17048@i2c:riic@0x36";
 const endpoint = "i2c:riic@0x36";
 const width = 960;
-const height = 640;
+const height = 640 + menu_bar.height;
 
 /// What one step still waits for, all at once: a parsed report line, this
 /// many session events, a flip count, and growth past a saved side.
