@@ -99,3 +99,13 @@ pub fn isLoopback(address: std.Io.net.IpAddress) bool {
         .ip6 => |v| std.mem.allEqual(u8, v.bytes[0..15], 0) and v.bytes[15] == 1,
     };
 }
+
+/// True when snapshot and restore may be served on `spec`: any Unix socket,
+/// a loopback TCP listener, or a TCP listener the operator opened to state
+/// files with --allow-state-files (RA8EMU-1175).
+pub fn allowsState(spec: Spec, allow_state_files: bool) bool {
+    return switch (spec) {
+        .unix => true,
+        .tcp => |address| allow_state_files or isLoopback(address),
+    };
+}
