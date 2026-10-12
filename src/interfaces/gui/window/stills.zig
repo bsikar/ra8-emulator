@@ -31,12 +31,17 @@ pub const Recorder = struct {
     saved: u32 = 0,
 
     pub fn platform(self: *Recorder) platform_mod.Platform {
-        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .focus = focus, .open_image = openImage, .title = title } };
+        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .focus = focus, .open_image = openImage, .open_profile = openProfile, .title = title } };
     }
 
     fn openImage(ctx: *anyopaque) void {
         const self: *Recorder = @ptrCast(@alignCast(ctx));
         _ = self.inner.openImage();
+    }
+
+    fn openProfile(ctx: *anyopaque) void {
+        const self: *Recorder = @ptrCast(@alignCast(ctx));
+        _ = self.inner.openProfile();
     }
 
     fn title(ctx: *anyopaque, text: []const u8) void {

@@ -7,8 +7,15 @@
 const std = @import("std");
 const c = @import("c.zig").c;
 
-const filters = [_]c.SDL_DialogFileFilter{
+pub const image_filters = [_]c.SDL_DialogFileFilter{
     .{ .name = "Firmware images", .pattern = "elf;axf" },
+    .{ .name = "All files", .pattern = "*" },
+};
+
+/// The Board menu's Open Profile picker offers board profile files
+/// (RA8EMU-1152).
+pub const profile_filters = [_]c.SDL_DialogFileFilter{
+    .{ .name = "Board profiles", .pattern = "board;txt;toml" },
     .{ .name = "All files", .pattern = "*" },
 };
 
@@ -16,11 +23,13 @@ pub const Picker = struct {
     /// The SDL event type a choice comes back as; 0 when SDL had none left
     /// to give, and the picker never goes up.
     kind: u32,
+    /// The file kinds the picker offers.
+    filters: []const c.SDL_DialogFileFilter,
     /// The last path chosen, kept until the next one.
     path: ?[*:0]u8 = null,
 
-    pub fn init() Picker {
-        return .{ .kind = c.SDL_RegisterEvents(1) };
+    pub fn init(filters: []const c.SDL_DialogFileFilter) Picker {
+        return .{ .kind = c.SDL_RegisterEvents(1), .filters = filters };
     }
 
     pub fn deinit(self: *Picker) void {
@@ -32,7 +41,7 @@ pub const Picker = struct {
     /// later as an event of `kind`, and a cancel as nothing.
     pub fn show(self: *const Picker, window: *c.SDL_Window) void {
         if (self.kind == 0) return;
-        c.SDL_ShowOpenFileDialog(chosen, @ptrFromInt(self.kind), window, &filters, filters.len, null, false);
+        c.SDL_ShowOpenFileDialog(chosen, @ptrFromInt(self.kind), window, self.filters.ptr, @intCast(self.filters.len), null, false);
     }
 
     /// The path `ev` carries when it is a choice from the picker. It holds

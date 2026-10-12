@@ -53,6 +53,10 @@ pub const Event = union(enum) {
     /// path is the backend's and holds until the next poll; a picker that
     /// was cancelled sends nothing.
     picked: []const u8,
+    /// The board profile chosen in the picker `openProfile` put up
+    /// (RA8EMU-1152). The path is the backend's and holds until the next
+    /// poll; a picker that was cancelled sends nothing.
+    picked_profile: []const u8,
 };
 
 /// How an executable opens and closes its window. ra8_gui passes
@@ -101,6 +105,10 @@ pub const Platform = struct {
         /// (RA8EMU-959) and returns at once; the choice comes back as a
         /// `picked` event. Null for a backend with no picker.
         open_image: ?*const fn (ctx: *anyopaque) void = null,
+        /// Puts up the OS's own file picker for a board profile
+        /// (RA8EMU-1152) and returns at once; the choice comes back as a
+        /// `picked_profile` event. Null for a backend with no picker.
+        open_profile: ?*const fn (ctx: *anyopaque) void = null,
         /// Sets the window's title; null for a backend with none.
         title: ?*const fn (ctx: *anyopaque, text: []const u8) void = null,
         /// Toggles the window's full-screen state (RA8EMU-966); null for a
@@ -172,6 +180,15 @@ pub const Platform = struct {
     /// has no picker.
     pub fn openImage(self: Platform) bool {
         const put_up = self.vtable.open_image orelse return false;
+        put_up(self.ctx);
+        return true;
+    }
+
+    /// Put up the OS's file picker for a board profile. It does not wait:
+    /// a choice arrives later as a `picked_profile` event. False when the
+    /// backend has no picker.
+    pub fn openProfile(self: Platform) bool {
+        const put_up = self.vtable.open_profile orelse return false;
         put_up(self.ctx);
         return true;
     }

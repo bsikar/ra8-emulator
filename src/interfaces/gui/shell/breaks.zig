@@ -68,6 +68,12 @@ pub const Core = struct {
 pub const Breaks = struct {
     cores: [2]Core = .{ .{}, .{} },
 
+    /// Drops every mark and ask in flight: the session was rebuilt and
+    /// its breakpoint ids are gone (RA8EMU-1152).
+    pub fn reset(self: *Breaks) void {
+        self.cores = .{ .{}, .{} };
+    }
+
     /// The addresses marked on `core`'s pane, oldest first.
     pub fn marks(self: *const Breaks, core: pane_layout.Core) []const u32 {
         const model = &self.cores[@backingInt(core)];

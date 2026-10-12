@@ -1,6 +1,9 @@
 //! shell: the files of src/interfaces/gui/shell/.
 
 pub const board = @import("board/board.zig");
+pub const board_pick = @import("board_pick.zig");
+pub const board_profiles = @import("board_profiles.zig");
+pub const board_store = @import("board_store.zig");
 pub const breaks = @import("breaks.zig");
 pub const camera = @import("camera/camera.zig");
 pub const console = @import("console.zig");
@@ -20,6 +23,7 @@ pub const panes = @import("panes.zig");
 pub const plug = @import("plug.zig");
 pub const register_edit = @import("register_edit.zig");
 pub const registers = @import("registers.zig");
+pub const server = @import("server.zig");
 pub const stack = @import("stack.zig");
 pub const run = @import("run.zig");
 pub const settings_page = @import("settings_page.zig");
