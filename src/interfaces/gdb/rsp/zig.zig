@@ -6,7 +6,8 @@
 //! give the session to that core, so `g`, `m`, `s` and `c` act on it while
 //! the other holds where it stopped (all-stop, scheduler locked). `c` runs budget
 //! after budget, asking the poll between them whether gdb sent an
-//! interrupt, and `s` runs one instruction. The stop replies are the same
+//! interrupt, and `s` runs one instruction. `bc` and `bs` put the run
+//! back through the recorded window (RA8EMU-1170) and reply like a stop. The stop replies are the same
 //! as gdb expects: `T05` for a break or a step, `T05watch:` and friends
 //! for a watch, `T02` for an interrupt and `T0b` when the core faulted.
 const std = @import("std");
@@ -35,6 +36,9 @@ pub const Target = struct {
     pump: bool = false,
     /// True while a pumped continue has run budgets but not stopped yet.
     pending: bool = false,
+    /// Where the run sits in the recorded window: 0 is the newest stop,
+    /// and the reverse packets put it further back.
+    back: u32 = 0,
 };
 
 /// Whether `request` is one this file answers.
@@ -44,7 +48,7 @@ pub fn handles(request: []const u8) bool {
     if (std.mem.eql(u8, request, "qfThreadInfo") or std.mem.eql(u8, request, "qsThreadInfo")) return true;
     if (std.mem.eql(u8, request, "qC")) return true;
     return switch (request[0]) {
-        'c', 's', '?', 'H', 'T' => true,
+        'b', 'c', 's', '?', 'H', 'T' => true,
         else => false,
     };
 }
@@ -57,6 +61,7 @@ pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 
     if (std.mem.eql(u8, request, "qsThreadInfo")) return copy(out, "l");
     if (std.mem.eql(u8, request, "qC")) return print(out, "QC{d}", .{thread(target)});
     return switch (request[0]) {
+        'b' => reverse(target, request, out),
         'c' => resume_(target, .cont, out),
         's' => resume_(target, .step, out),
         '?' => stopReply(target, out),
@@ -81,6 +86,38 @@ fn vcont(target: *Target, actions: []const u8, out: []u8) Error![]const u8 {
     };
 }
 
+/// The reverse packets: `bs` puts the run one recorded stop back, `bc`
+/// rewinds to the newest breakpoint or fault behind it in the recorded
+/// window, the window's oldest stop when `bc` finds neither (RA8EMU-1170).
+/// Without a history the reply is the error.
+fn reverse(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
+    const step = std.mem.eql(u8, request, "bs");
+    if (!step and !std.mem.eql(u8, request, "bc")) return copy(out, request_error);
+    const history = target.session.history orelse return copy(out, request_error);
+    if (history.len() == 0) return copy(out, request_error);
+    var at = target.back + 1;
+    if (step) {
+        if (at >= history.len()) return copy(out, request_error);
+    } else {
+        while (at < history.len()) : (at += 1) {
+            const frame = history.frame(at) catch break;
+            if (frame.tag == 1 or breakAt(target, frame.pc)) break;
+        }
+        if (at >= history.len()) at = history.len() - 1;
+        if (at <= target.back) return copy(out, request_error);
+    }
+    target.session.rewind(target.session.currentCore(), at) catch return copy(out, request_error);
+    target.back = at;
+    return reply(target, out, sigtrap);
+}
+
+/// Whether the selected core has a breakpoint set at `pc`, for a reverse
+/// continue looking for where to land.
+fn breakAt(target: *Target, pc: u32) bool {
+    const machine = target.session.machine(target.session.currentCore()) catch return false;
+    return machine.breaks.hit(pc) != null;
+}
+
 fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u8 {
     if (target.pump) return pumpResume(target, command, out);
     var ended = target.session.run(target.session.currentCore(), command) catch return copy(out, request_error);
@@ -94,6 +131,7 @@ fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u
         ended = target.session.run(target.session.currentCore(), .cont) catch return copy(out, request_error);
     }
     target.last = ended;
+    target.back = 0;
     return stopReply(target, out);
 }
 
@@ -177,6 +215,7 @@ fn pumpResume(target: *Target, command: session_api.Run, out: []u8) Error![]cons
         return out[0..0];
     }
     target.last = ended;
+    target.back = 0;
     return stopReply(target, out);
 }
 
@@ -194,11 +233,13 @@ pub fn pumpTick(target: *Target, out: []u8) Error![]const u8 {
             const stopped = target.session.interrupt(target.session.currentCore()) catch return copy(out, request_error);
             target.pending = false;
             target.last = .{ .stop = stopped };
+            target.back = 0;
             return stopReply(target, out);
         }
         return out[0..0];
     }
     target.pending = false;
     target.last = ended;
+    target.back = 0;
     return stopReply(target, out);
 }
