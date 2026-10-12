@@ -45,6 +45,7 @@ pub const flame_pane = @import("ui/flame_pane.zig");
 pub const hex_entry = @import("ui/hex_entry.zig");
 pub const pane_edit = @import("pane_edit.zig");
 pub const present_gate = @import("present_gate.zig");
+pub const lcd_pacing = @import("lcd_pacing.zig");
 pub const menu = @import("menu.zig");
 pub const menu_bar = @import("menu_bar.zig");
 pub const pane_layout = @import("ui/pane_layout.zig");
