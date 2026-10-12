@@ -6,7 +6,6 @@ const cli_app = @import("cli_app");
 const test_paths = @import("test_paths");
 const Connection = ra8.rpc.socket_transport.Connection;
 const serve_peer = @import("../serve_peer.zig");
-const proto = ra8.rpc.session.rpc;
 const image_path = serve_peer.image_path;
 const Term = std.process.Child.Term;
 const on_windows = @import("builtin").os.tag == .windows;
@@ -127,20 +126,70 @@ test "listen specs: an empty host and localhost bind loopback, a bracketed v6 li
     try std.testing.expectError(error.BadListen, Spec.parse("tcp::70000"));
 }
 
-test "snapshot is refused on a non-loopback TCP listener (RA8EMU-1175)" {
-    const gpa = std.testing.allocator;
-    var line: [128]u8 = undefined;
-    var started = try listen("tcp:0.0.0.0:0", &line);
-    errdefer started.child.kill(std.testing.io);
-    const colon = std.mem.lastIndexOfScalar(u8, started.bound, ':').?;
-    const port = try std.fmt.parseInt(u16, started.bound[colon + 1 ..], 10);
-    var connection = try Connection.tcp(std.testing.io, try std.Io.net.IpAddress.parse("127.0.0.1", port));
-    const peer = try serve_peer.Peer.init(gpa, connection.transport());
-    defer peer.deinit();
-    try peer.client.greet(peer.tx);
-    try std.testing.expectEqual(proto.capabilities, (try peer.next()).ready);
-    try std.testing.expectError(error.Refused, peer.call(proto.Ack, proto.StatePath, .snapshot, .{ .path = "/tmp/x.ra8snap" }));
-    connection.close();
-    try stop(&started.child);
-    try std.testing.expectEqual(Term{ .exited = 0 }, try started.child.wait(std.testing.io));
+/// A state hook that counts the host-file calls it receives.
+const CountingState = struct {
+    saves: usize = 0,
+    restores: usize = 0,
+    path: ?[]const u8 = null,
+
+    fn hook(self: *CountingState) ra8.session.board.state.Hook {
+        return .{ .context = self, .saveFn = save, .restoreFn = restore };
+    }
+
+    fn save(context: *anyopaque, path: []const u8) anyerror!void {
+        const self: *CountingState = @ptrCast(@alignCast(context));
+        self.saves += 1;
+        self.path = path;
+    }
+
+    fn restore(context: *anyopaque, path: []const u8) anyerror!void {
+        const self: *CountingState = @ptrCast(@alignCast(context));
+        self.restores += 1;
+        self.path = path;
+    }
+};
+
+/// The state hook a serve on `text` keeps, by the policy serve/main.zig applies.
+fn keptState(text: []const u8, allow: bool, counting: *CountingState) !?ra8.session.board.state.Hook {
+    const spec = try cli_app.serve.listen.Spec.parse(text);
+    return if (cli_app.serve.listen.allowsState(spec, allow)) counting.hook() else null;
+}
+
+test "snapshot and restore are refused on non-loopback TCP listeners without host-file calls (RA8EMU-1175)" {
+    const files = ra8.rpc.session.files;
+    const refused: u16 = ra8.rpc.session.server.app_codes.refused;
+    var scratch: [64]u8 = undefined;
+    for ([_][]const u8{ "tcp:0.0.0.0:7000", "tcp:[::]:7000", "tcp:192.0.2.1:7000" }) |text| {
+        var counting: CountingState = .{};
+        var context: ra8.rpc.session.server.Context = .{ .session = undefined, .scratch = &scratch, .state = try keptState(text, false, &counting) };
+        try std.testing.expect(context.state == null);
+        const args: ra8.rpc.session.rpc.StatePath = .{ .path = "x.ra8snap" };
+        const snapshot = files.snapshot(&context, args);
+        try std.testing.expect(snapshot == .err);
+        try std.testing.expectEqual(refused, @backingInt(snapshot.err));
+        const restore = files.restore(&context, args);
+        try std.testing.expect(restore == .err);
+        try std.testing.expectEqual(refused, @backingInt(restore.err));
+        try std.testing.expectEqual(@as(usize, 0), counting.saves);
+        try std.testing.expectEqual(@as(usize, 0), counting.restores);
+        try std.testing.expect(counting.path == null);
+    }
+}
+
+test "snapshot and restore reach host hooks on loopback, unix and explicit override listeners (RA8EMU-1175)" {
+    var scratch: [64]u8 = undefined;
+    const cases = [_]struct { []const u8, bool }{ .{ "tcp::7000", false }, .{ "tcp:localhost:7000", false }, .{ "tcp:127.0.0.2:7000", false }, .{ "tcp:[::1]:7000", false }, .{ "unix:/tmp/s", false }, .{ "tcp:0.0.0.0:7000", true }, .{ "tcp:[::]:7000", true }, .{ "tcp:192.0.2.1:7000", true } };
+    for (cases) |case| {
+        var counting: CountingState = .{};
+        var context: ra8.rpc.session.server.Context = .{ .session = undefined, .scratch = &scratch, .state = try keptState(case[0], case[1], &counting) };
+        try std.testing.expect(context.state != null);
+        try std.testing.expect(ra8.rpc.session.files.snapshot(&context, .{ .path = "save.ra8snap" }) == .ok);
+        try std.testing.expectEqual(@as(usize, 1), counting.saves);
+        try std.testing.expectEqual(@as(usize, 0), counting.restores);
+        try std.testing.expectEqualStrings("save.ra8snap", counting.path.?);
+        try std.testing.expect(ra8.rpc.session.files.restore(&context, .{ .path = "restore.ra8snap" }) == .ok);
+        try std.testing.expectEqual(@as(usize, 1), counting.saves);
+        try std.testing.expectEqual(@as(usize, 1), counting.restores);
+        try std.testing.expectEqualStrings("restore.ra8snap", counting.path.?);
+    }
 }

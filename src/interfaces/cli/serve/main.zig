@@ -135,12 +135,9 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     // operator asked for them there (RA8EMU-1175): a network peer could
     // otherwise overwrite or read files as the serving user.
     switch (asked.where) {
-        .listen => |spec| switch (spec) {
-            .tcp => |addr| if (!listen.isLoopback(addr) and !asked.allow_state_files) {
-                setup.context.state = null;
-                std.debug.print("serve: snapshot and restore are off on a non-loopback listener; pass --allow-state-files to keep them\n", .{});
-            },
-            .unix => {},
+        .listen => |spec| if (!listen.allowsState(spec, asked.allow_state_files)) {
+            setup.context.state = null;
+            std.debug.print("serve: snapshot and restore are off on a non-loopback listener; pass --allow-state-files to keep them\n", .{});
         },
         .stdio => {},
     }
