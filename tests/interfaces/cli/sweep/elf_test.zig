@@ -13,6 +13,175 @@ const matrix = ra8.board.sizing.matrix;
 const profile = ra8.board.profile;
 
 const fixture = "tests/fixtures/sizing/ext_stream.elf";
+const on_windows = @import("builtin").os.tag == .windows;
+const win32 = ra8.host.win32;
+
+test "sweep scratch selects native temp variables and ignores empty values" {
+    const gpa = std.testing.allocator;
+    var env: std.process.Environ.Map = .init(gpa);
+    defer env.deinit();
+    try scratchEquals(&env, .linux, &.{ "/tmp", "ra8-sweep-12.board" });
+    try std.testing.expectError(error.NoTempDirectory, sweep_elf.scratchPath(gpa, &env, .windows, 0x12));
+    try env.put("TMPDIR", "posix-temp");
+    try scratchEquals(&env, .linux, &.{ "posix-temp", "ra8-sweep-12.board" });
+    try env.put("USERPROFILE", "native-home");
+    try scratchEquals(&env, .windows, &.{ "native-home", "AppData", "Local", "Temp", "ra8-sweep-12.board" });
+    try env.put("TEMP", "native-temp");
+    try scratchEquals(&env, .windows, &.{ "native-temp", "ra8-sweep-12.board" });
+    try env.put("TMP", "native-tmp");
+    try scratchEquals(&env, .windows, &.{ "native-tmp", "ra8-sweep-12.board" });
+    try env.put("TMP", "");
+    try scratchEquals(&env, .windows, &.{ "native-temp", "ra8-sweep-12.board" });
+    try env.put("TMPDIR", "");
+    try scratchEquals(&env, .linux, &.{ "/tmp", "ra8-sweep-12.board" });
+}
+
+fn scratchEquals(env: *const std.process.Environ.Map, os: std.Target.Os.Tag, parts: []const []const u8) !void {
+    const gpa = std.testing.allocator;
+    const expected = try std.fs.path.join(gpa, parts);
+    defer gpa.free(expected);
+    const actual = try sweep_elf.scratchPath(gpa, env, os, 0x12);
+    defer gpa.free(actual);
+    try std.testing.expectEqualStrings(expected, actual);
+}
+
+test "a failed sweep child cleans only its exclusively reserved scratch file" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "keep.board", .data = "unrelated" });
+    const base = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(base);
+    var env: std.process.Environ.Map = .init(gpa);
+    defer env.deinit();
+    try env.put(if (on_windows) "TMP" else "TMPDIR", base);
+    var rows: [matrix.count]ra8.board.sizing.sweep.Row = undefined;
+    try std.testing.expectError(error.ChildFailed, sweep_elf.allWithExe(gpa, std.testing.io, &env, test_paths.emulator, .{ .path = "missing-sweep-owned-fixture.elf", .ms = "1" }, null, &rows));
+    try onlySentinel(tmp.dir);
+}
+
+test "a completed sweep cleans its scratch profile after every matrix row" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "keep.board", .data = "unrelated" });
+    const base = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(base);
+    var env: std.process.Environ.Map = .init(gpa);
+    defer env.deinit();
+    try env.put(if (on_windows) "TMP" else "TMPDIR", base);
+    var rows: [matrix.count]ra8.board.sizing.sweep.Row = undefined;
+    try sweep_elf.allWithExe(gpa, std.testing.io, &env, test_paths.emulator, .{ .path = fixture, .ms = "0" }, null, &rows);
+    for (rows, 0..) |row, index| try std.testing.expectEqual(matrix.at(index), row.config);
+    try onlySentinel(tmp.dir);
+}
+
+fn onlySentinel(dir: std.Io.Dir) !void {
+    var it = dir.iterate();
+    const entry = (try it.next(std.testing.io)).?;
+    try std.testing.expectEqualStrings("keep.board", entry.name);
+    try std.testing.expectEqual(@as(?std.Io.Dir.Entry, null), try it.next(std.testing.io));
+    const bytes = try dir.readFileAlloc(std.testing.io, "keep.board", std.testing.allocator, .limited(100));
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualStrings("unrelated", bytes);
+}
+
+test "an interrupted sweep removes its scratch profile and preserves siblings" {
+    try interruptedCase(.interrupt);
+}
+
+test "sweep cleans scratch after Ctrl-C or SIGTERM" {
+    try interruptedCase(.termination);
+}
+
+const Signal = enum { interrupt, termination };
+
+fn interruptedCase(signal: Signal) !void {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "keep.board", .data = "unrelated" });
+    const base = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(base);
+    var child = try interruptedSweep(gpa, base);
+    const started = try provenance(&child);
+    errdefer {
+        if (provenance(&child)) |now| {
+            if (now == started) child.kill(std.testing.io);
+        } else |_| {}
+    }
+    // A ready marker is emitted after reservation and handler installation.
+    var buffer: [256]u8 = undefined;
+    var at: usize = 0;
+    while (true) {
+        var byte: [1]u8 = undefined;
+        var into = [_][]u8{&byte};
+        if (try child.stderr.?.readStreaming(std.testing.io, &into) == 0) return error.EndOfStream;
+        if (byte[0] == '\n') {
+            if (std.mem.eql(u8, buffer[0..at], "sweep: scratch profile ready")) break;
+            at = 0;
+        } else {
+            if (at == buffer.len) return error.LineTooLong;
+            buffer[at] = byte[0];
+            at += 1;
+        }
+    }
+    std.debug.print("owned sweep pid={d} executable={s} scratch-directory={s}\n", .{ if (on_windows) win32.GetProcessId(child.id.?) else @as(u32, @intCast(child.id.?)), test_paths.emulator, base });
+    try std.testing.expectEqual(started, try provenance(&child));
+    try interrupt(&child, signal);
+    const result = try child.wait(std.testing.io);
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 1 }, result);
+    try onlySentinel(tmp.dir);
+}
+
+fn interruptedSweep(gpa: std.mem.Allocator, base: []const u8) !std.process.Child {
+    var env: std.process.Environ.Map = if (on_windows) try (std.process.Environ{ .block = .global }).createMap(gpa) else .init(gpa);
+    defer env.deinit();
+    try env.put(if (on_windows) "TMP" else "TMPDIR", base);
+    const argv = [_][]const u8{ test_paths.emulator, "sweep", "--elf", fixture, "--ms", "1000" };
+    if (!on_windows) return std.process.spawn(std.testing.io, .{ .argv = &argv, .environ_map = &env, .pgid = 0, .stdout = .ignore, .stderr = .pipe });
+    const command = try std.fmt.allocPrint(gpa, "\"{s}\" sweep --elf \"{s}\" --ms 1000", .{ test_paths.emulator, fixture });
+    defer gpa.free(command);
+    const wide = try std.unicode.utf8ToUtf16LeAllocZ(gpa, command);
+    defer gpa.free(wide);
+    const block = try env.createWindowsBlock(gpa, .{});
+    defer block.deinit(gpa);
+    const ends = try ra8.host.pipe_pair.create(.{});
+    errdefer ra8.host.read.close(ends[0]);
+    defer ra8.host.read.close(ends[1]);
+    try std.testing.expect(win32.SetHandleInformation(ends[1], 1, 1).toBool());
+    var startup: std.os.windows.STARTUPINFOW = std.mem.zeroes(std.os.windows.STARTUPINFOW);
+    startup.cb = @sizeOf(@TypeOf(startup));
+    startup.dwFlags = std.os.windows.STARTF_USESTDHANDLES | std.os.windows.STARTF_USESHOWWINDOW;
+    startup.wShowWindow = 0;
+    startup.hStdError = ends[1];
+    var info: win32.ProcessInfo = undefined;
+    const flags: std.os.windows.CreateProcessFlags = .{ .create_new_console = true, .create_new_process_group = true, .create_unicode_environment = true };
+    try std.testing.expect(win32.CreateProcessW(null, wide, null, null, .TRUE, @bitCast(flags), @ptrCast(@constCast(block.slice.ptr)), null, &startup, &info).toBool());
+    return .{ .id = info.process, .thread_handle = info.thread, .stdin = null, .stdout = null, .stderr = .{ .handle = ends[0], .flags = .{ .nonblocking = false } }, .request_resource_usage_statistics = false };
+}
+
+fn interrupt(child: *std.process.Child, signal: Signal) !void {
+    if (!on_windows) return std.posix.kill(-child.id.?, if (signal == .interrupt) .INT else .TERM);
+    const pid = win32.GetProcessId(child.id.?);
+    try std.testing.expect(pid != 0);
+    _ = win32.FreeConsole();
+    try std.testing.expect(win32.AttachConsole(pid).toBool());
+    defer {
+        _ = win32.FreeConsole();
+        _ = win32.AttachConsole(std.math.maxInt(u32));
+    }
+    if (signal == .termination) {
+        console_seen.store(false, .release);
+        try std.testing.expect(win32.SetConsoleCtrlHandler(testConsoleStop, .TRUE).toBool());
+        try std.testing.expect(win32.GenerateConsoleCtrlEvent(0, 0).toBool());
+        for (0..100) |_| {
+            if (console_seen.load(.acquire)) break;
+            win32.Sleep(10);
+        }
+        try std.testing.expect(console_seen.load(.acquire));
+    } else try std.testing.expect(win32.GenerateConsoleCtrlEvent(1, pid).toBool());
+}
 
 test "--elf takes a path, one way to end, and a part" {
     const options = try sweep_cli.parse(&[_][]const u8{ "--elf", "a.elf", "--stop-sym", "done", "1", "--part", "ra8p1", "--report", "json" });
@@ -85,4 +254,70 @@ test "the fixture moves the same bytes on every row and takes longer on slow mem
     }
     try std.testing.expect(slow.total_ns > fast.total_ns);
     try std.testing.expect(slow.stall_ns > fast.stall_ns);
+}
+
+test "sweep exclusive reservation refuses a collision without changing its bytes" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "owned.board", .data = "preserve" });
+    const path = try tmp.dir.realPathFileAlloc(std.testing.io, "owned.board", std.testing.allocator);
+    defer std.testing.allocator.free(path);
+    if (on_windows) {
+        try std.testing.expectError(error.ScratchCreateFailed, sweep_elf.reserveScratch(std.testing.allocator, std.testing.io, path));
+    } else {
+        try std.testing.expectError(error.PathAlreadyExists, sweep_elf.reserveScratch(std.testing.allocator, std.testing.io, path));
+    }
+    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "owned.board", std.testing.allocator, .limited(100));
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expectEqualStrings("preserve", bytes);
+}
+
+// Verify the exact owned executable and kernel birth identity before signals.
+fn provenance(child: *std.process.Child) !i64 {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    const expected = try std.Io.Dir.cwd().realPathFileAlloc(io, test_paths.emulator, gpa);
+    defer gpa.free(expected);
+    if (on_windows) {
+        const windows = std.os.windows;
+        var times: windows.KERNEL_USER_TIMES = undefined;
+        try std.testing.expectEqual(windows.NTSTATUS.SUCCESS, windows.ntdll.NtQueryInformationProcess(child.id.?, .Times, &times, @sizeOf(@TypeOf(times)), null));
+        var buffer: [8192]u8 align(@alignOf(windows.UNICODE_STRING)) = undefined;
+        try std.testing.expectEqual(windows.NTSTATUS.SUCCESS, windows.ntdll.NtQueryInformationProcess(child.id.?, .ImageFileNameWin32, &buffer, buffer.len, null));
+        const name: *const windows.UNICODE_STRING = @ptrCast(&buffer);
+        const text = try std.unicode.utf16LeToUtf8Alloc(gpa, name.Buffer.?[0 .. name.Length / 2]);
+        defer gpa.free(text);
+        const actual = if (std.mem.startsWith(u8, text, "\\\\?\\") or std.mem.startsWith(u8, text, "\\??\\")) text[4..] else text;
+        const wanted = if (std.mem.startsWith(u8, expected, "\\\\?\\")) expected[4..] else expected;
+        try std.testing.expect(std.ascii.eqlIgnoreCase(actual, wanted));
+        std.debug.print("PROVENANCE pid={d} exe={s} birth={d}\n", .{ win32.GetProcessId(child.id.?), actual, times.CreationTime });
+        return times.CreationTime;
+    }
+    const directory = try std.fmt.allocPrint(gpa, "/proc/{d}", .{child.id.?});
+    defer gpa.free(directory);
+    const exe = try std.fs.path.join(gpa, &.{ directory, "exe" });
+    defer gpa.free(exe);
+    const actual = try std.Io.Dir.cwd().realPathFileAlloc(io, exe, gpa);
+    defer gpa.free(actual);
+    try std.testing.expectEqualStrings(expected, actual);
+    const path = try std.fs.path.join(gpa, &.{ directory, "stat" });
+    defer gpa.free(path);
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+    var storage: [4096]u8 = undefined;
+    var into = [_][]u8{&storage};
+    const stat = storage[0..try file.readStreaming(io, &into)];
+    const close = std.mem.lastIndexOfScalar(u8, stat, ')') orelse return error.BadProcessStat;
+    var fields = std.mem.tokenizeScalar(u8, stat[close + 1 ..], ' ');
+    for (0..19) |_| _ = fields.next() orelse return error.BadProcessStat;
+    const started = try std.fmt.parseInt(i64, fields.next() orelse return error.BadProcessStat, 10);
+    std.debug.print("PROVENANCE pid={d} exe={s} birth_ticks={d}\n", .{ child.id.?, actual, started });
+    return started;
+}
+
+var console_seen = std.atomic.Value(bool).init(false);
+
+fn testConsoleStop(_: win32.DWORD) callconv(.winapi) win32.BOOL {
+    console_seen.store(true, .release);
+    return .TRUE;
 }
