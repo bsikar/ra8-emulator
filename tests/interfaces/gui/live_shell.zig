@@ -38,7 +38,7 @@ pub const Live = struct {
     /// images run a 1 GHz clock, which the session cannot keep up with.
     pub fn open(self: *Live, image: []const u8, milli: u64) !void {
         const gpa = std.testing.allocator;
-        try self.session.open(gpa, std.testing.io, image);
+        try self.session.open(gpa, std.testing.io, image, null);
         self.rx = try gpa.alloc(u8, 2 * Env.max_frame);
         self.tx = try gpa.alloc(u8, Env.max_frame);
         self.link.open(self.session.transport(), self.rx, self.tx);

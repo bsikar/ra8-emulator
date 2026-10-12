@@ -100,7 +100,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         return 2;
     };
     var setup: served_setup.Served = undefined;
-    setup.open(allocator, io, asked.elf) catch |err| {
+    setup.open(allocator, io, asked.elf, null) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
         return 1;
     };

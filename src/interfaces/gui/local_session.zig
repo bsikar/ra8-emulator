@@ -15,10 +15,11 @@ pub const LocalSession = struct {
     loop: rpc.Loopback,
     host: served.Host,
 
-    /// Open `elf_path` and serve it. The host and the context point into
-    /// `self`, so it stays put until `deinit`.
-    pub fn open(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8) !void {
-        try self.setup.open(allocator, io, elf_path);
+    /// Open `elf_path` and serve it, on the board profile `board_profile`
+    /// names (RA8EMU-1152; null is the shipped default). The host and the
+    /// context point into `self`, so it stays put until `deinit`.
+    pub fn open(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8) !void {
+        try self.setup.open(allocator, io, elf_path, board_profile);
         errdefer self.setup.deinit();
         const size = 2 * proto.Client.Env.max_frame;
         const to_server = try allocator.alloc(u8, size);

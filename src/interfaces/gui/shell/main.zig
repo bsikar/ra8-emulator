@@ -225,7 +225,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
 /// Serve the image in-process and run the shell on it.
 fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
     var session: local_session.LocalSession = undefined;
-    try session.open(allocator, io, args.image);
+    try session.open(allocator, io, args.image, null);
     defer session.deinit();
     session.setup.stageApps(io, allocator, args.apps[0..args.app_count]) catch |err| {
         std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});

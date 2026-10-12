@@ -170,7 +170,7 @@ test "--frames ends a window nobody closes, after that many frames with the imag
 test "--frames fails once the session is gone instead of waiting for a load" {
     const gpa = std.testing.allocator;
     var session: gui_app.local_session.LocalSession = undefined;
-    try session.open(gpa, std.testing.io, image);
+    try session.open(gpa, std.testing.io, image, null);
     defer session.deinit();
     const Env = ra8.rpc.session.rpc.Client.Env;
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);

@@ -228,3 +228,27 @@ test "RA8EMU-959: an image loaded over another is the one a firmware reset resta
     try std.testing.expectEqual(@as(?u32, 0x020C_0000), opened.loadedImage(.cpu0).?.vectorBase());
     try std.testing.expectEqual(@as(u32, 0x020C_0000), reboot.vector_base);
 }
+
+test "RA8EMU-1152: the harness opens on the board profile it is given" {
+    if (builtin.mode != .fast) return error.SkipZigTest;
+    const custom =
+        \\# Test board, profile format version 1.
+        \\version=1
+        \\ospi=size:16777216,width:8,clock_hz:166666667,latency_cycles:8,burst:incrementing16
+        \\sdram=size:8388608,width:32,clock_hz:133000000,latency_cycles:3,burst:incrementing16
+        \\memory_window_cycles=1000000
+        \\led=P600,0x001F,TEST LED
+        \\panel=sample_480x272
+    ;
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = image_path,
+        .board_profile = custom,
+    });
+    defer opened.deinit();
+
+    try std.testing.expectEqual(@as(u32, 16777216), opened.board().external_memory.ospi.size);
+    try std.testing.expectEqual(@as(u32, 8388608), opened.board().external_memory.sdram.size);
+    const profile = opened.boardProfile();
+    try std.testing.expectEqualStrings("TEST LED", profile.leds[0].label);
+    try std.testing.expect(profile.panel != null);
+}

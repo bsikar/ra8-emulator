@@ -102,7 +102,7 @@ fn settle(startup: *shell_startup.Startup, devices: *shell_devices.Devices) !voi
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     var session: local_session.LocalSession = undefined;
-    try session.open(gpa, io, image);
+    try session.open(gpa, io, image, null);
     defer session.deinit();
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
     defer gpa.free(rx);

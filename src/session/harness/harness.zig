@@ -11,6 +11,7 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const memory_load = @import("ra8_chip").core.cpu.memory.load;
 const read_image = @import("ra8_board").image.load;
 const Board = @import("ra8_board").board.Board;
+const profile = @import("ra8_board").profile;
 const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
 const Reboot = @import("ra8_chip").core.reboot.Reboot;
 const session_plug = @import("../board/plug.zig");
@@ -37,6 +38,8 @@ const txm_debug = @import("../txm/debug.zig");
 const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
 const decode = @import("ra8_chip").core.cpu.decode;
 pub const stacks = @import("stacks.zig");
+const load_input = @import("load_input.zig");
+const block_cache = @import("block_cache.zig");
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;
@@ -47,6 +50,10 @@ pub const Options = struct {
     elf_path: []const u8,
     device: part.Part = .ra8p1,
     input_script: ?[]const u8 = null,
+    /// The board profile's text (RA8EMU-1152); null is the shipped EK-RA8D2
+    /// default. The text stays the caller's; the labels parsed out of it
+    /// point into it and must outlive the harness.
+    board_profile: ?[]const u8 = null,
     /// Where snapshots live (RA8EMU-1175); null keeps bare names in the
     /// working directory.
     state_dir: ?[]const u8 = null,
@@ -98,6 +105,9 @@ const State = struct {
     bytes: []u8,
     image: elf.Image,
     board: Board,
+    /// The board profile the run opened with, its labels pointing into the
+    /// caller's text (RA8EMU-1152).
+    profile: profile.Profile = undefined,
     cpu0: Cpu0,
     memory: BoardBus,
     /// CPU0's MPU check, armed as a plain run arms it (boot.zig).
@@ -172,6 +182,11 @@ pub const Harness = struct {
 
     pub fn board(self: *Harness) *Board {
         return &self.state.board;
+    }
+
+    /// The board profile this harness opened with (RA8EMU-1152).
+    pub fn boardProfile(self: *Harness) *const profile.Profile {
+        return &self.state.profile;
     }
 
     pub fn guest(self: *Harness) Guest {
@@ -283,7 +298,7 @@ pub const Harness = struct {
         state.plugs.deinit();
         state.plugs_arena.deinit();
         state.cpu0.close();
-        dropBlocks(state.formed);
+        block_cache.drop(state.formed);
         state.board.deinit();
         state.loading.deinit();
         state.history.deinit();
@@ -305,8 +320,11 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.board = Board.init(allocator);
     errdefer state.board.deinit();
     state.board.part = options.device;
+    state.profile = try profile.parse(options.board_profile orelse profile.ek_ra8d2);
+    state.board.external_memory = state.profile.memory;
+    try state.board.nor.resize(state.profile.memory.ospi.size);
     state.board.clock.pace.mode = .virtual;
-    try loadInput(allocator, io, &state.board, options.input_script);
+    try load_input.load(allocator, io, &state.board, options.input_script);
     state.cpu0 = .{};
     state.tracer = null;
     errdefer state.cpu0.close();
@@ -330,8 +348,8 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.pending.clear_due = &state.quiet.clear_due;
     state.decoded = .{};
     state.cpu.decoded = &state.decoded;
-    state.formed = try formBlocks();
-    errdefer dropBlocks(state.formed);
+    state.formed = try block_cache.form();
+    errdefer block_cache.drop(state.formed);
     state.cpu.blocks = state.formed;
     // CPACR and the FP context words reach the core's FP state, as in a
     // plain run (boot.zig); otherwise every FP instruction is NOCP (RA8EMU-950).
@@ -370,26 +388,4 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
     return .{ .state = state };
-}
-
-fn loadInput(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8) !void {
-    const named = path orelse return;
-    const text = try std.Io.Dir.cwd().readFileAlloc(io, named, allocator, .limited(limits.max_input_bytes));
-    defer allocator.free(text);
-    try board.input_script.parse(text);
-}
-
-/// A block cache watching every store, so a write over code drops its
-/// blocks (code_lines.zig).
-fn formBlocks() !*decode.block_cache.BlockCache {
-    const cache = try std.heap.page_allocator.create(decode.block_cache.BlockCache);
-    errdefer std.heap.page_allocator.destroy(cache);
-    cache.init();
-    try decode.code_lines.watch(&cache.lines);
-    return cache;
-}
-
-fn dropBlocks(cache: *decode.block_cache.BlockCache) void {
-    decode.code_lines.unwatch(&cache.lines);
-    std.heap.page_allocator.destroy(cache);
 }
