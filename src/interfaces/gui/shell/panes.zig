@@ -118,8 +118,8 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .camera) if (self.camera) |camera| {
-        if (self.camera_file) |file| return shell_camera_file.draw(list, theme, body, camera, file);
-        return shell_camera.draw(list, theme, body, camera);
+        if (self.camera_file) |file| return shell_camera_file.draw(table, theme, body, camera, file);
+        return shell_camera.draw(table, theme, body, camera);
     };
     if (pane.kind == .registers) if (self.registers) |pair| {
         const model = pair.of(pane.core);

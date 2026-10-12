@@ -13,6 +13,7 @@ const session_link = @import("../../session_link.zig");
 const Theme = @import("../../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const pane_layout = @import("../../ui/pane_layout.zig");
 const shell_frame = @import("../../ui/shell/frame.zig");
 const camera_panel = @import("../../camera/panel.zig");
@@ -143,13 +144,44 @@ pub fn layoutIn(body: draw_list.Rect) camera_view.Layout {
 }
 
 /// Draw the panel at the top of `body`, its note on the row below.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect, camera: *const Camera) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_list.Rect, camera: *const Camera) !void {
     const layout = layoutIn(body);
-    try camera_view.draw(list, theme, layout, camera.panel);
+    try camera_view.draw(table, theme, layout, camera.panel);
     const said = camera.note() orelse return;
     const area = layout.area();
     const y = area.y + area.h + shell_frame.pad;
     const room = body.w - 2 * shell_frame.pad;
     if (room <= 0 or y + font.glyph_h > body.y + body.h) return;
-    try font.draw(list, layout.x, y, font.fit(said, @intCast(room)), theme.muted);
+    drawText(table, layout.x, y, font.fit(said, @intCast(room)), word(theme.muted), word(theme.background));
+}
+
+/// `text` drawn at `x`, `y` through the shared Paint table.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
