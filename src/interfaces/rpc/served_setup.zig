@@ -63,6 +63,7 @@ pub const Served = struct {
         self.context.camera = .{ .context = self, .setFn = setCamera };
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
+        self.context.host_clock = .{ .context = self, .nowFn = hostClock };
     }
 
     /// Sample CPU0's call stacks every `every` instructions and answer
@@ -109,6 +110,12 @@ pub const Served = struct {
     }
 
     /// RA8EMU-832: turn RTOS tracing on; safe to call when it already is.
+    /// The host clock the lcd_dirty rate measures against (RA8EMU-822).
+    fn hostClock(context: *anyopaque) u64 {
+        const self: *Served = @ptrCast(@alignCast(context));
+        return @intCast(@max(0, std.Io.Timestamp.now(self.io, .awake).nanoseconds));
+    }
+
     fn traceOn(context: *anyopaque) bool {
         const self: *Served = @ptrCast(@alignCast(context));
         return self.owner.traceIfRtos();

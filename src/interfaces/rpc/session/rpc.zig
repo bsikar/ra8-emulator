@@ -117,7 +117,9 @@ pub const NamedBreak = struct {
 /// from the table's pending numbering.
 pub const NamedPoint = struct { id: u32, address: u32, deferred: u8 };
 pub const Watch = struct { core: Core, first: u32, last: u32, access: Access };
-pub const Subscription = struct { core: Core, topic: Topic };
+/// Subscribing one core to one topic. For lcd_dirty, `rate` is the frames
+/// per second the client wants (RA8EMU-822); zero is every frame.
+pub const Subscription = struct { core: Core, topic: Topic, rate: u16 = 0 };
 pub const Now = struct { core: Core };
 pub const RunBudget = struct { core: Core, instructions: u64 };
 pub const U64 = struct { value: u64 };

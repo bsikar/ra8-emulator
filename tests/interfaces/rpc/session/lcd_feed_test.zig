@@ -88,6 +88,10 @@ const Wire = struct {
     host: served.Host = undefined,
     panel: *const Panel = undefined,
     got: Bounded(Got, 8) = .{},
+    /// Every lcd_dirty event received, across pokes.
+    sent: usize = 0,
+    /// The newest lcd_dirty event received, across pokes.
+    last: ?Got = null,
 
     fn init(gpa: std.mem.Allocator) !*Wire {
         const self = try gpa.create(Wire);
@@ -142,6 +146,8 @@ const Wire = struct {
             try std.testing.expectEqual(want, sent.pixels[row * sent.width + column]);
         };
         try self.got.append(.{ .x = sent.x, .y = sent.y, .width = sent.width, .height = sent.height, .virtual_ns = sent.virtual_ns });
+        self.sent += 1;
+        self.last = .{ .x = sent.x, .y = sent.y, .width = sent.width, .height = sent.height, .virtual_ns = sent.virtual_ns };
     }
 };
 
@@ -279,6 +285,62 @@ test "lcd_dirty is refused without a display or an allocator" {
         try std.testing.expectError(error.Refused, accepted(try wire.call(proto.Subscription, .subscribe, subscribe)));
         try std.testing.expect(rig.context.lcd_feed == null);
     }
+}
+
+/// A host clock that advances one millisecond per read, from 1 s.
+const FakeClock = struct {
+    ns: u64 = std.time.ns_per_s,
+
+    fn now(context: *anyopaque) u64 {
+        const self: *FakeClock = @ptrCast(@alignCast(context));
+        self.ns += std.time.ns_per_ms;
+        return self.ns;
+    }
+};
+
+test "a rate-limited subscriber holds frames between sends, and the counter counts the skips" {
+    var panel: Panel = .{ .width = 16, .height = 12 };
+    var clock: FakeClock = .{};
+    var rig: Rig = .{};
+    try rig.init(&panel, std.testing.allocator);
+    rig.context.host_clock = .{ .context = &clock, .nowFn = FakeClock.now };
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&rig.context, &panel);
+    const fast: proto.Subscription = .{ .core = .cpu0, .topic = .lcd_dirty, .rate = 60 };
+    try accepted(try wire.call(proto.Subscription, .subscribe, fast));
+
+    // One 1x1 refresh per millisecond for 100 ms, walking the panel's
+    // 16 columns: the 60 fps rate sends about every 17 ms, so 6 sends
+    // carry the 100 frames' latest pixels.
+    for (0..100) |at| {
+        rig.refresh(@intCast(at), .{ .x = @intCast(at % 16), .y = 1, .width = 1, .height = 1 });
+        try wire.poke();
+    }
+    try std.testing.expectEqual(@as(usize, 6), wire.sent);
+    try std.testing.expectEqual(@as(u32, 94), rig.context.lcd_holds);
+    try std.testing.expectEqual(@as(usize, 6), panel.captures);
+    // The last send's bounding box covers every refresh since the one
+    // before: the walk wraps the panel, so it is the full width.
+    try std.testing.expectEqual(Got{ .x = 0, .y = 1, .width = 16, .height = 1, .virtual_ns = 85 }, wire.last.?);
+}
+
+test "a zero-rate subscriber gets every frame even with a clock set" {
+    var panel: Panel = .{ .width = 4, .height = 4 };
+    var clock: FakeClock = .{};
+    var rig: Rig = .{};
+    try rig.init(&panel, std.testing.allocator);
+    rig.context.host_clock = .{ .context = &clock, .nowFn = FakeClock.now };
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&rig.context, &panel);
+    try accepted(try wire.call(proto.Subscription, .subscribe, subscribe));
+    for (0..4) |at| {
+        rig.refresh(@intCast(at), .{ .x = @intCast(at), .y = 0, .width = 1, .height = 1 });
+        try wire.poke();
+    }
+    try std.testing.expectEqual(@as(usize, 4), wire.sent);
+    try std.testing.expectEqual(@as(u32, 0), rig.context.lcd_holds);
 }
 
 test "merge and clip keep rectangles inside the panel" {
