@@ -16,6 +16,7 @@ const systick_bank = @import("../../systick_bank.zig");
 const second_zig = @import("zig.zig");
 const Store = @import("../../cpu/memory/store.zig").Store;
 const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
+const memmap = @import("../../memmap.zig");
 
 pub const Driver = struct {
     second: second_core.Second,
@@ -117,6 +118,11 @@ pub const Driver = struct {
         if (second.state.unvectored) {
             second.state.unvectored = false;
             self.core.cpu.reset(second.state.vector_base) catch |err| {
+                second.state.fault = .{ .pc = second.state.vector_base, .detail = @errorName(err) };
+                return;
+            };
+            // Warm reset clears the seed written by leaveReset.
+            self.core.cpu.bus.writeWord(memmap.scb.vtor, second.state.vector_base) catch |err| {
                 second.state.fault = .{ .pc = second.state.vector_base, .detail = @errorName(err) };
                 return;
             };
