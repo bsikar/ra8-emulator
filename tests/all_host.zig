@@ -149,6 +149,7 @@ test {
     _ = @import("interfaces/gui/shell/board/board_test.zig");
     _ = @import("interfaces/gui/shell/board/input_test.zig");
     _ = @import("interfaces/gui/board/dirty_test.zig");
+    _ = @import("interfaces/gui/board/pacing_test.zig");
     _ = @import("interfaces/gui/shell_board_live_test.zig");
     _ = @import("interfaces/gui/shell/devices_test.zig");
     _ = @import("interfaces/gui/shell/fault_test.zig");

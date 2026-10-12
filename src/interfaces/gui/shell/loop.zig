@@ -146,6 +146,7 @@ pub const Shell = struct {
         solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
         defer list.deinit();
+        if (self.board) |board| board.pace(self.now());
         try shell_frame.draw(&list, self.themes.active, .{
             .layout = &self.layout,
             .solved = &solved,
@@ -284,7 +285,6 @@ pub const Shell = struct {
         const link = self.link orelse return;
         pointer.up(board, link, x, y, self.boardNow());
     }
-
     /// The wall clock, or zero for a shell that was given none.
     fn now(self: *const Shell) u64 {
         const clock = self.clock orelse return 0;
@@ -360,7 +360,7 @@ pub const Shell = struct {
             if (answered) if (self.time) |time| time.loaded(&self.status);
             self.observeCore(answered, arrival);
             if (self.console) |console| try console.observe(arrival);
-            if (self.board) |board| try board.observe(arrival);
+            if (self.board) |board| try board.observe(arrival, self.now());
             if (self.devices) |devices| devices.observe(arrival);
             if (self.faults) |faults| if (faults.observe(arrival)) self.wants();
             if (self.camera) |camera| camera.observe(arrival);

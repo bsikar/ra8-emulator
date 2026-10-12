@@ -28,7 +28,7 @@ const Color = draw_list.Color;
 fn dirty(board: *Board, rect: proto.DirtyRect) !void {
     var bytes: [4096]u8 = undefined;
     const payload = try proto.encode(proto.DirtyRect, rect, &bytes);
-    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.lcd_dirty), .payload = payload } });
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.lcd_dirty), .payload = payload } }, 0);
 }
 
 fn gray(level: u8) Color {
@@ -73,8 +73,8 @@ test "the image grows to cover a rectangle past it, keeping what it held" {
 test "responses, other topics, the other core and short payloads leave the image alone" {
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
-    try board.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "x" } } });
-    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } });
+    try board.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "x" } } }, 0);
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.uart), .payload = "x" } }, 0);
     try dirty(&board, .{ .core = .cpu1, .x = 0, .y = 0, .width = 1, .height = 1, .virtual_ns = 1, .pixels = &.{5} });
     try dirty(&board, .{ .core = .cpu0, .x = 0, .y = 0, .width = 2, .height = 2, .virtual_ns = 1, .pixels = &.{5} });
     try std.testing.expect(!board.hasFrame());
@@ -101,7 +101,7 @@ fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: Color) 
 fn led(board: *Board, event: proto.SessionEvent) !void {
     var bytes: [64]u8 = undefined;
     const payload = try proto.encode(proto.SessionEvent, event, &bytes);
-    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = payload } });
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = payload } }, 0);
 }
 
 test "an LED change for cpu0 on the session topic sets its LED, and nothing else on it does" {
@@ -114,7 +114,7 @@ test "an LED change for cpu0 on the session topic sets its LED, and nothing else
     try led(&board, .{ .core = .cpu1, .kind = .led_changed, .address = 0x101 });
     try led(&board, .{ .core = .cpu0, .kind = .plugged, .address = 0x101 });
     try std.testing.expectEqual([_]bool{ false, false, true }, board.leds.on);
-    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = "x" } });
+    try board.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.session), .payload = "x" } }, 0);
     try std.testing.expect(!board.hasFrame());
 }
 
