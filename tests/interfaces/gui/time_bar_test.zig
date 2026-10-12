@@ -1,7 +1,7 @@
 //! Host tests for the time bar (RA8EMU-807): where each control sits, what a
 //! click lands on, a pinned CPU-backend golden frame, a narrow bar that never
 //! paints past its area, the clock readout on the row its neighbours stand
-//! on and cut to whole cells (RA8EMU-1168), and clicks on step, run and
+//! on, kept to whole segments when the bar is narrow (RA8EMU-941), and clicks on step, run and
 //! pause: a step goes to a spawned `serve --stdio` child, and run and pause
 //! light and unlight the shell's sliced run (shell_run_test.zig runs the
 //! slices).
@@ -105,12 +105,14 @@ test "a click lands on the control under it, and nothing in the gaps or the cloc
     try std.testing.expectEqual(@as(?bar.Control, null), bar.hit(area, layout.run.x + 1, area.y));
 }
 
+// RA8EMU-941: the readout used to clip its tail segment mid-word at 480;
+// these goldens were re-pinned with the speed segment dropped whole.
 test "the bar rasterises to the pinned golden frame" {
     var scene = try Scene.init(480, bar.height);
     defer scene.deinit();
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 15007699599523115719), scene.digest());
+    try std.testing.expectEqual(@as(u64, 9662044992334524907), scene.digest());
 }
 
 test "the bar rasterises to the pinned golden frame in the light theme" {
@@ -119,7 +121,7 @@ test "the bar rasterises to the pinned golden frame in the light theme" {
     scene.theme = light;
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 16234191626027740266), scene.digest());
+    try std.testing.expectEqual(@as(u64, 10813881438780127614), scene.digest());
 }
 
 test "the editing field rasterises to its pinned golden frame" {
@@ -129,7 +131,7 @@ test "the editing field rasterises to its pinned golden frame" {
     models.status.run = .running;
     models.field.typed("5");
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(true));
-    try std.testing.expectEqual(@as(u64, 17622458108587683926), scene.digest());
+    try std.testing.expectEqual(@as(u64, 9144866937343458358), scene.digest());
 }
 
 test "the bar with an RTC date rasterises to its pinned golden frame, wide enough for the whole line" {
@@ -139,6 +141,42 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
     models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
     try scene.render(.{ .x = 0, .y = 0, .w = 800, .h = bar.height }, models.view(false));
     try std.testing.expectEqual(@as(u64, 784415439429954224), scene.digest());
+}
+
+test "the bar at 480x20 with a date and a short speed shows only whole segments" {
+    const cell: i32 = @intCast(font.cell_w);
+    var scene = try Scene.init(480, 20);
+    defer scene.deinit();
+    var models = Models.sample();
+    models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
+    const view = models.view(false);
+    const area: Rect = .{ .x = 0, .y = 0, .w = 480, .h = 20 };
+    try scene.render(area, view);
+    {
+        var out: std.ArrayListUnmanaged(u8) = .empty;
+        defer out.deinit(std.testing.allocator);
+        try out.print(std.testing.allocator, "P6\n{d} {d}\n255\n", .{ scene.frame.width, scene.frame.height });
+        for (scene.frame.pixels) |p| try out.appendSlice(std.testing.allocator, &.{ p.r, p.g, p.b });
+        const file = std.c.fopen("/tmp/clock941.ppm", "wb") orelse return error.Open;
+        _ = std.c.fwrite(out.items.ptr, 1, out.items.len, file);
+        _ = std.c.fclose(file);
+    }
+    const clock = bar.Layout.of(area).clock;
+    const cells: usize = @intCast(@divFloor(clock.w - 2 * bar.pad, cell));
+    const elapsed = view.clock;
+    const date = view.clock_date orelse return error.NoDate;
+    // date | elapsed does not fit, so both the speed and the date drop whole
+    // and the elapsed segment alone is the line.
+    try std.testing.expect(elapsed.len <= cells);
+    try std.testing.expect(date.len + 3 + elapsed.len > cells);
+    try std.testing.expectEqualStrings(date, "2026-10-08 09:47:05");
+    const left = clock.x + bar.pad;
+    var x = left + @as(i32, @intCast(elapsed.len)) * cell;
+    while (x < area.w) : (x += 1) {
+        var y: i32 = 0;
+        while (y < area.h) : (y += 1) try std.testing.expect(!std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), dark.muted));
+    }
+    try std.testing.expectEqual(@as(u64, 279912207663143675), scene.digest());
 }
 
 /// The first row inside `area` with a pixel of `color`, or null.
@@ -171,7 +209,7 @@ test "the clock readout stands on the row the button labels and the speed field 
     }
 }
 
-test "a clock line too long for its room is cut to whole cells and keeps the bar's pad clear" {
+test "a narrow bar's clock keeps whole segments: the speed, then the date, go before the elapsed is cut" {
     const cell: i32 = @intCast(font.cell_w);
     for ([_]u32{ 300, 437, 455, 640 }) |width| {
         var scene = try Scene.init(width, bar.height);
@@ -182,22 +220,36 @@ test "a clock line too long for its room is cut to whole cells and keeps the bar
         const area: Rect = .{ .x = 0, .y = 0, .w = @intCast(width), .h = bar.height };
         try scene.render(area, view);
         const clock = bar.Layout.of(area).clock;
-        const cells = @divFloor(clock.w - 2 * bar.pad, cell);
-        try std.testing.expect(cells > 0 and cells < view.clock.len);
+        const cells: usize = @intCast(@divFloor(clock.w - 2 * bar.pad, cell));
+        const sep: usize = 3;
+        const elapsed = view.clock;
+        const date = view.clock_date orelse return error.NoDate;
+        const speed = view.clock_speed orelse return error.NoSpeed;
+        // The policy in characters decides the line the row should show.
+        var buf: [96]u8 = undefined;
+        var expected: []const u8 = undefined;
+        if (elapsed.len > cells) {
+            expected = elapsed[0..cells];
+        } else if (date.len + sep + elapsed.len + sep + speed.len <= cells) {
+            expected = try std.fmt.bufPrint(&buf, "{s} | {s} | {s}", .{ date, elapsed, speed });
+        } else if (date.len + sep + elapsed.len <= cells) {
+            expected = try std.fmt.bufPrint(&buf, "{s} | {s}", .{ date, elapsed });
+        } else expected = elapsed;
+        try std.testing.expect(expected.len <= cells);
         const left = clock.x + bar.pad;
         const top = clock.y + @divFloor(clock.h - @as(i32, font.glyph_h), 2);
-        // Nothing of the line past its last whole cell, up to the bar's edge.
-        var x = left + cells * cell;
+        // Nothing of any dropped segment paints past the line's last whole cell.
+        var x = left + @as(i32, @intCast(expected.len)) * cell;
         while (x < area.w) : (x += 1) {
             var y: i32 = 0;
             while (y < area.h) : (y += 1) try std.testing.expect(!std.meta.eql(scene.frame.at(@intCast(x), @intCast(y)), dark.muted));
         }
-        // Every cell that is shown is the whole glyph.
+        // Every cell that is shown is the whole glyph of the expected line.
         var index: usize = 0;
-        while (index < cells) : (index += 1) {
-            const origin = font.cell(view.clock[index]);
+        while (index < expected.len) : (index += 1) {
+            const origin = font.cell(expected[index]);
             for (0..font.cell_h) |row| for (0..font.cell_w) |column| {
-                const inked = view.clock[index] != ' ' and font.atlas.coverage[(origin.y + row) * font.atlas.width + origin.x + column] != 0;
+                const inked = expected[index] != ' ' and font.atlas.coverage[(origin.y + row) * font.atlas.width + origin.x + column] != 0;
                 const at = scene.frame.at(@intCast(left + @as(i32, @intCast(index)) * cell + @as(i32, @intCast(column))), @intCast(top + @as(i32, @intCast(row))));
                 try std.testing.expectEqual(inked, std.meta.eql(at, dark.muted));
             };

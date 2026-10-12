@@ -5,6 +5,7 @@
 //! which also turns a click into a run, step or pause (RA8EMU-1086). The shell
 //! (RA8EMU-201) places the bar; this file only lays it out, paints it and
 //! answers clicks.
+const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const widget_paint = @import("ra8_render").widget_paint;
@@ -95,8 +96,12 @@ pub const View = struct {
     field_refused: bool = false,
     /// The field has the keyboard: it reads what is typed and shows a caret.
     editing: bool = false,
-    /// The clock readout line.
+    /// The clock readout's elapsed segment, "T+h:mm:ss.mmm" (RA8EMU-941).
     clock: []const u8 = "",
+    /// The readout's date and speed segments; the bar drops whole ones that
+    /// do not fit, the speed first, then the date.
+    clock_date: ?[]const u8 = null,
+    clock_speed: ?[]const u8 = null,
 };
 
 pub fn draw(list: *draw_list.DrawList, theme: *const Theme, bar: Rect, view: View) !void {
@@ -176,12 +181,13 @@ fn word(color: draw_list.Color) u32 {
 /// corner, so the label is given the centring offset as its pad and starts
 /// far enough right to keep the text a `pad` in: the readout then stands
 /// on the same row as the button labels and the speed field (RA8EMU-1168).
-/// The line is cut to whole cells first. The widget draws what it is given,
-/// and the bar's clip would otherwise cut the last glyph through.
+/// The line is whole segments that fit (RA8EMU-941), so the bar's clip only
+/// ever keeps paint inside the bar.
 fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) !void {
     const room = area.w - 2 * pad;
     if (area.empty() or room <= 0) return;
-    const shown = font.fit(view.clock, @intCast(room));
+    var line: [160]u8 = undefined;
+    const shown = fitClock(view, room, &line);
     var buf: [160]u8 = undefined;
     const n = @min(shown.len, buf.len - 1);
     @memcpy(buf[0..n], shown[0..n]);
@@ -200,6 +206,32 @@ fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view
     _ = widget.label.ra8_widget_label_init(&w, &descriptor);
     w.rect = .{ .x = area.x + pad - down, .y = area.y, .w = area.w - (pad - down), .h = area.h };
     w.vt.?.render.?(&w);
+}
+
+/// The richest line of whole segments that fits `room` pixels (RA8EMU-941):
+/// the achieved speed and then the date are dropped whole before any part
+/// of the elapsed segment is cut, and a bar too narrow even for that cuts
+/// the elapsed segment to whole cells so the row is not empty.
+fn fitClock(view: View, room: i32, buf: []u8) []const u8 {
+    const cell: i32 = @intCast(font.cell_w);
+    const cells: usize = @intCast(@divFloor(room, cell));
+    const sep: usize = 3; // " | "
+    const elapsed = view.clock;
+    if (elapsed.len > cells) return font.fit(elapsed, @intCast(room));
+    var stream: std.Io.Writer = .fixed(buf);
+    if (view.clock_date) |date| {
+        if (view.clock_speed) |speed| {
+            if (date.len + sep + elapsed.len + sep + speed.len <= cells) {
+                stream.print("{s} | {s} | {s}", .{ date, elapsed, speed }) catch return elapsed;
+                return stream.buffered();
+            }
+        }
+        if (date.len + sep + elapsed.len <= cells) {
+            stream.print("{s} | {s}", .{ date, elapsed }) catch return elapsed;
+            return stream.buffered();
+        }
+    }
+    return elapsed;
 }
 
 fn fieldBox(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View) !void {

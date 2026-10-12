@@ -24,18 +24,23 @@ pub const step_budget: u64 = 0;
 /// The buffers the view's field and clock text live in; they outlive the view.
 pub const Texts = struct {
     field: [speed_field.max_chars + 4]u8 = undefined,
-    clock: [96]u8 = undefined,
+    date: [19]u8 = undefined,
+    elapsed: [32]u8 = undefined,
+    speed: [56]u8 = undefined,
 };
 
 /// The bar's view of `status`, `field` and `readout`, its text in `texts`.
 pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Field, readout: *const time_readout.Readout, editing: bool) bar.View {
+    const p = readout.pieces(field.applied, &texts.date, &texts.elapsed, &texts.speed) catch time_readout.Readout.Pieces{};
     return .{
         .run_lit = status.run == .running,
         .pause_lit = status.run == .halted,
         .field = field.shown(&texts.field) catch texts.field[0..0],
         .field_refused = field.refused != null,
         .editing = editing,
-        .clock = readout.text(field.applied, &texts.clock) catch texts.clock[0..0],
+        .clock = p.elapsed,
+        .clock_date = p.date,
+        .clock_speed = p.speed,
     };
 }
 
