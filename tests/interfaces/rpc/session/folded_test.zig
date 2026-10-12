@@ -22,7 +22,7 @@ fn ask(context: anytype, args: proto.FoldedAsk) ![]const u8 {
 }
 
 fn sampled(opened: *setup.Served) !void {
-    try opened.open(std.testing.allocator, std.testing.io, image);
+    try opened.open(std.testing.allocator, std.testing.io, image, null);
     errdefer opened.deinit();
     try opened.sampleStacks(500);
     const session = opened.owner.session();

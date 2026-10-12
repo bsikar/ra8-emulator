@@ -10,6 +10,7 @@ const stop_machine = @import("ra8_session").stop_machine;
 const region_map = @import("ra8_session").region.map;
 const source_spec = @import("ra8_host").camera.source_spec;
 const session_rtc = @import("ra8_session").rtc;
+const board_lib = @import("ra8_board");
 
 /// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
 pub const app_codes = proto.app_codes;
@@ -124,6 +125,9 @@ pub const Context = struct {
     state: ?@import("ra8_session").board.state.Hook = null,
     /// Writes the fitted parts for list_parts; a server without one refuses it.
     listing: ?Listing = null,
+    /// The parsed board profile board_parts serves (RA8EMU-1152); a server
+    /// without one serves the built-in EK-RA8D2 profile.
+    board_profile: ?*const board_lib.profile.Profile = null,
     /// Changes the camera source; a server without one refuses it.
     camera: ?Camera = null,
     /// Writes the memory map for `map`; a server without one refuses it.

@@ -42,7 +42,7 @@ test "host GDB serves ordinary packets, reconnects and drops a slow peer in fini
     defer env.deinit();
     try env.put("HOME", home);
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf");
+    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, io, &env);
     defer bound.deinit();

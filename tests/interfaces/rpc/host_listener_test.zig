@@ -85,7 +85,7 @@ test "a client over the socket is served on the opened session" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image);
+    try opened.open(gpa, std.testing.io, image, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -113,7 +113,7 @@ test "a hung-up client is dropped and the next one is taken" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image);
+    try opened.open(gpa, std.testing.io, image, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -143,7 +143,7 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image);
+    try opened.open(gpa, std.testing.io, image, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();

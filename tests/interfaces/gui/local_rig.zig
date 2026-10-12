@@ -17,7 +17,7 @@ pub const Rig = struct {
     /// Opens in place: the link points into `self`, so it must not move.
     pub fn open(self: *Rig, image: []const u8) !void {
         const gpa = std.testing.allocator;
-        try self.session.open(gpa, std.testing.io, image);
+        try self.session.open(gpa, std.testing.io, image, null);
         errdefer self.session.deinit();
         self.rx = try gpa.alloc(u8, 2 * Env.max_frame);
         errdefer gpa.free(self.rx);

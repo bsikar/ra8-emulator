@@ -77,7 +77,7 @@ pub fn listParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.PartLis
 /// the board only through this answer, so the pane draws what the board has
 /// and carries no board knowledge of its own.
 pub fn boardParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.BoardParts) {
-    const profile = board_lib.profile.parse(board_lib.profile.ek_ra8d2) catch |err| {
+    const profile = if (context.board_profile) |given| given.* else board_lib.profile.parse(board_lib.profile.ek_ra8d2) catch |err| {
         std.debug.print("serve: {s}\n", .{@errorName(err)});
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     };
@@ -90,7 +90,7 @@ pub fn boardParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.BoardP
     var colors: usize = 0;
     var names: usize = 0;
     for (chip_gpio.leds) |led| {
-        const entry = profile.ledAt(led.port, led.pin) orelse return refusedParts();
+        const entry = profile.ledAt(led.port, led.pin) orelse continue;
         if (colors + 2 > led_colors.len or !put(led_names, &names, entry.label)) return tooLong();
         led_colors[colors] = @truncate(entry.rgb565);
         led_colors[colors + 1] = @truncate(entry.rgb565 >> 8);
@@ -98,7 +98,7 @@ pub fn boardParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.BoardP
     }
     var switches: usize = 0;
     for (board_lib.switches.user) |one| {
-        const entry = profile.switchAt(one.port, one.pin) orelse return refusedParts();
+        const entry = profile.switchAt(one.port, one.pin) orelse continue;
         if (!put(switch_names, &switches, entry.label)) return tooLong();
     }
     const stem: []const u8 = if (profile.panel) |glass| glass.name else "";
@@ -112,10 +112,6 @@ pub fn boardParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.BoardP
         .led_colors = led_colors[0..colors],
         .switch_names = switch_names[0..switches],
     } };
-}
-
-fn refusedParts() rpc.Outcome(proto.BoardParts) {
-    return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
 }
 
 fn tooLong() rpc.Outcome(proto.BoardParts) {

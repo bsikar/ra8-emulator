@@ -44,8 +44,8 @@ pub const Served = struct {
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
-    pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8) !void {
-        var owner = try harness.open(allocator, io, .{ .elf_path = elf_path });
+    pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8) !void {
+        var owner = try harness.open(allocator, io, .{ .elf_path = elf_path, .board_profile = board_profile });
         errdefer owner.deinit();
         _ = owner.watchModules();
         const Env = served.Server.Env;
@@ -57,6 +57,7 @@ pub const Served = struct {
         self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
         self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
+        self.context.board_profile = self.owner.boardProfile();
         self.context.mapping = .{ .context = &self.owner, .mapFn = mapImage, .stackFn = stackOf, .imageFn = imageOf };
         self.context.clock = board_rtc.clock(self.owner.board());
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };

@@ -13,7 +13,7 @@ const image = "tests/fixtures/fpu/fp_basic.elf";
 test "the local session greets the shell's client in-process" {
     const gpa = std.testing.allocator;
     var session: local_session.LocalSession = undefined;
-    try session.open(gpa, std.testing.io, image);
+    try session.open(gpa, std.testing.io, image, null);
     defer session.deinit();
     const Env = proto.Client.Env;
     const rx = try gpa.alloc(u8, 2 * Env.max_frame);
@@ -29,7 +29,7 @@ test "the local session greets the shell's client in-process" {
 
 test "answering with nothing sent is a no-op" {
     var session: local_session.LocalSession = undefined;
-    try session.open(std.testing.allocator, std.testing.io, image);
+    try session.open(std.testing.allocator, std.testing.io, image, null);
     defer session.deinit();
     try session.answer();
     try std.testing.expect(session.setup.context.camera != null);
