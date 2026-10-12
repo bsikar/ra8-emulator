@@ -118,14 +118,22 @@ pub fn main(init: std.process.Init) !u8 {
     const line = try std.fmt.allocPrint(gpa, "{s}\n", .{args[3]});
     try log.writePositionalAll(init.io, line, (try log.stat(init.io)).size);
     const words = try remoteWords(gpa, args[3]);
-    if (words.len == 3 and std.mem.eql(u8, words[0], "test") and std.mem.eql(u8, words[1], "-f")) {
-        std.Io.Dir.cwd().access(init.io, words[2], .{}) catch |err| return switch (err) {
+    if (words.len == 8 and std.mem.eql(u8, words[0], "test") and std.mem.eql(u8, words[1], "-f")) {
+        const stat = std.Io.Dir.cwd().statFile(init.io, words[2], .{ .follow_symlinks = false }) catch |err| return switch (err) {
             error.FileNotFound => 1,
             else => err,
         };
+        if (stat.kind != .file) return 1;
+        try pauseProbe(init.io, args[2]);
         return 0;
     }
-    if (words.len == 11 and std.mem.eql(u8, words[0], "mkdir")) return copyImage(gpa, init.io, words);
+    if (words.len == 12 and std.mem.eql(u8, words[0], "sh") and std.mem.eql(u8, words[1], "-c") and std.mem.eql(u8, words[3], "ra8-image-cache")) {
+        if (std.mem.eql(u8, words[7], "hit")) {
+            const failure = try std.fs.path.join(gpa, &.{ args[2], "hit.fail" });
+            if (std.Io.Dir.cwd().access(init.io, failure, .{})) |_| return 7 else |err| if (err != error.FileNotFound) return err;
+        }
+        return cacheImage(gpa, init.io, words);
+    }
     if (words.len != 4 or !std.mem.eql(u8, words[1], "serve") or !std.mem.eql(u8, words[2], "--stdio")) return 255;
     var child = try std.process.spawn(init.io, .{ .argv = words, .stdin = .inherit, .stdout = .inherit, .stderr = .inherit });
     return switch (try child.wait(init.io)) {
@@ -134,18 +142,114 @@ pub fn main(init: std.process.Init) !u8 {
     };
 }
 
-fn copyImage(gpa: std.mem.Allocator, io: std.Io, words: []const []const u8) !u8 {
-    const expected = [_][]const u8{ "-p", "&&", "cat", ">", "&&", "mv" };
-    const indices = [_]usize{ 1, 3, 4, 5, 7, 8 };
-    for (expected, indices) |word, index| if (!std.mem.eql(u8, word, words[index])) return 255;
-    if (!std.mem.eql(u8, words[6], words[9])) return 255;
-    try std.Io.Dir.cwd().createDirPath(io, words[2]);
+fn cacheImage(gpa: std.mem.Allocator, io: std.Io, words: []const []const u8) !u8 {
+    if (!managedImage(words[5]) or !std.mem.startsWith(u8, words[6], words[5])) return 255;
+    const limit = try std.fmt.parseInt(usize, words[8], 10);
+    const size = try std.fmt.parseInt(usize, words[10], 10);
+    if (limit != 32 or size > 64 * 1024 * 1024 or try std.fmt.parseInt(usize, words[11], 10) != 64 * 1024 * 1024) return 255;
+    try std.Io.Dir.cwd().createDirPath(io, words[4]);
+    var cache = try std.Io.Dir.cwd().openDir(io, words[4], .{ .iterate = true });
+    defer cache.close(io);
+    if (!try cacheLock(io, cache, try std.fmt.parseInt(usize, words[9], 10))) return 1;
+    defer cache.deleteDir(io, ".ra8-image-lock") catch |err| std.debug.print("fixture lock cleanup: {s}\n", .{@errorName(err)});
+    try staleParts(io, cache);
+    try prune(gpa, io, cache, words[5], limit);
+    const stat = cache.statFile(io, words[5], .{ .follow_symlinks = false }) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    if (stat) |held| {
+        if (held.kind != .file) return 1;
+        if (std.mem.eql(u8, words[7], "store")) _ = try incoming(gpa, io);
+        const file = try cache.openFile(io, words[5], .{ .mode = .read_write });
+        defer file.close(io);
+        try file.setTimestampsNow(io);
+    } else {
+        if (!std.mem.eql(u8, words[7], "store")) return if (std.mem.eql(u8, words[7], "hit")) 3 else 1;
+        const part = try cache.createFile(io, words[6], .{ .exclusive = true });
+        var open = true;
+        defer cache.deleteFile(io, words[6]) catch |err| switch (err) {
+            error.FileNotFound => {},
+            else => std.debug.print("fixture partial cleanup: {s}\n", .{@errorName(err)}),
+        };
+        defer if (open) part.close(io);
+        const bytes = try incoming(gpa, io);
+        const copied = part.writeStreamingAll(io, bytes);
+        part.close(io);
+        open = false;
+        try copied;
+        if (bytes.len != size) return 1;
+        if (cache.access(io, "copy.fail", .{})) |_| return 1 else |err| if (err != error.FileNotFound) return err;
+        try cache.rename(words[6], cache, words[5], io);
+    }
+    return 0;
+}
+
+fn cacheLock(io: std.Io, cache: std.Io.Dir, limit: usize) !bool {
+    var attempts: usize = 0;
+    while (true) {
+        cache.createDir(io, ".ra8-image-lock", .default_dir) catch |err| {
+            if (err != error.PathAlreadyExists) return err;
+            attempts += 1;
+            if (attempts >= limit) return false;
+            try std.Io.sleep(io, .fromSeconds(1), .awake);
+            continue;
+        };
+        return true;
+    }
+}
+
+fn incoming(gpa: std.mem.Allocator, io: std.Io) ![]u8 {
     var buffer: [4096]u8 = undefined;
     var input = std.Io.File.stdin().reader(io, &buffer);
-    const bytes = try input.interface.allocRemaining(gpa, .limited(64 * 1024 * 1024));
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = words[6], .data = bytes });
-    try std.Io.Dir.cwd().rename(words[9], std.Io.Dir.cwd(), words[10], io);
-    return 0;
+    return input.interface.allocRemaining(gpa, .limited(64 * 1024 * 1024 + 1));
+}
+
+fn managedImage(name: []const u8) bool {
+    if (name.len != 68 or !std.mem.endsWith(u8, name, ".elf")) return false;
+    for (name[0..64]) |c| if (!(c >= '0' and c <= '9') and !(c >= 'a' and c <= 'f')) return false;
+    return true;
+}
+
+fn staleParts(io: std.Io, cache: std.Io.Dir) !void {
+    var it = cache.iterate();
+    const now = std.Io.Timestamp.now(io, .real).toNanoseconds();
+    while (try it.next(io)) |entry| {
+        if (entry.kind != .file or entry.name.len != 106 or !managedImage(entry.name[0..68]) or !std.mem.eql(u8, entry.name[68..74], ".part.")) continue;
+        var valid = true;
+        for (entry.name[74..]) |c| {
+            if (!(c >= '0' and c <= '9') and !(c >= 'a' and c <= 'f')) valid = false;
+        }
+        if (!valid) continue;
+        const stat = try cache.statFile(io, entry.name, .{ .follow_symlinks = false });
+        if (stat.kind != .file) continue;
+        if (now - stat.mtime.toNanoseconds() > 61 * std.time.ns_per_min) try cache.deleteFile(io, entry.name);
+    }
+}
+
+fn prune(gpa: std.mem.Allocator, io: std.Io, cache: std.Io.Dir, current: []const u8, limit: usize) !void {
+    const Entry = struct { name: []const u8, modified: i96 };
+    var entries: std.ArrayList(Entry) = .empty;
+    var it = cache.iterate();
+    while (try it.next(io)) |entry| {
+        if (entry.kind != .file or !managedImage(entry.name)) continue;
+        const stat = try cache.statFile(io, entry.name, .{ .follow_symlinks = false });
+        if (stat.kind != .file) continue;
+        if (stat.size > 64 * 1024 * 1024) {
+            try cache.deleteFile(io, entry.name);
+            continue;
+        }
+        if (std.mem.eql(u8, entry.name, current)) continue;
+        try entries.append(gpa, .{ .name = try gpa.dupe(u8, entry.name), .modified = stat.mtime.toNanoseconds() });
+    }
+    const Order = struct {
+        fn before(_: void, a: Entry, b: Entry) bool {
+            if (a.modified != b.modified) return a.modified > b.modified;
+            return std.mem.order(u8, a.name, b.name) == .lt;
+        }
+    };
+    std.mem.sort(Entry, entries.items, {}, Order.before);
+    if (entries.items.len >= limit) for (entries.items[limit - 1 ..]) |entry| try cache.deleteFile(io, entry.name);
 }
 
 /// The fixture accepts the single-quoted argv emitted by host.spawn.quote,
@@ -183,4 +287,17 @@ test "the native SSH stand-in decodes the real remote argv quoting" {
     const quoted = try @import("cli_app").host.spawn.quote(arena.allocator(), "a'b");
     const decoded = try remoteWords(arena.allocator(), quoted);
     try std.testing.expectEqualStrings("a'b", decoded[0]);
+}
+
+// Barrier after a successful unlocked probe, entirely in owned fixture data.
+fn pauseProbe(io: std.Io, root: []const u8) !void {
+    var dir = try std.Io.Dir.cwd().openDir(io, root, .{});
+    defer dir.close(io);
+    dir.access(io, "probe.pause", .{}) catch |err| return if (err == error.FileNotFound) {} else err;
+    try dir.writeFile(io, .{ .sub_path = "probe.ready", .data = "successful probe paused" });
+    for (0..1000) |_| {
+        if (dir.access(io, "probe.resume", .{})) |_| return else |err| if (err != error.FileNotFound) return err;
+        try std.Io.sleep(io, .fromMilliseconds(10), .awake);
+    }
+    return error.ProbeResumeTimeout;
 }
