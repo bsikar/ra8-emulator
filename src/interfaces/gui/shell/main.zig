@@ -44,6 +44,7 @@ const chunked = @import("ra8_rpc").session.load_chunks;
 const shell_stack = @import("stack.zig");
 const shell_open = @import("open.zig");
 const colors = @import("../ui/colors.zig");
+const shell_layout = @import("layout_store.zig");
 const shell_settings = @import("settings_page.zig");
 
 const Env = proto.Client.Env;
@@ -239,14 +240,13 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     // An explicit --theme wins over the saved choice (RA8EMU-963).
     shell.themes.choose(if (args.theme_set) args.theme else settings_store.load());
     shell.settings = .{ .store = &settings_store };
+    // The saved pane layout replaces the default before the first frame.
+    var layout_store = shell_layout.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    layout_store.restore(&shell.layout);
     defer shell.deinit();
     shell.link = &link;
     shell.server = served(&session);
-    if (host_listener.Listener.bind(allocator, io, env)) |bound| {
-        hosted = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = try allocator.alloc(u8, Env.max_frame), .gpa = allocator };
-        hosted.?.announce(args.image, session.setup.owner.session());
-        shell.listener = .{ .context = &hosted.?, .answerFn = answerHosted };
-    } else |_| {}
+    bindHosted(&hosted, allocator, io, env, window, args, &session, &shell);
     var host_clock = wall_clock.Host.init(io);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
@@ -295,7 +295,19 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .breaks = &breaks, .stack = &stack };
     shell.painter = panes.painter();
     try drive(io, &shell, window, args.image, bytes, args.frames);
+    layout_store.save(&shell.layout);
     link.close();
+}
+
+/// Binds the per-user host listener onto `hosted`; without one the shell
+/// answers only its own session (RA8EMU-1156).
+fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, session: *local_session.LocalSession, shell: *shell_loop.Shell) void {
+    const bound = host_listener.Listener.bind(allocator, io, env) catch return;
+    const tx = allocator.alloc(u8, Env.max_frame) catch return;
+    hosted.* = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = tx, .gpa = allocator };
+    const held = &hosted.*.?;
+    held.announce(args.image, session.setup.owner.session());
+    shell.listener = .{ .context = held, .answerFn = answerHosted };
 }
 
 /// The per-user listener and the session it serves (RA8EMU-1156): the

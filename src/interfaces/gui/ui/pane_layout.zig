@@ -217,7 +217,9 @@ pub const Layout = struct {
         }
     }
 
-    fn add(self: *Layout, value: Node) !Index {
+    /// Appends `value`, reusing the first free slot; the layout store's
+    /// restore rebuilds the tree node by node (RA8EMU-958).
+    pub fn add(self: *Layout, value: Node) !Index {
         for (self.nodes.items, 0..) |*slot, at| {
             if (slot.body != .free) continue;
             slot.* = value;

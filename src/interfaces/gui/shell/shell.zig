@@ -9,6 +9,7 @@ pub const fault = @import("fault.zig");
 /// The shell's pane chrome and text field, drawn by ui/shell/.
 pub const field = @import("../ui/shell/field.zig");
 pub const frame = @import("../ui/shell/frame.zig");
+pub const layout_store = @import("layout_store.zig");
 pub const loop = @import("loop.zig");
 pub const menu_actions = @import("menu_actions.zig");
 pub const main = @import("main.zig");
