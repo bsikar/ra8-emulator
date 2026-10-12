@@ -32,7 +32,7 @@ test "a press on a title steps that leaf's kind and keeps its core" {
     }
     const placed = target.?;
     const title = frame.titleOf(placed.area);
-    try std.testing.expect(titles.press(&layout, &solved, title.x + 1, title.y + 1));
+    try std.testing.expect(titles.titlePress(&layout, &solved, title.x + 1, title.y + 1));
     const changed = layout.pane(placed.index).?;
     try std.testing.expectEqual(pane_layout.Kind.camera, changed.kind);
     try std.testing.expectEqual(pane_layout.Core.cpu1, changed.core);
@@ -50,8 +50,8 @@ test "a press in a body or a gutter is not a title's" {
     var solved = try frame.solve(&layout, gpa, 480, 320);
     defer solved.deinit(gpa);
     const body = frame.bodyOf(solved.panes.items[0].area);
-    try std.testing.expect(!titles.press(&layout, &solved, body.x + 1, body.y + 1));
+    try std.testing.expect(!titles.titlePress(&layout, &solved, body.x + 1, body.y + 1));
     const gap = solved.gutters.items[0].area;
-    try std.testing.expect(!titles.press(&layout, &solved, gap.x, gap.y + 1));
+    try std.testing.expect(!titles.titlePress(&layout, &solved, gap.x, gap.y + 1));
     try std.testing.expectEqual(@as(?pane_layout.Index, null), titles.titleAt(&layout, &solved, body.x + 1, body.y + 1));
 }

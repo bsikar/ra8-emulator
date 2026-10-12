@@ -53,6 +53,7 @@ pub const Shell = struct {
     painter: ?shell_frame.Painter = null,
     /// The palette in use and the picker that changes it (RA8EMU-1165).
     themes: shell_theme.Themes = .{},
+    titles: shell_titles.Tracker = .{}, // a deck tab press holds a drag (RA8EMU-958).
     /// The settings page over the shell (RA8EMU-963).
     settings: shell_settings.Page = .{},
     console: ?*shell_console.Console = null,
@@ -173,11 +174,11 @@ pub const Shell = struct {
                 if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
-                if (!press.down) return self.releaseBoard(press.x, press.y);
+                if (!press.down) return self.releaseBoard(solved, press.x, press.y);
                 if (self.held != null) return;
                 if (self.pressFields(press.x, press.y)) return;
                 if (self.pressValue(press.x, press.y, solved)) return;
-                if (shell_titles.press(&self.layout, solved, press.x, press.y)) return;
+                if (self.titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.pressBoard(solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.pressLink(link, solved, press.x, press.y)) return;
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
@@ -276,7 +277,8 @@ pub const Shell = struct {
     }
 
     /// The left button came up: the board leaf sends the click or touch under way.
-    fn releaseBoard(self: *Shell, x: i32, y: i32) void {
+    fn releaseBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) void {
+        if (self.titles.release(&self.layout, solved, x, y)) return;
         const pointer = self.board_input orelse return;
         const board = self.board orelse return;
         const link = self.link orelse return;

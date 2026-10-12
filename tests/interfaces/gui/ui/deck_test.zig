@@ -66,10 +66,10 @@ test "a press on a tab row switches the shown child and a miss takes the row" {
     panes[0] = .{ .kind = .board, .core = .cpu0 };
     panes[1] = .{ .kind = .registers, .core = .cpu0 };
     const cell = frame.tabAt(title, panes[0..2], 1) orelse return error.TestUnexpectedResult;
-    try std.testing.expect(titles.press(&layout, &solved, cell.x + @divTrunc(cell.w, 2), title.y + 1));
+    try std.testing.expect(titles.titlePress(&layout, &solved, cell.x + @divTrunc(cell.w, 2), title.y + 1));
     const deck = layout.deckAt(layout.root) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(@as(u8, 1), deck.active);
-    try std.testing.expect(titles.press(&layout, &solved, title.x + title.w - 1, title.y + 1));
+    try std.testing.expect(titles.titlePress(&layout, &solved, title.x + title.w - 1, title.y + 1));
     const still = layout.deckAt(layout.root) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(@as(u8, 1), still.active);
 }
@@ -87,4 +87,47 @@ test "a deck over a split's halves keeps the split's leaves intact" {
     try std.testing.expectEqual(@as(u8, 2), deck.count);
     try std.testing.expectEqual(built.first, deck.children[0]);
     try std.testing.expectEqual(built.second, deck.children[1]);
+}
+
+/// A split with a deck in its second side and a console leaf in the first,
+/// so a dragged tab has another pane to drop on.
+fn dragLayout(allocator: std.mem.Allocator) !struct { layout: pane_layout.Layout, deck_leaf: pane_layout.Index, other: pane_layout.Index } {
+    var layout = try pane_layout.Layout.init(allocator, .{ .kind = .console, .core = .cpu0 });
+    errdefer layout.deinit();
+    const deck_leaf = try layout.split(layout.root, .across, .{ .kind = .board, .core = .cpu0 });
+    const second = try layout.split(deck_leaf, .across, .{ .kind = .registers, .core = .cpu0 });
+    const halves = layout.node(deck_leaf).body.split;
+    const children = [_]pane_layout.Index{ halves.first, halves.second };
+    try layout.deck(deck_leaf, &children);
+    _ = second;
+    return .{ .layout = layout, .deck_leaf = deck_leaf, .other = layout.node(layout.root).body.split.first };
+}
+
+fn placedAt(solved: *const pane_layout.Solved, index: pane_layout.Index) ?pane_layout.Rect {
+    for (solved.panes.items) |placed| if (placed.index == index) return placed.area;
+    return null;
+}
+
+test "a tab drag released over another pane splits the deck side by side" {
+    const allocator = std.testing.allocator;
+    const built = try dragLayout(allocator);
+    var layout = built.layout;
+    defer layout.deinit();
+    var solved = try frame.solve(&layout, allocator, 800, 500);
+    defer solved.deinit(allocator);
+    const home = solved.panes.items[1];
+    const title = frame.titleOf(home.area);
+    const panes = [_]pane_layout.Pane{ .{ .kind = .board, .core = .cpu0 }, .{ .kind = .registers, .core = .cpu0 } };
+    const cell = frame.tabAt(title, &panes, 0) orelse return error.TestUnexpectedResult;
+    var tracker = titles.Tracker{};
+    try std.testing.expect(tracker.press(&layout, &solved, cell.x + 1, cell.y + 1));
+    try std.testing.expect(tracker.drag != null);
+    try std.testing.expectEqual(@as(u8, 2), layout.deckAt(built.deck_leaf).?.count);
+    const drop = placedAt(&solved, built.other) orelse return error.TestUnexpectedResult;
+    try std.testing.expect(tracker.release(&layout, &solved, drop.x + 1, drop.y + 1));
+    // The console keeps its side; the deck split, the dragged view a leaf beside it.
+    try std.testing.expectEqual(pane_layout.Kind.console, layout.pane(layout.node(layout.root).body.split.first).?.kind);
+    const halves = layout.node(built.deck_leaf).body.split;
+    try std.testing.expectEqual(pane_layout.Kind.board, layout.pane(halves.first).?.kind);
+    try std.testing.expectEqual(@as(u8, 1), layout.deckAt(halves.second).?.count);
 }

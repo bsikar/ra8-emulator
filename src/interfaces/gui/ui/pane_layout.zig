@@ -151,6 +151,35 @@ pub const Layout = struct {
         return if (self.nodes.items[parent].body == .deck) parent else null;
     }
 
+    /// Splits the deck at `index` side by side: the view the deck shows at
+    /// `which` leaves as its own leaf and the deck keeps the rest. Returns
+    /// the new leaf.
+    pub fn splitDeck(self: *Layout, index: Index, which: u8, dragged_first: bool) !Index {
+        const held = self.deckAt(index) orelse return error.NotAPane;
+        if (held.count < 2 or which >= held.count) return error.NotAPane;
+        const leaving_node = held.children[which];
+        const leaving = self.pane(leaving_node) orelse return error.NotAPane;
+        var rest = held;
+        var at = which;
+        while (at + 1 < rest.count) : (at += 1) rest.children[at] = rest.children[at + 1];
+        rest.count -= 1;
+        if (rest.active >= rest.count) {
+            rest.active = rest.count - 1;
+        } else if (rest.active > which) {
+            rest.active -= 1;
+        }
+        self.nodes.items[leaving_node] = .{ .body = .free };
+        const side = try self.add(.{ .parent = index, .body = .{ .leaf = leaving } });
+        const keep = try self.add(.{ .parent = index, .body = .{ .deck = rest } });
+        self.nodes.items[index].body = .{ .split = .{
+            .axis = .across,
+            .ratio = 0.5,
+            .first = if (dragged_first) side else keep,
+            .second = if (dragged_first) keep else side,
+        } };
+        return side;
+    }
+
     /// Every pane's rect and every gutter for a window of `area`, panes in
     /// depth-first order, first side before second.
     pub fn solve(self: *const Layout, allocator: std.mem.Allocator, area: Rect) !Solved {
