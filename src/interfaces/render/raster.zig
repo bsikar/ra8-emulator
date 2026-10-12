@@ -66,6 +66,11 @@ fn mix(src: u8, dst: u8, a: u32, rest: u32) u8 {
 /// `atlas`; without one they draw nothing. The interpretation runs through
 /// the shared Paint table (RA8EMU-1157): raster.zig is the desktop
 /// framebuffer's pixel backend, paint_backend.zig the one painter path.
+/// The documented temporary composite (RA8EMU-1157): the desktop's chrome
+/// and leaves already paint through the shared Paint table, so this pass is
+/// only the carry that turns the shell's finished draw list into pixels for
+/// the two window paths. It leaves when the platform's show() takes the
+/// table and there is exactly one painter.
 pub fn draw(target: *Framebuffer, list: *const draw_list.DrawList, atlas: ?Atlas) void {
     const paint_backend = @import("paint_backend.zig");
     paint_backend.Backend.drawAll(target, list, atlas);

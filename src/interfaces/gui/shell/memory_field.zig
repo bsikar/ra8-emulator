@@ -86,9 +86,9 @@ pub fn rowsRect(body: Rect) Rect {
 
 /// Draw a memory leaf with the field: the rows above, a refusal note, then
 /// the field at the foot. A leaf too short for both keeps its rows whole.
-pub fn draw(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, body: Rect, now: *const shell_memory.Snapshot, pin: *Pin) !void {
-    if (body.h < shell_field.height + 2 * shell_frame.pad) return memory_pane.draw(list, theme, body, now);
-    try memory_pane.draw(list, theme, rowsRect(body), now);
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: Rect, now: *const shell_memory.Snapshot, pin: *Pin) !void {
+    if (body.h < shell_field.height + 2 * shell_frame.pad) return memory_pane.draw(table, theme, body, now);
+    try memory_pane.draw(table, theme, rowsRect(body), now);
     const field = fieldRect(body);
     if (pin.refused) {
         const room = @max(field.w, 0);
