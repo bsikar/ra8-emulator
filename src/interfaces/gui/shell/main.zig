@@ -301,7 +301,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.files = &files;
     var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
     shell.recent_menu = &recent_menu;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .breaks = &breaks, .stack = &stack };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .breaks = &breaks, .stack = &stack, .timeline = &shell.timeline.? };
     shell.painter = panes.painter();
     try drive(io, &shell, window, args.image, bytes, args.frames);
     layout_store.save(&shell.layout);

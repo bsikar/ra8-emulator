@@ -43,6 +43,8 @@ const disasm_pane = @import("../ui/disasm_pane.zig");
 const disasm_capture = @import("../disasm_capture.zig");
 const shell_stack = @import("stack.zig");
 const stack_pane = @import("../ui/stack_pane.zig");
+const timeline_model = @import("../timeline_model.zig");
+const timeline_pane = @import("../timeline_pane.zig");
 
 const Rect = draw_list.Rect;
 
@@ -58,6 +60,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .memory => "waiting for memory",
         .disasm => "waiting for the code",
         .stack => "waiting for the call stack",
+        .timeline => "waiting for the trace",
     };
 }
 
@@ -84,6 +87,8 @@ pub const Panes = struct {
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
+    /// The timeline's RTOS record (RA8EMU-838).
+    timeline: ?*timeline_model.Model = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -106,6 +111,16 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
             try console_strip.draw(list, theme, body, console.saved);
             return console_pane.draw(list, theme, console_strip.below(body), &console.log, console.scroll.back);
         }
+    };
+    if (pane.kind == .timeline) if (self.timeline) |model| {
+        const window = model.recorded() orelse return;
+        const room = body.w - 2 * shell_frame.pad;
+        try timeline_pane.draw(list, theme, body, model, .{
+            .start_ns = window.from,
+            .span_ns = @max(window.to - window.from, 1),
+            .width_px = @intCast(@max(room, 1)),
+        });
+        return;
     };
     if (pane.kind == .devices) if (self.devices) |devices| {
         if (self.plug) |plug| if (devices.answered and !devices.refused) {
