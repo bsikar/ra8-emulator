@@ -20,6 +20,8 @@ const shell_frame = @import("../ui/shell/frame.zig");
 const status_capture = @import("../status/capture.zig");
 const status_bar = @import("../status/bar.zig");
 const session_link = @import("../session_link.zig");
+const timeline_model = @import("../timeline_model.zig");
+const timeline_feed = @import("../timeline_feed.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
 const shell_board_input = @import("board/input.zig");
@@ -38,6 +40,7 @@ const shell_memory = @import("memory.zig");
 const shell_breaks = @import("breaks.zig");
 const shell_memory_field = @import("memory_field.zig");
 const shell_time = @import("time.zig");
+const shell_snaps = @import("snapshots.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
 const shell_theme = @import("theme.zig");
@@ -48,21 +51,22 @@ const shell_settings = @import("settings_page.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
-
 pub const Shell = struct {
     allocator: std.mem.Allocator,
     layout: pane_layout.Layout,
     status: status_bar.Status = .{},
     link: ?*session_link.Link = null,
     painter: ?shell_frame.Painter = null,
-    /// The palette in use and the picker that changes it (RA8EMU-1165).
+    /// The palette in use and its picker (RA8EMU-1165).
     themes: shell_theme.Themes = .{},
     titles: shell_titles.Tracker = .{}, // a deck tab press holds a drag (RA8EMU-958).
     /// The settings page over the shell (RA8EMU-963).
     settings: shell_settings.Page = .{},
+    timeline: ?timeline_model.Model = null,
+    trace_armed: bool = false,
     console: ?*shell_console.Console = null,
     board: ?*shell_board.Board = null,
-    /// The pointer on the board leaf: switch clicks and panel touches.
+    /// The board leaf's pointer: switch clicks and panel touches.
     board_input: ?*shell_board_input.Pointer = null,
     devices: ?*shell_devices.Devices = null,
     /// Each device row's fault mode (RA8EMU-817), stepped by its cell.
@@ -72,13 +76,13 @@ pub const Shell = struct {
     camera_file: ?*shell_camera_file.CameraFile = null,
     /// The `--attach` and `--click` plugs, sent once the image is loaded.
     startup: ?*shell_startup.Startup = null,
-    /// Whether the session has answered the image load.
+    /// The session has answered the image load.
     loaded: bool = false,
     registers: ?*shell_registers.Pair = null,
-    /// Register edits from the registers leaves (RA8EMU-946).
+    /// Register edits over the leaves (RA8EMU-946).
     edit: ?*shell_register_edit.Editor = null,
     memory: ?*shell_memory.Pair = null,
-    /// The memory leaf's address field for typed symbols (RA8EMU-934).
+    /// The memory leaf's typed symbol field (RA8EMU-934).
     memory_field: ?*shell_memory_field.Pin = null,
     code: ?*shell_memory.Pair = null,
     /// The run-to points clicked on the disassembly leaves (RA8EMU-1171).
@@ -91,17 +95,19 @@ pub const Shell = struct {
     /// the Board menu's pick (RA8EMU-1152).
     files: ?*shell_open.Open = null,
     pick: ?*shell_pick.Pick = null,
+    /// The timeline slice clicks' rewind (RA8EMU-838).
+    snaps: shell_snaps.Snapshots = undefined,
     /// The session when it is served in this process; null for a remote one.
     server: ?Server = null,
     /// The per-user listener outside clients connect to (RA8EMU-1156).
     listener: ?Server = null,
-    /// The wall clock a run is paced against; without one time stands still.
+    /// The wall clock a run is paced against; none, and time stands still.
     clock: ?wall_clock.Clock = null,
     /// The last pump took everything the session had sent.
     drained: bool = true,
-    /// Where the time bar was drawn this frame.
+    /// The time bar's place this frame.
     bar: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
-    /// The splitter being dragged, from its button press to its release.
+    /// The splitter being dragged, press to release.
     held: ?pane_layout.Gutter = null,
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},
@@ -110,18 +116,21 @@ pub const Shell = struct {
     width: i32 = 0,
     /// The window's height this frame (RA8EMU-963).
     height: i32 = 0,
-    /// Where the pointer last was, for the wheel and page keys.
+    /// The pointer's last place, for the wheel and page keys.
     pointer_at: struct { x: i32, y: i32 } = .{ .x = -1, .y = -1 },
     open: bool = true,
     frame: ?raster.Framebuffer = null,
-
     /// The shell owns `layout` from here on.
     pub fn init(allocator: std.mem.Allocator, layout: pane_layout.Layout) Shell {
-        return .{ .allocator = allocator, .layout = layout };
+        var self: Shell = .{ .allocator = allocator, .layout = layout };
+        self.timeline = timeline_model.Model.init(allocator);
+        self.snaps = shell_snaps.Snapshots.init(allocator);
+        return self;
     }
-
     pub fn deinit(self: *Shell) void {
         if (self.frame) |*frame| frame.deinit(self.allocator);
+        if (self.timeline) |*model| model.deinit();
+        self.snaps.deinit();
         self.layout.deinit();
     }
     /// The link's state, or closed when the shell has none.
@@ -176,7 +185,6 @@ pub const Shell = struct {
         try window.present(frame);
         return true;
     }
-
     /// Apply one input event against this frame's layout.
     pub fn handle(self: *Shell, window: platform.Platform, event: platform.Event, solved: *const pane_layout.Solved) void {
         switch (event) {
@@ -224,7 +232,6 @@ pub const Shell = struct {
             else => {},
         }
     }
-
     /// Page Up or Page Down over a console leaf (RA8EMU-1122).
     fn pageConsole(self: *Shell, event: platform.Event, solved: *const pane_layout.Solved) bool {
         const key = if (event == .key) event.key else return false;
@@ -232,7 +239,6 @@ pub const Shell = struct {
         if (!key.down) return false;
         return console.pageIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, key.code);
     }
-
     /// Offer a press to the register editor over a value cell.
     fn pressValue(self: *Shell, x: i32, y: i32, solved: *const pane_layout.Solved) bool {
         const edit = self.edit orelse return false;
@@ -246,24 +252,21 @@ pub const Shell = struct {
         const in_memory = if (self.memory_field) |field| field.press(x, y) else false;
         return self.pressBar(x, y) or in_plug or in_file or in_memory;
     }
-
+    /// Offer a press to the time bar: the timeline cursor's home.
     fn pressBar(self: *Shell, x: i32, y: i32) bool {
         const time = self.time orelse return false;
         const link = self.link orelse return false;
         return time.press(self.bar, x, y, &self.status, link);
     }
-
     /// Board time for an input: what the time bar last knew, or zero.
     fn boardNow(self: *const Shell) u64 {
         const time = self.time orelse return 0;
         return time.boardNow();
     }
-
     /// A pane changed the device list: the shell's rows are stale.
     fn wants(self: *Shell) void {
         if (self.devices) |devices| devices.want = true;
     }
-
     /// Offer a press to the session-backed panes: faults, devices, run-to points.
     fn pressLink(self: *Shell, link: *session_link.Link, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
         const devices = self.devices orelse return false;
@@ -272,20 +275,17 @@ pub const Shell = struct {
         if (self.breaks) |breaks| if (self.code) |code| if (breaks.clickIn(link, code, &self.layout, solved, x, y)) return true;
         return false;
     }
-
     /// Offer a left press to the board leaf: a switch, or the panel.
     fn pressBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
         const pointer = self.board_input orelse return false;
         const board = self.board orelse return false;
         return pointer.down(board, &self.layout, solved, x, y, self.boardNow());
     }
-
     fn moveBoard(self: *Shell, x: i32, y: i32) void {
         const pointer = self.board_input orelse return;
         const board = self.board orelse return;
         pointer.move(board, x, y);
     }
-
     /// The left button came up: the board leaf sends the click or touch under way.
     fn releaseBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) void {
         if (self.titles.release(&self.layout, solved, x, y)) return;
@@ -299,20 +299,20 @@ pub const Shell = struct {
         const clock = self.clock orelse return 0;
         return clock.now();
     }
-
     /// One round with the session: send what is due and take what has
     /// arrived, and when the session is served in this process let it answer
     /// and take that too.
     fn exchange(self: *Shell) !void {
+        if (self.link) |link| self.snaps.rewind(link);
         try self.pump();
         if (self.server) |server| try server.answer();
         if (self.listener) |listener| try listener.answer();
         try self.pump();
     }
 
-    /// Pay what this frame owes a lit run (shell_run.zig), one slice at a
-    /// time, each answered and taken before the next goes out; a session
-    /// in another process answers in its own time, one slice a frame.
+    /// Pay what this frame owes a lit run (shell_run.zig), one slice at
+    /// a time, each answered before the next goes out; a session in
+    /// another process answers in its own time, one slice a frame.
     fn paySlices(self: *Shell) !void {
         const time = self.time orelse return;
         const link = self.link orelse return;
@@ -347,6 +347,7 @@ pub const Shell = struct {
         };
         if (self.camera) |camera| camera.attach(link);
         if (self.plug) |plug| _ = plug.attach(link);
+        if (self.timeline != null) timeline_feed.arm(link, &self.trace_armed);
         if (self.startup) |startup| if (self.loaded) startup.attach(link);
         if (self.registers) |registers| registers.attach(link);
         if (self.memory_field) |field| _ = field.submit(self.memory);
@@ -361,6 +362,8 @@ pub const Shell = struct {
                 self.drained = true;
                 break;
             };
+            if (self.timeline) |*model| try timeline_feed.take(model, arrival);
+            self.snaps.observe(arrival);
             // A slice's end is not a stop: the run goes on.
             if (self.time) |time| if (time.observe(arrival, self.now()) == .boundary) continue;
             const loading = self.status.load_id;
@@ -381,7 +384,7 @@ pub const Shell = struct {
     }
 
     /// The stack, registers, memory and code leaves: start over after a
-    /// load, take the arrival, and follow each core's fresh registers.
+    /// load, take the arrival, follow each core's fresh registers.
     fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
         if (self.stack) |stack| {
             if (loaded) stack.reload();
