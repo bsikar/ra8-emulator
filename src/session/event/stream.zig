@@ -2,9 +2,10 @@
 //!
 //! Subscribe and unsubscribe while the engine is stopped, then poll from a
 //! consumer thread. Producers never wait for a consumer: an event is reported
-//! as dropped if polling owns the queue, full queues discard their oldest
-//! event, and queued LCD frames coalesce per core. Remaining events preserve
-//! publication order.
+//! as dropped if polling owns the queue, queued LCD frames coalesce per core,
+//! and a full queue discards its oldest telemetry first (RA8EMU-1179): those
+//! kinds are lossy. State-change kinds are dropped only when the queue holds
+//! no telemetry, and events preserve publication order.
 const std = @import("std");
 
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -16,6 +17,7 @@ pub const Event = struct {
     ended: ?@import("../zig/drive.zig").Ended = null,
     payload: Payload = .none,
     pub const Kind = enum { loaded, paused, stopped, rewound, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged, uart_byte, gpio_changed, led_changed, lcd_frame, fault, reset, watchdog, rtos_switch, rtos_idle, isr_enter, isr_leave, module_loaded, module_unloaded, module_faulted };
+
     pub const Rect = struct { x: u16, y: u16, width: u16, height: u16 };
     pub const Payload = union(enum) {
         none,
@@ -29,6 +31,14 @@ pub const Event = struct {
         rtos: struct { thread: u32 = 0, exception: u16 = 0 },
     };
 };
+/// A full queue evicts telemetry kinds first (RA8EMU-1179).
+fn telemetry(kind: Event.Kind) bool {
+    return switch (kind) {
+        .uart_byte, .gpio_changed, .led_changed, .lcd_frame, .fault, .reset, .watchdog, .rtos_switch, .rtos_idle, .isr_enter, .isr_leave, .module_loaded, .module_unloaded, .module_faulted => true,
+        else => false,
+    };
+}
+
 pub const capacity = 128;
 pub const subscribers = 8;
 pub const Read = struct { count: usize, dropped: u64 };
@@ -48,21 +58,35 @@ const Queue = struct {
             for (0..self.len) |i| {
                 const at = (self.head + i) % capacity;
                 if (self.items[at].kind != .lcd_frame or self.items[at].core != event.core) continue;
-                for (i..self.len - 1) |move| {
-                    self.items[(self.head + move) % capacity] = self.items[(self.head + move + 1) % capacity];
-                }
-                self.len -= 1;
-                _ = self.dropped.fetchAdd(1, .monotonic);
+                self.removeAt(i);
                 break;
             }
         }
-        if (self.len == capacity) {
-            self.head = (self.head + 1) % capacity;
-            self.len -= 1;
-            _ = self.dropped.fetchAdd(1, .monotonic);
-        }
+        if (self.len == capacity) self.removeAt(self.oldestTelemetry() orelse 0);
         self.items[(self.head + self.len) % capacity] = event;
         self.len += 1;
+    }
+
+    /// Telemetry kinds are lossy: a full queue may evict them. The rest are
+    /// state changes the client must see to stay in sync (RA8EMU-1179).
+    fn oldestTelemetry(self: *Queue) ?usize {
+        for (0..self.len) |i| {
+            if (telemetry(self.items[(self.head + i) % capacity].kind)) return i;
+        }
+        return null;
+    }
+
+    /// Drop the entry at the offset from the head, close the gap, count it.
+    fn removeAt(self: *Queue, at: usize) void {
+        self.len -= 1;
+        if (at == 0) {
+            self.head = (self.head + 1) % capacity;
+        } else {
+            for (at..self.len) |move| {
+                self.items[(self.head + move) % capacity] = self.items[(self.head + move + 1) % capacity];
+            }
+        }
+        _ = self.dropped.fetchAdd(1, .monotonic);
     }
     fn read(self: *Queue, out: []Event) Read {
         while (!self.mutex.tryLock()) std.atomic.spinLoopHint();

@@ -152,3 +152,73 @@ test "SCI, GPIO and LED taps publish timestamped source events" {
     try std.testing.expectEqual(stream_api.Event.Kind.gpio_changed, events[1].kind);
     try std.testing.expectEqual(stream_api.Event.Kind.led_changed, events[2].kind);
 }
+
+test "a full queue evicts telemetry first and keeps the state changes in order" {
+    var stream: stream_api.Stream = .{};
+    const id = stream.subscribe().?;
+    for (0..stream_api.capacity) |i| stream.publish(.{
+        .core = .cpu0,
+        .virtual_ns = i,
+        .kind = .uart_byte,
+        .payload = .{ .uart = .{ .channel = 8, .byte = @truncate(i) } },
+    });
+    stream.publish(.{ .core = .cpu0, .kind = .fault_set, .payload = .{ .fault = .{ .cause = 3 } } });
+    stream.publish(.{ .core = .cpu0, .kind = .fault_cleared });
+    var out: [stream_api.capacity]stream_api.Event = undefined;
+    const got = stream.read(id, &out).?;
+    try std.testing.expectEqual(stream_api.capacity, got.count);
+    try std.testing.expectEqual(@as(u64, 2), got.dropped);
+    try std.testing.expectEqual(stream_api.Event.Kind.uart_byte, out[0].kind);
+    try std.testing.expectEqual(@as(u64, 2), out[0].virtual_ns);
+    try std.testing.expectEqual(stream_api.Event.Kind.fault_set, out[got.count - 2].kind);
+    try std.testing.expectEqual(@as(u32, 3), out[got.count - 2].payload.fault.cause);
+    try std.testing.expectEqual(stream_api.Event.Kind.fault_cleared, out[got.count - 1].kind);
+}
+
+test "a full queue that holds no telemetry drops its oldest event instead" {
+    var stream: stream_api.Stream = .{};
+    const id = stream.subscribe().?;
+    for (0..stream_api.capacity) |i| stream.publish(.{ .core = .cpu0, .virtual_ns = i, .kind = .loaded });
+    stream.publish(.{ .core = .cpu0, .virtual_ns = stream_api.capacity, .kind = .stopped });
+    var out: [stream_api.capacity]stream_api.Event = undefined;
+    const got = stream.read(id, &out).?;
+    try std.testing.expectEqual(stream_api.capacity, got.count);
+    try std.testing.expectEqual(@as(u64, 1), got.dropped);
+    try std.testing.expectEqual(@as(u64, 1), out[0].virtual_ns);
+    try std.testing.expectEqual(@as(u64, stream_api.capacity), out[got.count - 1].virtual_ns);
+}
+
+fn drainChurn(stream: *stream_api.Stream, id: usize, out: []stream_api.Event, seen: *usize, last: *?u64) !void {
+    while (true) {
+        const got = stream.read(id, out).?;
+        if (got.count == 0 and got.dropped == 0) break;
+        for (out[0..got.count]) |event| {
+            if (last.*) |before| try std.testing.expect(event.virtual_ns > before);
+            last.* = event.virtual_ns;
+            if (event.kind == .breakpoint_set) seen.* += 1;
+        }
+    }
+}
+
+test "state changes between telemetry stay in publication order under churn" {
+    var stream: stream_api.Stream = .{};
+    const id = stream.subscribe().?;
+    var seen: usize = 0;
+    var last: ?u64 = null;
+    var out: [64]stream_api.Event = undefined;
+    for (0..stream_api.capacity * 3) |i| {
+        if (i % 64 == 32) {
+            stream.publish(.{ .core = .cpu0, .virtual_ns = i, .kind = .breakpoint_set, .address = @intCast(i) });
+        } else {
+            stream.publish(.{
+                .core = .cpu0,
+                .virtual_ns = i,
+                .kind = .uart_byte,
+                .payload = .{ .uart = .{ .channel = 0, .byte = @truncate(i) } },
+            });
+        }
+        if (i % 16 == 15) try drainChurn(&stream, id, &out, &seen, &last);
+    }
+    try drainChurn(&stream, id, &out, &seen, &last);
+    try std.testing.expectEqual(@as(usize, 6), seen);
+}
