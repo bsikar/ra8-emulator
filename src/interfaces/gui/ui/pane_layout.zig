@@ -21,7 +21,12 @@ pub const Axis = enum { across, down };
 
 pub const Pane = struct { kind: Kind, core: Core };
 pub const Split = struct { axis: Axis, ratio: f32, first: Index, second: Index };
-pub const Body = union(enum) { leaf: Pane, split: Split, free };
+/// The most views one deck stacks (RA8EMU-958).
+pub const max_deck: usize = 4;
+/// A deck stacks several views over one area; only the active child solves,
+/// and the area's title strip shows one tab per child (RA8EMU-958).
+pub const Deck = struct { children: [max_deck]Index = undefined, count: u8 = 0, active: u8 = 0 };
+pub const Body = union(enum) { leaf: Pane, split: Split, deck: Deck, free };
 pub const Node = struct { parent: ?Index = null, body: Body };
 
 /// A pane's place in a solved layout.
@@ -90,6 +95,7 @@ pub const Layout = struct {
             self.nodes.items[index].body.leaf.kind = .empty;
             return;
         };
+        if (self.nodes.items[parent].body != .split) return error.NotAPane;
         const halves = self.nodes.items[parent].body.split;
         const sibling = if (halves.first == index) halves.second else halves.first;
         const kept = self.nodes.items[sibling].body;
@@ -107,9 +113,42 @@ pub const Layout = struct {
         self.nodes.items[index].body.leaf.core = core;
     }
 
+    /// Converts the node at `index` into a deck over `children` (at least
+    /// one, at most `max_deck`); the first child stays shown.
+    pub fn deck(self: *Layout, index: Index, children: []const Index) !void {
+        if (children.len == 0 or children.len > max_deck) return error.NotAPane;
+        var value = Deck{ .count = @intCast(children.len) };
+        for (children, 0..) |child, at| {
+            self.nodes.items[child].parent = index;
+            value.children[at] = child;
+        }
+        self.nodes.items[index].body = .{ .deck = value };
+    }
+
     pub fn setKind(self: *Layout, index: Index, kind: Kind) !void {
         if (self.pane(index) == null) return error.NotAPane;
         self.nodes.items[index].body.leaf.kind = kind;
+    }
+
+    /// Points the deck at `index` at `value`.
+    pub fn setDeck(self: *Layout, index: Index, value: Deck) !void {
+        if (self.nodes.items[index].body != .deck) return error.NotAPane;
+        self.nodes.items[index].body = .{ .deck = value };
+    }
+
+    /// The deck the node at `index` holds, or null.
+    pub fn deckAt(self: *const Layout, index: Index) ?Deck {
+        return switch (self.nodes.items[index].body) {
+            .deck => |found| found,
+            else => null,
+        };
+    }
+
+    /// The parent of the node at `index` when it is a deck, so a solved
+    /// child can find the tab row it lives in.
+    pub fn deckParent(self: *const Layout, index: Index) ?Index {
+        const parent = self.nodes.items[index].parent orelse return null;
+        return if (self.nodes.items[parent].body == .deck) parent else null;
     }
 
     /// Every pane's rect and every gutter for a window of `area`, panes in
@@ -140,6 +179,10 @@ pub const Layout = struct {
                 try self.place(allocator, halves.first, parts.first, solved);
                 try solved.gutters.append(allocator, .{ .split = index, .area = parts.gap, .whole = area });
                 try self.place(allocator, halves.second, parts.second, solved);
+            },
+            .deck => |stack| if (stack.count != 0) {
+                // The deck is one area: only the shown child is placed on it.
+                try self.place(allocator, stack.children[stack.active], area, solved);
             },
             .free => unreachable,
         }
