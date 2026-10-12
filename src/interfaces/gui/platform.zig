@@ -57,9 +57,24 @@ pub const Event = union(enum) {
 
 /// How an executable opens and closes its window. ra8_gui passes
 /// sdl/opener.zig's SDL window to the shell; a test passes a headless one.
-/// `open` is null when no window can be had.
+/// A window's saved geometry (RA8EMU-966): its size in points, where it
+/// sat on the screen, and whether it was full screen. x and y are null
+/// when the saved state has no position.
+pub const WindowState = struct {
+    width: u32,
+    height: u32,
+    x: ?i32 = null,
+    y: ?i32 = null,
+    fullscreen: bool = false,
+};
+
+/// Where a window sits on the screen (RA8EMU-966).
+pub const Pos = struct { x: i32, y: i32 };
+
+/// `open` is null when no window can be had; the shell hands it the saved
+/// geometry to open at, or null for the backend's default.
 pub const Opener = struct {
-    open: *const fn () ?Platform,
+    open: *const fn (saved: ?WindowState) ?Platform,
     close: *const fn () void,
 };
 
@@ -93,6 +108,9 @@ pub const Platform = struct {
         toggle_fullscreen: ?*const fn (ctx: *anyopaque) void = null,
         /// Whether the window is full screen (RA8EMU-966); null is never.
         fullscreen: ?*const fn (ctx: *anyopaque) bool = null,
+        /// Where the window sits on the screen (RA8EMU-966); null when the
+        /// backend does not say.
+        position: ?*const fn (ctx: *anyopaque) ?Pos = null,
     };
 
     /// The next input event, or null once this frame's events are drained.
@@ -162,6 +180,13 @@ pub const Platform = struct {
     /// backend does not say.
     pub fn fullscreen(self: Platform) bool {
         const get = self.vtable.fullscreen orelse return false;
+        return get(self.ctx);
+    }
+
+    /// Where the window sits on the screen (RA8EMU-966); null when the
+    /// backend does not say.
+    pub fn position(self: Platform) ?Pos {
+        const get = self.vtable.position orelse return null;
         return get(self.ctx);
     }
 

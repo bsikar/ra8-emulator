@@ -106,13 +106,15 @@ const Window = struct {
         quit_after = quit;
     }
 
-    fn open() ?platform.Platform {
+    fn open(saved: ?platform.WindowState) ?platform.Platform {
+        _ = saved;
         opens += 1;
         inner = Headless.init(std.testing.allocator, 480, 320);
         return .{ .ctx = &inner.?, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present } };
     }
 
-    fn none() ?platform.Platform {
+    fn none(saved: ?platform.WindowState) ?platform.Platform {
+        _ = saved;
         opens += 1;
         return null;
     }
