@@ -232,7 +232,7 @@ test "a guest with both slots valid overlays them with the newer slot booted" {
     try std.testing.expectEqual(map_layout.SlotState.State.valid, dfu.b.state);
     try std.testing.expectEqual(boot_slots.Which.b, dfu.booted.?);
     try std.testing.expectEqual(dfu_layout.run_base, dfu.run_base);
-    try std.testing.expectEqual(@as(u64, 2482856036502827657), try digest(dark, &layout, null, "/tmp/map778_boot.ppm"));
+    try std.testing.expectEqual(@as(u64, 7763959113260832073), try digest(dark, &layout, null, "/tmp/map778_boot.ppm"));
 }
 
 test "a bad-CRC newer slot leaves the older slot booted" {
@@ -245,7 +245,7 @@ test "a bad-CRC newer slot leaves the older slot booted" {
     const dfu = layout.slots.?;
     try std.testing.expectEqual(map_layout.SlotState.State.bad_crc, dfu.b.state);
     try std.testing.expectEqual(boot_slots.Which.a, dfu.booted.?);
-    try std.testing.expectEqual(@as(u64, 6609514058959215016), try digest(dark, &layout, null, "/tmp/map778_badcrc.ppm"));
+    try std.testing.expectEqual(@as(u64, 16954390616888938344), try digest(dark, &layout, null, "/tmp/map778_badcrc.ppm"));
 }
 
 test "a guest with no dfu layout carries no overlay" {

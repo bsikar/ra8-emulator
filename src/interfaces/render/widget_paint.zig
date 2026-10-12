@@ -32,7 +32,7 @@ pub const Target = struct {
     failed: bool = false,
 
     pub fn paint(self: *Target) widget.types.Paint {
-        return .{ .user = self, .fill_rect = fillRect, .draw_text = drawText, .text_size = textSize };
+        return .{ .user = self, .fill_rect = fillRect, .draw_text = drawText, .text_size = textSize, .draw_line = drawLine };
     }
 };
 
@@ -48,6 +48,14 @@ fn targetOf(user: ?*anyopaque) *Target {
 fn fillRect(user: ?*anyopaque, x: i32, y: i32, w: i32, h: i32, color: u32) callconv(.c) void {
     const target = targetOf(user);
     target.list.fill(.{ .x = x, .y = y, .w = w, .h = h }, colorOf(color)) catch {
+        target.failed = true;
+    };
+}
+
+/// Bresenham line through the table; the widget backend draws it straight.
+fn drawLine(user: ?*anyopaque, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) callconv(.c) void {
+    const target = targetOf(user);
+    target.list.line(x0, y0, x1, y1, colorOf(color)) catch {
         target.failed = true;
     };
 }
