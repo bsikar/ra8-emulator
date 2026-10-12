@@ -109,12 +109,12 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     };
     if (pane.kind == .devices) if (self.devices) |devices| {
         if (self.plug) |plug| if (devices.answered and !devices.refused) {
-            try shell_plug.draw(list, theme, body, devices, plug);
-            return drawFaults(self, list, theme, shell_plug.rowsRect(body), devices);
+            try shell_plug.draw(table, theme, body, devices, plug);
+            return drawFaults(self, table, theme, shell_plug.rowsRect(body), devices);
         };
         if (devices.answered and devices.note() == null) {
-            try shell_devices.draw(list, theme, body, devices);
-            return drawFaults(self, list, theme, body, devices);
+            try shell_devices.draw(table, theme, body, devices);
+            return drawFaults(self, table, theme, body, devices);
         }
     };
     if (pane.kind == .camera) if (self.camera) |camera| {
@@ -131,7 +131,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| {
-            if (self.memory_field) |field| return shell_memory_field.draw(list, theme, body, now, field);
+            if (self.memory_field) |field| return shell_memory_field.draw(list, table, theme, body, now, field);
             return memory_pane.draw(list, theme, body, now);
         }
     };
@@ -157,10 +157,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
 }
 
 /// The fault cells over a listed devices leaf's rows, when the shell keeps faults.
-fn drawFaults(self: *const Panes, list: *draw_list.DrawList, theme: *const Theme, rows: Rect, devices: *const shell_devices.Devices) !void {
+fn drawFaults(self: *const Panes, table: *const widget.types.Paint, theme: *const Theme, rows: Rect, devices: *const shell_devices.Devices) !void {
     const faults = self.faults orelse return;
     if (devices.note() != null) return;
-    try shell_fault.draw(list, theme, rows, devices, faults);
+    try shell_fault.draw(table, theme, rows, devices, faults);
 }
 
 /// Instructions decoded forward from `pc` out of the rows read around it,

@@ -6,6 +6,7 @@
 //! One field; with two memory leaves it sits in the last one drawn.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
+const widget = @import("ra8_widget");
 const font = @import("ra8_render").font;
 const platform = @import("../platform.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
@@ -85,10 +86,43 @@ pub fn rowsRect(body: Rect) Rect {
 
 /// Draw a memory leaf with the field: the rows above, a refusal note, then
 /// the field at the foot. A leaf too short for both keeps its rows whole.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: Rect, now: *const shell_memory.Snapshot, pin: *Pin) !void {
+pub fn draw(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, body: Rect, now: *const shell_memory.Snapshot, pin: *Pin) !void {
     if (body.h < shell_field.height + 2 * shell_frame.pad) return memory_pane.draw(list, theme, body, now);
     try memory_pane.draw(list, theme, rowsRect(body), now);
     const field = fieldRect(body);
-    if (pin.refused) try font.draw(list, field.x, field.y - font.glyph_h - 2, font.fit(refusal, @intCast(@max(field.w, 0))), theme.muted);
-    try pin.field.draw(list, theme, field);
+    if (pin.refused) {
+        const room = @max(field.w, 0);
+        drawText(table, field.x, field.y - font.glyph_h - 2, font.fit(refusal, @intCast(room)), word(theme.muted), word(theme.background));
+    }
+    try pin.field.draw(table, theme, field);
+}
+
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }

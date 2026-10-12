@@ -11,6 +11,7 @@ const session_link = @import("../session_link.zig");
 const Theme = @import("../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 
@@ -140,7 +141,7 @@ pub fn unplugRowAt(body: draw_list.Rect, x: i32, y: i32) ?usize {
 
 /// Draw one row per fitted part inside `body`, as many as fit, then the
 /// unplug refusal when there was one.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect, devices: *const Devices) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_list.Rect, devices: *const Devices) !void {
     const room = body.w - 2 * shell_frame.pad;
     if (room <= 0) return;
     const x = body.x + shell_frame.pad;
@@ -155,11 +156,40 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect
     }) {
         if (y + font.glyph_h > body.y + body.h) return;
         const part = split(text);
-        try font.draw(list, x, y, font.fit(part.name, @intCast(room)), theme.ink);
-        if (room > column + mark) try font.draw(list, x + column, y, font.fit(part.at, @intCast(room - column - mark)), theme.muted);
+        drawText(table, x, y, font.fit(part.name, @intCast(room)), word(theme.ink), word(theme.background));
+        if (room > column + mark) drawText(table, x + column, y, font.fit(part.at, @intCast(room - column - mark)), word(theme.muted), word(theme.background));
         const cell = unplugCell(body, row);
-        if (room > mark) try font.draw(list, cell.x, cell.y, unplug_mark, theme.muted);
+        if (room > mark) drawText(table, cell.x, cell.y, unplug_mark, word(theme.muted), word(theme.background));
     }
     if (!devices.unplug_refused or y + font.glyph_h > body.y + body.h) return;
-    try font.draw(list, x, y, font.fit("the session would not unplug that part", @intCast(room)), theme.muted);
+    drawText(table, x, y, font.fit("the session would not unplug that part", @intCast(room)), word(theme.muted), word(theme.background));
+}
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: u32, bg: u32) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
