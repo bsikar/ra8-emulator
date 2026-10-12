@@ -70,7 +70,7 @@ test "clicking SW1 on the board pane reaches the firmware" {
     try run(&link, &leds, .run, 2_000);
     try std.testing.expect(!leds.on[0]);
 
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 });
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
     const sw1 = layout.switches[0];
     const x = sw1.x + @divTrunc(sw1.w, 2);
     const y = sw1.y + @divTrunc(sw1.h, 2);

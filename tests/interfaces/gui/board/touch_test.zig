@@ -40,7 +40,7 @@ test "pixels off the panel clamp to its edges" {
 }
 
 test "the pane shows the panel inside its panel area, keeping the aspect" {
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 });
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
     const shown = touch.shownIn(layout, width, height);
     try std.testing.expect(!shown.empty());
     try std.testing.expect(shown.x >= layout.panel.x and shown.y >= layout.panel.y);
