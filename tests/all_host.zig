@@ -135,6 +135,7 @@ test {
     _ = @import("interfaces/gui/lcd_pacing_test.zig");
     _ = @import("interfaces/gui/lcd_scrubber_test.zig");
     _ = @import("interfaces/gui/lcd_history_test.zig");
+    _ = @import("interfaces/gui/snapshot_ring_test.zig");
     _ = @import("interfaces/gui/timeline_model_test.zig");
     _ = @import("interfaces/gui/timeline_pane_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");

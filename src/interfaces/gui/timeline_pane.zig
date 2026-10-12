@@ -176,3 +176,28 @@ fn stampLabel(ns: u64, into: []u8) []const u8 {
     if (ns >= 1_000) return std.fmt.bufPrint(into, "{d:.3}us", .{f / 1e3}) catch "";
     return std.fmt.bufPrint(into, "{d}ns", .{ns}) catch "";
 }
+
+/// The slice under a pane click, or null when the point sits on the
+/// name column, a core header, the ruler, or empty lane space. Mirrors
+/// draw's row walk so a click lands on the slice painted there; `x`
+/// and `y` are pane-local.
+pub fn hitAt(area: Rect, model: *const Model, view: View, x: i32, y: i32) ?timeline_model.Slice {
+    if (area.w < col_w + 16 or area.h < ruler_h + header_h + row_h) return null;
+    const rows = rowsRect(area);
+    if (x < rows.x or y < area.y or y >= area.y + rows.h) return null;
+    const bottom = area.y + rows.h;
+    var y_top = area.y;
+    for (0..timeline_model.limits.cores) |ci| {
+        if (y_top >= bottom or y_top + header_h > bottom) break;
+        if (y < y_top + header_h) return null;
+        var order_buf: [64]usize = undefined;
+        var row_y = y_top + header_h;
+        for (laneOrder(model, @intCast(ci), &order_buf)) |index| {
+            if (row_y + row_h > bottom) break;
+            if (y >= row_y and y < row_y + row_h) return model.hit(index, view, x - rows.x);
+            row_y += row_h;
+        }
+        y_top = row_y;
+    }
+    return null;
+}
