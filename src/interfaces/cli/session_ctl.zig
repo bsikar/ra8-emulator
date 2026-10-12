@@ -8,6 +8,7 @@
 //! fresh machine booted from ELF.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
+const chunk_load = @import("ra8_rpc").session.load_chunks;
 const Spec = @import("serve/listen.zig").Spec;
 const ctl_client = @import("ctl/client.zig");
 const Client = ctl_client.Client;
@@ -254,8 +255,8 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
     switch (request.command) {
         .events => |options| return events.watch(client, w, json, options),
         .load => |path| {
-            const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(proto.max_payload));
-            _ = try client.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });
+            const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(@intCast(chunk_load.max_image)));
+            _ = try chunk_load.loadImageCall(client, .cpu0, image);
             try out.loaded(w, json, path, image.len);
         },
         .run => |budget| try runTo(client, w, json, budget),

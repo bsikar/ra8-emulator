@@ -3,6 +3,7 @@
 const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
+const load_chunks = @import("load_chunks.zig");
 const api = @import("ra8_session").api;
 const session_symbols = @import("ra8_session").symbols;
 const stop_machine = @import("ra8_session").stop_machine;
@@ -89,6 +90,9 @@ pub const Context = struct {
     /// The event-stream queue RTOS events are read from while any core
     /// wants the trace topic (RA8EMU-832).
     trace_feed: ?usize = null,
+    /// The in-flight chunked load between load_begin and load_end
+    /// (RA8EMU-1174); holds nothing between loads.
+    chunks: load_chunks.Assembler = .{},
     /// Owns each captured panel frame. A server without one, or a session
     /// without a display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
@@ -125,7 +129,7 @@ fn bit(topic: proto.Topic) u8 {
     return @as(u8, 1) << @intCast(index);
 }
 
-const Ack = rpc.Outcome(proto.Ack);
+pub const Ack = rpc.Outcome(proto.Ack);
 const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
 fn code(value: u16) rpc.Code {

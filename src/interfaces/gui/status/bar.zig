@@ -4,6 +4,7 @@
 //! picked file that never got as far as the session.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
+const chunked = @import("ra8_rpc").session.load_chunks;
 const session_link = @import("../session_link.zig");
 const Link = session_link.Link;
 const Arrival = session_link.Arrival;
@@ -53,7 +54,7 @@ pub const Refusal = enum {
             .load => "the session refused the image",
             .run => "the session refused to run",
             .unread => "the file could not be read",
-            .too_large => "the image is too large for the session (1 MiB at most)",
+            .too_large => "the image is too large for the session (64 MiB at most)",
         };
     }
 };
@@ -71,12 +72,12 @@ pub const Status = struct {
     render: ?[]const u8 = null,
 
     /// Load `bytes` (read from `path`) on this core, then read where it halted.
-    /// An image longer than one load carries is turned back here, before
-    /// the link is asked to send what it cannot.
+    /// An image longer than one load carries streams in chunks (RA8EMU-1174);
+    /// only one beyond the chunked cap is turned back here, before the
+    /// link is asked to send what it cannot.
     pub fn load(self: *Status, link: *Link, path: []const u8, bytes: []const u8) !void {
-        if (bytes.len > proto.Load.max_len.image) return error.ImageTooLarge;
         _ = try link.send(proto.Subscription, .subscribe, .{ .core = self.core, .topic = .stop });
-        self.load_id = try link.send(proto.Load, .load, .{ .core = self.core, .image = bytes });
+        self.load_id = try chunked.loadImageSend(link, self.core, bytes);
         self.staged = Image.of(path, bytes);
     }
 

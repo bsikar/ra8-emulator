@@ -25,6 +25,7 @@ const session_input = @import("input.zig");
 const session_backtrace = @import("backtrace.zig");
 const session_periph = @import("periph.zig");
 const session_folded = @import("folded.zig");
+const session_chunks = @import("load_chunks.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -35,6 +36,9 @@ pub const app_codes = handlers.app_codes;
 const M = proto.Method;
 const routes = .{
     .{ @backingInt(M.load), handlers.load },
+    .{ @backingInt(M.load_begin), session_chunks.loadBegin },
+    .{ @backingInt(M.load_chunk), session_chunks.loadChunk },
+    .{ @backingInt(M.load_end), session_chunks.loadEnd },
     .{ @backingInt(M.run), handlers.run },
     .{ @backingInt(M.pause), handlers.pause },
     .{ @backingInt(M.step), handlers.step },
