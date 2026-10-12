@@ -245,3 +245,63 @@ test "CPU1 preserves fractional cycles across a default-rate round" {
     driver.roundAt(124, 8_000_000);
     try std.testing.expectEqual(@as(u64, 2), driver.second.state.timebase.elapsed);
 }
+
+fn holdFetch(context: *anyopaque, address: u32) bool {
+    _ = context;
+    _ = address;
+    return true;
+}
+
+fn rerelease(zero_slots: bool) !void {
+    var board = Board.init(std.testing.allocator);
+    defer board.deinit();
+    var store0 = try Store.init(null);
+    defer store0.deinit();
+    const cpu0: Guest = .{ .store = &store0 };
+    try ra8.board.wiring.attachBlocks(&board, cpu0);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf", std.testing.allocator, .limited(1 << 20));
+    defer std.testing.allocator.free(bytes);
+    const image = try ra8.board.image.load.read(try ra8.board.image.elf.Image.init(bytes));
+    var driver: Driver = undefined;
+    try driver.open(ra8.board.wiring.cpu1(&board), image.image(), cpu0);
+    defer driver.close();
+    const cpu = &driver.core.cpu;
+    const initial = driver.second.state.vector_base;
+    try std.testing.expect(initial != 0);
+    try std.testing.expectEqual(initial, try cpu.bus.readWord(memmap.scb.vtor));
+    if (zero_slots) cpu.fetch_guard = .{ .context = &driver, .holdsFn = holdFetch };
+    const moved = vectors;
+    try driver.guest().writeWord(moved, stack);
+    try driver.guest().writeWord(moved + 4, code | 1);
+    try driver.guest().write(code, &.{ 0xFE, 0xE7 });
+    var reboot: ra8.chip.core.reboot.Reboot = .{};
+    board.reboot = &reboot;
+    const ctrl = ra8.chip.periph.cpu_ctrl;
+    // The last release uses zero INITVTOR and must retain the previous base.
+    for ([_]u32{ initial, moved, 0 }, 0..) |given, i| {
+        reboot.performed += 1;
+        board.second_core.reset();
+        const before = cpu.slots;
+        driver.round(1);
+        try std.testing.expect(driver.second.state.held);
+        try std.testing.expectEqual(before, cpu.slots);
+        board.bus.write(ctrl.win_base + ctrl.regs.initvtor, 4, given);
+        board.bus.write(ctrl.win_base + ctrl.regs.actcsr, 2, ctrl.key.value | ctrl.bits.actreq);
+        driver.round(1);
+        const expected = if (i == 0) initial else moved;
+        try std.testing.expectEqual(expected, try cpu.bus.readWord(memmap.scb.vtor));
+        try std.testing.expectEqual(expected, cpu.vtor);
+        try std.testing.expect(!driver.second.state.held and !driver.second.state.unvectored);
+        try std.testing.expectEqual(@as(?ra8.chip.core.fault.Fault, null), driver.second.state.fault);
+        try std.testing.expectEqual(before + @as(u64, if (zero_slots) 0 else 1), cpu.slots);
+    }
+    try std.testing.expectEqual(@as(u32, 3), driver.second.state.restarts);
+}
+
+test "CPU VTOR regression: CPU1 re-release restores the configured guest VTOR" {
+    try rerelease(false);
+}
+
+test "CPU VTOR regression: repeated zero-slot CPU1 re-release restores guest VTOR" {
+    try rerelease(true);
+}

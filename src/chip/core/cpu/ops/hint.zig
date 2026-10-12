@@ -32,6 +32,17 @@ pub const encodings = struct {
 
 pub const group: op.Group = .{ .name = "hint", .decode = decode };
 
+/// The board/session wires this to every other core's event register.
+/// It is host wiring, retained on reset and never checkpointed.
+pub const EventSender = struct {
+    context: *anyopaque,
+    sendFn: *const fn (*anyopaque) void,
+
+    pub fn send(self: EventSender) void {
+        self.sendFn(self.context);
+    }
+};
+
 fn decode(instr: Instr) ?op.Exec {
     const e = encodings;
     if (instr.size == 2) {
@@ -89,4 +100,5 @@ fn waitForInterrupt(cpu: *Cpu, instr: Instr) op.Error!void {
 fn sendEvent(cpu: *Cpu, instr: Instr) op.Error!void {
     _ = instr;
     cpu.event = true;
+    if (cpu.event_sender) |sender| sender.send();
 }

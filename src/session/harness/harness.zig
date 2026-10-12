@@ -19,6 +19,7 @@ const session_faults = @import("../board/faults/faults.zig");
 const board_boundary = @import("../board/boundary.zig");
 const session_events = @import("../board/events.zig");
 const second_core = @import("ra8_chip").core.second.core;
+const memmap = @import("ra8_chip").core.memmap;
 const session_display = @import("../board/display.zig");
 const session_state = @import("../board/state.zig");
 const session_history = @import("../history.zig");
@@ -87,6 +88,8 @@ const LoaderState = struct {
         _ = try memory_load.image(memory, loaded.image());
         const base = image.vectorBase() orelse return error.NoVectorTable;
         try cpu.reset(base);
+        // CPU1 exposes its initial table through VTOR after reset clears SCS.
+        if (core == .cpu1) try cpu.bus.writeWord(memmap.scb.vtor, base);
         if (core == .cpu0) if (self.reboot) |reboot| {
             reboot.vector_base = base;
         };

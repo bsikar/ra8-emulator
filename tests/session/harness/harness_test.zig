@@ -252,3 +252,41 @@ test "RA8EMU-1152: the harness opens on the board profile it is given" {
     try std.testing.expectEqualStrings("TEST LED", profile.leds[0].label);
     try std.testing.expect(profile.panel != null);
 }
+
+test "CPU VTOR regression: repeated Session CPU1 loads expose the loaded vector base" {
+    const gpa = std.testing.allocator;
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf" });
+    defer opened.deinit();
+    var second: ra8.session.cpu1.bringup.Cpu1 = .{};
+    try second.open(gpa, std.testing.io, &opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    defer second.close(gpa);
+    const cpu = second.cpu();
+    const first = second.image.?.vectorBase().?;
+    try std.testing.expect(first != 0);
+    try std.testing.expectEqual(first, try cpu.bus.readWord(ra8.chip.core.memmap.scb.vtor));
+    const moved = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "tests/fixtures/gpio/blink.elf", gpa, .limited(1 << 20));
+    defer gpa.free(moved);
+    // Bring-up loads once already. No slot separates these same-base and moved-base loads.
+    for ([_][]const u8{ second.bytes, second.bytes, moved, moved, second.bytes }) |bytes| {
+        const before = cpu.slots;
+        try opened.session().load(.cpu1, bytes);
+        const expected = (try ra8.board.image.elf.Image.init(bytes)).vectorBase().?;
+        try std.testing.expect(expected != 0);
+        var word: [4]u8 = undefined;
+        try opened.session().read(.cpu1, ra8.chip.core.memmap.scb.vtor, &word);
+        try std.testing.expectEqual(expected, std.mem.readInt(u32, &word, .little));
+        try std.testing.expectEqual(expected, cpu.vtor);
+        try std.testing.expectEqual(before, cpu.slots);
+    }
+    try std.testing.expectEqual(@as(u64, 0), cpu.slots);
+    _ = try opened.session().step(.cpu1);
+    try std.testing.expect(cpu.slots > 0);
+    const before = cpu.slots;
+    try opened.session().load(.cpu1, moved);
+    try opened.session().load(.cpu1, moved);
+    const base = (try ra8.board.image.elf.Image.init(moved)).vectorBase().?;
+    try std.testing.expect(base != first);
+    try std.testing.expectEqual(base, try cpu.bus.readWord(ra8.chip.core.memmap.scb.vtor));
+    try std.testing.expectEqual(before, cpu.slots);
+    try std.testing.expectEqual(@as(u32, 0), try opened.primaryCpu().bus.readWord(ra8.chip.core.memmap.scb.vtor));
+}

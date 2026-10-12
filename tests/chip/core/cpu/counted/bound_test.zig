@@ -37,6 +37,88 @@ fn regs(pairs: []const [2]u32) [16]u32 {
     return out;
 }
 
+/// NZCV, in that order from bit 3, of ADDS (`a + b`) or of SUBS and CMP
+/// (`a - b`), worked out apart from the core and from `limit`.
+fn flags(a: u32, b: u32, subtract: bool) u4 {
+    const wide: u64 = if (subtract) @as(u64, a) + ~b + 1 else @as(u64, a) + b;
+    const result: u32 = @truncate(wide);
+    const n: u4 = @intCast(result >> 31);
+    const z: u4 = @intFromBool(result == 0);
+    const c: u4 = @intFromBool(wide >> 32 != 0);
+    const sign = if (subtract) (a ^ b) & (a ^ result) else ~(a ^ b) & (a ^ result);
+    return n << 3 | z << 2 | c << 1 | @as(u4, @intCast(sign >> 31));
+}
+
+/// The slow way round: how many trips after the traced one a setter fed
+/// `x`, moving by `delta` a trip, leaves the `kept` flags it left in the
+/// traced trip. Counts no further than `most`.
+fn slowTrips(x: u32, delta: i32, other: u32, subtract: bool, kept: u4, most: u64) u64 {
+    const traced = flags(x, other, subtract) & kept;
+    var now = x;
+    var count: u64 = 0;
+    while (count < most) : (count += 1) {
+        now +%= @as(u32, @bitCast(delta));
+        if (flags(now, other, subtract) & kept != traced) break;
+    }
+    return count;
+}
+
+const nzcv: u4 = 0b1111;
+
+test "a flag setter whose flags reach the loop head is bounded" {
+    // adds r3,#1 ; b loop. A skip ends at the head with the traced xPSR, so
+    // these flags are live although nothing in the loop reads them.
+    var trip = Trip{};
+    trip.head[3] = 1;
+    trip.add(0x3301, regs(&.{.{ 3, 0x7FFF_FFF0 }}));
+    trip.add(0xE7FD, regs(&.{.{ 3, 0x7FFF_FFF1 }}));
+    // Stepped one at a time, N and V first change on the 15th trip after,
+    // when 0x7FFF_FFFF + 1 goes negative: 14 trips keep the traced flags.
+    const slow = slowTrips(0x7FFF_FFF0, 1, 1, false, nzcv, 100);
+    try std.testing.expectEqual(@as(u64, 14), slow);
+    // The bound stops strictly before the guard point one short of that
+    // (0x7FFF_FFFE), so it is the 13 trips before it: never past `slow`.
+    try std.testing.expectEqual(@as(?u64, slow - 1), trip.trips(&.{}));
+}
+
+test "a setter that leaves carry and overflow standing does not make them dead" {
+    // adds r3,#1 ; movs r1,#5 ; b loop. MOVS rewrites N and Z only, so the
+    // head still sees the C and V of the ADDS, and its carry out at the wrap.
+    var trip = Trip{};
+    trip.head[3] = 1;
+    trip.add(0x3301, regs(&.{.{ 3, 0xFFFF_FFF0 }}));
+    trip.add(0x2105, regs(&.{.{ 3, 0xFFFF_FFF1 }}));
+    trip.add(0xE7FC, regs(&.{ .{ 3, 0xFFFF_FFF1 }, .{ 1, 5 } }));
+    const slow = slowTrips(0xFFFF_FFF0, 1, 1, false, 0b0011, 100);
+    try std.testing.expectEqual(@as(u64, 14), slow);
+    try std.testing.expectEqual(@as(?u64, slow - 1), trip.trips(&.{}));
+    // The same with a reader of that carry inside the trip: bcc loop.
+    trip.steps[2] = td.decode(0xD3FC, 0);
+    try std.testing.expectEqual(@as(?u64, slow - 1), trip.trips(&.{}));
+}
+
+test "only a later flag setter in the same trip makes flags dead" {
+    // The first ADDS may cross a boundary, but the last ADDS flags reach
+    // the head. Wrapping to the first setter cannot make them dead.
+    var trip = Trip{};
+    trip.head[3] = 1;
+    trip.head[4] = 1;
+    trip.add(0x3301, regs(&.{ .{ 3, 10 }, .{ 4, 0x7FFF_FFF0 } }));
+    trip.add(0x3401, regs(&.{ .{ 3, 11 }, .{ 4, 0x7FFF_FFF0 } }));
+    trip.add(0xE7FC, regs(&.{ .{ 3, 11 }, .{ 4, 0x7FFF_FFF1 } }));
+    // R3 at 10 is 2^31 trips from any boundary, so only R4's ADDS can bound
+    // this: 14 trips keep its flags, and the bound stops one guard point
+    // short of that.
+    const slow = slowTrips(0x7FFF_FFF0, 1, 1, false, nzcv, 100);
+    try std.testing.expectEqual(@as(u64, 14), slow);
+    try std.testing.expectEqual(@as(?u64, slow - 1), trip.trips(&.{}));
+    // With R4 still, the first ADDS stays dead and nothing bounds the trip.
+    trip.head[4] = 0;
+    trip.steps[1] = td.decode(0x2C01, 0);
+    trip.regs[2] = regs(&.{ .{ 3, 11 }, .{ 4, 0x7FFF_FFF0 } });
+    try std.testing.expectEqual(@as(?u64, cb.unbounded), trip.trips(&.{}));
+}
+
 test "an up-count to a register limit stops short of the limit" {
     // adds r0,#1 ; cmp r0,r1 ; bls loop. The ADDS flags are dead.
     var trip = Trip{};
@@ -118,7 +200,17 @@ test "a value that starts moving inside the trip, or a moving SP, is refused" {
     trip.add(0xE7FC, regs(&.{ .{ 0, 11 }, .{ 1, 10 } }));
     try std.testing.expectEqual(@as(?u64, null), trip.trips(&.{}));
     trip.head[1] = 1;
-    try std.testing.expectEqual(@as(?u64, cb.unbounded), trip.trips(&.{}));
+    // The copy now hangs together, but the ADDS flags reach the head and
+    // move at the sign boundary: 10 + n + 1 first goes negative on trip
+    // 0x7FFF_FFFF - 10, so every trip up to the one before keeps them.
+    const exact: u32 = 0x7FFF_FFFF - 10 - 1;
+    const traced = flags(10, 1, false);
+    try std.testing.expectEqual(traced, flags(10 + exact, 1, false));
+    try std.testing.expect(traced != flags(10 + exact + 1, 1, false));
+    try std.testing.expectEqual(@as(u64, 4096), slowTrips(10, 1, 1, false, nzcv, 4096));
+    try std.testing.expectEqual(@as(u64, 4096), slowTrips(10 + exact - 4096, 1, 1, false, nzcv, 5000));
+    // One guard point short of that, as everywhere.
+    try std.testing.expectEqual(@as(?u64, exact - 1), trip.trips(&.{}));
     trip.head[13] = 4;
     try std.testing.expectEqual(@as(?u64, null), trip.trips(&.{}));
 }
@@ -144,8 +236,14 @@ test "a CBZ on the down-counter, as txm_fault_cpu1's main polls" {
     trip.add(0xD109, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
     trip.add(0x3901, regs(&.{ .{ 1, 1000 }, .{ 2, shared }, .{ 4, mark } }));
     trip.add(0xE7EF, regs(&.{ .{ 1, 999 }, .{ 2, shared }, .{ 4, mark } }));
-    // Zero is 1000 trips off and one is 999, so 998 are safe.
-    try std.testing.expectEqual(@as(?u64, 998), trip.trips(&.{}));
+    // The CBZ alone: zero is 1000 trips off and one is 999, so 998 are safe.
+    try std.testing.expectEqual(@as(u64, 998), cb.limit(1000, -1, 0));
+    // The SUBS flags reach the head through `b loop`, and CBZ reads none, so
+    // they bound the trip too. Stepped, Z first sets on trip 999 (1 - 1),
+    // so 998 trips keep the traced flags; its guard point is two, not one.
+    const slow = slowTrips(1000, -1, 1, true, nzcv, 5000);
+    try std.testing.expectEqual(@as(u64, 998), slow);
+    try std.testing.expectEqual(@as(?u64, slow - 1), trip.trips(&.{}));
 }
 
 test "a CBNZ on a moving value sitting at zero allows no trips" {
