@@ -1,0 +1,9 @@
+# Example of adding a display: a generic 4.3" 480x272 RGB565 LCD.
+# The emulator becomes whatever a config describes -- a board profile names
+# one of these by file stem, or none at all.
+name   = "Generic 4.3in 480x272"
+type   = "tft"
+width  = 480
+height = 272
+format = "rgb565"
+ppi    = 122

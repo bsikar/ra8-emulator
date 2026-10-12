@@ -14,14 +14,23 @@ const Rect = draw_list.Rect;
 const Color = draw_list.Color;
 
 const area: Rect = .{ .x = 0, .y = 0, .w = 480, .h = 320 };
+const sample: pane.Parts = .{
+    .panel = .{ .width = 1024, .height = 600 },
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+};
 
 fn middle(rect: Rect) [2]i32 {
     return .{ rect.x + @divTrunc(rect.w, 2), rect.y + @divTrunc(rect.h, 2) };
 }
 
 test "a press released over the same switch clicks it" {
-    const layout = pane.Layout.of(area, pane.profile);
-    for (layout.switches, 0..) |button, index| {
+    const layout = pane.Layout.of(area, sample);
+    for (layout.switches[0..layout.switch_count], 0..) |button, index| {
         var press: input.Press = .{};
         const at = middle(button);
         press.down(layout, at[0], at[1]);
@@ -32,7 +41,7 @@ test "a press released over the same switch clicks it" {
 }
 
 test "a release off the pressed switch, or a press off every switch, clicks nothing" {
-    const layout = pane.Layout.of(area, pane.profile);
+    const layout = pane.Layout.of(area, sample);
     const sw1 = middle(layout.switches[0]);
     const sw2 = middle(layout.switches[1]);
     const panel = middle(layout.panel);
@@ -52,14 +61,14 @@ fn faceAt(view: pane.View, button: Rect) !Color {
     defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, area.w, area.h);
     defer frame.deinit(std.testing.allocator);
-    try pane.draw(&list, dark, area, view, pane.profile);
+    try pane.draw(&list, dark, area, view, sample);
     raster.draw(&frame, &list, font.atlas);
     const at = middle(button);
     return frame.pixels[@intCast(at[1] * area.w + at[0])];
 }
 
 test "only the held switch draws pressed" {
-    const layout = pane.Layout.of(area, pane.profile);
+    const layout = pane.Layout.of(area, sample);
     const leds: pane.Leds = .{};
     try std.testing.expectEqual(dark.face, try faceAt(.{ .leds = &leds }, layout.switches[0]));
     try std.testing.expectEqual(dark.pressed_face, try faceAt(.{ .leds = &leds, .pressed = 0 }, layout.switches[0]));

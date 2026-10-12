@@ -63,6 +63,7 @@ const routes = .{
     .{ @backingInt(M.set_fault), parts.setFault },
     .{ @backingInt(M.clear_fault), parts.clearFault },
     .{ @backingInt(M.list_parts), parts.listParts },
+    .{ @backingInt(M.board_parts), parts.boardParts },
     .{ @backingInt(M.set_camera_source), session_camera.setCameraSource },
     .{ @backingInt(M.map), session_map.map },
     .{ @backingInt(M.stack), session_stack.stack },

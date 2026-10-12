@@ -1,11 +1,14 @@
-//! The board pane (RA8EMU-813): the EK-RA8D2 as one block of draw-list
+//! The board pane (RA8EMU-813): the board as one block of draw-list
 //! commands. An outline of the board holds the panel image the shell's board
-//! feed builds from lcd_dirty (RA8EMU-790), the three user LEDs lit from the
-//! session's led_changed events (RA8EMU-811) and the two user switches as hit
-//! rects. Layout is a pure function of the area; the panel image keeps its
-//! own aspect inside its slot, and before (or without) a frame the slot is
-//! fitted to the loaded panel profile (RA8EMU-1150). The shell (RA8EMU-201)
-//! places the pane.
+//! feed builds from lcd_dirty (RA8EMU-790), the user LEDs lit from the
+//! session's led_changed events (RA8EMU-811) and the user switches as hit
+//! rects. The pane draws exactly the parts the session reports through
+//! board_parts (RA8EMU-1151), so any LED or switch count and any panel
+//! aspect lays out and lights the same way, and the pane carries no board
+//! knowledge of its own. Layout is a pure function of the area and the
+//! parts; the panel image keeps its own aspect inside its slot, and before
+//! (or without) a frame the slot is fitted to the reported panel. The shell
+//! (RA8EMU-201) places the pane.
 //! gui/board.capture.zig folds the session's events into `Leds`; this pane
 //! never imports the session or the chip.
 const std = @import("std");
@@ -26,43 +29,55 @@ const shape_w: u32 = 3;
 const shape_h: u32 = 2;
 const pad: i32 = 4;
 
-/// The board's user LEDs and their lit RGB565 words, in the chip's order;
-/// gui/board.capture.zig checks both against the chip at comptime.
-pub const led_count: usize = 3;
-pub const led_rgb565 = [led_count]u16{ 0x001F, 0x07E0, 0xF800 };
-
-pub const switch_count: usize = 2;
-pub const switch_names = [switch_count][]const u8{ "SW1", "SW2" };
-pub const led_names = [led_count][]const u8{ "LED1", "LED2", "LED3" };
+/// The most LEDs, switches and label bytes the pane keeps, the shell's
+/// copy-off-the-wire storage.
+pub const max_leds: usize = 8;
+pub const max_switches: usize = 8;
+pub const name_max: usize = 24;
 
 /// The panel profile whose shape the pane draws the panel at before (or
-/// without) a frame (RA8EMU-1150): the ER-TFT070-6 glass in
-/// panels/ek_ra8d2.toml, 1024x600 rgb565 at 169 ppi. Pixels are square, so
-/// the physical shape is the pixel shape. Width and height 0 (unknown) keep
-/// the raw slot shape.
+/// without) a frame (RA8EMU-1150), as the session reports it (RA8EMU-1151).
 pub const Profile = struct {
     width: u32 = 0,
     height: u32 = 0,
 };
 
-/// The EK-RA8D2's panel profile, the one board the pane draws.
-pub const profile: Profile = .{ .width = 1024, .height = 600 };
+/// One LED's lamp colour and label, as the session reports it.
+pub const Led = struct {
+    rgb565: u16,
+    name: []const u8,
+};
+
+/// The board's parts, as the session reports them through board_parts
+/// (RA8EMU-1151): the LEDs in the chip's led_changed order, the switch
+/// labels in the board's switch order, and the panel profile the pre-frame
+/// slot fits. Width and height 0 (no panel or unknown) keep the raw slot
+/// shape.
+pub const Parts = struct {
+    leds: []const Led = &.{},
+    switch_names: []const []const u8 = &.{},
+    panel: Profile = .{},
+};
 
 /// What the LEDs show; gui/board.capture.zig folds the session's
 /// led_changed events into it.
 pub const Leds = struct {
-    on: [led_count]bool = @splat(false),
+    on: [max_leds]bool = @splat(false),
 };
 
 /// Where each part sits. Every rect is empty when the area is too small.
 pub const Layout = struct {
     board: Rect,
     panel: Rect,
-    leds: [led_count]Rect,
-    switches: [switch_count]Rect,
+    led_count: usize,
+    switch_count: usize,
+    leds: [max_leds]Rect,
+    switches: [max_switches]Rect,
 
-    pub fn of(area: Rect, panel: Profile) Layout {
-        var layout: Layout = .{ .board = none(area), .panel = none(area), .leds = @splat(none(area)), .switches = @splat(none(area)) };
+    pub fn of(area: Rect, parts: Parts) Layout {
+        const led_count = @min(parts.leds.len, max_leds);
+        const switch_count = @min(parts.switch_names.len, max_switches);
+        var layout: Layout = .{ .board = none(area), .panel = none(area), .led_count = led_count, .switch_count = switch_count, .leds = @splat(none(area)), .switches = @splat(none(area)) };
         if (area.w < min_w or area.h < min_h) return layout;
         const inner: Rect = .{ .x = area.x + pad, .y = area.y + pad, .w = area.w - 2 * pad, .h = area.h - 2 * pad };
         const board = fit.fitIn(inner, shape_w, shape_h);
@@ -70,31 +85,30 @@ pub const Layout = struct {
         const column = @divTrunc(board.w, 4);
         layout.board = board;
         layout.panel = .{ .x = board.x + margin, .y = board.y + margin, .w = board.w - column - 2 * margin, .h = board.h - 2 * margin };
-        if (panel.width > 0 and panel.height > 0) layout.panel = fit.fitIn(layout.panel, panel.width, panel.height);
-        // Three LEDs and two switches share the column, each with its label under it.
+        if (parts.panel.width > 0 and parts.panel.height > 0) layout.panel = fit.fitIn(layout.panel, parts.panel.width, parts.panel.height);
+        // The LEDs and switches share the column, each with its label under it.
         const label_h = @as(i32, font.cell_h) + pad;
-        const room = @divTrunc(board.h - 2 * margin, @as(i32, led_count + switch_count)) - label_h;
+        const side_parts = led_count + switch_count;
+        const room = if (side_parts == 0) @as(i32, board.h) else @divTrunc(board.h - 2 * margin, @as(i32, @intCast(side_parts))) - label_h;
         const side = @max(4, @min(@min(@divTrunc(column, 4), @divTrunc(board.h, 10)), room));
-        const left = board.x + board.w - column + @divTrunc(column - side, 2) - margin / 2;
         const step = side + label_h;
-        for (&layout.leds, 0..) |*led, index| {
-            led.* = .{ .x = left, .y = board.y + margin + @as(i32, @intCast(index)) * step, .w = side, .h = side };
+        for (layout.leds[0..led_count], 0..) |*led, index| {
+            led.* = .{ .x = board.x + board.w - column + @divTrunc(column - side, 2) - margin / 2, .y = board.y + margin + @as(i32, @intCast(index)) * step, .w = side, .h = side };
         }
         const button_w = @min(column - 2 * margin, 2 * side);
-        const button_x = board.x + board.w - column + @divTrunc(column - button_w, 2) - margin / 2;
-        for (&layout.switches, 0..) |*button, index| {
+        for (layout.switches[0..switch_count], 0..) |*button, index| {
             // Switches sit at the bottom, but never above the slot under the last LED.
             const from_bottom: i32 = @intCast(switch_count - index);
             const below_leds = board.y + margin + @as(i32, @intCast(led_count + index)) * step;
             const y = @max(below_leds, board.y + board.h - margin - from_bottom * step);
-            button.* = .{ .x = button_x, .y = y, .w = button_w, .h = side };
+            button.* = .{ .x = board.x + board.w - column + @divTrunc(column - button_w, 2) - margin / 2, .y = y, .w = button_w, .h = side };
         }
         return layout;
     }
 
     /// The switch a click at (x, y) lands on, if any.
     pub fn hit(self: Layout, x: i32, y: i32) ?usize {
-        for (self.switches, 0..) |button, index| if (button.contains(x, y)) return index;
+        for (self.switches[0..self.switch_count], 0..) |button, index| if (button.contains(x, y)) return index;
         return null;
     }
 
@@ -118,20 +132,20 @@ pub const View = struct {
 };
 
 /// Paints the pane into `area`; an area under the minimum draws nothing.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View, panel: Profile) !void {
-    const layout = Layout.of(area, panel);
+pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View, parts: Parts) !void {
+    const layout = Layout.of(area, parts);
     if (layout.board.empty()) return;
     try list.fill(area, theme.background);
     try list.pushClip(area);
     defer list.popClip();
     try list.fill(layout.board, theme.border);
     try list.fill(inset(layout.board), theme.well);
-    const image = view.panel orelse return drawParts(list, theme, layout, view, unseen);
+    const image = view.panel orelse return drawParts(list, theme, layout, view, parts, unseen);
     try list.fill(layout.panel, theme.background);
     const shown = fit.fitIn(layout.panel, image.width, image.height);
     try list.panel(shown, image, view.dirty, !wholeScale(shown, image.width, image.height));
     if (view.skipped > 0) try cornerSkipped(list, shown, view.skipped, theme);
-    try drawParts(list, theme, layout, view, null);
+    try drawParts(list, theme, layout, view, parts, null);
 }
 
 /// Whether `shown` is the panel at a whole-number scale, drawn nearest so
@@ -144,25 +158,25 @@ pub fn wholeScale(shown: Rect, width: u32, height: u32) bool {
 }
 
 /// The empty panel slot (when `blank` is set), the LEDs and the switches.
-fn drawParts(list: *draw_list.DrawList, theme: *const Theme, layout: Layout, view: View, blank: ?Color) !void {
+fn drawParts(list: *draw_list.DrawList, theme: *const Theme, layout: Layout, view: View, parts: Parts, blank: ?Color) !void {
     if (blank) |color| try list.fill(layout.panel, color);
-    for (layout.leds, 0..) |led, index| {
+    for (layout.leds[0..layout.led_count], 0..) |led, index| {
         try list.fill(led, theme.led_bezel);
         const inner = inset(led);
         const on = view.leds.on[index];
-        try list.fill(inner, if (on) lampOf(led_rgb565[index]) else theme.led_off);
+        try list.fill(inner, if (on) lampOf(parts.leds[index].rgb565) else theme.led_off);
         if (on and inner.w >= 8 and inner.h >= 8) {
             // Optical specular highlight on active LED diffuser, only where it
             // stays clear of the lamp's centre.
             try list.fill(.{ .x = inner.x + 2, .y = inner.y + 2, .w = 2, .h = 2 }, theme.led_specular);
         }
-        try label(list, led, led_names[index], theme.muted);
+        try label(list, led, parts.leds[index].name, theme.muted);
     }
-    for (layout.switches, 0..) |button, index| {
+    for (layout.switches[0..layout.switch_count], 0..) |button, index| {
         const is_pressed = view.pressed == index;
         try list.fill(button, if (is_pressed) theme.accent else theme.control_border);
         try list.fill(inset(button), if (is_pressed) theme.pressed_face else theme.face);
-        try label(list, button, switch_names[index], if (is_pressed) theme.accent else theme.ink);
+        try label(list, button, parts.switch_names[index], if (is_pressed) theme.accent else theme.ink);
     }
 }
 

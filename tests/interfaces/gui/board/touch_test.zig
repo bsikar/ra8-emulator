@@ -10,6 +10,16 @@ const Rect = ra8.render.draw_list.Rect;
 const proto = ra8.rpc.session.rpc;
 
 const width: u32 = 1024;
+
+const sample: pane.Parts = .{
+    .panel = .{ .width = 1024, .height = 600 },
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+};
 const height: u32 = 600;
 
 fn expectPoint(want_x: u16, want_y: u16, got: touch.Point) !void {
@@ -40,7 +50,7 @@ test "pixels off the panel clamp to its edges" {
 }
 
 test "the pane shows the panel inside its panel area, keeping the aspect" {
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, sample);
     const shown = touch.shownIn(layout, width, height);
     try std.testing.expect(!shown.empty());
     try std.testing.expect(shown.x >= layout.panel.x and shown.y >= layout.panel.y);

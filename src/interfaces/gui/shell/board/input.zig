@@ -29,7 +29,7 @@ pub const Pointer = struct {
     /// landed on a switch or on the panel image of a board leaf.
     pub fn down(self: *Pointer, board: *const Board, layout: *const pane_layout.Layout, solved: *const pane_layout.Solved, x: i32, y: i32, now_ns: u64) bool {
         const body = bodyAt(layout, solved, x, y) orelse return false;
-        const parts = board_pane.Layout.of(body, board_pane.profile);
+        const parts = board_pane.Layout.of(body, board.parts);
         self.press.down(parts, x, y);
         if (board.hasFrame()) self.drag.down(board_touch.shownIn(parts, board.width, board.height), board.width, board.height, x, y, now_ns);
         if (self.press.held == null and self.drag.start == null) return false;
@@ -41,7 +41,7 @@ pub const Pointer = struct {
     pub fn move(self: *Pointer, board: *const Board, x: i32, y: i32) void {
         const body = self.grabbed orelse return;
         if (!board.hasFrame()) return;
-        const parts = board_pane.Layout.of(body, board_pane.profile);
+        const parts = board_pane.Layout.of(body, board.parts);
         self.drag.move(board_touch.shownIn(parts, board.width, board.height), board.width, board.height, x, y);
     }
 
@@ -50,7 +50,7 @@ pub const Pointer = struct {
     pub fn up(self: *Pointer, board: *const Board, link: *session_link.Link, x: i32, y: i32, now_ns: u64) void {
         const body = self.grabbed orelse return;
         self.grabbed = null;
-        const parts = board_pane.Layout.of(body, board_pane.profile);
+        const parts = board_pane.Layout.of(body, board.parts);
         if (self.press.up(parts, x, y)) |index| {
             _ = board_input.send(link, .cpu0, index, now_ns) catch {};
         }

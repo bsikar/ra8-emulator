@@ -28,9 +28,19 @@ fn within(a: i64, b: i64, slack: i64) bool {
     return @abs(a - b) <= slack;
 }
 
+const sample: pane.Parts = .{
+    .panel = .{ .width = 1024, .height = 600 },
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+};
+
 test "the panel keeps its aspect and sits centred in its slot at every size" {
     for (areas) |area| {
-        const parts = pane.Layout.of(area, pane.profile);
+        const parts = pane.Layout.of(area, sample);
         const shown = touch.shownIn(parts, width, height);
         try std.testing.expect(!shown.empty());
         try std.testing.expect(within(@as(i64, shown.w) * height, @as(i64, shown.h) * width, width));
@@ -45,7 +55,7 @@ test "the panel keeps its aspect and sits centred in its slot at every size" {
 
 test "touch corners and centre round-trip at every size" {
     for (areas) |area| {
-        const shown = touch.shownIn(pane.Layout.of(area, pane.profile), width, height);
+        const shown = touch.shownIn(pane.Layout.of(area, sample), width, height);
         const first = touch.toPanel(shown, width, height, shown.x, shown.y);
         try std.testing.expectEqual(touch.Point{ .x = 0, .y = 0 }, first);
         const last = touch.toPanel(shown, width, height, shown.x + shown.w - 1, shown.y + shown.h - 1);
@@ -58,8 +68,8 @@ test "touch corners and centre round-trip at every size" {
 
 test "each switch's centre hits it at every size" {
     for (areas) |area| {
-        const parts = pane.Layout.of(area, pane.profile);
-        for (parts.switches, 0..) |button, index| {
+        const parts = pane.Layout.of(area, sample);
+        for (parts.switches[0..parts.switch_count], 0..) |button, index| {
             const x = button.x + @divTrunc(button.w, 2);
             const y = button.y + @divTrunc(button.h, 2);
             try std.testing.expectEqual(@as(?usize, index), parts.hit(x, y));
@@ -69,7 +79,7 @@ test "each switch's centre hits it at every size" {
 
 test "a press in a letterbox bar lands on no panel pixel" {
     for (areas) |area| {
-        const parts = pane.Layout.of(area, pane.profile);
+        const parts = pane.Layout.of(area, sample);
         const shown = touch.shownIn(parts, width, height);
         // The slot itself carries the profile's aspect (RA8EMU-1150), so a
         // bar wider than the fit's rounding is the only place this holds.

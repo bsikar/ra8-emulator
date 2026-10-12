@@ -75,6 +75,15 @@ fn tapAt(link: *Link, shown: ra8.render.draw_list.Rect, x: i32, y: i32) !void {
     try run(link, .cont, 20_000);
     try run(link, .cont, 20_000);
 }
+const sample: pane.Parts = .{
+    .panel = .{ .width = 1024, .height = 600 },
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+};
 
 test "a touch on the board pane's panel reaches the firmware's touch driver" {
     const gpa = std.testing.allocator;
@@ -97,7 +106,7 @@ test "a touch on the board pane's panel reaches the firmware's touch driver" {
     try run(&link, .run, 2_000);
     try std.testing.expectEqual(@as(u32, 0), (try report(&link)).count);
 
-    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, pane.profile);
+    const layout = pane.Layout.of(.{ .x = 0, .y = 0, .w = 480, .h = 320 }, sample);
     const shown = touch.shownIn(layout, width, height);
     const mid_x = shown.x + @divTrunc(shown.w, 2);
     const mid_y = shown.y + @divTrunc(shown.h, 2);

@@ -11,6 +11,7 @@ test {
     _ = @import("session/harness/files_test.zig");
     _ = @import("session/harness/stacks_test.zig");
     _ = @import("board/profile_test.zig");
+    _ = @import("board/panels_test.zig");
     _ = @import("board/external/memory_test.zig");
     _ = @import("board/external/backing_test.zig");
     _ = @import("chip/core/cpu/memory/external_port_test.zig");

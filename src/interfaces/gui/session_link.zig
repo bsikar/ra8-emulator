@@ -6,7 +6,7 @@ const rpc = @import("ra8_rpc_wire");
 const proto = @import("ra8_rpc").session.rpc;
 const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 
-const Env = proto.Client.Env;
+pub const Env = proto.Client.Env;
 
 /// Why a connection stopped being usable.
 pub const Failure = enum {

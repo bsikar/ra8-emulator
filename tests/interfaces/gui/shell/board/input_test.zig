@@ -19,6 +19,17 @@ const Board = gui_app.shell.board.Board;
 const Pointer = shell_board_input.Pointer;
 const Rect = draw_list.Rect;
 
+/// The EK-RA8D2's parts, as the session's board_parts answer reports them.
+const ek_shape: board_pane.Parts = .{
+    .leds = &.{
+        .{ .rgb565 = 0x001F, .name = "LED1 BLUE" },
+        .{ .rgb565 = 0x07E0, .name = "LED2 GREEN" },
+        .{ .rgb565 = 0xF800, .name = "LED3 RED" },
+    },
+    .switch_names = &.{ "SW1", "SW2" },
+    .panel = .{ .width = 1024, .height = 600 },
+};
+
 /// Mirrors SW1 onto LED1 (tests/fixtures/gpio/README.md).
 const image = "tests/fixtures/gpio/buttons.elf";
 const width = 640;
@@ -53,9 +64,11 @@ const Bench = struct {
             const pane = self.layout.pane(placed.index) orelse continue;
             if (pane.kind == .board) break frame.bodyOf(placed.area);
         } else return error.NoBoardLeaf;
-        self.parts = board_pane.Layout.of(self.body, board_pane.profile);
+        self.board.setParts(ek_shape.leds, ek_shape.switch_names, ek_shape.panel);
         self.board.attach(&self.rig.link);
         try self.exchange();
+        // The served session's answer reports the same board; lay out from it.
+        self.parts = board_pane.Layout.of(self.body, self.board.parts);
         try std.testing.expectEqual(@as(u32, 0), self.refused);
     }
 
