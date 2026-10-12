@@ -31,7 +31,7 @@ pub const Peer = struct {
     }
 
     /// The next frame from the server, or an error after ten seconds.
-    fn next(self: *Peer) !Incoming {
+    pub fn next(self: *Peer) !Incoming {
         const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
         while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| return incoming;
@@ -41,7 +41,7 @@ pub const Peer = struct {
     }
 
     /// Call `method` and decode its `Reply`, skipping any events on the way.
-    fn call(self: *Peer, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
+    pub fn call(self: *Peer, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
         _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
         while (true) switch (try self.next()) {
             .response => |response| return switch (response.result) {
@@ -82,9 +82,29 @@ pub fn listen(spec: []const u8, line: []u8) !Listening {
         .stderr = .pipe,
     });
     errdefer child.kill(io);
-    var reader = child.stderr.?.reader(io, line);
-    const said = try reader.interface.takeDelimiterExclusive('\n');
+    // Assemble stderr lines one byte at a time: a buffered reader's take
+    // never returns on a child pipe that stays open (RA8EMU-1175's serve
+    // children serve until killed, and the 1175 notice precedes the bound
+    // line, so lines are skipped until the bound one arrives).
     const prefix = "serve: listening on ";
-    try std.testing.expect(std.mem.startsWith(u8, said, prefix));
-    return .{ .child = child, .bound = said[prefix.len..] };
+    var at: usize = 0;
+    var bound: []const u8 = "";
+    while (true) {
+        var one: [1]u8 = undefined;
+        var slices = [_][]u8{&one};
+        const got = try child.stderr.?.readStreaming(io, &slices);
+        if (got == 0) return error.EndOfStream;
+        if (one[0] == '\n') {
+            if (std.mem.startsWith(u8, line[0..at], prefix)) {
+                bound = line[0..at];
+                break;
+            }
+            at = 0;
+            continue;
+        }
+        if (at == line.len) return error.StreamTooLong;
+        line[at] = one[0];
+        at += 1;
+    }
+    return .{ .child = child, .bound = bound[prefix.len..] };
 }

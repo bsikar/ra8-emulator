@@ -29,10 +29,9 @@ test "restore puts pc, guest memory and virtual time back where snapshot left th
     defer tmp.cleanup();
     const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
-    const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "run.ra8snap" });
-    defer std.testing.allocator.free(path);
+    const path = "run.ra8snap";
 
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };
@@ -64,5 +63,31 @@ test "snapshot and restore are refused with no state hook or no such file" {
     var bare: server.Context = .{ .session = opened.session(), .scratch = &scratch };
     try std.testing.expect(files.snapshot(&bare, .{ .path = "unused" }) == .err);
     var served: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };
-    try std.testing.expect(files.restore(&served, .{ .path = "tests/fixtures/uart/no-such.ra8snap" }) == .err);
+    try std.testing.expect(files.restore(&served, .{ .path = "no-such.ra8snap" }) == .err);
+}
+
+test "snapshot and restore refuse every path that leaves the state directory (RA8EMU-1175)" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(dir);
+
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir });
+    defer opened.deinit();
+    var scratch: [64]u8 = undefined;
+    var context: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };
+
+    for ([_][]const u8{ "/tmp/x.ra8snap", "../x.ra8snap", "a/b.ra8snap", "..", ".", "" }) |path| {
+        try std.testing.expectError(error.BadStatePath, opened.stateFiles().save(path));
+        try std.testing.expectError(error.BadStatePath, opened.stateFiles().restore(path));
+    }
+    // A bare name lands in the state directory, and nothing the refusals
+    // were offered was written anywhere.
+    try std.testing.expect(files.snapshot(&context, .{ .path = "ok.state" }) == .ok);
+    const landed = try std.fs.path.join(std.testing.allocator, &.{ dir, "ok.state" });
+    defer std.testing.allocator.free(landed);
+    try std.testing.expect((try tmp.dir.statFile(std.testing.io, "ok.state", .{})).kind == .file);
+    try std.testing.expectError(error.FileNotFound, tmp.dir.openFile(std.testing.io, "../x.ra8snap", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.openFile(std.testing.io, "a/b.ra8snap", .{}));
+    try std.testing.expectError(error.FileNotFound, tmp.dir.openFile(std.testing.io, "x.ra8snap", .{}));
 }

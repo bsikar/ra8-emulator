@@ -46,3 +46,18 @@ test "--sd-dir and repeated --app fill the card the server opens with (RA8EMU-11
 test "--sd-dir is taken at most once" {
     try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--sd-dir", "a", "--sd-dir", "b", "--stdio", "a.elf" }) == null);
 }
+
+test "--allow-state-files parses once (RA8EMU-1175)" {
+    const asked = parse(&.{ "ra8_emulator", "serve", "--allow-state-files", "--listen", "tcp:0.0.0.0:7000", "a.elf" }).?;
+    try std.testing.expect(asked.allow_state_files);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--allow-state-files", "--allow-state-files", "--stdio", "a.elf" }) == null);
+}
+
+test "isLoopback separates loopback from the world (RA8EMU-1175)" {
+    const listen = cli_app.serve.listen;
+    try std.testing.expect(listen.isLoopback(try std.Io.net.IpAddress.parse("127.0.0.1", 0)));
+    try std.testing.expect(listen.isLoopback(try std.Io.net.IpAddress.parse("127.9.9.9", 0)));
+    try std.testing.expect(listen.isLoopback(try std.Io.net.IpAddress.parse("::1", 0)));
+    try std.testing.expect(!listen.isLoopback(try std.Io.net.IpAddress.parse("0.0.0.0", 0)));
+    try std.testing.expect(!listen.isLoopback(try std.Io.net.IpAddress.parse("192.168.1.4", 0)));
+}

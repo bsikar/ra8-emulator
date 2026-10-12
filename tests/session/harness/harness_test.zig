@@ -37,9 +37,8 @@ test "RA8EMU-768: restore returns the session to a saved screen, frame for frame
     defer tmp.cleanup();
     const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
-    const path = try std.fs.path.join(std.testing.allocator, &.{ dir, "screen.ra8snap" });
-    defer std.testing.allocator.free(path);
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path });
+    const path = "screen.ra8snap";
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path, .state_dir = dir });
     defer opened.deinit();
 
     try opened.session().waitSettled(2_000_000_000);

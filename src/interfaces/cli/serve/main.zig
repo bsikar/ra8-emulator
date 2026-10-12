@@ -16,15 +16,16 @@ const elf = @import("ra8_board").image.elf;
 
 pub const usage =
     \\usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
-    \\       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
+    \\       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] [--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
     \\       --profile-folded samples each core's call stacks for `ctl folded`
     \\       --cpu1 brings CPU1 up from its own image, parked until it is run
     \\       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the SDHI card, as for a run
+    \\       --allow-state-files lets snapshot and restore run on a non-loopback listener
     \\
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{} };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
@@ -34,6 +35,7 @@ pub const fold_every: u32 = 1000;
 pub fn parse(argv: []const []const u8) ?Asked {
     if (argv.len < 2) return null;
     var folded = false;
+    var allow_state = false;
     var cpu1: ?[]const u8 = null;
     var sdhi: card_setup.Sdhi = .{};
     var at: usize = 2;
@@ -41,6 +43,8 @@ pub fn parse(argv: []const []const u8) ?Asked {
         const valued = at + 1 < argv.len;
         if (std.mem.eql(u8, argv[at], "--profile-folded") and !folded) {
             folded = true;
+        } else if (std.mem.eql(u8, argv[at], "--allow-state-files") and !allow_state) {
+            allow_state = true;
         } else if (std.mem.eql(u8, argv[at], "--cpu1") and cpu1 == null and valued) {
             at += 1;
             cpu1 = argv[at];
@@ -61,6 +65,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
     @memcpy(rest[2..][0..left], argv[at..]);
     var asked = parseWhere(rest[0 .. 2 + left]) orelse return null;
     asked.folded = folded;
+    asked.allow_state_files = allow_state;
     asked.cpu1 = cpu1;
     asked.sdhi = sdhi;
     return asked;
@@ -126,6 +131,19 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         std.debug.print("serve: cannot sample stacks: {s}\n", .{@errorName(err)});
         return 1;
     };
+    // Snapshot and restore stay off a non-loopback TCP listener unless the
+    // operator asked for them there (RA8EMU-1175): a network peer could
+    // otherwise overwrite or read files as the serving user.
+    switch (asked.where) {
+        .listen => |spec| switch (spec) {
+            .tcp => |addr| if (!listen.isLoopback(addr) and !asked.allow_state_files) {
+                setup.context.state = null;
+                std.debug.print("serve: snapshot and restore are off on a non-loopback listener; pass --allow-state-files to keep them\n", .{});
+            },
+            .unix => {},
+        },
+        .stdio => {},
+    }
     const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx };
     const context = &setup.context;
     const done = switch (asked.where) {
