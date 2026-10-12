@@ -111,8 +111,11 @@ pub const Backend = struct {
             .text_size = textSize,
             .draw_text_face = drawTextFace,
             .text_size_face = textSizeFace,
-            .draw_text_style = drawTextStyle,
-            .text_size_style = textSizeStyle,
+            // No style bindings: the emulator's only shipped faces are the raw
+            // 8x16 sans/serif bitmaps, so labels render through the face path
+            // and stay atlas-identical to every pinned golden.
+            .draw_text_style = null,
+            .text_size_style = null,
             .draw_line = drawLine,
             .blit = blit,
             .push_clip = pushClipCb,

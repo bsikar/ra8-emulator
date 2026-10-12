@@ -69,8 +69,11 @@ test "a leaf switched to the stack kind draws the chain, not its note" {
     const body = shell_frame.bodyOf(placed.area);
     var shown = draw_list.DrawList.init(gpa, Live_width, Live_height);
     defer shown.deinit();
+    var frame = try ra8.render.raster.Framebuffer.init(gpa, Live_width, Live_height);
+    defer frame.deinit(gpa);
+    var backend = ra8.render.paint_backend.Backend.init(&frame);
     const painter = live.panes.painter();
-    try painter.paint(painter.context, &shown, dark, pane, body);
+    try painter.paint(painter.context, &shown, &backend.paint(), dark, pane, body);
     var want = draw_list.DrawList.init(gpa, Live_width, Live_height);
     defer want.deinit();
     try stack_pane.draw(&want, dark, body, &live.stack.cores[0].now.?, 0);

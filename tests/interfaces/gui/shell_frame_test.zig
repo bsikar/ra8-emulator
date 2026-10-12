@@ -16,6 +16,7 @@ const time_bar = gui_app.time_bar;
 const menu_bar = gui_app.menu_bar;
 const frame = gui_app.shell.frame;
 const State = gui_app.session_link.State;
+const widget = @import("ra8_widget");
 
 const width: i32 = 480;
 const height: i32 = 320;
@@ -25,7 +26,7 @@ const Count = struct {
     calls: usize = 0,
     bodies: [8]draw_list.Rect = undefined,
 
-    fn paint(context: *anyopaque, list: *draw_list.DrawList, _: *const gui_app.colors.Theme, pane: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
+    fn paint(context: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, pane: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
         _ = list;
         _ = pane;
         const self: *Count = @ptrCast(@alignCast(context));
@@ -127,7 +128,7 @@ test "the perimeter border is retained when a painter fills the body" {
     defer scene.deinit();
     const status: status_bar.Status = .{};
     const Filler = struct {
-        fn paint(_: *anyopaque, list: *draw_list.DrawList, _: *const gui_app.colors.Theme, _: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
+        fn paint(_: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, _: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
             try list.fill(body, dark.face);
         }
     };

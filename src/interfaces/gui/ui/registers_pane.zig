@@ -12,7 +12,6 @@ const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const Theme = @import("colors.zig").Theme;
-const widget_paint = @import("ra8_render").widget_paint;
 const widget = @import("ra8_widget");
 
 const Color = draw_list.Color;
@@ -204,22 +203,20 @@ pub fn valueOrigin(cell: Rect) struct { x: i32, y: i32 } {
 /// and band fills dispatch through the table, and the text is the
 /// firmware's label widget, one label per name and value, so no pane code
 /// emits raw glyph commands.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, now: Snapshot, before: ?Snapshot, fold: Fold) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, now: Snapshot, before: ?Snapshot, fold: Fold) !void {
     if (slotRect(area, 0) == null) return;
-    try list.pushClip(area);
-    defer list.popClip();
-    var target = widget_paint.Target{ .list = list };
-    const paint = target.paint();
-    fillArea(&paint, area, word(theme.background));
+    table.push_clip.?(table.user, area.x, area.y, area.w, area.h);
+    defer table.pop_clip.?(table.user);
+    fillArea(table, area, word(theme.background));
     const count = groupCount(now.mve);
     for (groups[0..count], fold[0..count], 0..) |group, folded, which| {
         const header = headerRect(area, fold, which) orelse break;
-        drawHeader(&paint, theme, header, group.name, folded);
+        drawHeader(table, theme, header, group.name, folded);
         if (folded) continue;
         for (group.first..group.first + group.len) |index| {
             const cell = cellRect(area, fold, index) orelse break;
             const at = valueIndex(index);
-            drawCell(&paint, theme, cell, label(index), now.values[at], now.changedAt(before, at));
+            drawCell(table, theme, cell, label(index), now.values[at], now.changedAt(before, at));
         }
     }
 }

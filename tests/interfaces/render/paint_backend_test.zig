@@ -53,8 +53,11 @@ test "the paint table binds every member" {
     try std.testing.expect(f.paint.text_size != null);
     try std.testing.expect(f.paint.draw_text_face != null);
     try std.testing.expect(f.paint.text_size_face != null);
-    try std.testing.expect(f.paint.draw_text_style != null);
-    try std.testing.expect(f.paint.text_size_style != null);
+    // The style pair stays unbound: the emulator ships only the raw 8x16
+    // sans/serif bitmaps, and the scaled style path would move every glyph
+    // off the metrics the pane grids and goldens are pinned to.
+    try std.testing.expect(f.paint.draw_text_style == null);
+    try std.testing.expect(f.paint.text_size_style == null);
     try std.testing.expect(f.paint.draw_line != null);
     try std.testing.expect(f.paint.blit != null);
     try std.testing.expect(f.paint.push_clip != null);
