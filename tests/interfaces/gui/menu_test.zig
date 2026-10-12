@@ -26,7 +26,7 @@ test "View toggles every pane kind but empty" {
     try std.testing.expect(menu.view[0].action.eql(.{ .toggle = .board }));
     try std.testing.expectEqualStrings("Disassembly", menu.view[6].label);
     try std.testing.expectEqual(@as(u8, '7'), menu.view[6].shortcut.?.key);
-    try std.testing.expectEqualStrings("Stack", menu.view[7].label);
+    try std.testing.expectEqualStrings("Call stack", menu.view[7].label);
     try std.testing.expectEqual(@as(u8, '8'), menu.view[7].shortcut.?.key);
     for (menu.view) |item| try std.testing.expect(item.action.toggle != .empty);
 }
