@@ -20,6 +20,7 @@ const session_events = @import("../board/events.zig");
 const second_core = @import("ra8_chip").core.second.core;
 const session_display = @import("../board/display.zig");
 const session_state = @import("../board/state.zig");
+const session_history = @import("../history.zig");
 const chunk_clock = @import("../chunk_clock.zig");
 pub const files = @import("files.zig");
 const debug_session = @import("../session.zig");
@@ -49,6 +50,9 @@ pub const Options = struct {
     /// Where snapshots live (RA8EMU-1175); null keeps bare names in the
     /// working directory.
     state_dir: ?[]const u8 = null,
+    /// How many stops the rewind history keeps (RA8EMU-1170); the oldest
+    /// frame falls off past it.
+    history_frames: u32 = 240,
     settle_window_ns: u64 = 50_000_000,
 };
 
@@ -118,6 +122,7 @@ const State = struct {
     chunk: chunk_clock.ChunkClock,
     files: session_state.Files,
     state_file: files.StateFile,
+    history: session_history.History,
     reboot: Reboot,
     display: session_display.Host,
     tracer: ?rtos_hook.Tracer,
@@ -255,6 +260,11 @@ pub const Harness = struct {
         return self.state.state_file.hook();
     }
 
+    /// The rewind history this run records (RA8EMU-1170).
+    pub fn history(self: *Harness) *session_history.History {
+        return &self.state.history;
+    }
+
     /// Keep snapshots under `dir` (RA8EMU-1175); null returns to the working
     /// directory. `dir` must outlive the harness.
     pub fn setStateDir(self: *Harness, dir: ?[]const u8) void {
@@ -276,6 +286,7 @@ pub const Harness = struct {
         dropBlocks(state.formed);
         state.board.deinit();
         state.loading.deinit();
+        state.history.deinit();
         state.allocator.free(state.bytes);
         state.allocator.destroy(state);
         self.* = undefined;
@@ -348,6 +359,8 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.live.boundary = state.edge.hook();
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
     state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
+    state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
+    state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
     state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });
