@@ -7,7 +7,6 @@
 //! halted at reset until Run is pressed on the time bar (RA8EMU-1118).
 //! Only the local host connects so far; SSH profiles join with RA8EMU-761.
 const std = @import("std");
-const session_api = @import("ra8_session").api;
 const host_profiles = @import("ra8_host").profiles;
 const platform = @import("../platform.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -34,8 +33,6 @@ const shell_memory_field = @import("memory_field.zig");
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
 const card_apps = @import("ra8_rpc").card_apps;
-const host_listener = @import("ra8_rpc").host_listener;
-const served_server = @import("ra8_rpc").session.server;
 const shell_run = @import("run.zig");
 const shell_time = @import("time.zig");
 const wall_clock = @import("../wall_clock.zig");
@@ -47,6 +44,12 @@ const colors = @import("../ui/colors.zig");
 const shell_layout = @import("layout_store.zig");
 const shell_settings = @import("settings_page.zig");
 const shell_window = @import("window_store.zig");
+const shell_hosted = @import("hosted.zig");
+const shell_rebuild = @import("rebuild.zig");
+const shell_board_store = @import("board_store.zig");
+const shell_board_pick = @import("board_pick.zig");
+const shell_board_profiles = @import("board_profiles.zig");
+const host_listener = @import("ra8_rpc").host_listener;
 
 const Env = proto.Client.Env;
 const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
@@ -231,8 +234,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
         std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
         return err;
     };
-    // Outside clients (ctl, IDEs) reach the same session (RA8EMU-1156).
-    var hosted: ?Hosted = null;
+    var hosted: ?shell_hosted.Hosted = null;
     defer if (hosted) |*h| h.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
     const tx = try allocator.alloc(u8, Env.max_frame);
@@ -250,8 +252,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     layout_store.restore(&shell.layout);
     defer shell.deinit();
     shell.link = &link;
-    shell.server = served(&session);
-    bindHosted(&hosted, allocator, io, env, window, args, &session, &shell);
+    shell_hosted.bindHosted(&hosted, allocator, io, env, window, args.image, &session, &shell);
+    var board_store = shell_board_store.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, rx, tx, &board_store);
     var host_clock = wall_clock.Host.init(io);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
@@ -304,59 +307,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     link.close();
 }
 
-/// Binds the per-user host listener onto `hosted`; without one the shell
-/// answers only its own session (RA8EMU-1156).
-fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, session: *local_session.LocalSession, shell: *shell_loop.Shell) void {
-    const bound = host_listener.Listener.bind(allocator, io, env) catch return;
-    const tx = allocator.alloc(u8, Env.max_frame) catch return;
-    hosted.* = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = tx, .gpa = allocator };
-    const held = &hosted.*.?;
-    held.announce(args.image, session.setup.owner.session());
-    shell.listener = .{ .context = held, .answerFn = answerHosted };
-}
-
-/// The per-user listener and the session it serves (RA8EMU-1156): the
-/// listener must stay put once the shell holds it, so it lives here whole.
-const Hosted = struct {
-    listener: host_listener.Listener,
-    context: *served_server.Context,
-    window: platform.Platform,
-    tx: []u8,
-    gpa: std.mem.Allocator,
-
-    /// List the one session and its gdb port in the discovery file.
-    fn announce(self: *Hosted, elf: []const u8, live: ?*session_api.Session) void {
-        _ = self.listener.addGdb(elf, live) catch return;
-        self.listener.announce() catch {};
-    }
-
-    fn answer(self: *Hosted) !void {
-        if (self.listener.takeFocus()) self.window.focus();
-        self.listener.pumpGdb();
-        return self.listener.answer(self.context, self.tx);
-    }
-
-    fn deinit(self: *Hosted) void {
-        self.listener.deinit();
-        self.gpa.free(self.tx);
-    }
-};
-
-fn answerHosted(context: *anyopaque) anyerror!void {
-    const hosted: *Hosted = @ptrCast(@alignCast(context));
-    return hosted.answer();
-}
-
-/// `session` as the shell answers it: in this process, on the shell's thread.
-pub fn served(session: *local_session.LocalSession) shell_server.Server {
-    return .{ .context = session, .answerFn = answerLocal };
-}
-
-fn answerLocal(context: *anyopaque) anyerror!void {
-    const session: *local_session.LocalSession = @ptrCast(@alignCast(context));
-    return session.answer();
-}
-
 /// Step `shell` once a frame until its window closes, loading the image once
 /// its session has greeted. With `frames` it also ends after that many
 /// frames drawn with the image loaded, and fails once the image can no
@@ -370,10 +320,11 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
     while (true) {
         const began = clock.now();
         if (!try shell.step(window)) return;
-        if (!sent and shell.state() == .connected) {
+        if (shell.state() == .connected and (!sent or reloadDue(shell))) {
             const link = shell.link orelse return;
             try shell.status.load(link, path, bytes);
             sent = true;
+            if (shell.pick) |picked| picked.reload = false;
         }
         if (frames) |wanted| {
             if (lost(shell)) return error.ImageNotLoaded;
@@ -384,6 +335,13 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
         const spent = clock.now() - began;
         if (spent < frame_ns) try io.sleep(.fromNanoseconds(frame_ns - spent), .awake);
     }
+}
+
+/// Whether a board-profile rebuild is waiting to reload the image
+/// (RA8EMU-1152).
+fn reloadDue(shell: *const shell_loop.Shell) bool {
+    const chosen = shell.pick orelse return false;
+    return chosen.reload;
 }
 
 /// Whether the image can no longer load: the session is gone or refused it.

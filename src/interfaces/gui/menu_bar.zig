@@ -58,7 +58,8 @@ pub fn dropWidth(index: usize, os: std.Target.Os.Tag) i32 {
     var buf: [16]u8 = undefined;
     for (menu.bar[index].items) |item| {
         if (!menu.shows(item, os)) continue;
-        var item_w = 2 * pad + @as(i32, @intCast(font.textWidth(item.label.len)));
+        const air: i32 = if (item.shortcut == null) 3 * pad else 2 * pad;
+        var item_w = air + @as(i32, @intCast(font.textWidth(item.label.len)));
         if (item.shortcut) |s| {
             const text = menu.text(s, os, &buf) catch unreachable;
             item_w += pad + @as(i32, @intCast(font.textWidth(text.len)));

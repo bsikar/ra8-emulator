@@ -57,6 +57,7 @@ pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void 
     switch (action) {
         .command => |command| switch (command) {
             .open_elf => if (shell.files) |files| files.ask(),
+            .open_profile => if (shell.pick) |pick| pick.ask(),
             .settings => shell.settings.ask(),
             // The wire has no unload or reset method yet; those items wait
             // for the methods to land.
@@ -67,6 +68,7 @@ pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void 
             .pause => if (shell.time) |time| if (shell.link) |link| time.pressCommand(.pause, link, &shell.status),
             .step => if (shell.time) |time| if (shell.link) |link| time.pressCommand(.step, link, &shell.status),
         },
+        .choice => |choice| if (shell.pick) |pick| pick.choose(choice),
         .toggle => |kind| togglePane(shell, kind),
     }
 }

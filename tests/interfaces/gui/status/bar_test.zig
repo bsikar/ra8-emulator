@@ -115,6 +115,32 @@ test "a corpus ELF loads, steps and runs through a local session, and the status
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
 }
 
+test "the status line names the board and panel in force (RA8EMU-1152)" {
+    var status: status_bar.Status = .{};
+    status.image = status_bar.Image.of("app.elf", "abc");
+    status.run = .{ .halted = .{ .address = 0x02000040, .reason = null } };
+    var buf: [256]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        "closed | app.elf ba7816bf8f01cfea | halted at 0x02000040",
+        try status.text(.closed, &buf),
+    );
+    status.setMachine("ek_ra8d2", "sample_eink");
+    try std.testing.expectEqualStrings(
+        "closed | app.elf ba7816bf8f01cfea | ek_ra8d2 [sample_eink] | halted at 0x02000040",
+        try status.text(.closed, &buf),
+    );
+    status.setMachine("ek_ra8d2", "none");
+    try std.testing.expectEqualStrings(
+        "closed | app.elf ba7816bf8f01cfea | ek_ra8d2 | halted at 0x02000040",
+        try status.text(.closed, &buf),
+    );
+    status.setMachine("ek_ra8d2", "");
+    try std.testing.expectEqualStrings(
+        "closed | app.elf ba7816bf8f01cfea | ek_ra8d2 | halted at 0x02000040",
+        try status.text(.closed, &buf),
+    );
+}
+
 test "a run the shell keeps going in slices reads as running, and its pause as a halt with no reason" {
     var status: status_bar.Status = .{};
     status.image = status_bar.Image.of("app.elf", "abc");

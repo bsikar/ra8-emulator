@@ -53,7 +53,7 @@ pub const Live = struct {
         self.pointer = .{};
         self.panes = .{ .board = &self.board, .board_input = &self.pointer, .stack = &self.stack };
         self.shell.link = &self.link;
-        self.shell.server = gui_app.shell.main.served(&self.session);
+        self.shell.server = gui_app.shell.server.served(&self.session);
         self.shell.clock = self.clock.clock();
         self.shell.time = &self.time;
         self.shell.registers = &self.registers;

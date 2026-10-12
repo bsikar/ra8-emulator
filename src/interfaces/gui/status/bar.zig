@@ -70,6 +70,19 @@ pub const Status = struct {
     run_id: ?u32 = null,
     /// The window's render segment, set once the backend opened (RA8EMU-226).
     render: ?[]const u8 = null,
+    /// The board and panel in force, named by the launcher (RA8EMU-1152).
+    machine_buf: [80]u8 = undefined,
+    machine_len: usize = 0,
+
+    /// Records the board and panel the session runs: the board alone when
+    /// it runs its own panel or none.
+    pub fn setMachine(self: *Status, board: []const u8, panel: []const u8) void {
+        const shown = if (panel.len == 0 or std.mem.eql(u8, panel, "none"))
+            std.fmt.bufPrint(&self.machine_buf, "{s}", .{board}) catch return
+        else
+            std.fmt.bufPrint(&self.machine_buf, "{s} [{s}]", .{ board, panel }) catch return;
+        self.machine_len = shown.len;
+    }
 
     /// Load `bytes` (read from `path`) on this core, then read where it halted.
     /// An image longer than one load carries streams in chunks (RA8EMU-1174);
@@ -140,7 +153,8 @@ pub const Status = struct {
         self.refused = what;
     }
 
-    /// The status line: connection | image | run state [| refusal].
+    /// The status line: connection | image [| board and panel] | run
+    /// state [| refusal] [| render].
     pub fn text(self: *const Status, state: session_link.State, buf: []u8) ![]const u8 {
         var stream: std.Io.Writer = .fixed(buf);
         const out = &stream;
@@ -153,6 +167,7 @@ pub const Status = struct {
         if (self.image) |*image| {
             try out.print(" | {s} {x}", .{ image.name(), image.hash[0..] });
         } else try out.writeAll(" | no image");
+        if (self.machine_len > 0) try out.print(" | {s}", .{self.machine_buf[0..self.machine_len]});
         switch (self.run) {
             .unknown => {},
             .running => try out.writeAll(" | running"),

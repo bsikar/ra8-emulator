@@ -23,6 +23,9 @@ pub const Headless = struct {
     /// How many times the image picker was asked for (RA8EMU-959); a test
     /// answers by feeding a `picked` event.
     pickers: u32 = 0,
+    /// How many times the profile picker was asked for (RA8EMU-1152); a
+    /// test answers by feeding a `picked_profile` event.
+    profile_pickers: u32 = 0,
     /// The title last set.
     title_buf: [128]u8 = undefined,
     title_len: usize = 0,
@@ -42,7 +45,7 @@ pub const Headless = struct {
     }
 
     pub fn platform(self: *Headless) platform_mod.Platform {
-        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .appearance = appearance, .focus = focus, .open_image = openImage, .title = setTitle, .visible = isVisible } };
+        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .appearance = appearance, .focus = focus, .open_image = openImage, .open_profile = openProfile, .title = setTitle, .visible = isVisible } };
     }
 
     pub fn title(self: *const Headless) []const u8 {
@@ -90,6 +93,11 @@ pub const Headless = struct {
     fn openImage(ctx: *anyopaque) void {
         const self: *Headless = @ptrCast(@alignCast(ctx));
         self.pickers += 1;
+    }
+
+    fn openProfile(ctx: *anyopaque) void {
+        const self: *Headless = @ptrCast(@alignCast(ctx));
+        self.profile_pickers += 1;
     }
 
     fn setTitle(ctx: *anyopaque, text: []const u8) void {
