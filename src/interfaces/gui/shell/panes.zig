@@ -131,8 +131,8 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| {
-            if (self.memory_field) |field| return shell_memory_field.draw(list, table, theme, body, now, field);
-            return memory_pane.draw(list, theme, body, now);
+            if (self.memory_field) |field| return shell_memory_field.draw(table, theme, body, now, field);
+            return memory_pane.draw(table, theme, body, now);
         }
     };
     if (pane.kind == .disasm) if (self.code) |pair| {

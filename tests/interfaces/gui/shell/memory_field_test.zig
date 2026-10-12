@@ -70,7 +70,7 @@ fn typed(pin: *shell_memory_field.Pin, list: *draw_list.DrawList, snapshot: *con
     pin.image = image;
     var target = ra8.render.widget_paint.Target{ .list = list };
     const paint = target.paint();
-    try shell_memory_field.draw(list, &paint, dark, body, snapshot, pin);
+    try shell_memory_field.draw(&paint, dark, body, snapshot, pin);
     const field = shell_memory_field.fieldRect(body);
     try std.testing.expect(pin.press(field.x + 2, field.y + 2));
     var left = text;
@@ -159,6 +159,6 @@ test "a leaf too short for the field keeps its rows whole and takes no press" {
     try pin.init();
     var target = ra8.render.widget_paint.Target{ .list = &list };
     const paint = target.paint();
-    try shell_memory_field.draw(&list, &paint, dark, .{ .x = 0, .y = 0, .w = body.w, .h = 24 }, &snapshot, &pin);
+    try shell_memory_field.draw(&paint, dark, .{ .x = 0, .y = 0, .w = body.w, .h = 24 }, &snapshot, &pin);
     try std.testing.expect(!pin.press(4, 4));
 }

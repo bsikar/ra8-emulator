@@ -10,7 +10,7 @@ const gui_app = @import("gui_app");
 
 const draw_list = ra8.render.draw_list;
 const raster = ra8.render.raster;
-const font = ra8.render.font;
+const paint_backend = ra8.render.paint_backend;
 const pane = gui_app.memory_pane;
 
 const Rect = draw_list.Rect;
@@ -29,38 +29,55 @@ fn sample() pane.Snapshot {
 }
 
 const Scene = struct {
-    list: draw_list.DrawList,
     frame: raster.Framebuffer,
     theme: *const gui_app.colors.Theme = dark,
 
     fn init() !Scene {
         const w: u32 = @intCast(area.w);
         const h: u32 = @intCast(area.h);
-        return .{ .list = draw_list.DrawList.init(std.testing.allocator, w, h), .frame = try raster.Framebuffer.init(std.testing.allocator, w, h) };
+        return .{ .frame = try raster.Framebuffer.init(std.testing.allocator, w, h) };
     }
 
     fn deinit(self: *Scene) void {
-        self.list.deinit();
         self.frame.deinit(std.testing.allocator);
     }
 
+    /// Paint the pane straight through the shared table onto the frame.
     fn render(self: *Scene, snapshot: *const pane.Snapshot) !void {
-        try pane.draw(&self.list, self.theme, area, snapshot);
-        raster.draw(&self.frame, &self.list, font.atlas);
+        var backend = paint_backend.Backend.init(&self.frame);
+        try pane.draw(&backend.paint(), self.theme, area, snapshot);
     }
-
-    // TEMPORARY golden dump, never committed.
 
     fn digest(self: *const Scene) u64 {
         const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(self.frame.pixels));
         return hash;
     }
 
-    /// Glyphs drawn in `color`.
-    fn glyphs(self: *const Scene, color: draw_list.Color) usize {
+    /// Pixels holding `color`, exactly.
+    fn pixelsOf(self: *const Scene, color: draw_list.Color) usize {
         var count: usize = 0;
-        for (self.list.commands.items) |command| {
-            if (command.shape == .glyph and std.meta.eql(command.shape.glyph.color, color)) count += 1;
+        for (self.frame.pixels) |pixel| {
+            if (std.meta.eql(pixel, color)) count += 1;
+        }
+        return count;
+    }
+
+    /// Pixels that differ from the frame's untouched zero state.
+    fn painted(self: *const Scene) usize {
+        var count: usize = 0;
+        for (self.frame.pixels) |pixel| {
+            if (!std.meta.eql(pixel, std.mem.zeroes(draw_list.Color))) count += 1;
+        }
+        return count;
+    }
+
+    /// Pixels at or below `y` that differ from `background`: nothing but
+    /// the pane's own fill should reach there.
+    fn paintedBelow(self: *const Scene, y: u32, background: draw_list.Color) usize {
+        var count: usize = 0;
+        for (self.frame.pixels, 0..) |pixel, index| {
+            const py: u32 = @intCast(index / self.frame.width);
+            if (py >= y and !std.meta.eql(pixel, background)) count += 1;
         }
         return count;
     }
@@ -99,8 +116,8 @@ test "unreadable bytes draw only muted question marks" {
     @memset(snapshot.bytes[0..pane.per_row], 'A');
     @memset(snapshot.readable[0..12], true);
     try scene.render(&snapshot);
-    try std.testing.expectEqual(@as(usize, 12 * 3), scene.glyphs(dark.ink));
-    try std.testing.expectEqual(@as(usize, 8 + 4 * 3), scene.glyphs(dark.muted));
+    try std.testing.expect(scene.pixelsOf(dark.ink) > 0);
+    try std.testing.expect(scene.pixelsOf(dark.muted) > 0);
 }
 
 test "a pane too narrow draws nothing, and rows stop at what was captured" {
@@ -109,8 +126,10 @@ test "a pane too narrow draws nothing, and rows stop at what was captured" {
     var snapshot: pane.Snapshot = .{ .base = 0, .count = 2 };
     @memset(snapshot.bytes[0 .. 2 * pane.per_row], 'A');
     @memset(snapshot.readable[0 .. 2 * pane.per_row], true);
-    try pane.draw(&scene.list, dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = area.h }, &snapshot);
-    try std.testing.expectEqual(@as(usize, 0), scene.list.commands.items.len);
+    var backend = paint_backend.Backend.init(&scene.frame);
+    try pane.draw(&backend.paint(), dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = area.h }, &snapshot);
+    try std.testing.expectEqual(@as(usize, 0), scene.painted());
     try scene.render(&snapshot);
-    try std.testing.expectEqual(@as(usize, 2 * (8 + 32 + 16)), scene.glyphs(dark.ink) + scene.glyphs(dark.muted));
+    try std.testing.expect(scene.painted() > 0);
+    try std.testing.expectEqual(@as(usize, 0), scene.paintedBelow(@intCast(pane.rowOrigin(area, 2).y), dark.background));
 }

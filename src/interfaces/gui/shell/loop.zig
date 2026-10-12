@@ -4,8 +4,7 @@
 //! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane
 //! titles (RA8EMU-800) and the settings page (RA8EMU-963) take their presses, and while Run is
 //! lit each frame pays the board its slices on the shell's own thread, so the frame never waits
-//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam,
-//! so SDL and the headless platform run it alike.
+//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const raster = @import("ra8_render").raster;
@@ -160,6 +159,7 @@ pub const Shell = struct {
         });
         try shell_settings.Page.draw(&self.settings, &list, &self.themes, self.themes.active, width, height);
         if (try window.show(&list, font.atlas)) return true;
+        // raster.draw is the documented temporary composite (RA8EMU-1157).
         const frame = try self.fitFrame(size);
         raster.draw(frame, &list, font.atlas);
         try window.present(frame);

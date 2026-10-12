@@ -13,7 +13,7 @@ const zig_session = ra8.session.step_hook.zig.session;
 const api = ra8.session.api;
 const draw_list = ra8.render.draw_list;
 const raster = ra8.render.raster;
-const font = ra8.render.font;
+const paint_backend = ra8.render.paint_backend;
 const pane = gui_app.memory_pane;
 const capture = gui_app.memory_capture;
 
@@ -26,12 +26,10 @@ const area = draw_list.Rect{ .x = 0, .y = 0, .w = pane.min_w, .h = 2 * pane.pad 
 fn digest(snapshot: *const pane.Snapshot) !u64 {
     const w: u32 = @intCast(area.w);
     const h: u32 = @intCast(area.h);
-    var list = draw_list.DrawList.init(std.testing.allocator, w, h);
-    defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, w, h);
     defer frame.deinit(std.testing.allocator);
-    try pane.draw(&list, dark, area, snapshot);
-    raster.draw(&frame, &list, font.atlas);
+    var backend = paint_backend.Backend.init(&frame);
+    try pane.draw(&backend.paint(), dark, area, snapshot);
     const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
     return hash;
 }
