@@ -12,6 +12,7 @@ const registers_pane = @import("../ui/registers_pane.zig");
 const hex_entry = @import("../ui/hex_entry.zig");
 const font = @import("ra8_render").font;
 const draw_list = @import("ra8_render").draw_list;
+const widget = @import("ra8_widget");
 const platform = @import("../platform.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
@@ -119,17 +120,17 @@ pub const Editor = struct {
 
     /// Draw `core`'s open field over its value and its note, in a leaf
     /// drawn in `body` with `fold`.
-    pub fn draw(self: *const Editor, list: *draw_list.DrawList, theme: *const Theme, body: Rect, fold: registers_pane.Fold, core: proto.Core) !void {
+    pub fn draw(self: *const Editor, table: *const widget.types.Paint, theme: *const Theme, body: Rect, fold: registers_pane.Fold, core: proto.Core) void {
         if (self.open) |open| if (open.core == core) {
             if (registers_pane.cellRect(body, fold, open.cell)) |rect| {
                 const at = registers_pane.valueOrigin(rect);
-                try hex_entry.draw(list, theme, at.x, at.y, &open.field);
+                hex_entry.draw(table, theme, at.x, at.y, &open.field);
             }
         };
         const text = self.note(core) orelse return;
         const band: Rect = .{ .x = body.x, .y = body.y + body.h - registers_pane.row_h, .w = body.w, .h = registers_pane.row_h };
-        try list.fill(band, theme.background);
-        try font.draw(list, band.x + registers_pane.pad, band.y + 2, text, theme.muted);
+        hex_entry.fillArea(table, band, theme.background);
+        hex_entry.drawText(table, band.x + registers_pane.pad, band.y + 2, text, theme.muted, theme.background);
     }
 
     fn commit(self: *Editor, link: *session_link.Link, value: u32) void {

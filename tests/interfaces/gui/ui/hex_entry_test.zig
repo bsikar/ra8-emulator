@@ -9,6 +9,7 @@ const gui_app = @import("gui_app");
 
 const draw_list = ra8.render.draw_list;
 const raster = ra8.render.raster;
+const widget_paint = ra8.render.widget_paint;
 const font = ra8.render.font;
 const hex_entry = gui_app.hex_entry;
 
@@ -48,7 +49,9 @@ test "the field draws a band with the caret after the digits" {
     defer frame.deinit(std.testing.allocator);
     var field = hex_entry.Field.init(2);
     field.typed("a");
-    try hex_entry.draw(&list, dark, 4, 4, &field);
+    var into = widget_paint.Target{ .list = &list };
+    const paint = into.paint();
+    hex_entry.draw(&paint, dark, 4, 4, &field);
     raster.draw(&frame, &list, font.atlas);
     const band = hex_entry.bandRect(4, 4, &field);
     try std.testing.expectEqual(dark.band, frame.at(@intCast(band.x + band.w - 1), @intCast(band.y)));
