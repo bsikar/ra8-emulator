@@ -47,6 +47,7 @@ pub const pane_edit = @import("pane_edit.zig");
 pub const present_gate = @import("present_gate.zig");
 pub const lcd_pacing = @import("lcd_pacing.zig");
 pub const lcd_scrubber = @import("lcd_scrubber.zig");
+pub const timeline_model = @import("timeline_model.zig");
 pub const lcd_history = @import("lcd_history.zig");
 pub const menu = @import("menu.zig");
 pub const menu_bar = @import("menu_bar.zig");
