@@ -270,7 +270,7 @@ const Gdb = struct {
         const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
         while (std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
             bound.pumpGdb();
-            while ((ra8.host.sock.ready.wait(fd, 0) catch return error.Socket).any()) {
+            while ((ra8.host.sock.ready.wait(std.testing.io, fd, 0) catch return error.Socket).any()) {
                 var byte: [1]u8 = undefined;
                 const got = std.posix.read(fd, &byte) catch return error.Socket;
                 if (got == 0) return error.Closed;

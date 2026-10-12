@@ -195,7 +195,7 @@ fn reboot(self: *Session, live: *session_api.Session) !void {
 /// Frame and send one reply; false never ends the connection here.
 fn sendReply(self: *Session, c: *Session.Client, body: []const u8) bool {
     const framed = rsp.packet.frame(&c.framed, body) catch return false;
-    self.send(c, framed);
+    _ = self.send(c, framed);
     c.last = body;
     return true;
 }
