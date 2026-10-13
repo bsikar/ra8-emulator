@@ -24,9 +24,17 @@ pub fn save(writer: anytype, store: *const Store, cores: []const *const Cpu, boa
 }
 
 pub fn savePair(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity) !void {
+    return savePairMode(writer, stores, cores, board, identity, false);
+}
+
+pub fn savePairAttached(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity) !void {
+    return savePairMode(writer, stores, cores, board, identity, true);
+}
+
+fn savePairMode(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity, owned: bool) !void {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return error.BadValue;
     try file.writeHeader(writer);
-    try board_snap.save(board, writer);
+    if (owned) try board_snap.saveAttached(board, writer) else try board_snap.save(board, writer);
     for (stores, 0..) |store, index| try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
     for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
     var counter: std.Io.Writer.Discarding = .init(&.{});
@@ -74,6 +82,14 @@ pub fn Prepared(comptime B: type) type {
 }
 
 pub fn prepare(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity) !Prepared(@TypeOf(board.*)) {
+    return prepareMode(bytes, stores, cores, board, identity, false);
+}
+
+pub fn prepareAttached(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity) !Prepared(@TypeOf(board.*)) {
+    return prepareMode(bytes, stores, cores, board, identity, true);
+}
+
+fn prepareMode(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity, owned: bool) !Prepared(@TypeOf(board.*)) {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return Error.BadValue;
     try check(bytes, board);
     try checkImage(bytes, identity);
@@ -84,7 +100,7 @@ pub fn prepare(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, b
         memories[index] = try memory.prepare(store, section.payload);
     }
     var prepared = Prepared(@TypeOf(board.*)){
-        .board = try board_snap.prepare(board, bytes),
+        .board = if (owned) try board_snap.prepareAttached(board, bytes) else try board_snap.prepare(board, bytes),
         .memories = memories,
         .count = cores.len,
     };

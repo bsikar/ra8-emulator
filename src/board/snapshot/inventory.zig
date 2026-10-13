@@ -20,7 +20,7 @@ pub const omitted = .{
     .{ .name = "run_hook", .reason = "Embedding pacing and soak callbacks" },
     .{ .name = "external_memory", .reason = "Root configuration; memory section validates the fabric layout" },
     .{ .name = "cpu1", .reason = "Guest handle; CPU1 bytes saved by the run owner" },
-    .{ .name = "asks", .reason = "Startup attachments explicitly refused pending complete arena serialization" },
+    .{ .name = "asks", .reason = "Owner-validated topology and guest objects saved by outer Files attachment graph; unowned startup APIs refuse" },
     .{ .name = "sd_line", .reason = "Stable pointer to the saved SPI SD card" },
     .{ .name = "sd_volume", .reason = "Formatting report, not mutable card contents" },
     .{ .name = "event_sink", .reason = "Embedding event callback" },

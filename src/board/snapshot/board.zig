@@ -13,7 +13,7 @@ const Part = @import("ra8_chip").core.part.Part;
 pub const inputs = @import("inputs.zig");
 pub const inventory = @import("inventory.zig");
 
-pub const Error = file.Error || fields.Error || error{ Missing, WrongPart };
+pub const Error = file.Error || fields.Error || error{ Missing, WrongPart, UnsupportedAttachments };
 
 /// The board-shaped sections after time, in kind order. Appending is a
 /// format change.
@@ -41,8 +41,17 @@ const sections = .{
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
+    return saveMode(board, writer, false);
+}
+
+/// The outer owner has validated and will serialize its typed attachment graph.
+pub fn saveAttached(board: anytype, writer: anytype) !void {
+    return saveMode(board, writer, true);
+}
+
+fn saveMode(board: anytype, writer: anytype, owned: bool) !void {
+    if (!owned and board.asks.count != 0) return error.UnsupportedAttachments;
     comptime if (!inventory.complete(@TypeOf(board.*))) @compileError("unclassified Board snapshot field");
-    if (board.asks.count != 0) return error.UnsupportedAttachments;
     try file.writeSectionHeader(writer, .part, 1);
     try fields.write(writer, @as(u8, @backingInt(board.part)));
     try time.save(&board.time, writer);
@@ -104,7 +113,16 @@ pub fn Prepared(comptime B: type) type {
 }
 
 pub fn prepare(board: anytype, bytes: []const u8) !Prepared(@TypeOf(board.*)) {
-    if (board.asks.count != 0) return error.UnsupportedAttachments;
+    return prepareMode(board, bytes, false);
+}
+
+/// Only the outer typed attachment owner may commit this preparation.
+pub fn prepareAttached(board: anytype, bytes: []const u8) !Prepared(@TypeOf(board.*)) {
+    return prepareMode(board, bytes, true);
+}
+
+fn prepareMode(board: anytype, bytes: []const u8, owned: bool) !Prepared(@TypeOf(board.*)) {
+    if (!owned and board.asks.count != 0) return error.UnsupportedAttachments;
     const B = @TypeOf(board.*);
     const next = try std.heap.page_allocator.create(B);
     next.* = board.*;

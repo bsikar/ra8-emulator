@@ -18,12 +18,12 @@ const max_side: u16 = 4096;
 
 pub fn save(board: anytype, writer: anytype) !void {
     var counter: std.Io.Writer.Discarding = .init(&.{});
-    try body(&counter.writer, board.panel);
+    try writePayload(&counter.writer, board.panel);
     try file.writeSectionHeader(writer, .panel, counter.fullCount());
-    try body(writer, board.panel);
+    try writePayload(writer, board.panel);
 }
 
-fn body(writer: anytype, panel: anytype) !void {
+pub fn writePayload(writer: anytype, panel: anytype) !void {
     try fields.writeExcept(writer, panel, wiring);
     try fields.writeExcept(writer, panel.planes, buffers);
     inline for (.{ panel.planes.image, panel.planes.glass }) |plane| {
@@ -51,24 +51,36 @@ fn readPlane(cursor: *fields.Cursor) fields.Error!Raw {
 pub fn load(board: anytype, bytes: []const u8) Error!void {
     const section = try file.Reader.find(bytes, .panel) orelse return Error.Missing;
     var cursor: fields.Cursor = .{ .bytes = section.payload };
-    var copy = board.panel;
-    try fields.readOver(&cursor, &copy, wiring);
-    try fields.readOver(&cursor, &copy.planes, buffers);
-    const image = try readPlane(&cursor);
-    const glass = try readPlane(&cursor);
+    try readPayload(&board.panel, &cursor);
+}
+
+/// Read only into caller-owned detached storage. Hooks remain the target's.
+pub fn readPayload(panel: anytype, cursor: *fields.Cursor) Error!void {
+    var copy = panel.*;
+    try fields.readOver(cursor, &copy, wiring);
+    try fields.readOver(cursor, &copy.planes, buffers);
+    const image = try readPlane(cursor);
+    const glass = try readPlane(cursor);
     if (!cursor.done() or !fits(copy, image, glass)) return Error.BadValue;
-    const allocator = board.panel.planes.allocator;
+    const allocator = panel.planes.allocator;
     copy.planes.image = try build(@TypeOf(copy.planes.image), allocator, image);
     errdefer if (copy.planes.image.pixels.len != 0) allocator.free(copy.planes.image.pixels);
     copy.planes.glass = try build(@TypeOf(copy.planes.glass), allocator, glass);
-    board.panel.planes.deinit();
-    board.panel = copy;
+    panel.planes.deinit();
+    panel.* = copy;
 }
 
 fn fits(panel: anytype, image: Raw, glass: Raw) bool {
     const shape = panel.planes.geometry;
     if (shape.width == 0 or shape.height == 0 or shape.width > max_side or shape.height > max_side) return false;
-    if (panel.register_count > panel.registers.len) return false;
+    if (panel.register_count > panel.registers.len or panel.burst.len > panel.burst.buf.len or panel.burst.pos > panel.burst.len) return false;
+    // During a partial new header, load_left still belongs to the old header.
+    if (panel.command == .load_area and panel.data_index >= @import("wire.zig").arg.load_first_pixel) {
+        if (panel.load_left > @as(u32, panel.load_width) * panel.load_height) return false;
+        if (panel.load_left != 0 and panel.load_width == 0) return false;
+        if (panel.loaded_pixels > @as(u32, panel.load_width) * panel.load_height) return false;
+    }
+    if (panel.pixels_per_word != 2 and panel.pixels_per_word != 4 and panel.pixels_per_word != 5 and panel.pixels_per_word != 8) return false;
     if ((image.pixels.len == 0) != (glass.pixels.len == 0)) return false;
     return planeFits(shape, image) and planeFits(shape, glass);
 }
