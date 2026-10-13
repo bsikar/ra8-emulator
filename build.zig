@@ -70,6 +70,16 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(exe);
+    const move_peer = if (peer_only) exe else b.addExecutable(.{
+        .name = "ra8_host_move_peer",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/interfaces/cli/host_move_main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{.{ .name = "cli_app", .module = apps.cli }},
+        }),
+    });
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
@@ -101,9 +111,9 @@ pub fn build(b: *std.Build) void {
     const imports: build_tests.Imports = .{ .filter = b.option([]const u8, "test-filter", "Compile only tests whose name contains this text"), .emu = emu, .cli = apps.cli, .gui = apps.gui, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod };
     // Three roots, one after the other under -j1, so peak memory is the largest half's (RA8EMU-785).
     const tests = [_]*std.Build.Step.Compile{
-        build_tests.compile(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe),
-        build_tests.compile(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe),
-        build_tests.compile(b, "ra8_gui_link_tests", "tests/interfaces/gui/link_test.zig", target, optimize, imports, exe), // RA8EMU-1176
+        build_tests.compile(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe, move_peer),
+        build_tests.compile(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe, move_peer),
+        build_tests.compile(b, "ra8_gui_link_tests", "tests/interfaces/gui/link_test.zig", target, optimize, imports, exe, move_peer), // RA8EMU-1176
     };
     build_tests.add(b, &tests, target, optimize, emu, &exe.step);
 
