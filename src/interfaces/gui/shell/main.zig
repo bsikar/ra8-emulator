@@ -37,6 +37,7 @@ const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
 const shell_stack = @import("stack.zig");
 const shell_source = @import("source.zig");
+const shell_locals = @import("locals.zig");
 const shell_memory = @import("memory.zig");
 const shell_map = @import("map.zig");
 const shell_memory_field = @import("memory_field.zig");
@@ -172,6 +173,7 @@ const ShellFeeds = struct {
     registers: shell_registers.Pair = .{},
     edit: shell_register_edit.Editor = .{},
     stack: shell_stack.Pair = .{},
+    locals: shell_locals.Pair = .{},
     memory: shell_memory.Pair = .{},
     memory_field: shell_memory_field.Pin = .{},
     code: shell_memory.Pair = .{ .follows = .pc },
@@ -270,6 +272,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.stack = &stack;
     var source: shell_source.Pair = shell_source.Pair.init(io);
     shell.source = &source;
+    shell.locals = &feeds.locals;
     var memory: shell_memory.Pair = .{};
     shell.memory = &memory;
     shell.memory_field = &feeds.memory_field;
@@ -285,7 +288,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.files = &files;
     var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
     shell.recent_menu = &recent_menu;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source, .locals = &feeds.locals };
     shell.painter = panes.painter();
     if (image) |named| try boot.start(named);
     try driveAndSave(io, &shell, window, &boot, args.frames, &layout_store, &recent_store, recent_list);

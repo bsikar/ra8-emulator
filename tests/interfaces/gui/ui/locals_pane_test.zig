@@ -73,6 +73,12 @@ test "the full-size pane renders the rows differently from a blank frame" {
     try std.testing.expect(try digest(&snap, w, 300) != try blankDigest(w, 300));
 }
 
+test "the default shell pane is wide enough to show locals" {
+    var snap = snapshot();
+    const w = 735;
+    try std.testing.expect(try digest(&snap, w, 500) != try blankDigest(w, 500));
+}
+
 test "a snapshot longer than the pane clips to the rows that fit" {
     // A full 32-row snapshot against a pane that fits a third of it.
     const w = pane.min_w + 40;
