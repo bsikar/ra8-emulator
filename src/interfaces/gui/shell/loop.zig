@@ -332,7 +332,6 @@ pub const Shell = struct {
         if (self.registers) |registers| registers.refresh();
         if (self.stack) |stack| stack.refresh();
     }
-
     /// Feed what the session sent into the status bar model and the leaves.
     pub fn pump(self: *Shell) !void {
         const link = self.link orelse return;
@@ -379,7 +378,6 @@ pub const Shell = struct {
         }
         self.settle();
     }
-
     /// The stack, registers, memory and code leaves: start over after a
     /// load, take the arrival, follow each core's fresh registers.
     fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {

@@ -13,6 +13,9 @@ const harness = @import("../harness/harness.zig");
 const step_hook = @import("../step_hook.zig");
 const stop_machine = @import("../stop_machine.zig");
 const watch_bus = @import("../watch/bus.zig");
+const rtos_hook = @import("../rtos/hook.zig");
+const rtos_publish = @import("../rtos/publish.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 
 /// Holds what CPU1 runs on; it stays put while the session has it.
 pub const Cpu1 = struct {
@@ -24,6 +27,11 @@ pub const Cpu1 = struct {
     /// CPU1's image, for its names, frames and lines.
     image: ?elf.Image = null,
     paired: ?*cpu_mod.Cpu = null,
+    /// CPU1's RTOS tracer, its bus listener and its publisher onto the
+    /// session's event stream, once traceRtos arms them (RA8EMU-840).
+    tracer: ?rtos_hook.Tracer = null,
+    listener: rtos_hook.zig.Listener = undefined,
+    publisher: rtos_publish.Publisher = undefined,
 
     /// Bring CPU1 up from the ELF at `path` beside `opened`, park it in the
     /// session and give the session back to CPU0.
@@ -48,6 +56,40 @@ pub const Cpu1 = struct {
 
     pub fn cpu(self: *Cpu1) *cpu_mod.Cpu {
         return &self.pair.core.cpu;
+    }
+
+    /// Publish CPU1's ThreadX switches and exception entry and return on
+    /// the session's event stream (RA8EMU-840), the way Harness.traceRtos
+    /// does for CPU0. The tracer resolves from CPU1's own image; stamps
+    /// come from the shared board clock, the timeline the model folds
+    /// both cores onto, and load from CPU1's retired count.
+    /// False when CPU1's image has no current-thread pointer to trace.
+    pub fn traceRtos(self: *Cpu1, opened: *harness.Harness) bool {
+        const image = self.image orelse return false;
+        self.tracer = rtos_hook.resolveOn(image, .{}, 1) orelse return false;
+        const tracer = &self.tracer.?;
+        tracer.now = &opened.board().time.base.retired;
+        tracer.trace.fine = &self.pair.core.cpu.retired;
+        self.listener = .{ .tracer = tracer };
+        const cpu0 = &self.pair.core.cpu;
+        cpu0.bus = self.listener.onBus(cpu0.bus);
+        if (cpu0.source) |inner| cpu0.source = self.listener.onSource(inner);
+        const live = opened.session();
+        self.publisher = .{ .trace = &tracer.trace, .stream = &live.event_stream, .inner = live.live.boundary, .time = &opened.board().time.base };
+        live.live.boundary = self.publisher.hook();
+        return true;
+    }
+
+    /// Turn CPU1's RTOS tracing on unless it already is; false when its
+    /// image has no current-thread pointer to trace.
+    pub fn traceIfRtos(self: *Cpu1, opened: *harness.Harness) bool {
+        if (self.tracer != null) return true;
+        return self.traceRtos(opened);
+    }
+
+    /// CPU1's guest memory, for the trace topic's thread names.
+    pub fn guest(self: *Cpu1) Guest {
+        return self.pair.guest();
     }
 
     pub fn close(self: *Cpu1, allocator: std.mem.Allocator) void {
