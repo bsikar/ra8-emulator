@@ -20,6 +20,9 @@ const camera_panel = @import("../../camera/panel.zig");
 const camera_view = @import("../../ui/camera_view.zig");
 const camera_open = @import("../../camera/open.zig");
 const camera_always = @import("../../camera/always.zig");
+const camera_barrel = @import("../../camera/camera.zig");
+const Listings = @import("listings.zig").Listings;
+const Listed = @import("listings.zig").Listed;
 const fit = @import("../../ui/fit.zig");
 const Spec = @import("ra8_host").camera.source_spec.Spec;
 pub const file = @import("file.zig");
@@ -45,6 +48,7 @@ pub const Camera = struct {
     /// A camera whose panel keeps the consent Always for this run only.
     pub fn opened(io: std.Io) Camera {
         var camera: Camera = .{};
+        camera.listings.io = io;
         camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
         return camera;
     }
@@ -64,18 +68,24 @@ pub const Camera = struct {
     /// The kind last picked without a file, waiting for its path.
     wants: ?Kind = null,
 
+    listings: Listings = .{},
+    /// The webcam the device row picked; null opens the default one.
+    device: ?u32 = null,
+
     preview_provider: ?PreviewProvider = null,
     preview_pixels: std.ArrayListUnmanaged(draw_list.Color) = .empty,
     preview_image: ?draw_list.Image = null,
     last_pace_ns: u64 = 0,
 
     pub fn deinit(self: *Camera, allocator: std.mem.Allocator) void {
+        self.listings.clear(allocator);
         self.preview_pixels.deinit(allocator);
         self.preview_image = null;
     }
 
     /// Refresh the camera preview frame from the provider at ~30 fps.
     pub fn pace(self: *Camera, now_ns: u64, allocator: std.mem.Allocator) void {
+        if (!self.listings.done) self.listings.refresh(allocator);
         const provider = self.preview_provider orelse return;
         if (now_ns -% self.last_pace_ns < 33_000_000 and self.preview_image != null) return;
         self.last_pace_ns = now_ns;
@@ -96,6 +106,51 @@ pub const Camera = struct {
             .height = frame.height,
             .pixels = colors,
         };
+    }
+
+    /// The host's webcams; none when the host lists none.
+    pub fn devices(self: *const Camera) []const u32 {
+        return self.listings.devices();
+    }
+
+    /// The project's files of the active source's kind; none when the
+    /// active source opens no file.
+    pub fn mediaNames(self: *const Camera) []const []const u8 {
+        return switch (self.panel.active) {
+            .image => self.listings.picture_names,
+            .video => self.listings.clip_names,
+            .gradient, .pipe, .webcam => &[_][]const u8{},
+        };
+    }
+
+    /// The listed entries behind `mediaNames`, previews included.
+    pub fn listedEntries(self: *const Camera) []Listed {
+        return switch (self.panel.active) {
+            .image => self.listings.pictures,
+            .video => self.listings.clips,
+            .gradient, .pipe, .webcam => &.{},
+        };
+    }
+
+    /// Makes `name` the active picture or clip source's file; a new file
+    /// counts as a change so `attach` sends the ask.
+    pub fn pickMedia(self: *Camera, name: []const u8) void {
+        const slot = switch (self.panel.active) {
+            .image => &self.args.image,
+            .video => &self.args.video,
+            else => return,
+        };
+        if (std.mem.eql(u8, slot.*, name)) return;
+        slot.* = name;
+        self.panel.changes += 1;
+    }
+
+    /// Names the webcam to open. While the webcam runs, the new device
+    /// counts as a change so `attach` reopens it.
+    pub fn pickDevice(self: *Camera, device: u32) void {
+        if (self.device != null and self.device.? == device) return;
+        self.device = device;
+        if (self.panel.active == .webcam) self.panel.changes += 1;
     }
 
     /// Send the panel's newest pick, once per change, while connected.
@@ -162,7 +217,18 @@ pub const Camera = struct {
             const body = shell_frame.bodyOf(placed.area);
             if (body.contains(x, y)) {
                 defer if (self.kept) |*kept| kept.follow(&self.panel);
-                return camera_view.click(&self.panel, layoutIn(body), x, y);
+                if (camera_view.click(&self.panel, layoutIn(body), x, y)) return true;
+                const names = self.mediaNames();
+                const stack = camera_barrel.rows.stackFor(body, self.devices().len, names.len) orelse return false;
+                if (stack.device()) |row| if (camera_barrel.rows.hitDevices(row, self.devices(), x, y)) |d| {
+                    self.pickDevice(d);
+                    return true;
+                };
+                if (stack.media()) |row| if (camera_barrel.rows.hitMedia(row, names, x, y)) |name| {
+                    self.pickMedia(name);
+                    return true;
+                };
+                return false;
             }
         }
         return false;
@@ -222,6 +288,11 @@ pub fn drawPreview(list: *draw_list.DrawList, theme: *const Theme, body: draw_li
     }
     var bottom = body.y + body.h - shell_frame.pad;
     if (camera.wants != null) bottom -= (24 + shell_frame.pad);
+    const names = camera.mediaNames();
+    var stack = camera_barrel.rows.stackFor(body, camera.devices().len, names.len);
+    if (stack) |s| {
+        if (bottom - s.height() - top < 16) stack = null else bottom -= s.height();
+    }
     const room_w = body.w - 2 * shell_frame.pad;
     const room_h = bottom - top;
     if (room_w < 16 or room_h < 16) return;
@@ -234,6 +305,14 @@ pub fn drawPreview(list: *draw_list.DrawList, theme: *const Theme, body: draw_li
             const shown = fit.fitIn(inner, img.width, img.height);
             try list.scaledImage(shown, img, false);
         }
+    }
+    const s = stack orelse return;
+    if (s.device()) |row| try camera_barrel.rows.drawDevices(theme, list, row, camera.devices(), camera.device);
+    if (s.media()) |row| try camera_barrel.rows.drawMedia(theme, list, row, names, camera.args.of(camera.panel.active), camera_view.colorOf(theme, camera.panel.active));
+    for (camera.listedEntries(), 0..) |entry, index| {
+        const t = entry.thumb orelse continue;
+        const row = s.media() orelse break;
+        try camera_barrel.thumb.draw(list, row.slot(index), t);
     }
 }
 

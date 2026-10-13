@@ -104,6 +104,9 @@ test {
     _ = @import("interfaces/gui/window/stills_test.zig");
     _ = @import("interfaces/gui/camera/open_test.zig");
     _ = @import("interfaces/gui/camera/always_test.zig");
+    _ = @import("interfaces/gui/camera/devices_test.zig");
+    _ = @import("interfaces/gui/camera/media_test.zig");
+    _ = @import("interfaces/gui/camera/rows_test.zig");
     _ = @import("interfaces/gui/ui/camera_view_test.zig");
     _ = @import("interfaces/render/board_view_test.zig");
     _ = @import("interfaces/gui/present_gate_test.zig");
