@@ -13,5 +13,6 @@ pub const rtc = @import("rtc.zig");
 pub const server = @import("server.zig");
 pub const stack = @import("stack.zig");
 pub const backtrace = @import("backtrace.zig");
+pub const source_line = @import("source_line.zig");
 pub const periph = @import("periph.zig");
 pub const folded = @import("folded.zig");
