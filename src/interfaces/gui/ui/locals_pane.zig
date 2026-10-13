@@ -102,12 +102,12 @@ fn drawRow(table: *const widget.types.Paint, theme: *const Theme, area: Rect, ro
 
 /// The wire's where kinds, one word: frame, register with offset, a
 /// register, a global address, or an empty cell for none.
-fn whereLabel(buffer: []u8, local: *const Row) ![]const u8 {
+pub fn whereLabel(buffer: []u8, local: *const Row) ![]const u8 {
     return switch (local.where_kind) {
         1 => std.fmt.bufPrint(buffer, "fb{d}", .{local.where_a}),
         2 => if (local.where_b == 0) std.fmt.bufPrint(buffer, "r{d}", .{local.where_a}) else std.fmt.bufPrint(buffer, "r{d}{c}{d}", .{ local.where_a, @as(u8, if (local.where_b < 0) '-' else '+'), @abs(local.where_b) }),
         3 => std.fmt.bufPrint(buffer, "r{d}", .{local.where_a}),
-        4 => std.fmt.bufPrint(buffer, "@0x{X:0>8}", .{local.where_a}),
+        4 => std.fmt.bufPrint(buffer, "@0x{X:0>8}", .{@as(u64, @bitCast(local.where_a))}),
         else => std.fmt.bufPrint(buffer, "", .{}),
     };
 }
