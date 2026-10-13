@@ -75,7 +75,7 @@ pub fn containing(sections: Sections, address: u32) Error!?Function {
 
 /// A unit's header, leaving `cursor` on its first DIE. Returns the unit's
 /// abbreviation table, or null for a unit kind with no code in it.
-fn header(cursor: *Cursor, abbrev: []const u8) Error!?[]const u8 {
+pub fn header(cursor: *Cursor, abbrev: []const u8) Error!?[]const u8 {
     const version = try cursor.int(u16);
     var table: u32 = 0;
     var address_size: u8 = 0;
@@ -163,7 +163,7 @@ fn read(cursor: *Cursor, kind: u64, implicit: i64) Error!?Value {
 }
 
 /// Step over a value whose form gives nothing this reader needs.
-fn skip(cursor: *Cursor, kind: u64) Error!void {
+pub fn skip(cursor: *Cursor, kind: u64) Error!void {
     const fixed: ?u64 = switch (kind) {
         0x19 => 0,
         0x0c, 0x11, 0x25, 0x29 => 1,
