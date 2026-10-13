@@ -13,6 +13,19 @@ pub fn move(context: Context, from: []const u8, to: []const u8, purpose: []const
     const base = context.source;
     const peer = base.native_provider orelse return error.NativePeerUnavailable;
     try context.validate(from);
+    if (intent.pending(base.io, base.dir, @import("../name.zig").classify(from).id)) return error.Moving;
+    var child = try prepare(context, peer);
+    defer child.close();
+    const parsed = try intent.start(base.allocator, context, from, to, purpose);
+    defer parsed.deinit();
+    try exchange(context, peer, parsed.value, &child);
+}
+
+/// Validate the provider and both writable pipe bounds before any intent
+/// becomes durable. Recovery uses the same checks before another exchange.
+fn prepare(context: Context, peer: provider.Provider) !Proxy {
+    const base = context.source;
+    try peer.bounds.check();
     try provider.check(base.io, peer);
     const source_path = try wire.windowsPath(base.allocator, base.path);
     defer base.allocator.free(source_path);
@@ -21,9 +34,10 @@ pub fn move(context: Context, from: []const u8, to: []const u8, purpose: []const
     const source_root = try @import("file.zig").here(base.dir);
     const target_root = try @import("file.zig").here(context.target.dir);
     if (source_root.device_major != target_root.device_major or source_root.device_minor != target_root.device_minor) return error.CrossDevice;
-    const parsed = try intent.start(base.allocator, context, from, to, purpose);
-    defer parsed.deinit();
-    try settle(context, peer, parsed.value);
+    var child = try Proxy.spawn(context, peer.executable, peer.bounds.reap);
+    errdefer child.close();
+    try child.fits();
+    return child;
 }
 
 pub fn settle(context: Context, peer: ?provider.Provider, record: intent.Record) !void {
@@ -31,24 +45,37 @@ pub fn settle(context: Context, peer: ?provider.Provider, record: intent.Record)
     if (try intent.arrived(context, record)) {
         return finish(context, record);
     }
+    if (!record.committed) return intent.cancel(context, record);
     try context.validate(record.from);
-    const status = try exchange(context, peer orelse return error.NativePeerUnavailable, record);
+    const configured = peer orelse return error.NativeMoveUnknown;
+    var child = try prepare(context, configured);
+    defer child.close();
+    try exchange(context, configured, record, &child);
+}
+
+fn complete(context: Context, record: intent.Record, status: wire.Status) !void {
     switch (status) {
         .success => {
             if (!try intent.arrived(context, record)) return error.IdentityConflict;
             try finish(context, record);
         },
         .collision => {
-            try intent.cleanup(context, record, false);
+            try intent.cancel(context, record);
             return error.PathAlreadyExists;
         },
         .cross_device => {
-            try intent.cleanup(context, record, false);
+            try intent.cancel(context, record);
             return error.CrossDevice;
         },
-        .refused => return error.NativeMoveRefused,
+        .refused => {
+            try intent.cancel(context, record);
+            return error.NativeMoveRefused;
+        },
         // The peer's window closed before COMMIT reached it; nothing moved.
-        .expired => return error.NativeMoveExpired,
+        .expired => {
+            try intent.cancel(context, record);
+            return error.NativeMoveExpired;
+        },
     }
 }
 
@@ -62,12 +89,18 @@ fn finish(context: Context, record: intent.Record) !void {
     try intent.cleanup(context, record, true);
 }
 
-fn exchange(context: Context, peer: provider.Provider, record: intent.Record) !wire.Status {
+fn exchange(context: Context, peer: provider.Provider, record: intent.Record, child: *Proxy) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
     const base = context.source;
     const allocator = base.allocator;
     const io = base.io;
-    try peer.bounds.check();
+    var flagged = record.committed;
+    errdefer {
+        child.close();
+        if (!flagged and child.stage == .reaped) intent.cancel(context, record) catch {};
+    }
+    try intent.scope(context, record, record.from, record.to);
+    try context.validate(record.from);
     if (!std.mem.eql(u8, &peer.sha256, &try provider.digest(io, peer.executable))) return error.PeerDigestMismatch;
     const source = try wire.windowsPath(allocator, base.path);
     defer allocator.free(source);
@@ -75,9 +108,6 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record) !w
     defer allocator.free(target);
     const request: wire.Request = .{ .nonce = record.nonce, .source = .{ .path = source, .marker = try Context.marker(base) }, .target = .{ .path = target, .marker = try Context.marker(context.target) }, .from = record.from, .to = record.to, .commit_ms = peer.bounds.commit, .drain_ms = peer.bounds.drain };
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = 0, .reply = .{ .nonce = record.nonce, .phase = .starting, .pid = 0, .source_inode = 0, .source_root = 0, .target_root = 0 } });
-    var child = try Proxy.spawn(context, peer.executable, peer.bounds.reap);
-    defer child.close();
-    try child.fits();
     try wire.write(allocator, io, child.child.stdin.?, request);
     const ready = wire.read(wire.Reply, allocator, io, child.child.stdout.?, .after(io, peer.bounds.ready)) catch |err| return if (err == error.DeadlineExceeded) error.NativePeerTimeout else err;
     defer ready.deinit();
@@ -89,20 +119,39 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record) !w
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = ready.value });
     try context.recheck(record.from, record.source, record.source_root, record.target_root);
     if (window.left(io) == null) return error.NativePeerTimeout;
-    child.commit(allocator, .{ .nonce = record.nonce, .commit = true }) catch |err| return lost(context, record, err);
+    try intent.commit(context, record);
+    flagged = true;
+    child.commit(allocator, .{ .nonce = record.nonce, .commit = true }) catch |err| return complete(context, record, try lost(context, record, err));
     const done = wire.read(wire.Reply, allocator, io, child.child.stdout.?, drained) catch |err| {
         child.close();
-        return lost(context, record, err);
+        return complete(context, record, try lost(context, record, err));
     };
     defer done.deinit();
     try reply(record, done.value, .done);
     if (done.value.source_inode != ready.value.source_inode or done.value.source_root != ready.value.source_root or done.value.target_root != ready.value.target_root or done.value.pid != ready.value.pid) return error.BadFrame;
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = done.value });
-    const term = child.reap();
+    return outcome(context, record, done.value.status, child.reap());
+}
+
+/// A reply is not a cancellation proof without its matching native exit.
+/// Success may outlive reap: the verified arrival, checked by complete,
+/// settles that result even when the proxy is still draining. A watchdog
+/// drain exit is also allowed only for a success reply and verified arrival.
+pub fn outcome(context: Context, record: intent.Record, status: wire.Status, term: ?std.process.Child.Term) !void {
     try context.source.checkMarked();
     try context.target.checkMarked();
-    if (done.value.status == .success and (term == null or !term.?.success())) return error.NativePeerFailed;
-    return done.value.status;
+    const exits = @import("windows.zig").exits;
+    if (term) |ended| {
+        const code = switch (ended) {
+            .exited => |code| code,
+            else => return error.NativePeerFailed,
+        };
+        if (status == .success) {
+            if (code != exits.success and code != exits.drained) return error.NativePeerFailed;
+        } else if (code != exits.rejected) return error.NativePeerFailed;
+    } else if (status != .success) return error.NativeMoveUnknown;
+    if (status == .success and !try intent.arrived(context, record)) return error.NativeMoveUnknown;
+    try complete(context, record, status);
 }
 
 /// COMMIT was written and no done reply came back: the rename may have

@@ -8,9 +8,11 @@ const name = @import("../name.zig");
 const metadata = @import("../metadata.zig");
 const layout = @import("../layout.zig");
 
-/// Exit codes a watchdog ends the peer with. Neither follows a rename in
-/// flight: `expired` means none was started, `drained` that one returned.
+/// Normal reply exits and watchdog exits. Neither watchdog exit follows a
+/// rename in flight: `expired` means none started, `drained` one returned.
 pub const exits = struct {
+    pub const success = 0;
+    pub const rejected = 3;
     pub const expired = 4;
     pub const drained = 5;
 };
@@ -57,7 +59,7 @@ fn run(allocator: std.mem.Allocator, io: std.Io) !u8 {
         break :status try rename(allocator, source, target_root, request.to);
     } else .expired;
     try wire.write(allocator, io, .stdout(), reply);
-    return if (reply.status == .success) 0 else 3;
+    return if (reply.status == .success) exits.success else exits.rejected;
 }
 
 /// The window opens before the bound reply is written. A peer still waiting
