@@ -9,12 +9,13 @@ const Binding = @import("attachments.zig").Binding;
 const Plugs = @import("plug.zig").Plugs;
 const Faults = @import("faults/faults.zig").Faults;
 const ownership = @import("attachment_ownership.zig");
+const nodes = @import("attachment_nodes.zig");
 
 pub fn commit(next: *graph.Graph, previous: *graph.Graph, top: *const Topology, arena: *std.heap.ArenaAllocator, board: *Board, binding: ?Binding) void {
-    var moved: [512]bool = @splat(false);
+    const donors = matchProviders(next, previous);
     for (next.nodes[0..next.count], 0..) |node, id| {
         if (node.kind != .part) continue;
-        const old = oldFor(next, previous, id, &moved);
+        const old: ?nodes.Node = if (donors[id]) |old_id| previous.nodes[old_id] else null;
         retainWiring(node, old, board);
     }
     if (board.pins.observer) |observer| {
@@ -38,21 +39,46 @@ pub fn commit(next: *graph.Graph, previous: *graph.Graph, top: *const Topology, 
     installTopology(next, top, board);
 }
 
-fn oldFor(next: *const graph.Graph, previous: *const graph.Graph, id: usize, moved: *[512]bool) ?@import("attachment_nodes.zig").Node {
-    const wanted = next.nodes[id];
+/// Runtime ordinals are persistent bindings. Reserve them before fallback can
+/// consume one; startup/restored extras prefer other nonruntime donors.
+fn matchProviders(next: *const graph.Graph, previous: *const graph.Graph) [nodes.limit]?u16 {
+    var donors: [nodes.limit]?u16 = @splat(null);
+    var moved: [nodes.limit]bool = @splat(false);
+    const next_runtime = runtimeParts(next);
+    const old_runtime = runtimeParts(previous);
     for (next.runtime[0..next.runtime_count], 0..) |entry, index| {
-        if (entry != @as(u16, @intCast(id)) or index >= previous.runtime_count) continue;
+        if (index >= previous.runtime_count) continue;
+        const id = entry.?;
         const old_id = previous.runtime[index].?;
-        const old = previous.nodes[old_id];
-        if (!moved[old_id] and old.kind == .part and old.kind.part == wanted.kind.part and std.meta.eql(old.at, wanted.at)) {
+        if (!moved[old_id] and compatible(next.nodes[id], previous.nodes[old_id])) {
             moved[old_id] = true;
-            return old;
+            donors[id] = old_id;
         }
     }
+    for (next.nodes[0..next.count], 0..) |wanted, id| {
+        if (wanted.kind != .part or donors[id] != null) continue;
+        donors[id] = matching(wanted, previous, &moved, &old_runtime, next_runtime[id]);
+        if (donors[id] == null) donors[id] = matching(wanted, previous, &moved, &old_runtime, null);
+    }
+    return donors;
+}
+
+fn runtimeParts(g: *const graph.Graph) [nodes.limit]bool {
+    var result: [nodes.limit]bool = @splat(false);
+    for (g.runtime[0..g.runtime_count]) |entry| result[entry.?] = true;
+    return result;
+}
+
+fn compatible(wanted: nodes.Node, old: nodes.Node) bool {
+    return wanted.kind == .part and old.kind == .part and old.kind.part == wanted.kind.part and std.meta.eql(old.at, wanted.at);
+}
+
+fn matching(wanted: nodes.Node, previous: *const graph.Graph, moved: *[nodes.limit]bool, runtime: *const [nodes.limit]bool, role: ?bool) ?u16 {
     for (previous.nodes[0..previous.count], 0..) |old, old_id| {
-        if (moved[old_id] or old.kind != .part or old.kind.part != wanted.kind.part or !std.meta.eql(old.at, wanted.at)) continue;
+        if (moved[old_id] or !compatible(wanted, old)) continue;
+        if (role) |wanted_role| if (runtime[old_id] != wanted_role) continue;
         moved[old_id] = true;
-        return old;
+        return @intCast(old_id);
     }
     return null;
 }
