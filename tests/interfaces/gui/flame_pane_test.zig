@@ -57,7 +57,8 @@ fn digest(theme: *const Theme, model: *const flame.Model, hover: ?u32) !u64 {
     defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, @intCast(area.w), @intCast(area.h));
     defer frame.deinit(std.testing.allocator);
-    try pane.draw(&list, theme, area, model, hover);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    pane.draw(&target.paint(), theme, area, model, hover);
     raster.draw(&frame, &list, font.atlas);
     const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
     return hash;
@@ -106,7 +107,8 @@ test "a pane too narrow draws nothing" {
     defer model.deinit();
     var list = draw_list.DrawList.init(std.testing.allocator, 64, 64);
     defer list.deinit();
-    try pane.draw(&list, dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = area.h }, &model, null);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    pane.draw(&target.paint(), dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = area.h }, &model, null);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 

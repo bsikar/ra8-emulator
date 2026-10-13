@@ -9,7 +9,6 @@ const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const Theme = @import("colors.zig").Theme;
-const widget_paint = @import("ra8_render").widget_paint;
 const widget = @import("ra8_widget");
 const flame_model = @import("../flame/model.zig");
 
@@ -68,25 +67,24 @@ pub fn label(model: *const Model, node: u32) []const u8 {
     return if (node == 0) root_label else model.name(node);
 }
 
-/// Draw the pane through the shared Paint table (RA8EMU-1159): the
+/// Draw the pane through the handed Paint table (RA8EMU-1157): the
 /// background and the box fills dispatch through the table and the text is
 /// the firmware's label widget, so no pane code emits raw glyph commands.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, model: *const Model, hover: ?u32) !void {
+/// The list clip the pane used to push is a documented temporary the table
+/// cannot carry until RA8FW-951; spans fit the width and the rows the
+/// height they are handed.
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, model: *const Model, hover: ?u32) void {
     if (area.w < min_w or rows(area) == 0) return;
-    try list.pushClip(area);
-    defer list.popClip();
-    var target = widget_paint.Target{ .list = list };
-    const paint = target.paint();
-    fillArea(&paint, area, word(theme.background));
+    fillArea(table, area, word(theme.background));
     for (0..model.nodes.items.len) |index| {
         const node: u32 = @intCast(index);
         const depth = model.row(node) orelse continue;
         if (depth >= rows(area)) continue;
         const span = model.span(node, width(area)) orelse continue;
         if (span.w <= 0) continue;
-        drawBox(&paint, theme, boxRect(area, depth, span), label(model, node), hover == node);
+        drawBox(table, theme, boxRect(area, depth, span), label(model, node), hover == node);
     }
-    if (hover) |node| drawTip(&paint, theme, area, model, node);
+    if (hover) |node| drawTip(table, theme, area, model, node);
 }
 
 fn drawBox(table: *const widget.types.Paint, theme: *const Theme, box: Rect, called: []const u8, hovered: bool) void {
