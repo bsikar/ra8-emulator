@@ -18,7 +18,7 @@ test "native pipe framing rejects oversized and truncated frames before parsing"
         defer input.close(io);
         try output.writeStreamingAll(io, bytes);
         output.close(io);
-        const result = wire.read(wire.Commit, std.testing.allocator, io, input);
+        const result = wire.read(wire.Commit, std.testing.allocator, io, input, null);
         try std.testing.expectError(if (bytes.len == 4) error.BadFrame else error.EndOfStream, result);
     }
 }
@@ -31,8 +31,15 @@ test "native frame roundtrip preserves nonce and commit decision" {
     defer output.close(io);
     const nonce: ra8.host.history.name.Id = @splat('a');
     try wire.write(std.testing.allocator, io, output, wire.Commit{ .nonce = nonce, .commit = false });
-    const parsed = try wire.read(wire.Commit, std.testing.allocator, io, input);
+    const parsed = try wire.read(wire.Commit, std.testing.allocator, io, input, null);
     defer parsed.deinit();
     try std.testing.expectEqualStrings(&nonce, &parsed.value.nonce);
     try std.testing.expect(!parsed.value.commit);
+}
+
+test "protocol bounds are finite, nonzero and fit one pipe" {
+    try (wire.Bounds{}).check();
+    try std.testing.expectEqual(@as(u32, 2), wire.version);
+    try std.testing.expect(wire.pipe_bytes <= 65536);
+    for ([_]wire.Bounds{ .{ .ready = 0 }, .{ .commit = 0 }, .{ .drain = wire.Bounds.limit + 1 }, .{ .reap = 0 } }) |bad| try std.testing.expectError(error.BadBounds, bad.check());
 }
