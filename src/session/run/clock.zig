@@ -52,6 +52,8 @@ pub const Clock = struct {
     idle_skip: bool = false,
     /// `--save-state` / `--load-state` (RA8EMU-696): zig_snapshot.zig.
     state: state_options.Options = .{},
+    /// Identity of the loaded ELF, fixed before executing or restoring.
+    image_identity: ?[16]u8 = null,
     resume_boundary: bool = false,
     resume_unscaled: bool = false,
     /// Rates selected when the current boundary opened.

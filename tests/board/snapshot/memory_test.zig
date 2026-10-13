@@ -107,10 +107,11 @@ test "a second core saves its own regions, not the SRAM it borrows" {
     var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&second, &list);
-    var back = try restore(list.written());
+    var back = try memory.Store.init(&first);
     defer back.deinit();
+    try memory.load(&back, (try file.Reader.find(list.written(), .memory)).?.payload);
     try std.testing.expectEqualStrings("cpu1", back.span(memmap.mram_base, 4).?);
-    try std.testing.expectEqual(@as(u8, 0), back.span(memmap.sram_base, 1).?[0]);
+    try std.testing.expectEqualStrings("shared", back.span(memmap.sram_base, 6).?);
 }
 
 test "a region whose size changed is refused" {

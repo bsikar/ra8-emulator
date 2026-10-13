@@ -108,6 +108,7 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
 /// (RA8EMU-681): "channels.listener" leaves out `listener` in every element
 /// of `channels`.
 pub fn writeExcept(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) std.Io.Writer.Error!void {
+    comptime if (!skipsResolve(@TypeOf(value), skip)) @compileError("snapshot skip path does not resolve in " ++ @typeName(@TypeOf(value)));
     inline for (@typeInfo(@TypeOf(value)).@"struct".field_names) |name| {
         if (comptime named(name, skip)) continue;
         const inner = comptime below(name, skip);
@@ -128,6 +129,7 @@ fn writeInner(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) st
 /// Reads what `writeExcept` wrote over `out`; the skipped fields keep
 /// whatever `out` already held.
 pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
+    comptime if (!skipsResolve(@TypeOf(out.*), skip)) @compileError("snapshot skip path does not resolve in " ++ @typeName(@TypeOf(out.*)));
     const info = @typeInfo(@TypeOf(out.*)).@"struct";
     inline for (info.field_names, info.field_types) |name, T| {
         if (comptime named(name, skip)) continue;
@@ -135,6 +137,44 @@ pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!voi
         if (inner.len == 0) {
             @field(out.*, name) = try read(T, cursor);
         } else try readInner(cursor, &@field(out.*, name), inner);
+    }
+}
+
+/// Every skip must name an existing field, including the entire dotted path.
+pub fn skipsResolve(comptime T: type, comptime skip: anytype) bool {
+    inline for (skip) |path| if (!pathResolves(T, path)) return false;
+    return true;
+}
+
+/// A reflected inventory must classify every field once. Omitted fields
+/// require a real field name and a non-empty written reason.
+pub fn complete(comptime T: type, comptime saved: anytype, comptime omitted: anytype) bool {
+    @setEvalBranchQuota(200_000);
+    inline for (saved) |name| if (!@hasField(T, name)) return false;
+    inline for (omitted) |one| if (!@hasField(T, one.name) or one.reason.len == 0) return false;
+    inline for (@typeInfo(T).@"struct".field_names) |name| {
+        var count: usize = 0;
+        inline for (saved) |one| if (std.mem.eql(u8, name, one)) {
+            count += 1;
+        };
+        inline for (omitted) |one| if (std.mem.eql(u8, name, one.name)) {
+            count += 1;
+        };
+        if (count != 1) return false;
+    }
+    return true;
+}
+
+fn pathResolves(comptime T: type, comptime path: []const u8) bool {
+    switch (@typeInfo(T)) {
+        .array => |array| return pathResolves(array.child, path),
+        .@"struct" => {
+            const dot = std.mem.indexOfScalar(u8, path, '.') orelse path.len;
+            if (!@hasField(T, path[0..dot])) return false;
+            if (dot == path.len) return true;
+            return pathResolves(@FieldType(T, path[0..dot]), path[dot + 1 ..]);
+        },
+        else => return false,
     }
 }
 

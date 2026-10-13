@@ -164,6 +164,9 @@ const State = struct {
     }
 };
 
+comptime {
+    if (!@import("snapshot_inventory.zig").complete(State)) @compileError("unclassified harness State");
+}
 /// Owns the heap-stable emulator state. Do not copy a live Harness value.
 pub const Harness = struct {
     state: *State,
@@ -289,10 +292,12 @@ pub const Harness = struct {
         self.state.state_file.dir = dir;
     }
 
-    /// Let the boundary tick CPU1's board edge and take its reset requests.
-    pub fn bindSecond(self: *Harness, second: *second_core.Second, second_guest: Guest) void {
-        self.state.edge.second = second;
-        self.state.edge.second_memory = second_guest;
+    /// Let the boundary tick CPU1's board edge and take its reset requests,
+    /// and let snapshots save its run state.
+    pub fn bindSecondDriver(self: *Harness, pair: *second_core.zig.run.Driver) void {
+        self.state.edge.second = &pair.second;
+        self.state.edge.second_memory = pair.guest();
+        self.state.files.pair = pair;
     }
 
     pub fn deinit(self: *Harness) void {
@@ -378,7 +383,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.event_sources.chunk = &state.chunk;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk };
     state.session.live.boundary = state.edge.hook();
-    state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge };
+    state.files = .{ .plugs = &state.plugs, .faults = &state.faults, .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending };
     state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
     state.session.history = &state.history;

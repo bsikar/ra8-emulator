@@ -71,10 +71,15 @@ pub const Bridge = struct {
     worker: ?worker.Worker = null,
 
     pub fn deinit(self: *Bridge) void {
+        self.closeFlows();
+        self.tape.deinit();
+    }
+
+    /// Host attachments and the tape outlive restored guest connections.
+    pub fn closeFlows(self: *Bridge) void {
         for (&self.tcp_flows) |*flow| flow.close();
         self.udp_bridge.deinit();
         self.dns_bridge.deinit();
-        self.tape.deinit();
         self.tcp_cursor = 0;
     }
     pub fn active(self: *const Bridge) bool {

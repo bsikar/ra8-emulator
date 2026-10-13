@@ -53,6 +53,8 @@ pub const Plugs = struct {
 
     instances: [max_instances]catalog.Instance = undefined,
     instance_count: usize = 0,
+    /// Existing topology changes require the attachment snapshot owner.
+    snapshot_changed: bool = false,
     fitted: [max_fitted]Fitted = undefined,
     fitted_count: usize = 0,
 
@@ -77,6 +79,10 @@ pub const Plugs = struct {
         }
     }
 
+    pub fn snapshotSafe(self: *const Plugs) bool {
+        return !self.snapshot_changed and self.instance_count == 0 and self.board.asks.count == 0;
+    }
+
     pub fn hook(self: *Plugs) session_api.PlugHook {
         return .{ .context = self, .plugFn = setErased };
     }
@@ -85,6 +91,7 @@ pub const Plugs = struct {
     pub fn set(self: *Plugs, at: endpoint.Endpoint, name: ?[]const u8) !void {
         const wanted = name orelse {
             try self.unplug(at);
+            self.snapshot_changed = true;
             return self.forget(at);
         };
         if (self.instance_count == self.instances.len) return error.TooManyInstances;
@@ -102,6 +109,7 @@ pub const Plugs = struct {
             };
         }
         try plug.one(self.board, made.device, at);
+        self.snapshot_changed = true;
         self.note(at, made.model.name);
         if (std.mem.eql(u8, wanted, parts.panel_name)) {
             const panel: *eink.Panel = @ptrCast(@alignCast(made.state));

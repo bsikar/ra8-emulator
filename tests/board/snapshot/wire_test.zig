@@ -77,3 +77,19 @@ test "a missing section or a cut payload leaves the wire untouched" {
     try std.testing.expect(std.meta.isError(wire.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.wire.imu.writes);
 }
+
+test "full expander pointer outside register file preserves target wire and devices" {
+    var source = busy();
+    source.wire.expander.pointer = 255;
+    source.wire.expander.pointed = true;
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer bytes.deinit();
+    try saved(&source, &bytes);
+    var target = busy();
+    try target.wire.controller.attachDevice(target.wire.expander.device());
+    const context = target.wire.controller.devices.devices[0].?.context;
+    try std.testing.expectError(error.BadValue, wire.load(&target, bytes.written()));
+    try std.testing.expectEqual(@as(u8, 0), target.wire.expander.pointer);
+    try std.testing.expectEqual(@as(u32, 2), target.wire.expander.writes);
+    try std.testing.expect(target.wire.controller.devices.devices[0].?.context == context);
+}

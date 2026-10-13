@@ -15,6 +15,8 @@
 //! (sys.zig) but not the clock it divides, so a period derived from the
 //! TCON totals would rest on a guessed source rate. A chunk that covers
 //! several periods yields one scan, and the periods it swallowed are counted.
+const std = @import("std");
+
 pub const default_period_ns: u64 = 16_666_667;
 
 /// Who scans when a frame boundary passes. The sink does the scan itself, so
@@ -56,5 +58,24 @@ pub const Vsync = struct {
     /// Called by the board after each chunk.
     pub fn tick(self: *Vsync, now_ns: u64) void {
         if (self.due(now_ns)) self.sink.frame(self.sink.context, now_ns);
+    }
+};
+
+/// Pointer-free guest timing; a restore keeps the target sink and configuration.
+pub const Saved = struct {
+    period_ns: u64,
+    next_ns: u64,
+    boundaries: u64,
+    swallowed: u64,
+
+    pub fn of(live: Vsync) Saved {
+        return .{ .period_ns = live.period_ns, .next_ns = live.next_ns, .boundaries = live.boundaries, .swallowed = live.swallowed };
+    }
+
+    pub fn install(self: Saved, live: *Vsync) error{BadValue}!void {
+        if (self.period_ns == 0 or self.period_ns != live.period_ns or self.next_ns > std.math.maxInt(u64) - self.period_ns or self.boundaries > self.next_ns / self.period_ns or self.swallowed > self.boundaries or (self.boundaries != 0 and self.swallowed == self.boundaries)) return error.BadValue;
+        live.next_ns = self.next_ns;
+        live.boundaries = self.boundaries;
+        live.swallowed = self.swallowed;
     }
 };

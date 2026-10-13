@@ -22,6 +22,7 @@ const Clock = @import("../run/clock.zig").Clock;
 const max_bytes = 1 << 30;
 
 pub const Error = error{SecondCoreNotSaved};
+pub const imageIdentity = run_file.imageIdentity;
 
 /// The hook for `clock`'s run, or null when neither flag was given.
 pub fn hook(clock: *Clock) ?boot.Snapshot {
@@ -41,9 +42,14 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const allocator = std.heap.page_allocator;
     const bytes = try std.Io.Dir.cwd().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
     defer allocator.free(bytes);
-    try run_file.load(bytes, store, &.{core}, clock.board);
-    try systick.load(.{ clock.timebase, &clock.ns_timebase }, bytes);
+    var bases = .{ clock.timebase.*, clock.ns_timebase };
+    try systick.load(.{ &bases[0], &bases[1] }, bytes);
     const saved = try stretch.load(bytes);
+    var staged = try run_file.prepare(bytes, &.{store}, &.{core}, clock.board, .{ clock.image_identity, null });
+    defer staged.deinit();
+    staged.commit(&.{store}, &.{core}, clock.board);
+    clock.timebase.* = bases[0];
+    clock.ns_timebase = bases[1];
     clock.accounted = core.retired -| saved.owed;
     clock.wall_cycles = if (backing.fabricOf(store)) |fabric| fabric.wall else 0;
     clock.cycle_remainder = saved.cycle_remainder;
@@ -81,7 +87,7 @@ fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     var staging: [4096]u8 = undefined;
     var writer = file.writer(clock.io, &staging);
     const out = &writer.interface;
-    try run_file.save(out, store, &.{core}, clock.board);
+    try run_file.savePair(out, &.{store}, &.{core}, clock.board, .{ clock.image_identity, null });
     try systick.save(.{ clock.timebase, &clock.ns_timebase }, out);
     try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, out);
     try out.flush();

@@ -12,9 +12,13 @@ pub const magic = "RA8SNAP\x00".*;
 /// Version 4 moves the Ethernet PHYs and the wire peer out of the ports and
 /// the DMA into the rswitch section's own fields (RA8EMU-1042), so a version 3
 /// rswitch section would read in the wrong order and is refused.
-pub const version: u32 = 4;
+/// Version 5 adds registry state, private CPU1 memory and image identity.
+/// Version 6 saves actual slot counters and the CPU's first/warm-reset state.
+/// Earlier layouts lack booted and are refused before decoding guest state.
+/// Version 7 saves the configured GLCDC vsync phase and counters.
+pub const version: u32 = 7;
 
-pub const Error = error{ BadMagic, BadVersion, Truncated };
+pub const Error = error{ BadMagic, BadVersion, Truncated, DuplicateSection };
 
 /// What a section holds. Values are part of the format and never reused.
 pub const Kind = enum(u32) {
@@ -69,6 +73,13 @@ pub const Kind = enum(u32) {
     systick = 25,
     /// What the run owed its clocks when it saved (RA8EMU-700).
     stretch = 26,
+    registry = 27,
+    second_memory = 28,
+    second = 29,
+    debug_units = 30,
+    image = 31,
+    board_inputs = 32,
+    session_runtime = 33,
     _,
 };
 
@@ -113,13 +124,17 @@ pub const Reader = struct {
         return .{ .kind = kind, .payload = payload };
     }
 
-    /// The first section of `kind`, or null when there is none.
+    /// A unique section of `kind`. Scan the tail even after finding it.
     pub fn find(bytes: []const u8, kind: Kind) Error!?Section {
         var reader = try open(bytes);
+        var found: ?Section = null;
         while (try reader.next()) |section| {
-            if (section.kind == kind) return section;
+            if (section.kind == kind) {
+                if (found != null) return Error.DuplicateSection;
+                found = section;
+            }
         }
-        return null;
+        return found;
     }
 
     fn int(self: *Reader, comptime T: type) Error!T {
