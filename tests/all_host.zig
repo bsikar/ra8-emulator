@@ -138,6 +138,8 @@ test {
     _ = @import("interfaces/gui/snapshot_ring_test.zig");
     _ = @import("interfaces/gui/timeline_model_test.zig");
     _ = @import("interfaces/gui/timeline_pane_test.zig");
+    _ = @import("interfaces/gui/ui/locals_pane_test.zig");
+    _ = @import("interfaces/gui/shell/locals_test.zig");
     _ = @import("interfaces/rpc/session/timeline_trace_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
@@ -237,6 +239,7 @@ test {
     _ = @import("interfaces/rpc/session/backtrace_test.zig");
     _ = @import("interfaces/rpc/session/source_line_test.zig");
     _ = @import("interfaces/rpc/backtrace_wire_test.zig");
+    _ = @import("interfaces/rpc/locals_wire_test.zig");
     _ = @import("interfaces/rpc/session/periph_test.zig");
     _ = @import("interfaces/rpc/session/folded_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");

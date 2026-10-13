@@ -42,6 +42,8 @@ pub const tag = struct {
 pub const attribute = struct {
     pub const location: u64 = 0x02;
     pub const name: u64 = 0x03;
+    pub const byte_size: u64 = 0x0b;
+    pub const type_ref: u64 = 0x49;
 };
 
 pub const form = struct {
@@ -60,6 +62,12 @@ pub const form = struct {
     pub const udata: u64 = 0x0f;
     pub const indirect: u64 = 0x16;
     pub const exprloc: u64 = 0x18;
+    pub const ref_addr: u64 = 0x10;
+    pub const ref1: u64 = 0x11;
+    pub const ref2: u64 = 0x12;
+    pub const ref4: u64 = 0x13;
+    pub const ref8: u64 = 0x14;
+    pub const ref_udata: u64 = 0x17;
     pub const implicit_const: u64 = 0x21;
 };
 
@@ -87,6 +95,10 @@ pub const Where = union(enum) {
 pub const Local = struct {
     name: []const u8,
     where: ?Where,
+    /// The type's name and byte size when the image says both; empty
+    /// and zero when the chain runs out before either.
+    type_name: []const u8 = "",
+    size: u32 = 0,
 };
 
 /// The locals of the function holding `address`, written into `into`,
@@ -103,7 +115,7 @@ pub fn inFunction(sections: Sections, address: u32, into: []Local) Error!usize {
         if (end > sections.info.len) return Error.Truncated;
         cursor.bytes = sections.info[0..end];
         if (try dwarf_info.header(&cursor, sections.abbrev)) |table| {
-            try scan(&cursor, table, sections, address, into, &written);
+            try scan(&cursor, table, sections, offset, address, into, &written);
         }
         offset = end;
     }
@@ -117,12 +129,22 @@ const Die = struct {
     high_is_end: bool = false,
     name: ?[]const u8 = null,
     location: ?[]const u8 = null,
+    type_ref: ?u64 = null,
+    type_global: bool = false,
+    byte_size: ?u64 = null,
 
     fn take(self: *Die, name: u64, value: ?Attr) void {
         const seen = value orelse return;
         switch (name) {
             attribute.name => self.name = seen.text,
             attribute.location => self.location = seen.block,
+            attribute.type_ref => {
+                if (seen.number != 0) {
+                    self.type_ref = seen.number;
+                    self.type_global = seen.global;
+                }
+            },
+            attribute.byte_size => self.byte_size = seen.number,
             dwarf_info.attribute.low_pc => {
                 if (seen.address) self.low = seen.number;
             },
@@ -143,7 +165,7 @@ const Die = struct {
     }
 };
 
-fn scan(cursor: *Cursor, table: []const u8, sections: Sections, address: u32, into: []Local, written: *usize) Error!void {
+fn scan(cursor: *Cursor, table: []const u8, sections: Sections, unit: u64, address: u32, into: []Local, written: *usize) Error!void {
     var depth: usize = 0;
     var collect: ?usize = null;
     while (!cursor.done()) {
@@ -167,7 +189,15 @@ fn scan(cursor: *Cursor, table: []const u8, sections: Sections, address: u32, in
         }
         if (collect != null) {
             if ((spec.tag == tag.variable or spec.tag == tag.formal_parameter) and written.* < into.len) {
-                into[written.*] = .{ .name = die.name orelse "", .where = if (die.location) |bytes| where(bytes) else null };
+                var local = Local{ .name = die.name orelse "", .where = if (die.location) |bytes| where(bytes) else null };
+                if (die.type_ref) |ref| {
+                    const found = describeType(sections, unit, ref, die.type_global, 0) catch null;
+                    if (found) |kind| {
+                        if (kind.name) |text| local.type_name = text;
+                        if (kind.byte_size) |bytes| local.size = @truncate(bytes);
+                    }
+                }
+                into[written.*] = local;
                 written.* += 1;
             }
         } else if (spec.tag == dwarf_info.tag_subprogram and die.covers(address)) {
@@ -197,13 +227,19 @@ fn specOf(abbrev: []const u8, code: u64) Error!Spec {
     }
 }
 
-const Attr = struct { number: u64 = 0, address: bool = false, block: ?[]const u8 = null, text: ?[]const u8 = null };
+const Attr = struct { number: u64 = 0, address: bool = false, global: bool = false, block: ?[]const u8 = null, text: ?[]const u8 = null };
 
 /// An attribute's value when its form carries one this reader needs,
 /// else an empty one once the cursor is past it.
 fn read(cursor: *Cursor, kind: u64, implicit: i64, str: []const u8) Error!Attr {
     return switch (kind) {
         form.addr => .{ .number = try cursor.int(u32), .address = true },
+        form.ref_addr => .{ .number = try cursor.int(u32), .global = true },
+        form.ref1 => .{ .number = try cursor.byte() },
+        form.ref2 => .{ .number = try cursor.int(u16) },
+        form.ref4 => .{ .number = try cursor.int(u32) },
+        form.ref8 => .{ .number = try cursor.int(u64) },
+        form.ref_udata => .{ .number = try cursor.uleb() },
         form.data1 => .{ .number = try cursor.byte() },
         form.data2 => .{ .number = try cursor.int(u16) },
         form.data4 => .{ .number = try cursor.int(u32) },
@@ -240,3 +276,44 @@ fn where(bytes: []const u8) ?Where {
     if (!cursor.done()) return null;
     return found;
 }
+
+/// The type of a local, from the type DIE its DW_AT_type names: its own
+/// name and byte size, or the nearest the chain of DW_AT_type links
+/// carries, depth-bounded so a cycle answers empty. Absolute offsets
+/// (DW_FORM_ref_addr) skip the unit arithmetic.
+pub fn describeType(sections: Sections, unit: u64, offset: u64, global: bool, depth: usize) Error!?Type {
+    if (depth >= 4) return null;
+    const at = if (global) offset else unit + offset;
+    if (at >= sections.info.len) return null;
+    var cursor = Cursor{ .bytes = sections.info, .at = @intCast(at) };
+    const code = try cursor.uleb();
+    if (code == 0) return null;
+    const spec = try specOf(sections.abbrev, code);
+    var die = Die{};
+    var abbrev_cursor = spec.cursor;
+    while (true) {
+        const name = try abbrev_cursor.uleb();
+        const kind = try abbrev_cursor.uleb();
+        if (name == 0 and kind == 0) break;
+        const implicit: i64 = if (kind == form.implicit_const) try abbrev_cursor.sleb() else 0;
+        die.take(name, try read(&cursor, kind, implicit, sections.str));
+    }
+    var found = Type{};
+    if (die.name) |text| found.name = text;
+    if (die.byte_size) |bytes| found.byte_size = bytes;
+    if (die.type_ref) |ref| {
+        const next = describeType(sections, unit, ref, die.type_global, depth + 1) catch null;
+        if (next) |later| {
+            if (found.name == null) found.name = later.name;
+            if (found.byte_size == null) found.byte_size = later.byte_size;
+        }
+    }
+    if (found.name == null and found.byte_size == null) return null;
+    return found;
+}
+
+/// One type DIE's answer.
+pub const Type = struct {
+    name: ?[]const u8 = null,
+    byte_size: ?u64 = null,
+};
