@@ -1,9 +1,6 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
-//! (quit, the menu strip RA8EMU-957, gutter drags), pumps the session link into the status bar,
-//! console, board, device, camera and plug models, takes their presses (the menu strip
-//! RA8EMU-968, the pane titles RA8EMU-800, the settings page RA8EMU-963), and while Run is lit
-//! pays the board its slices on the shell's own thread, never more than one per frame. Then it
-//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
+//! (quit, the menu strip RA8EMU-957, gutter drags), pumps the session link into the leaves, takes
+//! their presses (the menu strip RA8EMU-968, the titles RA8EMU-800, the settings page RA8EMU-963), pays a lit run its slices, and draws the frame (RA8EMU-764) through the platform seam.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const widget_paint = @import("ra8_render").widget_paint;
@@ -41,6 +38,7 @@ const shell_time = @import("time.zig");
 const shell_snaps = @import("snapshots.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
+const shell_source = @import("source.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
@@ -74,7 +72,6 @@ pub const Shell = struct {
     camera_file: ?*shell_camera_file.CameraFile = null,
     /// The `--attach` and `--click` plugs, sent once the image is loaded.
     startup: ?*shell_startup.Startup = null,
-    /// The session has answered the image load.
     loaded: bool = false,
     registers: ?*shell_registers.Pair = null,
     /// Register edits over the leaves (RA8EMU-946).
@@ -87,10 +84,10 @@ pub const Shell = struct {
     breaks: ?*shell_breaks.Breaks = null,
     /// The call stack leaves, walked again after a load and every stop.
     stack: ?*shell_stack.Pair = null,
+    source: ?*shell_source.Pair = null,
     /// The time bar's models: the run, the speed field and the clock.
     time: ?*shell_time.Time = null,
-    /// Opening another image from the OS's file picker (RA8EMU-959), and
-    /// the Board menu's pick (RA8EMU-1152).
+    /// Opening another image (RA8EMU-959) and the Board menu's pick (RA8EMU-1152).
     files: ?*shell_open.Open = null,
     pick: ?*shell_pick.Pick = null,
     /// The timeline slice clicks' rewind (RA8EMU-838).
@@ -101,11 +98,8 @@ pub const Shell = struct {
     listener: ?Server = null,
     /// The wall clock a run is paced against; none, and time stands still.
     clock: ?wall_clock.Clock = null,
-    /// The last pump took everything the session had sent.
     drained: bool = true,
-    /// The time bar's place this frame.
     bar: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
-    /// The splitter being dragged, press to release.
     held: ?pane_layout.Gutter = null,
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},
@@ -331,6 +325,7 @@ pub const Shell = struct {
         if (!time.settle(&self.status)) return;
         if (self.registers) |registers| registers.refresh();
         if (self.stack) |stack| stack.refresh();
+        if (self.source) |source| source.refresh();
     }
     /// Feed what the session sent into the status bar model and the leaves.
     pub fn pump(self: *Shell) !void {
@@ -351,6 +346,7 @@ pub const Shell = struct {
         if (self.code) |code| code.attach(link);
         if (self.breaks) |breaks| breaks.attach(link);
         if (self.stack) |stack| stack.attach(link);
+        if (self.source) |source| source.attach(link);
         self.drained = false;
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
@@ -384,6 +380,10 @@ pub const Shell = struct {
         if (self.stack) |stack| {
             if (loaded) stack.reload();
             stack.observe(arrival);
+        }
+        if (self.source) |source| {
+            if (loaded) source.reload();
+            source.observe(arrival);
         }
         const registers = self.registers orelse return;
         if (loaded) registers.reload();

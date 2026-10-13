@@ -40,7 +40,8 @@ pub const Pin = struct {
     image: ?Image = null,
     refused: bool = false,
 
-    /// Set the field up in place; the pin must not move afterwards.
+    /// Set the field up in place; the pin must not move afterwards, since
+    /// the field's widget points at its own descriptor.
     pub fn init(self: *Pin) !void {
         try self.field.init(placeholder);
     }

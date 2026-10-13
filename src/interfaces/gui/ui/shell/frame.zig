@@ -88,6 +88,7 @@ pub fn kindName(kind: pane_layout.Kind) []const u8 {
         .disasm => "Disassembly",
         .stack => "Call stack",
         .timeline => "Timeline",
+        .source => "Source",
     };
 }
 

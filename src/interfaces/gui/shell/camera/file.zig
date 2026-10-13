@@ -25,7 +25,8 @@ pub const CameraFile = struct {
     /// Each file kind's path, so a new one never changes another's.
     paths: [3][shell_field.capacity]u8 = undefined,
 
-    /// Set the field up in place; it must not move afterwards.
+    /// Set the field up in place; the file must not move afterwards, since
+    /// the field's widget points at its own descriptor.
     pub fn init(self: *CameraFile) !void {
         try self.field.init(placeholder);
     }
