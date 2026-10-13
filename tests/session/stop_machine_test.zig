@@ -365,3 +365,16 @@ test "an interrupt during a watched chunk still reports the watch" {
     machine.proceed();
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x104)));
 }
+
+test "a watch with halting debug off pends the monitor and keeps the run going" {
+    var machine = Machine{ .halting = false };
+    _ = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    try std.testing.expectEqual(@as(usize, 0), machine.onAccess(0x2000_0040, 4, .write, null));
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, .watchpoint), machine.takeMonitor());
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, null), machine.takeMonitor());
+    try std.testing.expectEqual(@as(usize, 0), machine.arrivals().len);
+    try std.testing.expect(!machine.pendingData());
+}

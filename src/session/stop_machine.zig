@@ -254,11 +254,10 @@ pub const Machine = struct {
 
     /// Hand the machine a bus access made by the instruction now running,
     /// with the value it moved when known. Every watch the access matches
-    /// is counted and collected, not just the first (X11), and every DWT
-    /// comparator that matches is held as a unit event. The stop any of
-    /// them may cause is reported on the next `onInstruction`. Returns how
-    /// many watch arrivals were collected, so a recorder that takes the
-    /// hit instead of stopping can hand them back.
+    /// is collected, not just the first (X11), every DWT comparator match
+    /// is held as a unit event, and with halting debug off a watch match
+    /// pends the monitor instead. The stop lands on the next `onInstruction`;
+    /// the return is the count for recorders that take the hit back.
     pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access, value: ?u32) usize {
         if (self.mode == .halted) return 0;
         var matched: [dwt_capacity]usize = undefined;
@@ -270,8 +269,10 @@ pub const Machine = struct {
         }
         var found: [watch_table.limits.capacity]watch_table.Hit = undefined;
         const count = self.watches.collect(address, width, access, &found);
-        for (found[0..count]) |hit| self.record(.{ .watch = hit });
-        return count;
+        for (found[0..count]) |hit| {
+            if (self.halting) self.record(.{ .watch = hit }) else self.noteMonitor(.watchpoint);
+        }
+        return if (self.halting) count else 0;
     }
 
     /// A comparator matched on something other than an address: the Cycle
@@ -294,8 +295,7 @@ pub const Machine = struct {
         return self.unit_pending != null or self.firstWatch() != null;
     }
 
-    /// Take the last `count` arrivals back out: a recorder that consumed
-    /// the hits keeps the run going with no stop to report.
+    /// Take the last `count` arrivals back out, keeping the run going.
     pub fn dropLast(self: *Machine, count: usize) void {
         self.hits_len -= @min(count, self.hits_len);
     }
