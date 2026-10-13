@@ -8,6 +8,7 @@ const rpc = @import("ra8_rpc_wire");
 const served = @import("ra8_rpc").session.server;
 const served_setup = @import("ra8_rpc").served_setup;
 const proto = @import("ra8_rpc").session.rpc;
+const board_camera = @import("ra8_session").board.camera;
 
 pub const LocalSession = struct {
     setup: served_setup.Served,
@@ -38,6 +39,11 @@ pub const LocalSession = struct {
     /// Answer every frame the shell has sent so far.
     pub fn answer(self: *LocalSession) !void {
         while (try self.host.poll(self.setup.tx) != .idle) {}
+    }
+
+    /// Sample a preview frame from the board's camera source (RA8EMU-1180).
+    pub fn cameraPreview(self: *LocalSession) ?board_camera.Preview {
+        return board_camera.preview(self.setup.owner.board());
     }
 
     pub fn deinit(self: *LocalSession) void {

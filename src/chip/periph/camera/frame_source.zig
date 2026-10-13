@@ -14,6 +14,13 @@ pub const Shape = struct {
     lines: u32,
 };
 
+/// An RGB preview frame from the source for GUI observation (RA8EMU-1180).
+pub const Preview = struct {
+    width: u32,
+    height: u32,
+    pixels: []const u8,
+};
+
 pub const FrameSource = struct {
     context: *anyopaque,
     vtable: *const VTable,
@@ -29,6 +36,8 @@ pub const FrameSource = struct {
         fill: *const fn (context: *anyopaque, row: u32, column: u32, out: []u8) void,
         /// Let go of whatever the source holds open.
         close: *const fn (context: *anyopaque) void,
+        /// Sample an RGB preview frame without altering the capture sequence.
+        preview: ?*const fn (context: *anyopaque) ?Preview = null,
     };
 
     pub fn frame(self: FrameSource, when: u64, shape: Shape) void {
@@ -41,5 +50,10 @@ pub const FrameSource = struct {
 
     pub fn close(self: FrameSource) void {
         self.vtable.close(self.context);
+    }
+
+    pub fn preview(self: FrameSource) ?Preview {
+        const prev = self.vtable.preview orelse return null;
+        return prev(self.context);
     }
 };
