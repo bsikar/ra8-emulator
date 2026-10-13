@@ -25,6 +25,37 @@ fn shell() !shell_loop.Shell {
     return shell_loop.Shell.init(std.testing.allocator, try pane_layout.twoCore(std.testing.allocator));
 }
 
+test "a shell mouse press on a timeline slice moves the shared cursor to its start" {
+    const Rig = @import("../local_rig.zig").Rig;
+    const timeline = gui_app.timeline_pane;
+    var rig: Rig = undefined;
+    try rig.open(elf_path);
+    defer rig.deinit();
+    var window = Headless.init(std.testing.allocator, width, height);
+    defer window.deinit();
+    var s = shell_loop.Shell.init(std.testing.allocator, try pane_layout.Layout.init(std.testing.allocator, .{ .kind = .timeline, .core = .cpu0 }));
+    defer s.deinit();
+    s.link = &rig.link;
+    const model = &s.timeline.?;
+    try model.take(.{ .when = 100, .core = 0, .kind = .switch_to, .thread = 0xA });
+    try model.take(.{ .when = 700, .core = 0, .kind = .switch_to, .thread = 0xB });
+    try model.finish(1000);
+    var solved = try shell_frame.solve(&s.layout, std.testing.allocator, width, height);
+    defer solved.deinit(std.testing.allocator);
+    const body = shell_frame.bodyOf(solved.panes.items[0].area);
+    const x = body.x + timeline.col_w + 40;
+    const y = body.y + timeline.header_h + 2;
+    try window.feed(.{ .button = .{ .button = 1, .down = true, .x = x, .y = y } });
+    try std.testing.expect(try s.step(window.platform()));
+    try std.testing.expectEqual(@as(?u64, 100), s.snaps.cursor.at_ns);
+    try std.testing.expectEqualStrings("state not kept this far back", s.snaps.notice.?);
+    try std.testing.expect(s.snaps.step == .none);
+    // A later press on the core header leaves the selected slice alone.
+    try window.feed(.{ .button = .{ .button = 1, .down = true, .x = x, .y = body.y + 2 } });
+    try std.testing.expect(try s.step(window.platform()));
+    try std.testing.expectEqual(@as(?u64, 100), s.snaps.cursor.at_ns);
+}
+
 test "a frame presents the shell frame on the headless platform" {
     var window = Headless.init(std.testing.allocator, width, height);
     defer window.deinit();

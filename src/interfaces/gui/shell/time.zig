@@ -104,7 +104,9 @@ pub const Time = struct {
     /// (RA8EMU-957): the button's press without the hit test.
     pub fn pressCommand(self: *Time, control: time_bar.Control, link: *Link, status: *Status) void {
         const was_lit = self.run.lit;
-        time_bar_capture.press(control, status, &self.run, link) catch {
+        time_bar_capture.press(control, status, &self.run, link) catch |err| {
+            // A Step that never reached the session can be tried again.
+            if (err == error.TableFull) return;
             status.refused = .run;
             return;
         };

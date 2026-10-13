@@ -320,3 +320,27 @@ test "a failed sliced run send settles at its last address with refusal" {
     try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .run), bench.status.refused);
     try std.testing.expect(!bench.time.run.lit);
 }
+
+test "a queue-full Step preserves the halt and prior note and succeeds on retry" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const halt = bench.status.run.halted;
+    for (0..proto.pending_slots) |_| _ = try bench.rig.link.send(proto.Now, .now, .{ .core = .cpu0 });
+    bench.status.refused = .unread;
+    try std.testing.expect(bench.click(.step));
+    try std.testing.expectEqualDeep(halt, bench.status.run.halted);
+    try std.testing.expectEqual(@as(?u32, null), bench.status.run_id);
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, .unread), bench.status.refused);
+    try std.testing.expect(!bench.time.run.lit and !bench.time.run.refused);
+    try std.testing.expect(bench.rig.link.state == .connected);
+    try bench.exchange();
+    bench.time.pressCommand(.step, &bench.rig.link, &bench.status);
+    try std.testing.expect(bench.status.run_id != null);
+    try std.testing.expect(bench.status.run == .running);
+    try std.testing.expectEqual(@as(?gui_app.status.bar.Refusal, null), bench.status.refused);
+    try bench.exchange();
+    try std.testing.expectEqual(@as(?u32, null), bench.status.run_id);
+    try std.testing.expectEqual(@as(?proto.StopReason, .stepped), bench.status.run.halted.reason);
+    try std.testing.expect(bench.status.run.halted.address != halt.address);
+}
