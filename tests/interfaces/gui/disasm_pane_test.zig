@@ -111,7 +111,8 @@ const Scene = struct {
     }
 
     fn render(self: *Scene, snapshot: *const pane.Snapshot) !void {
-        try pane.draw(&self.list, self.theme, area, snapshot, &.{break_at});
+        var target = ra8.render.widget_paint.Target{ .list = &self.list };
+        pane.draw(&target.paint(), self.theme, area, snapshot, &.{break_at});
         raster.draw(&self.frame, &self.list, font.atlas);
     }
 
@@ -189,7 +190,8 @@ test "a pane too narrow draws nothing" {
     const snapshot = try rig.snapshot();
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 200);
     defer list.deinit();
-    try pane.draw(&list, dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = 200 }, &snapshot, &.{});
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    pane.draw(&target.paint(), dark, .{ .x = 0, .y = 0, .w = pane.min_w - 1, .h = 200 }, &snapshot, &.{});
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
