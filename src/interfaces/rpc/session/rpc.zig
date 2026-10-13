@@ -271,6 +271,8 @@ pub const backtrace_bytes = backtrace_frames * frame_bytes;
 /// pc; the leaf reads the file's rows itself.
 pub const SourceLine = struct {
     found: u8,
+    /// The pc the answer is for, 0 when `found` is 0.
+    pc: u32,
     line: u32,
     path: []const u8,
     pub const max_len = .{ .path = source_path_cap };

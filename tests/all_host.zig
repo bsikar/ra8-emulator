@@ -228,6 +228,7 @@ test {
     _ = @import("interfaces/rpc/session/input_test.zig");
     _ = @import("interfaces/rpc/session/event_feed_test.zig");
     _ = @import("interfaces/rpc/session/backtrace_test.zig");
+    _ = @import("interfaces/rpc/session/source_line_test.zig");
     _ = @import("interfaces/rpc/backtrace_wire_test.zig");
     _ = @import("interfaces/rpc/session/periph_test.zig");
     _ = @import("interfaces/rpc/session/folded_test.zig");

@@ -35,7 +35,7 @@
 //! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
 const Translator = @import("translate_c").Translator;
-const gui_smoke = @import("gui_smoke.zig");
+const gui_smoke = @import("tools/gui_smoke.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
