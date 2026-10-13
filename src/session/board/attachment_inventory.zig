@@ -4,6 +4,7 @@ const c = @import("ra8_components");
 const fields = @import("ra8_board").snapshot.run.fields;
 const Plugs = @import("plug.zig").Plugs;
 const Faults = @import("faults/faults.zig").Faults;
+const Asks = @import("ra8_board").plug.Asks;
 
 pub fn complete() bool {
     return fields.complete(Plugs, .{ "instances", "instance_count", "instance_endpoints", "snapshot_owned", "snapshot_owned_count", "snapshot_endpoints", "fitted", "fitted_count", "panels" }, .{
@@ -12,6 +13,8 @@ pub fn complete() bool {
     }) and fields.complete(Faults, .{ "wrapped", "spi_parts", "uart_parts" }, .{
         .{ .name = "board", .reason = "Stable target Board binding" },
         .{ .name = "arena", .reason = "Allocation wiring; wrappers are typed nodes" },
+    }) and fields.complete(Asks, .{ "asked", "count", "attached_eink", "owned", "owned_count" }, .{
+        .{ .name = "arena", .reason = "Target allocator; actual owned startup objects join typed graph and transfer to Plugs at commit" },
     }) and automatic(c.lsm6dso.Imu, .{}) and automatic(c.max17048.Gauge, .{}) and
         automatic(c.eink.Panel, .{ "planes", "refresh_hook", "refresh_log_hook", "event_hook" }) and
         automatic(@FieldType(c.eink.Panel, "planes"), .{ "allocator", "image", "glass" }) and

@@ -8,6 +8,7 @@ const Board = @import("ra8_board").board.Board;
 const nodes = @import("attachment_nodes.zig");
 const plug = @import("plug.zig");
 const Faults = @import("faults/faults.zig").Faults;
+const ownership = @import("attachment_ownership.zig");
 
 pub const Graph = struct {
     nodes: [nodes.limit]nodes.Node = undefined,
@@ -33,6 +34,11 @@ pub const Graph = struct {
     }
 
     pub fn retain(self: *Graph, board: *Board, plugs: ?*const plug.Plugs, faults: ?*const Faults) !void {
+        if (board.asks.owned_count > board.asks.owned.len) return error.BadValue;
+        for (board.asks.owned[0..board.asks.owned_count]) |owned| {
+            _ = try codec.ofModel(owned.instance.model);
+            _ = try self.add(board, owned.instance.device, owned.at, 0);
+        }
         if (plugs) |held| {
             if (held.instance_count > self.runtime.len) return error.BadValue;
             self.runtime_count = held.instance_count;
@@ -47,13 +53,19 @@ pub const Graph = struct {
         }
         if (faults) |held| {
             for (held.wrapped, 0..) |entry, index| if (entry) |wrapper| {
-                self.wrapped[index] = try self.add(board, .{ .i2c = wrapper.device() }, i2cEndpoint(board, wrapper.device()), 0);
+                const device: catalog.Device = .{ .i2c = wrapper.device() };
+                const at = try ownership.endpoint(board, plugs, device, i2cEndpoint(board, wrapper.device()));
+                self.wrapped[index] = try self.add(board, device, at, 0);
             };
             for (held.spi_parts.held, 0..) |entry, index| if (entry) |wrapper| {
-                self.spi_held[index] = try self.add(board, .{ .spi = wrapper.device() }, spiEndpoint(board, plugs, wrapper.device(), index), 0);
+                const device: catalog.Device = .{ .spi = wrapper.device() };
+                const at = try ownership.endpoint(board, plugs, device, spiEndpoint(board, plugs, wrapper.device(), index));
+                self.spi_held[index] = try self.add(board, device, at, 0);
             };
             for (held.uart_parts.held, 0..) |entry, index| if (entry) |wrapper| {
-                self.uart_held[index] = try self.add(board, .{ .uart = wrapper.device() }, .{ .uart = .{ .channel = @intCast(index) } }, 0);
+                const device: catalog.Device = .{ .uart = wrapper.device() };
+                const at = try ownership.endpoint(board, plugs, device, .{ .uart = .{ .channel = @intCast(index) } });
+                self.uart_held[index] = try self.add(board, device, at, 0);
             };
         }
     }
