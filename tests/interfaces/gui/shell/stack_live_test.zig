@@ -12,6 +12,8 @@ const shell_frame = gui_app.shell.frame;
 const draw_list = ra8.render.draw_list;
 const Live_width = @import("../live_shell.zig").width;
 const Live_height = @import("../live_shell.zig").height;
+const test_paths = @import("test_paths");
+
 const stack_pane = gui_app.stack_pane;
 
 /// Blinks LED1 twice and then parks in a loop, so it never stops by itself.
@@ -78,4 +80,20 @@ test "a leaf switched to the stack kind draws the chain, not its note" {
     stack_pane.draw(&target.paint(), dark, shell_frame.toList(body), &live.stack.cores[0].now.?, 0);
     try std.testing.expect(want.commands.items.len > 1);
     try std.testing.expectEqual(want.commands.items.len, shown.commands.items.len);
+}
+
+test "the stack leaf walks cpu1 once the rig opens the second image" {
+    var live: Live = undefined;
+    try live.open(test_paths.threadx_dual, slow);
+    defer live.deinit();
+    try live.openSecond(test_paths.threadx_dual_cpu1);
+    // CPU1 halted with no stop event of its own; the shell refreshes its
+    // leaves the way a paused run does (shell.run.zig).
+    live.registers.refresh();
+    live.stack.refresh();
+    try live.untilReadOn(1, live.registers.cores[1].serial);
+    const pc1 = live.pcOn(1);
+    try live.untilStackOn(1, pc1);
+    try std.testing.expect(live.stack.cores[1].now.?.count != 0);
+    try std.testing.expectEqual(@as(?[]const u8, null), live.stack.cores[1].note());
 }
