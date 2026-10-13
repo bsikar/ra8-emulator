@@ -383,7 +383,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.event_sources.chunk = &state.chunk;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk };
     state.session.live.boundary = state.edge.hook();
-    state.files = .{ .plugs = &state.plugs, .faults = &state.faults, .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending };
+    state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
     state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
     state.session.history = &state.history;

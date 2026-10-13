@@ -18,6 +18,9 @@ const Second = chip.core.second.core.Second;
 const Pair = chip.core.second.core.zig.run.Driver;
 const NvicSource = chip.core.cpu.exception.nvic_source.NvicSource;
 
+const attachment_snapshot = @import("attachments.zig");
+pub const attachments = attachment_snapshot;
+
 pub const Error = error{ SecondCoreNotSaved, UnsupportedAttachments };
 
 pub const Hook = struct {
@@ -44,16 +47,18 @@ pub const Files = struct {
     image: ?[]const u8 = null,
     images: ?*const [2]?[]u8 = null,
     pending: ?*NvicSource = null,
-    plugs: ?*const @import("plug.zig").Plugs = null,
-    faults: ?*const @import("faults/faults.zig").Faults = null,
+    attachments: ?attachment_snapshot.Binding = null,
 
     pub fn writeTo(self: *Files, writer: *std.Io.Writer) !void {
         comptime if (!complete()) @compileError("unclassified Session snapshot field");
         try self.single();
+        comptime if (!attachment_snapshot.inventory.complete()) @compileError("unclassified attachment field");
+        var attachment_graph: attachment_snapshot.graph.Graph = .{};
+        _ = try attachment_snapshot.capture(self.board, self.attachments, &attachment_graph);
         const count: usize = if (self.pair != null) 2 else 1;
         const stores = self.storesOf();
         const cores = self.coresOf();
-        try run_file.savePair(writer, stores[0..count], cores[0..count], self.board, self.identity());
+        try run_file.savePairAttached(writer, stores[0..count], cores[0..count], self.board, self.identity());
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{}, writer);
         if (self.pair) |pair| try saveSecond(pair, writer);
@@ -63,6 +68,7 @@ pub const Files = struct {
         try self.debugBody(writer);
         try file.writeSectionHeader(writer, .session_runtime, if (self.edge.chunk != null) 9 else 1);
         try fields.write(writer, if (self.edge.chunk) |chunk| @as(?u64, chunk.mark) else @as(?u64, null));
+        try attachment_snapshot.save(self.board, self.attachments, writer);
     }
 
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
@@ -82,9 +88,12 @@ pub const Files = struct {
         var second: ?PairState = null;
         if (self.pair) |pair| second = try readSecond(pair, bytes);
         const stores = self.storesOf();
-        var staged = try run_file.prepare(bytes, stores[0..count], cores[0..count], self.board, self.identity());
+        var staged = try run_file.prepareAttached(bytes, stores[0..count], cores[0..count], self.board, self.identity());
         defer staged.deinit();
+        var attachment_state = try attachment_snapshot.prepare(self.board, self.attachments, bytes);
+        defer attachment_state.deinit();
         staged.commit(stores[0..count], cores[0..count], self.board);
+        attachment_state.commit(self.board, self.attachments);
         self.edge.timebase = bases[0];
         self.edge.ns_timebase = bases[1];
         if (second) |saved| saved.commit(self.pair.?);
@@ -110,16 +119,16 @@ pub const Files = struct {
     /// The existing host-file callers use this binding check before opening.
     pub fn single(self: *const Files) Error!void {
         if (self.edge.second != null and self.pair == null) return Error.SecondCoreNotSaved;
-        if (self.board.asks.count != 0) return Error.UnsupportedAttachments;
+        const binding = self.attachments orelse {
+            if (self.board.asks.count != 0) return Error.UnsupportedAttachments;
+            if (self.session) |session| if (session.plugs != null or session.faults != null) return Error.UnsupportedAttachments;
+            return;
+        };
+        if (binding.plugs.board != self.board or binding.faults.board != self.board) return Error.UnsupportedAttachments;
         if (self.session) |session| {
-            if (session.plugs) |hook| {
-                const plugs = self.plugs orelse return Error.UnsupportedAttachments;
-                if (@intFromPtr(hook.context) != @intFromPtr(plugs)) return Error.UnsupportedAttachments;
-            }
-            if (session.faults) |faults| if (!faults.snapshotSafe()) return Error.UnsupportedAttachments;
+            if (session.plugs) |hook| if (hook.context != @as(*anyopaque, binding.plugs)) return Error.UnsupportedAttachments;
+            if (session.faults) |faults| if (faults != binding.faults) return Error.UnsupportedAttachments;
         }
-        if (self.plugs) |plugs| if (!plugs.snapshotSafe()) return Error.UnsupportedAttachments;
-        if (self.faults) |faults| if (!faults.snapshotSafe()) return Error.UnsupportedAttachments;
     }
 
     fn storesOf(self: *Files) [2]*Store {

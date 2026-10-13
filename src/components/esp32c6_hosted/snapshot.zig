@@ -34,3 +34,40 @@ fn fits(wire: anytype) bool {
     return wire.offset <= wire.rx.len and wire.caps_len <= wire.caps.len and
         queue.head < queue.slots.len and queue.len <= queue.slots.len;
 }
+
+/// Guest payload only. The caller supplies detached storage with no flows.
+pub fn writePayload(writer: *std.Io.Writer, part: anytype) !void {
+    if (!fits(part.wire) or part.wire.offset >= part.wire.rx.len) return error.BadValue;
+    var copy = part.*;
+    @memset(copy.wire.rx[copy.wire.offset..], 0);
+    if (copy.wire.offset == 0) @memset(&copy.wire.tx, 0);
+    for (&copy.wire.queue.slots, 0..) |*slot, index| {
+        const distance = (index + copy.wire.queue.slots.len - copy.wire.queue.head) % copy.wire.queue.slots.len;
+        if (distance >= copy.wire.queue.len) @memset(slot, 0);
+    }
+    try fields.writeExcept(writer, copy, wiring);
+}
+
+pub fn readPayload(part: anytype, cursor: *fields.Cursor) fields.Error!void {
+    try fields.readOver(cursor, part, wiring);
+    if (!cursor.done() or !fits(part.wire) or part.wire.offset >= part.wire.rx.len) return error.BadValue;
+}
+
+/// Rebuild the private sideband callback without changing saved pin levels.
+/// This runs at commit. The connect operation touches a local scratch GPIO.
+pub fn rebindPins(part: anytype, pins: anytype, observe: bool) void {
+    var scratch: @TypeOf(pins.*) = .{};
+    part.connect(&scratch);
+    part.pins = pins;
+    if (observe) pins.observer = scratch.observer;
+}
+
+/// Recognize the model's sideband observer while leaving host taps alone.
+pub fn observerMatches(part: anytype, pins: anytype) bool {
+    const observer = pins.observer orelse return false;
+    if (observer.context != @as(*anyopaque, part)) return false;
+    var probe: @TypeOf(part.*) = .{};
+    var scratch: @TypeOf(pins.*) = .{};
+    probe.connect(&scratch);
+    return observer.changedFn == scratch.observer.?.changedFn;
+}

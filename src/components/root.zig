@@ -38,3 +38,5 @@ pub const esp_tape = @import("esp32c6_hosted/tape/tape.zig");
 pub const fault = @import("fault/fault.zig");
 pub const parts = @import("parts.zig");
 pub const request = @import("request.zig");
+
+pub const catalog_snapshot = @import("catalog_snapshot.zig");

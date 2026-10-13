@@ -16,7 +16,9 @@ pub const magic = "RA8SNAP\x00".*;
 /// Version 6 saves actual slot counters and the CPU's first/warm-reset state.
 /// Earlier layouts lack booted and are refused before decoding guest state.
 /// Version 7 saves the configured GLCDC vsync phase and counters.
-pub const version: u32 = 7;
+/// Version 8 requires the typed attachment graph: catalog parts, topology and
+/// fault wrappers. A version 7 file has none and is refused before decoding.
+pub const version: u32 = 8;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated, DuplicateSection };
 
@@ -80,6 +82,7 @@ pub const Kind = enum(u32) {
     image = 31,
     board_inputs = 32,
     session_runtime = 33,
+    attachments = 34,
     _,
 };
 

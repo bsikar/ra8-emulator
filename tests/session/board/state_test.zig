@@ -96,7 +96,7 @@ test "state strict missing and duplicated sections are refused with the live run
     live.board.bus.write(0x4fff_ff08, 4, 0x77);
     var before = try live.save();
     defer before.deinit();
-    const kinds = [_]file.Kind{ .part, .time, .security, .c6, .memory, .second_memory, .cpu, .registry, .image, .board_inputs, .systick, .stretch, .second, .debug_units, .session_runtime };
+    const kinds = [_]file.Kind{ .part, .time, .security, .c6, .memory, .second_memory, .cpu, .registry, .image, .board_inputs, .systick, .stretch, .second, .debug_units, .session_runtime, .attachments };
     for (kinds) |kind| for ([_]usize{ 0, 2 }) |copies| {
         var bad = try recount(saved.written(), kind, copies);
         defer bad.deinit();
@@ -122,7 +122,7 @@ test "state strict malformed later sections and identity errors leave the live r
     live.machines[0].fpb.enabled = false;
     var before = try live.save();
     defer before.deinit();
-    for ([_]file.Kind{ .memory, .cpu, .time, .panel, .storage, .c6, .registry, .systick, .stretch, .second_memory, .second, .debug_units, .board_inputs, .session_runtime }) |kind| {
+    for ([_]file.Kind{ .memory, .cpu, .time, .panel, .storage, .c6, .registry, .systick, .stretch, .second_memory, .second, .debug_units, .board_inputs, .session_runtime, .attachments }) |kind| {
         var bad = try malformed(saved.written(), kind);
         defer bad.deinit();
         try std.testing.expect(std.meta.isError(live.files.readFrom(bad.written())));
@@ -284,7 +284,7 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
     }
 }
 
-test "state strict formats five and six are refused before live guest state or host wiring changes" {
+test "state strict formats five through seven are refused before live guest state or host wiring changes" {
     const live = try Rig.create();
     defer live.destroy();
     try populated(live);
@@ -293,7 +293,7 @@ test "state strict formats five and six are refused before live guest state or h
     defer before.deinit();
     const old = try std.testing.allocator.dupe(u8, before.written());
     defer std.testing.allocator.free(old);
-    for ([_]u32{ 5, 6 }) |version| {
+    for ([_]u32{ 5, 6, 7 }) |version| {
         std.mem.writeInt(u32, old[file.magic.len..][0..4], version, .little);
         try std.testing.expectError(error.BadVersion, live.files.readFrom(old));
     }
