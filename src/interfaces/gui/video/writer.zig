@@ -92,6 +92,8 @@ pub const Writer = struct {
                 if (self.ffmpeg_sink) |sink| try sink.interface.flush();
                 if (self.ffmpeg_child) |*child| {
                     if (child.stdin) |*stdin| stdin.close(self.io);
+                    // EOF ends the encoder input; wait must not close it again.
+                    child.stdin = null;
                     _ = child.wait(self.io) catch {};
                     self.ffmpeg_child = null;
                 }
@@ -117,6 +119,7 @@ pub const Writer = struct {
                 if (self.ffmpeg_buf) |buf| self.allocator.free(buf);
                 if (self.ffmpeg_child) |*child| {
                     if (child.stdin) |*stdin| stdin.close(self.io);
+                    child.stdin = null;
                     _ = child.wait(self.io) catch {};
                 }
             },
