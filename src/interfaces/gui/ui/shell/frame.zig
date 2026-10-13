@@ -166,8 +166,8 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
         status_strip.draw(&paint, theme, theme_picker.rest(strip), &shell.strip);
         try theme_picker.draw(list, theme, strip, picker);
     } else status_strip.draw(&paint, theme, strip, &shell.strip);
-    // The strip draws last, so an open drop-down covers the panes.
-    try menu_bar.draw(list, theme, shell.menu, shell.width);
+    // The bar draws last, so an open drop-down covers the panes.
+    menu_bar.draw(&paint, theme, shell.menu, shell.width);
 }
 
 fn drawLeaf(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: Pane, area: Rect, painter: ?Painter, tabs: ?Tabs) !void {

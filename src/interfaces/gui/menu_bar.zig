@@ -11,9 +11,11 @@ const std = @import("std");
 const builtin = @import("builtin");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const colors = @import("ui/colors.zig");
 const menu = @import("menu.zig");
 
+const Color = draw_list.Color;
 const Rect = draw_list.Rect;
 const Theme = colors.Theme;
 
@@ -180,44 +182,81 @@ pub fn hover(bar: *Bar, menus: []const menu.Menu, width: i32, x: i32) void {
 
 /// Draws the strip across the top of a window `width` wide. Draw it after
 /// the panes and the bottom chrome, so an open drop-down covers them.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, view: Menu, width: i32) !void {
-    try list.fill(.{ .x = 0, .y = 0, .w = width, .h = height }, theme.face);
-    try list.fill(.{ .x = 0, .y = height - 1, .w = width, .h = 1 }, theme.border);
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, view: Menu, width: i32) void {
+    fillArea(table, .{ .x = 0, .y = 0, .w = width, .h = height }, theme.face);
+    fillArea(table, .{ .x = 0, .y = height - 1, .w = width, .h = 1 }, theme.border);
     const top = @divFloor(height - @as(i32, font.glyph_h), 2);
     for (view.menus, 0..) |m, index| {
         const at = title(view.menus, width, index);
         const hot = view.bar.open == index;
-        if (hot) try list.fill(at, theme.band);
-        try font.draw(list, at.x + pad, top, m.title, if (hot) theme.highlight else theme.ink);
+        if (hot) fillArea(table, at, theme.band);
+        drawText(table, at.x + pad, top, m.title, if (hot) theme.highlight else theme.ink, theme.face);
     }
     const open = view.bar.open orelse return;
     const box = drop(view.menus, width, open, view.os);
-    try list.fill(box, theme.face);
-    try outline(list, theme.control_border, box);
-    for (0..view.menus[open].items.len) |at| try drawItem(list, theme, view, width, open, at);
+    fillArea(table, box, theme.face);
+    outline(table, theme.control_border, box);
+    for (0..view.menus[open].items.len) |at| drawItem(table, theme, view, width, open, at);
 }
 
-fn drawItem(list: *draw_list.DrawList, theme: *const Theme, view: Menu, width: i32, open: usize, at: usize) !void {
+fn fillArea(table: *const widget.types.Paint, r: Rect, color: Color) void {
+    table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: Color, bg: Color) void {
+    var buffer: [256]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
+}
+
+fn drawItem(table: *const widget.types.Paint, theme: *const Theme, view: Menu, width: i32, open: usize, at: usize) void {
     const item = shownAt(view.menus[open], at, view.os) orelse return;
     const area = row(view.menus, width, open, at, view.os);
     if (item.divided) {
         const line = area.y - divide;
-        try list.fill(.{ .x = area.x, .y = line, .w = area.w, .h = 1 }, theme.border);
+        fillArea(table, .{ .x = area.x, .y = line, .w = area.w, .h = 1 }, theme.border);
     }
     const ok = menu.enabled(item.action, view.state);
     const top = area.y + @divFloor(area.h - @as(i32, font.glyph_h), 2);
-    try font.draw(list, area.x + pad, top, menu.label(item, view.state), if (ok) theme.ink else theme.muted);
+    drawText(table, area.x + pad, top, menu.label(item, view.state), if (ok) theme.ink else theme.muted, theme.face);
     const bound = item.shortcut orelse return;
     var buf: [16]u8 = undefined;
     const text = menu.text(bound, view.os, &buf) catch return;
     const w: i32 = @intCast(font.textWidth(text.len));
-    try font.draw(list, area.x + area.w - pad - w, top, text, theme.muted);
+    drawText(table, area.x + area.w - pad - w, top, text, theme.muted, theme.face);
 }
 
 /// One pixel of `color` round the inside of `area`.
-fn outline(list: *draw_list.DrawList, color: draw_list.Color, area: Rect) !void {
-    try list.fill(.{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
-    try list.fill(.{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
+/// One pixel of `color` round the inside of `area`.
+fn outline(table: *const widget.types.Paint, color: Color, area: Rect) void {
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
+    fillArea(table, .{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
 }
