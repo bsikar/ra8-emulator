@@ -39,8 +39,8 @@ pub fn commit(next: *graph.Graph, previous: *graph.Graph, top: *const Topology, 
     installTopology(next, top, board);
 }
 
-/// Runtime ordinals are persistent bindings. Reserve them before fallback can
-/// consume one; startup/restored extras prefer other nonruntime donors.
+/// Reserve indexed runtime bindings, then all same-role donors, before any
+/// cross-role fallback can consume a provider needed by another part.
 fn matchProviders(next: *const graph.Graph, previous: *const graph.Graph) [nodes.limit]?u16 {
     var donors: [nodes.limit]?u16 = @splat(null);
     var moved: [nodes.limit]bool = @splat(false);
@@ -58,7 +58,10 @@ fn matchProviders(next: *const graph.Graph, previous: *const graph.Graph) [nodes
     for (next.nodes[0..next.count], 0..) |wanted, id| {
         if (wanted.kind != .part or donors[id] != null) continue;
         donors[id] = matching(wanted, previous, &moved, &old_runtime, next_runtime[id]);
-        if (donors[id] == null) donors[id] = matching(wanted, previous, &moved, &old_runtime, null);
+    }
+    for (next.nodes[0..next.count], 0..) |wanted, id| {
+        if (wanted.kind != .part or donors[id] != null) continue;
+        donors[id] = matching(wanted, previous, &moved, &old_runtime, null);
     }
     return donors;
 }
