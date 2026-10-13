@@ -103,12 +103,18 @@ fn interruptedCase(signal: Signal) !void {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "keep.board", .data = "unrelated" });
     const base = try tmp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(base);
-    var child = try interruptedSweep(gpa, base);
+    var child = try interruptedSweep(gpa, base, signal);
     const started = try provenance(&child);
+    var reaped = false;
     errdefer {
-        if (provenance(&child)) |now| {
-            if (now == started) child.kill(std.testing.io);
-        } else |_| {}
+        if (!reaped) {
+            if (provenance(&child)) |now| {
+                if (now == started and live(&child)) {
+                    std.debug.print("CLEANUP verified pid={d} birth={d}\n", .{ if (on_windows) win32.GetProcessId(child.id.?) else @as(u32, @intCast(child.id.?)), now });
+                    child.kill(std.testing.io);
+                }
+            } else |err| std.debug.print("CLEANUP identity check failed: {s}\n", .{@errorName(err)});
+        }
     }
     // A ready marker is emitted after reservation and handler installation.
     var buffer: [256]u8 = undefined;
@@ -126,21 +132,26 @@ fn interruptedCase(signal: Signal) !void {
             at += 1;
         }
     }
-    std.debug.print("owned sweep pid={d} executable={s} scratch-directory={s}\n", .{ if (on_windows) win32.GetProcessId(child.id.?) else @as(u32, @intCast(child.id.?)), test_paths.emulator, base });
+    std.debug.print("owned sweep pid={d} scratch-directory={s} mode={s}\n", .{ if (on_windows) win32.GetProcessId(child.id.?) else @as(u32, @intCast(child.id.?)), base, @tagName(signal) });
     try std.testing.expectEqual(started, try provenance(&child));
+    try std.testing.expect(live(&child));
+    std.debug.print("EVENT ready=true live=true pid={d} birth={d} mode={s}\n", .{ if (on_windows) win32.GetProcessId(child.id.?) else @as(u32, @intCast(child.id.?)), started, @tagName(signal) });
     try interrupt(&child, signal);
     const result = try child.wait(std.testing.io);
+    reaped = true;
+    std.debug.print("CHILD_EXIT mode={s} result={any}\n", .{ @tagName(signal), result });
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 1 }, result);
     try onlySentinel(tmp.dir);
+    std.debug.print("SCRATCH mode={s} keep.board=unrelated owned=none\n", .{@tagName(signal)});
 }
 
-fn interruptedSweep(gpa: std.mem.Allocator, base: []const u8) !std.process.Child {
+fn interruptedSweep(gpa: std.mem.Allocator, base: []const u8, signal: Signal) !std.process.Child {
     var env: std.process.Environ.Map = if (on_windows) try (std.process.Environ{ .block = .global }).createMap(gpa) else .init(gpa);
     defer env.deinit();
     try env.put(if (on_windows) "TMP" else "TMPDIR", base);
     const argv = [_][]const u8{ test_paths.emulator, "sweep", "--elf", fixture, "--ms", "1000" };
     if (!on_windows) return std.process.spawn(std.testing.io, .{ .argv = &argv, .environ_map = &env, .pgid = 0, .stdout = .ignore, .stderr = .pipe });
-    const command = try std.fmt.allocPrint(gpa, "\"{s}\" sweep --elf \"{s}\" --ms 1000", .{ test_paths.emulator, fixture });
+    const command = try sweepCommand(gpa);
     defer gpa.free(command);
     const wide = try std.unicode.utf8ToUtf16LeAllocZ(gpa, command);
     defer gpa.free(wide);
@@ -156,9 +167,22 @@ fn interruptedSweep(gpa: std.mem.Allocator, base: []const u8) !std.process.Child
     startup.wShowWindow = 0;
     startup.hStdError = ends[1];
     var info: win32.ProcessInfo = undefined;
-    const flags: std.os.windows.CreateProcessFlags = .{ .create_new_console = true, .create_new_process_group = true, .create_unicode_environment = true };
+    // A new process group disables Ctrl-C for its root. Ctrl-Break needs it;
+    // Ctrl-C instead uses the isolated console's broadcast group zero.
+    const flags: std.os.windows.CreateProcessFlags = .{ .create_new_console = true, .create_new_process_group = signal == .interrupt, .create_unicode_environment = true };
     try std.testing.expect(win32.CreateProcessW(null, wide, null, null, .TRUE, @bitCast(flags), @ptrCast(@constCast(block.slice.ptr)), null, &startup, &info).toBool());
+    std.debug.print("SPAWN mode={s} pid={d} argv={s} new_group={} new_console=true\n", .{ @tagName(signal), info.process_id, command, signal == .interrupt });
     return .{ .id = info.process, .thread_handle = info.thread, .stdin = null, .stdout = null, .stderr = .{ .handle = ends[0], .flags = .{ .nonblocking = false } }, .request_resource_usage_statistics = false };
+}
+
+fn sweepCommand(gpa: std.mem.Allocator) ![]u8 {
+    return std.fmt.allocPrint(gpa, "\"{s}\" sweep --elf \"{s}\" --ms 1000", .{ test_paths.emulator, fixture });
+}
+
+fn live(child: *std.process.Child) bool {
+    if (!on_windows) return true;
+    const zero: std.os.windows.LARGE_INTEGER = 0;
+    return std.os.windows.ntdll.NtWaitForSingleObject(child.id.?, .FALSE, &zero) == .TIMEOUT;
 }
 
 fn interrupt(child: *std.process.Child, signal: Signal) !void {
@@ -173,14 +197,28 @@ fn interrupt(child: *std.process.Child, signal: Signal) !void {
     }
     if (signal == .termination) {
         console_seen.store(false, .release);
-        try std.testing.expect(win32.SetConsoleCtrlHandler(testConsoleStop, .TRUE).toBool());
-        try std.testing.expect(win32.GenerateConsoleCtrlEvent(0, 0).toBool());
-        for (0..100) |_| {
-            if (console_seen.load(.acquire)) break;
-            win32.Sleep(10);
+        // The child was already created, so this per-process Ctrl-C mask
+        // protects only the attached test process from the group-zero event.
+        try std.testing.expect(win32.SetConsoleCtrlHandler(null, .TRUE).toBool());
+        defer {
+            if (!win32.SetConsoleCtrlHandler(null, .FALSE).toBool()) std.debug.print("PARENT Ctrl-C mask removal failed\n", .{});
         }
-        try std.testing.expect(console_seen.load(.acquire));
-    } else try std.testing.expect(win32.GenerateConsoleCtrlEvent(1, pid).toBool());
+        try std.testing.expect(win32.SetConsoleCtrlHandler(testConsoleStop, .TRUE).toBool());
+        defer {
+            if (!win32.SetConsoleCtrlHandler(testConsoleStop, .FALSE).toBool()) std.debug.print("PARENT Ctrl-C handler removal failed\n", .{});
+        }
+        try std.testing.expect(win32.GenerateConsoleCtrlEvent(0, 0).toBool());
+        try awaitChildExit(child);
+        std.debug.print("PARENT Ctrl-C handler seen={} (diagnostic only)\n", .{console_seen.load(.acquire)});
+    } else {
+        try std.testing.expect(win32.GenerateConsoleCtrlEvent(1, pid).toBool());
+        try awaitChildExit(child);
+    }
+}
+
+fn awaitChildExit(child: *std.process.Child) !void {
+    const timeout: std.os.windows.LARGE_INTEGER = -100_000_000;
+    try std.testing.expectEqual(std.os.windows.NTSTATUS.SUCCESS, std.os.windows.ntdll.NtWaitForSingleObject(child.id.?, .FALSE, &timeout));
 }
 
 test "--elf takes a path, one way to end, and a part" {
@@ -290,7 +328,15 @@ fn provenance(child: *std.process.Child) !i64 {
         const actual = if (std.mem.startsWith(u8, text, "\\\\?\\") or std.mem.startsWith(u8, text, "\\??\\")) text[4..] else text;
         const wanted = if (std.mem.startsWith(u8, expected, "\\\\?\\")) expected[4..] else expected;
         try std.testing.expect(std.ascii.eqlIgnoreCase(actual, wanted));
-        std.debug.print("PROVENANCE pid={d} exe={s} birth={d}\n", .{ win32.GetProcessId(child.id.?), actual, times.CreationTime });
+        var command_buffer: [8192]u8 align(@alignOf(windows.UNICODE_STRING)) = undefined;
+        try std.testing.expectEqual(windows.NTSTATUS.SUCCESS, windows.ntdll.NtQueryInformationProcess(child.id.?, .CommandLineInformation, &command_buffer, command_buffer.len, null));
+        const command_string: *const windows.UNICODE_STRING = @ptrCast(&command_buffer);
+        const command = try std.unicode.utf16LeToUtf8Alloc(gpa, command_string.Buffer.?[0 .. command_string.Length / 2]);
+        defer gpa.free(command);
+        const wanted_command = try sweepCommand(gpa);
+        defer gpa.free(wanted_command);
+        try std.testing.expectEqualStrings(wanted_command, command);
+        std.debug.print("PROVENANCE pid={d} exe={s} birth={d} argv={s}\n", .{ win32.GetProcessId(child.id.?), actual, times.CreationTime, command });
         return times.CreationTime;
     }
     const directory = try std.fmt.allocPrint(gpa, "/proc/{d}", .{child.id.?});
