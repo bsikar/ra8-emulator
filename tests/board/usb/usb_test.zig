@@ -75,3 +75,65 @@ test "with the cable in, the scripted host stays off the device jack" {
     try std.testing.expectEqualDeep(usbfs.host.Host{}, cabled.script);
     try std.testing.expect(!std.meta.eql(usbfs.host.Host{}, scripted.script));
 }
+
+fn bridgeHook() usb.Hook {
+    const Watch = struct {
+        fn poll(_: *anyopaque, _: *usbfs.Device, _: *const usbfs.host.Host) void {}
+    };
+    var seen: u8 = 0;
+    return .{ .context = &seen, .pollFn = Watch.poll };
+}
+
+test "the device jack's enumeration holds the width" {
+    // Waiting with nothing the line can offer: nothing could advance it.
+    var idle = usb.Usb{};
+    idle.device.connectVbus();
+    try std.testing.expect(idle.quiet());
+    // The pull-up lands: the next boundary could advance the script.
+    try std.testing.expect(!pulledUp().quiet());
+    // A step in flight moves one step per boundary.
+    var in_flight = pulledUp();
+    in_flight.tick();
+    try std.testing.expectEqual(usbfs.host.Step.device_descriptor, in_flight.script.step);
+    try std.testing.expect(!in_flight.quiet());
+}
+
+test "the device jack's settled script is quiet" {
+    var done = pulledUp();
+    done.script.step = .configured;
+    try std.testing.expect(done.quiet());
+    var refused = pulledUp();
+    refused.script.step = .failed;
+    try std.testing.expect(refused.quiet());
+}
+
+test "the device jack's failed script is quiet" {
+    var board = pulledUp();
+    board.script.patience = 1;
+    var tick: u32 = 0;
+    while (tick < 5 and board.script.step != .failed) : (tick += 1) board.tick();
+    try std.testing.expectEqual(usbfs.host.Step.failed, board.script.step);
+    try std.testing.expect(board.quiet());
+}
+
+test "the device jack's live bridge keeps the width" {
+    var idle = usb.Usb{};
+    idle.device.connectVbus();
+    idle.bridge = bridgeHook();
+    // Nothing attached: the bridge has nothing to poll.
+    try std.testing.expect(idle.quiet());
+    // The line comes up: the bridge polls it every boundary.
+    var live = pulledUp();
+    live.bridge = bridgeHook();
+    try std.testing.expect(!live.quiet());
+}
+
+test "the device jack under the loop cable holds no width" {
+    var cabled = pulledUp();
+    cabled.loopBack();
+    // The scripted host is frozen in .waiting while the line reads Default.
+    try std.testing.expect(!cabled.quiet());
+    // Once the HS host has the device addressed, the waiting script is idle.
+    cabled.device.setup(usbfs.host.requests.set_address);
+    try std.testing.expect(cabled.quiet());
+}

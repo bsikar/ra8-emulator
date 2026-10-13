@@ -18,6 +18,7 @@ test {
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");
+    _ = @import("debug_read_npu_test.zig");
     _ = @import("debug_read_sci_test.zig");
     _ = @import("stack/samples_test.zig");
     _ = @import("stack/walk_test.zig");

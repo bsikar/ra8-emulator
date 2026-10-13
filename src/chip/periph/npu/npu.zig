@@ -357,6 +357,7 @@ pub const Npu = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
+            .peekFn = @import("peek.zig").thunk,
         };
     }
 };
