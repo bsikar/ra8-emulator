@@ -340,6 +340,7 @@ fn translate(ev: *const c.SDL_Event) ?Event {
             .y = @intFromFloat(ev.button.y),
         } },
         c.SDL_EVENT_MOUSE_WHEEL => .{ .wheel = .{ .dx = ev.wheel.x, .dy = ev.wheel.y } },
+        c.SDL_EVENT_DROP_FILE => .{ .dropped = std.mem.span(ev.drop.data) },
         else => null,
     };
 }

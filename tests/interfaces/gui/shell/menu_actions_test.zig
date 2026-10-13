@@ -9,6 +9,7 @@ const gui_app = @import("gui_app");
 const pane_layout = gui_app.pane_layout;
 const shell_frame = gui_app.shell.frame;
 const shell_loop = gui_app.shell.loop;
+const menu = gui_app.menu;
 const shell_open = gui_app.shell.open;
 const menu_actions = gui_app.shell.menu_actions;
 const menu_bar = gui_app.menu_bar;
@@ -76,10 +77,10 @@ test "the open command asks the picker from the key and the strip" {
     try std.testing.expect(open.asked);
     // The strip's own item fires the same ask.
     open.asked = false;
-    const title = menu_bar.title(width, 0);
+    const title = menu_bar.title(&menu.bar, width, 0);
     s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 0), s.menu.bar.open);
-    const item = menu_bar.row(width, 0, 0, builtin.os.tag);
+    const item = menu_bar.row(&menu.bar, width, 0, 0, builtin.os.tag);
     s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
     try std.testing.expect(open.asked);
     try std.testing.expectEqual(@as(?usize, null), s.menu.bar.open);
@@ -93,11 +94,11 @@ test "a disabled item keeps its drop-down out" {
     var placed = try solved(&s);
     defer placed.deinit(std.testing.allocator);
     menu_actions.observe(&s, window.platform(), width);
-    const title = menu_bar.title(width, 1);
+    const title = menu_bar.title(&menu.bar, width, 1);
     s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = title.x + @divTrunc(title.w, 2), .y = @divTrunc(title.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 1), s.menu.bar.open);
     // Run with no image loaded is disabled: the drop-down stays out.
-    const item = menu_bar.row(width, 1, 0, builtin.os.tag);
+    const item = menu_bar.row(&menu.bar, width, 1, 0, builtin.os.tag);
     s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = item.x + @divTrunc(item.w, 2), .y = item.y + @divTrunc(item.h, 2) } }, &placed);
     try std.testing.expectEqual(@as(?usize, 1), s.menu.bar.open);
 }

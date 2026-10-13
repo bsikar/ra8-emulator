@@ -27,8 +27,8 @@ pub const Console = struct {
     /// What the last save did, shown on the save tab.
     saved: console_save.Outcome = .none,
 
-    pub fn init(allocator: std.mem.Allocator) Console {
-        return .{ .log = console_log.Log.init(allocator, scrollback) };
+    pub fn init(allocator: std.mem.Allocator, save_to: ?console_save.Target) Console {
+        return .{ .log = console_log.Log.init(allocator, scrollback), .save_to = save_to };
     }
 
     pub fn deinit(self: *Console) void {

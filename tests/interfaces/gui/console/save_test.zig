@@ -82,7 +82,7 @@ test "a click on the save tab saves through the shell, elsewhere it does not" {
     defer tmp.cleanup();
     var shell = shell_loop.Shell.init(std.testing.allocator, try pane_layout.twoCore(std.testing.allocator));
     defer shell.deinit();
-    var console = Console.init(std.testing.allocator);
+    var console = Console.init(std.testing.allocator, null);
     defer console.deinit();
     console.save_to = .{ .io = io, .dir = tmp.dir };
     shell.console = &console;

@@ -6,6 +6,7 @@ const std = @import("std");
 const platform = @import("../platform.zig");
 const shell_loop = @import("loop.zig");
 const local_session = @import("../local_session.zig");
+const session_link = @import("../session_link.zig");
 const session_api = @import("ra8_session").api;
 const host_listener = @import("ra8_rpc").host_listener;
 const served_server = @import("ra8_rpc").session.server;
@@ -46,7 +47,8 @@ pub fn answerHosted(context: *anyopaque) anyerror!void {
 
 /// Binds the per-user host listener onto `hosted`; without one the shell
 /// answers only its own session (RA8EMU-1156).
-pub fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, elf: []const u8, session: *local_session.LocalSession, shell: *shell_loop.Shell) void {
+pub fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, elf: []const u8, session: *local_session.LocalSession, link: *session_link.Link, shell: *shell_loop.Shell) void {
+    shell.link = link;
     const bound = host_listener.Listener.bind(allocator, io, env) catch return;
     const tx = allocator.alloc(u8, Env.max_frame) catch return;
     hosted.* = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = tx, .gpa = allocator };

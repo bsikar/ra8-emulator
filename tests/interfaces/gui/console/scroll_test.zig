@@ -100,7 +100,7 @@ const Fixture = struct {
 fn fixture(fx: *Fixture) !void {
     fx.window = Headless.init(std.testing.allocator, 1280, 800);
     fx.shell = shell_loop.Shell.init(std.testing.allocator, try pane_layout.twoCore(std.testing.allocator));
-    fx.console = Console.init(std.testing.allocator);
+    fx.console = Console.init(std.testing.allocator, null);
     fx.shell.console = &fx.console;
     fx.solved = try fx.shell.layout.solve(std.testing.allocator, .{ .x = 0, .y = 0, .w = 1280, .h = 800 });
     try lines(&fx.console.log, 200);
