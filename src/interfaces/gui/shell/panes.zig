@@ -118,6 +118,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .camera) if (self.camera) |camera| {
+        try shell_camera.drawPreview(list, theme, body, camera);
         if (self.camera_file) |file| return shell_camera_file.draw(table, theme, body, camera, file);
         return shell_camera.draw(table, theme, body, camera);
     };

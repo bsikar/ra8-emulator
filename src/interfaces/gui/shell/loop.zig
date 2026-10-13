@@ -152,6 +152,7 @@ pub const Shell = struct {
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
         defer list.deinit();
         if (self.board) |board| board.pace(self.now());
+        if (self.camera) |camera| camera.pace(self.now(), self.allocator);
         try shell_frame.draw(&list, self.themes.active, .{
             .layout = &self.layout,
             .solved = &solved,

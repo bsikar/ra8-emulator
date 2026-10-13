@@ -20,6 +20,7 @@ const camera_panel = @import("../../camera/panel.zig");
 const camera_view = @import("../../ui/camera_view.zig");
 const camera_open = @import("../../camera/open.zig");
 const camera_always = @import("../../camera/always.zig");
+const fit = @import("../../ui/fit.zig");
 const Spec = @import("ra8_host").camera.source_spec.Spec;
 pub const file = @import("file.zig");
 
@@ -27,6 +28,18 @@ const Kind = camera_panel.Kind;
 
 /// Where the session's answer to the last pick stands.
 pub const Status = enum { idle, asking, switched, refused, needs_file };
+
+/// An RGB preview frame from the session camera source (RA8EMU-1180).
+pub const PreviewFrame = struct {
+    width: u32,
+    height: u32,
+    pixels: []const u8,
+};
+
+pub const PreviewProvider = struct {
+    context: *anyopaque,
+    previewFn: *const fn (ctx: *anyopaque) ?PreviewFrame,
+};
 
 pub const Camera = struct {
     panel: camera_panel.Panel = .{},
@@ -43,6 +56,40 @@ pub const Camera = struct {
     status: Status = .idle,
     /// The kind last picked without a file, waiting for its path.
     wants: ?Kind = null,
+
+    preview_provider: ?PreviewProvider = null,
+    preview_pixels: std.ArrayListUnmanaged(draw_list.Color) = .empty,
+    preview_image: ?draw_list.Image = null,
+    last_pace_ns: u64 = 0,
+
+    pub fn deinit(self: *Camera, allocator: std.mem.Allocator) void {
+        self.preview_pixels.deinit(allocator);
+        self.preview_image = null;
+    }
+
+    /// Refresh the camera preview frame from the provider at ~30 fps.
+    pub fn pace(self: *Camera, now_ns: u64, allocator: std.mem.Allocator) void {
+        const provider = self.preview_provider orelse return;
+        if (now_ns -% self.last_pace_ns < 33_000_000 and self.preview_image != null) return;
+        self.last_pace_ns = now_ns;
+        const frame = provider.previewFn(provider.context) orelse return;
+        if (frame.width == 0 or frame.height == 0) return;
+        const count = @as(usize, frame.width) * frame.height;
+        if (frame.pixels.len < count * 3) return;
+        if (self.preview_pixels.items.len != count) {
+            self.preview_pixels.resize(allocator, count) catch return;
+        }
+        const colors = self.preview_pixels.items;
+        for (0..count) |i| {
+            const rgb = frame.pixels[i * 3 ..][0..3];
+            colors[i] = draw_list.Color.rgb(rgb[0], rgb[1], rgb[2]);
+        }
+        self.preview_image = .{
+            .width = frame.width,
+            .height = frame.height,
+            .pixels = colors,
+        };
+    }
 
     /// Send the panel's newest pick, once per change, while connected.
     pub fn attach(self: *Camera, link: *session_link.Link) void {
@@ -153,6 +200,34 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_li
     const room = body.w - 2 * shell_frame.pad;
     if (room <= 0 or y + font.glyph_h > body.y + body.h) return;
     drawText(table, layout.x, y, font.fit(said, @intCast(room)), word(theme.muted), word(theme.background));
+}
+
+/// Draw a live preview of the camera feed in the remaining body area (RA8EMU-1180).
+pub fn drawPreview(list: *draw_list.DrawList, theme: *const Theme, body: draw_list.Rect, camera: *const Camera) !void {
+    const layout = layoutIn(body);
+    const panel_h: i32 = if (camera.panel.asking or camera.panel.always)
+        layout.area().h
+    else
+        camera_view.button + 2 * camera_view.gap;
+    var top = layout.y + panel_h + shell_frame.pad;
+    if (camera.note() != null) {
+        top += @as(i32, font.glyph_h) + shell_frame.pad;
+    }
+    var bottom = body.y + body.h - shell_frame.pad;
+    if (camera.wants != null) bottom -= (24 + shell_frame.pad);
+    const room_w = body.w - 2 * shell_frame.pad;
+    const room_h = bottom - top;
+    if (room_w < 16 or room_h < 16) return;
+    const area: draw_list.Rect = .{ .x = layout.x, .y = top, .w = room_w, .h = room_h };
+    try list.fill(area, theme.border);
+    const inner: draw_list.Rect = .{ .x = area.x + 1, .y = area.y + 1, .w = @max(0, area.w - 2), .h = @max(0, area.h - 2) };
+    try list.fill(inner, theme.well);
+    if (camera.preview_image) |img| {
+        if (img.width > 0 and img.height > 0) {
+            const shown = fit.fitIn(inner, img.width, img.height);
+            try list.scaledImage(shown, img, false);
+        }
+    }
 }
 
 /// `text` drawn at `x`, `y` through the shared Paint table.

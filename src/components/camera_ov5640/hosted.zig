@@ -42,7 +42,7 @@ pub fn Hosted(comptime Input: type) type {
         format_control: *const u8,
 
         /// The source owns `input` from here on, and closing it closes the
-        /// input. On an error the caller still owns `input`.
+        /// input. On an error the caller still owns `input` rationale.
         pub fn open(allocator: std.mem.Allocator, input: *Input, format_control: *const u8, label: []const u8, detail: []const u8) !frame_source.FrameSource {
             const self = try allocator.create(Self);
             // frame() reads the sensor register before each capture, on the
@@ -56,7 +56,23 @@ pub fn Hosted(comptime Input: type) type {
             return .{ .context = self, .vtable = &vtable, .label = label, .detail = detail };
         }
 
-        const vtable = frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
+        const vtable = frame_source.FrameSource.VTable{
+            .frame = frame,
+            .fill = fill,
+            .close = close,
+            .preview = preview,
+        };
+
+        fn preview(context: *anyopaque) ?frame_source.Preview {
+            const self: *Self = @ptrCast(@alignCast(context));
+            const pic = self.input.picture(0);
+            if (pic.width == 0 or pic.height == 0 or pic.pixels.len == 0) return null;
+            return .{
+                .width = pic.width,
+                .height = pic.height,
+                .pixels = pic.pixels,
+            };
+        }
 
         fn frame(context: *anyopaque, when: u64, shape: frame_source.Shape) void {
             const self: *Self = @ptrCast(@alignCast(context));

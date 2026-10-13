@@ -52,7 +52,7 @@ const shell_board_profiles = @import("board_profiles.zig");
 const host_listener = @import("ra8_rpc").host_listener;
 
 const Env = proto.Client.Env;
-const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
+const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]...\n" ++
     "    [--app FILE.ra8app[=MODULE.elf]]... [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]]\n" ++
     "    [--frames N] [--theme dark|light|system] [--render-driver NAME] IMAGE\n";
 
@@ -225,6 +225,23 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     return 0;
 }
 
+fn getCameraPreview(ctx: *anyopaque) ?shell_camera.PreviewFrame {
+    const session: *local_session.LocalSession = @ptrCast(@alignCast(ctx));
+    const prev = session.cameraPreview() orelse return null;
+    return .{
+        .width = prev.width,
+        .height = prev.height,
+        .pixels = prev.pixels,
+    };
+}
+
+fn initCamera(io: std.Io, session: *local_session.LocalSession, spec: ?source_spec.Spec) shell_camera.Camera {
+    var camera: shell_camera.Camera = .{ .preview_provider = .{ .context = session, .previewFn = getCameraPreview } };
+    camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
+    if (spec) |s| shell_camera.start(&camera, s);
+    return camera;
+}
+
 /// Serve the image in-process and run the shell on it.
 fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
     var session: local_session.LocalSession = undefined;
@@ -272,9 +289,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.devices = &devices;
     var faults: shell_fault.Faults = .{};
     shell.faults = &faults;
-    var camera: shell_camera.Camera = .{};
-    camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
-    if (args.camera) |spec| shell_camera.start(&camera, spec);
+    var camera = initCamera(io, &session, args.camera);
+    defer camera.deinit(allocator);
     shell.camera = &camera;
     shell.startup = startup;
     var plug: shell_plug.Plug = .{};
