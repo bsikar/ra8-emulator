@@ -45,7 +45,7 @@ test "File opens an ELF, closes it and quits" {
 }
 
 test "View toggles every pane kind but empty" {
-    try std.testing.expectEqual(@as(usize, 12), menu.view.len);
+    try std.testing.expectEqual(@as(usize, 13), menu.view.len);
     try std.testing.expectEqualStrings("Board", menu.view[0].label);
     try std.testing.expect(menu.view[0].action.eql(.{ .toggle = .board }));
     try std.testing.expectEqualStrings("Disassembly", menu.view[6].label);

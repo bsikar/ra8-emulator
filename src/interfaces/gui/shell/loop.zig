@@ -40,6 +40,8 @@ const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
 const shell_source = @import("source.zig");
 const shell_locals = @import("locals.zig");
+const shell_map = @import("map.zig");
+const map_pane = @import("../ui/map_pane.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
@@ -87,6 +89,8 @@ pub const Shell = struct {
     stack: ?*shell_stack.Pair = null,
     source: ?*shell_source.Pair = null,
     locals: ?*shell_locals.Pair = null,
+    /// The memory map leaf (RA8EMU-781): the image's sections over the regions.
+    map: ?*shell_map.State = null,
     /// The time bar's models: the run, the speed field and the clock.
     time: ?*shell_time.Time = null,
     /// Opening another image (RA8EMU-959) and the Board menu's pick (RA8EMU-1152).
@@ -125,6 +129,7 @@ pub const Shell = struct {
         if (self.frame) |*frame| frame.deinit(self.allocator);
         if (self.timeline) |*model| model.deinit();
         self.snaps.deinit();
+        if (self.map) |map| map.deinit();
         self.layout.deinit();
     }
     /// The link's state, or closed when the shell has none.
@@ -196,6 +201,7 @@ pub const Shell = struct {
                 if (self.titles.press(&self.layout, solved, press.x, press.y)) return;
                 if (self.pressBoard(solved, press.x, press.y)) return;
                 if (self.link) |link| if (self.pressLink(link, solved, press.x, press.y)) return;
+                if (self.pressMap(solved, press.x, press.y)) return;
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
                 if (self.console) |console| if (console.clickIn(&self.layout, solved, press.x, press.y)) return;
                 const camera = self.camera orelse return;
@@ -221,7 +227,10 @@ pub const Shell = struct {
                 if (self.camera_file) |file| _ = file.handle(event);
                 if (self.memory_field) |field| _ = field.handle(event);
             },
-            .picked, .dropped => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
+            .picked, .dropped => |path| {
+                if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status);
+                if (self.map) |map| map.build(path);
+            },
             .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
             else => {},
         }
@@ -239,6 +248,20 @@ pub const Shell = struct {
         const registers = self.registers orelse return false;
         return edit.press(registers, &self.layout, solved, x, y);
     }
+    /// A click on a map block pins the memory leaf to the block's start.
+    fn pressMap(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
+        const map = self.map orelse return false;
+        const model = &(map.layout orelse return false);
+        for (solved.panes.items) |placed| {
+            const pane = self.layout.pane(placed.index) orelse continue;
+            if (pane.kind != .map) continue;
+            const address = map_pane.click(model, shell_frame.bodyOf(placed.area), x, y) orelse continue;
+            if (self.memory) |memory| memory.pinTo(address);
+            return true;
+        }
+        return false;
+    }
+
     /// Offer a press to the text fields and the time bar.
     fn pressFields(self: *Shell, x: i32, y: i32) bool {
         const in_plug = if (self.plug) |plug| plug.press(x, y) else false;

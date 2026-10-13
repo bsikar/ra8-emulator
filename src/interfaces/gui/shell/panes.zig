@@ -22,6 +22,7 @@ const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const console_pane = @import("../ui/console_pane.zig");
 const locals_pane = @import("../ui/locals_pane.zig");
+const map_pane = @import("../ui/map_pane.zig");
 const console_strip = @import("../ui/console_strip.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
@@ -44,6 +45,7 @@ const disasm_pane = @import("../ui/disasm_pane.zig");
 const disasm_capture = @import("../disasm_capture.zig");
 const shell_stack = @import("stack.zig");
 const shell_locals = @import("locals.zig");
+const shell_map = @import("map.zig");
 const stack_pane = @import("../ui/stack_pane.zig");
 const shell_source = @import("source.zig");
 const source_pane = @import("../ui/source_pane.zig");
@@ -68,6 +70,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .source => "waiting for the source line",
         .timeline => "waiting for the trace",
         .locals => "waiting for the locals",
+        .map => "waiting for an image",
     };
 }
 
@@ -95,6 +98,8 @@ pub const Panes = struct {
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
     locals: ?*const shell_locals.Pair = null,
+    /// The image's sections over the board's regions (RA8EMU-781).
+    map: ?*const shell_map.State = null,
     source: ?*shell_source.Pair = null,
     /// The timeline's RTOS record (RA8EMU-838).
     timeline: ?*timeline_model.Model = null,
@@ -178,6 +183,9 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     };
     if (pane.kind == .locals) if (self.locals) |pair| {
         if (pair.of(pane.core).now) |*now| return locals_pane.draw(list, theme, toList(body), now);
+    };
+    if (pane.kind == .map) if (self.map) |map| {
+        if (map.layout) |*l| return map_pane.draw(list, theme, toList(body), l, map.hover);
     };
     if (pane.kind == .source) if (self.source) |pair| {
         const model = pair.of(pane.core);

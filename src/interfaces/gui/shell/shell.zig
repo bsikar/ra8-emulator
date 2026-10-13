@@ -20,6 +20,7 @@ pub const menu_actions = @import("menu_actions.zig");
 pub const main = @import("main.zig");
 pub const memory = @import("memory.zig");
 pub const memory_field = @import("memory_field.zig");
+pub const map = @import("map.zig");
 pub const open = @import("open.zig");
 pub const panes = @import("panes.zig");
 pub const plug = @import("plug.zig");

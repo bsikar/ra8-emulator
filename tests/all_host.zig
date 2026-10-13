@@ -143,6 +143,7 @@ test {
     _ = @import("interfaces/gui/timeline_pane_test.zig");
     _ = @import("interfaces/gui/ui/locals_pane_test.zig");
     _ = @import("interfaces/gui/shell/locals_test.zig");
+    _ = @import("interfaces/gui/shell/map_test.zig");
     _ = @import("interfaces/rpc/session/timeline_trace_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
