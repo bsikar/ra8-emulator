@@ -91,6 +91,7 @@ pub fn kindName(kind: pane_layout.Kind) []const u8 {
         .timeline => "Timeline",
         .source => "Source",
         .locals => "Locals",
+        .map => "Memory Map",
     };
 }
 
