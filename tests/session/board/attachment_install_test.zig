@@ -306,3 +306,75 @@ test "provider binding older startup only snapshot uses the remaining nonruntime
     try std.testing.expectEqual(@as(usize, 3), left.events);
     try std.testing.expectEqual(@as(usize, 0), right.events);
 }
+
+fn refusedFresh(rig: *Rig, bytes: []const u8) !void {
+    const panels = rig.plugs.panels;
+    const device = rig.board.spi.channels[1].device;
+    const owners = [_]usize{ rig.plugs.instance_count, rig.plugs.snapshot_owned_count, rig.board.asks.owned_count };
+    rig.cpu.regs.low[4] = 0x12345678;
+    const corrupt = try std.testing.allocator.dupe(u8, bytes);
+    defer std.testing.allocator.free(corrupt);
+    corrupt[corrupt.len - 1] = 0xff;
+    try std.testing.expectError(error.BadValue, rig.files.readFrom(corrupt));
+    const allocator = rig.board.bus.cells.allocator;
+    defer rig.board.bus.cells.allocator = allocator;
+    for (0..4) |index| {
+        var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = index });
+        rig.board.bus.cells.allocator = failing.allocator();
+        try std.testing.expectError(error.OutOfMemory, attachments.prepare(&rig.board, rig.binding(), bytes));
+    }
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    rig.board.bus.cells.allocator = failing.allocator();
+    try std.testing.expectError(error.OutOfMemory, rig.files.readFrom(bytes));
+    try std.testing.expectEqualDeep(panels, rig.plugs.panels);
+    try std.testing.expectEqualDeep(device, rig.board.spi.channels[1].device);
+    try std.testing.expectEqualDeep(owners, [_]usize{ rig.plugs.instance_count, rig.plugs.snapshot_owned_count, rig.board.asks.owned_count });
+    try std.testing.expectEqual(@as(u32, 0x12345678), rig.cpu.regs.low[4]);
+}
+
+test "provider binding R3 fresh runtime history reserves same role before cross role fallback" {
+    var source: Providers = undefined;
+    try source.init();
+    defer source.deinit();
+    var saved = try source.save();
+    defer saved.deinit();
+    const expected_a = panelBytes(source.a(), 4);
+    const expected_d = panelBytes(source.b(), 4);
+    const target = try Rig.create();
+    defer target.destroy();
+    const other_at: Endpoint = .{ .spi = .{ .channel = 1, .select = 0 } };
+    var allocated = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var active: fixture.Observer = .{};
+    var builtin: fixture.Observer = .{};
+    builtin.bind(&target.board.panel);
+    try target.plugs.set(other_at, "eink");
+    try fixture.pixels(target.plugs.panels[1].?, allocated.allocator());
+    try target.plugs.set(other_at, null);
+    try target.plugs.set(panel_at, "eink");
+    try fixture.pixels(target.plugs.panels[1].?, allocated.allocator());
+    active.bind(target.plugs.panels[1].?);
+    try refusedFresh(target, saved.written());
+    try active.matches(target.plugs.panels[1].?);
+    try std.testing.expectEqual(@as(usize, 24), allocated.allocated_bytes);
+    try std.testing.expectEqual(@as(usize, 0), allocated.freed_bytes);
+    for (0..3) |iteration| {
+        try target.files.readFrom(saved.written());
+        const a: *Panel = @ptrCast(@alignCast(target.plugs.snapshot_owned[0].state));
+        const d = target.plugs.panels[1].?;
+        try std.testing.expectEqualSlices(u8, &expected_a, &panelBytes(a, 4));
+        try std.testing.expectEqualSlices(u8, &expected_d, &panelBytes(d, 4));
+        fixture.render(target);
+        std.debug.print("R3 fresh target restore {d}: active events={d}, builtin events={d}, pixel={x}\n", .{ iteration + 1, active.events, builtin.events, active.pixel });
+        try std.testing.expectEqual(iteration + 1, active.events);
+        try std.testing.expectEqual(@as(u8, 0x55), active.pixel);
+        try active.matches(d);
+        try builtin.matches(a);
+        try refusedFresh(target, saved.written());
+        try active.matches(d);
+        try builtin.matches(a);
+        try std.testing.expectEqual(@as(usize, 24), allocated.freed_bytes);
+    }
+    try std.testing.expectEqual(@as(usize, 3), active.frames);
+    try std.testing.expectEqual(@as(usize, 3), active.logs);
+    try std.testing.expectEqual(@as(usize, 0), builtin.events);
+}
