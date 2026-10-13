@@ -81,6 +81,12 @@ pub const Usb = struct {
     }
 
     pub fn quiet(self: *const Usb) bool {
-        return self.host.quiet();
+        if (!self.host.quiet()) return false;
+        if (!self.script.quiet(&self.device)) return false;
+        // A bridge polls the device each boundary, so while the line is up
+        // its rhythm is one poll per boundary and a wider stretch would
+        // change it (RA8EMU-938). Nothing to poll below Powered.
+        if (self.bridge != null and self.device.lineState() == usbhs.regs.port.lnst_j) return false;
+        return true;
     }
 };

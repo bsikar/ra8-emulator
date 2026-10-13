@@ -97,6 +97,18 @@ pub const Host = struct {
     /// Whether the current read ended on a short packet.
     short: bool = false,
 
+    /// Whether the script has nothing it could do at the next boundary
+    /// (RA8EMU-938): settled in configured or failed, or waiting on a device
+    /// the line cannot offer. A step in flight moves one step per boundary,
+    /// so a wider stretch would skip one.
+    pub fn quiet(self: *const Host, device: *const usbfs.Device) bool {
+        switch (self.step) {
+            .configured, .failed => return true,
+            .waiting => return state(device) != usbfs.intsts0.dvsq_default,
+            else => return false,
+        }
+    }
+
     pub fn tick(self: *Host, device: *usbfs.Device) void {
         switch (self.step) {
             .waiting => if (state(device) == usbfs.intsts0.dvsq_default) self.advance(.device_descriptor),
