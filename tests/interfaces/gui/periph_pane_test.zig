@@ -140,7 +140,9 @@ test "a pane too small draws nothing" {
     try std.testing.expect(pane.regRect(tiny, &snap, 0) == null);
     var list = draw_list.DrawList.init(std.testing.allocator, @intCast(tiny.w), @intCast(tiny.h));
     defer list.deinit();
-    try pane.draw(&list, dark, tiny, &snap, null);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    pane.draw(&paint, dark, tiny, &snap, null);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
@@ -241,7 +243,9 @@ fn digest(theme: *const Theme, now: *const pane.Snapshot, before: ?*const pane.S
     defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, @intCast(wide.w), @intCast(wide.h));
     defer frame.deinit(std.testing.allocator);
-    try pane.draw(&list, theme, wide, now, before);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    pane.draw(&paint, theme, wide, now, before);
     raster.draw(&frame, &list, font.atlas);
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
