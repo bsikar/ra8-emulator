@@ -60,6 +60,7 @@ pub const Method = enum(u16) {
     load_chunk = 0x0125,
     load_end = 0x0126,
     board_parts = 0x0127,
+    source_line = 0x0128,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -264,6 +265,18 @@ pub const frame_file_cap = 32;
 /// One frame's widest encoding plus the length byte before it.
 pub const frame_bytes = 1 + 4 + 1 + 4 + 4 + 4 + frame_name_cap + 4 + frame_file_cap;
 pub const backtrace_bytes = backtrace_frames * frame_bytes;
+/// The source place of a core's pc (RA8EMU-1125): the file and line the pc
+/// belongs to, looked up in the image's .debug_line. `found` is 0 and the
+/// path empty when there is no image or the line table does not cover the
+/// pc; the leaf reads the file's rows itself.
+pub const SourceLine = struct {
+    found: u8,
+    line: u32,
+    path: []const u8,
+    pub const max_len = .{ .path = source_path_cap };
+};
+/// Characters of the answered source path.
+pub const source_path_cap = 256;
 /// The board's RTC calendar (RA8EMU-809). With `valid` 0 the counters hold
 /// no date and every date field is 0; `running` is RCR2.START.
 pub const RtcReport = struct {
