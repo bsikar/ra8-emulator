@@ -72,6 +72,7 @@ const routes = .{
     .{ @backingInt(M.backtrace), session_backtrace.backtrace },
     .{ @backingInt(M.source_line), session_source_line.sourceLine },
     .{ @backingInt(M.locals), session_locals.locals },
+    .{ @backingInt(M.locals_at), session_locals.localsAt },
     .{ @backingInt(M.periph), session_periph.periph },
     .{ @backingInt(M.folded), session_folded.folded },
     .{ @backingInt(M.rtc), session_rtc.rtc },
