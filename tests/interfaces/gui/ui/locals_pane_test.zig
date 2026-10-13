@@ -89,3 +89,9 @@ test "a snapshot longer than the pane clips to the rows that fit" {
     }
     try std.testing.expectEqual(try digest(&long, w, h), try digest(&clipped, w, h));
 }
+
+test "an address where reads as the address, not a signed form" {
+    var local: pane.Row = .{ .where_kind = 4, .where_a = 0x02000100 };
+    var buf: [22]u8 = undefined;
+    try std.testing.expectEqualStrings("@0x02000100", try pane.whereLabel(&buf, &local));
+}
