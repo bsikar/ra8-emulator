@@ -24,7 +24,9 @@ fn render(view: scrubber.View, path: [:0]const u8) !u64 {
     defer list.deinit();
     var frame = try raster.Framebuffer.init(std.testing.allocator, @intCast(area.w), @intCast(area.h));
     defer frame.deinit(std.testing.allocator);
-    try scrubber.draw(&list, dark, area, view);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    scrubber.draw(&paint, dark, area, view);
     raster.draw(&frame, &list, font.atlas);
     {
         var out: std.ArrayListUnmanaged(u8) = .empty;
