@@ -1,11 +1,10 @@
 //! The shell loop (RA8EMU-763): one frame of the debugger shell. It drains the window's events
-//! (quit, the menu strip RA8EMU-957, gutter drags) and pumps the session link into the status bar,
-//! console, board, device, camera and plug models, whose leaves take clicks and typing, and the
-//! registers leaves, read again after a load or a stop. The menu strip (RA8EMU-968), the pane
-//! titles (RA8EMU-800) and the settings page (RA8EMU-963) take their presses, and while Run is
-//! lit each frame pays the board its slices on the shell's own thread, so the frame never waits
-//! on more than one slice. Then it draws the shell frame (RA8EMU-764) through the platform seam,
-//! so SDL and the headless platform run it alike.
+//! (quit, the menu strip RA8EMU-957, gutter drags), pumps the session link into the status bar,
+//! console, board, device, camera and plug models, takes their presses (the menu strip
+//! RA8EMU-968, the pane titles RA8EMU-800, the settings page RA8EMU-963), and while Run is lit
+//! pays the board its slices on the shell's own thread, never more than one per frame. Then it
+//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless
+//! platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const widget_paint = @import("ra8_render").widget_paint;
@@ -226,9 +225,8 @@ pub const Shell = struct {
                 if (self.camera_file) |file| _ = file.handle(event);
                 if (self.memory_field) |field| _ = field.handle(event);
             },
-            .picked => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
+            .picked, .dropped => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
             .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
-            .dropped => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
             else => {},
         }
     }
@@ -299,9 +297,8 @@ pub const Shell = struct {
         const clock = self.clock orelse return 0;
         return clock.now();
     }
-    /// One round with the session: send what is due and take what has
-    /// arrived, and when the session is served in this process let it answer
-    /// and take that too.
+    /// One round with the session: send what is due and take what arrived;
+    /// a session served in this process answers and is taken too.
     fn exchange(self: *Shell) !void {
         if (self.link) |link| self.snaps.rewind(link);
         try self.pump();
@@ -310,9 +307,9 @@ pub const Shell = struct {
         try self.pump();
     }
 
-    /// Pay what this frame owes a lit run (shell_run.zig), one slice at
-    /// a time, each answered before the next goes out; a session in
-    /// another process answers in its own time, one slice a frame.
+    /// Pay what this frame owes a lit run (shell_run.zig), one slice at a time,
+    /// each answered before the next goes out; a session in another process
+    /// answers in its own time, one slice a frame.
     fn paySlices(self: *Shell) !void {
         const time = self.time orelse return;
         const link = self.link orelse return;
