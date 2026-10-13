@@ -4,12 +4,17 @@
 //! differs from the snapshot taken before the last stop draws in
 //! `highlight`, the registers pane's (RA8EMU-741) mark.
 //!
+//! The pane paints through the handed Paint table (RA8EMU-1157). The table
+//! has no clip yet (RA8FW-951); the old list clip moved no pixels because
+//! every row here is laid out to fit the area, so it is gone.
+//!
 //! The pane never imports the session: gui/periph_capture.zig fills a
 //! Snapshot, and draw reads only the snapshot, so the shell redraws
 //! without touching a core.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 
 const Rect = draw_list.Rect;
@@ -112,31 +117,65 @@ pub fn hit(area: Rect, snap: *const Snapshot, x: i32, y: i32) ?usize {
     return null;
 }
 
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, now: *const Snapshot, before: ?*const Snapshot) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, now: *const Snapshot, before: ?*const Snapshot) void {
     if (rows(area) == 0) return;
-    try list.fill(area, theme.background);
-    try list.pushClip(area);
-    defer list.popClip();
+    fillArea(table, area, theme.background);
     for (0..now.block_count) |index| {
         const rect = blockRect(area, now, index) orelse break;
         const picked = index == now.selected;
-        if (picked) try list.fill(rect, theme.pc_band_bg);
-        try font.draw(list, rect.x + 2, rect.y + 2, now.blocks[index].name, if (picked) theme.pc_cyan else theme.muted);
+        if (picked) fillArea(table, rect, theme.pc_band_bg);
+        drawText(table, rect.x + 2, rect.y + 2, now.blocks[index].name, if (picked) theme.pc_cyan else theme.muted, if (picked) theme.pc_band_bg else theme.background);
     }
     for (0..now.reg_count) |index| {
         const rect = regRect(area, now, index) orelse break;
         const reg = now.regs[index];
         const moved = now.readable[index] and now.changedAt(before, index);
-        if (moved) try list.fill(rect, theme.dirty_cell_bg);
-        try font.draw(list, rect.x + 2, rect.y + 2, reg.name, theme.muted);
+        if (moved) fillArea(table, rect, theme.dirty_cell_bg);
+        drawText(table, rect.x + 2, rect.y + 2, reg.name, theme.muted, if (moved) theme.dirty_cell_bg else theme.background);
         var offset_buffer: [10]u8 = undefined;
-        const offset_text = try std.fmt.bufPrint(&offset_buffer, "0x{X:0>2}", .{reg.offset});
-        try font.draw(list, rect.x + 2 + nameWidth(now) + gapWidth(), rect.y + 2, offset_text, theme.muted);
+        const offset_text = std.fmt.bufPrint(&offset_buffer, "0x{X:0>2}", .{reg.offset}) catch "";
+        drawText(table, rect.x + 2 + nameWidth(now) + gapWidth(), rect.y + 2, offset_text, theme.muted, if (moved) theme.dirty_cell_bg else theme.background);
         var value_buffer: [8]u8 = undefined;
         const text = if (now.readable[index]) valueText(&value_buffer, now.values[index], reg.width) else "--------";
         const at = rect.x + 2 + nameWidth(now) + gapWidth() + offsetWidth() + gapWidth();
-        try font.draw(list, at, rect.y + 2, text, if (moved) theme.highlight else theme.ink);
+        drawText(table, at, rect.y + 2, text, if (moved) theme.highlight else theme.ink, if (moved) theme.dirty_cell_bg else theme.background);
     }
+}
+
+fn fillArea(table: *const widget.types.Paint, r: Rect, color: draw_list.Color) void {
+    table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell, so pixels stay identical.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: draw_list.Color, bg: draw_list.Color) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
 
 /// The value at `width`'s digits; an undeclared width (0) shows a full word.
