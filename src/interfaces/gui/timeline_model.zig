@@ -70,12 +70,6 @@ pub const Model = struct {
     /// Close both cores' open slices at `now`, as the run ends.
     pub fn finish(self: *Model, now: u64) !void {
         for (0..limits.cores) |index| {
-            const one = &self.fold[index];
-            // A run that ended on its last event leaves that owner open with
-            // nothing to charge; keep the zero-width slice so the event that
-            // opened it is still a slice edge.
-            const owner = one.running();
-            if (now == one.since and owner.kind != .before) try self.append(owner, @intCast(index), now, now);
             try self.charge(@intCast(index), now);
         }
     }
@@ -137,10 +131,13 @@ pub const Model = struct {
 
     /// Close the open slice on one core at `now`, charged to whoever 269
     /// says ran since the last event. Time before a core's first event is
-    /// 269's `before` and goes on no lane.
+    /// 269's `before` and goes on no lane. An owner that only held the
+    /// core at an instant, its whole stretch at the time the last event
+    /// landed, gets a zero-width slice, so the event that charged it is
+    /// still a slice edge on its own lane.
     fn charge(self: *Model, core: u1, now: u64) !void {
         const one = &self.fold[core];
-        if (now <= one.since) return;
+        if (now < one.since) return;
         const owner = one.running();
         if (owner.kind != .before) try self.append(owner, core, one.since, now);
         one.since = now;
