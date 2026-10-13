@@ -2,6 +2,36 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("host/app_dirs_test.zig");
+    _ = @import("host/stops_test.zig");
+    _ = @import("host/history/root_test.zig");
+    _ = @import("host/history/base_test.zig");
+    _ = @import("host/history/budget_test.zig");
+    _ = @import("host/history/catalog_test.zig");
+    _ = @import("host/history/layout_test.zig");
+    _ = @import("host/history/gates_test.zig");
+    _ = @import("host/history/lease_test.zig");
+    _ = @import("host/history/lock_test.zig");
+    _ = @import("host/history/machine_test.zig");
+    _ = @import("host/history/metadata_test.zig");
+    _ = @import("host/history/move/root_test.zig");
+    _ = @import("host/history/move/move_test.zig");
+    _ = @import("host/history/move/file_test.zig");
+    _ = @import("host/history/move/tree_test.zig");
+    _ = @import("host/history/move/probe_test.zig");
+    _ = @import("host/history/move/receipt_test.zig");
+    _ = @import("host/history/name_test.zig");
+    _ = @import("host/history/owner_test.zig");
+    _ = @import("host/history/paths_test.zig");
+    _ = @import("host/history/recover_test.zig");
+    _ = @import("host/history/remove_test.zig");
+    _ = @import("host/history/rename_test.zig");
+    _ = @import("host/history/resources_test.zig");
+    _ = @import("host/history/runtime_test.zig");
+    _ = @import("host/history/scratch_test.zig");
+    _ = @import("host/history/session_test.zig");
+    _ = @import("host/history/storage_test.zig");
+    _ = @import("host/history/sweep_test.zig");
     _ = @import("host/pipe_pair_test.zig");
     _ = @import("host/socket_flags_test.zig");
     _ = @import("host/sock/sock_test.zig");
