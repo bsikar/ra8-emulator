@@ -24,6 +24,7 @@ const session_rtc = @import("rtc.zig");
 const session_input = @import("input.zig");
 const session_backtrace = @import("backtrace.zig");
 const session_source_line = @import("source_line.zig");
+const session_locals = @import("locals.zig");
 const session_periph = @import("periph.zig");
 const session_folded = @import("folded.zig");
 const session_chunks = @import("load_chunks.zig");
@@ -70,6 +71,7 @@ const routes = .{
     .{ @backingInt(M.stack), session_stack.stack },
     .{ @backingInt(M.backtrace), session_backtrace.backtrace },
     .{ @backingInt(M.source_line), session_source_line.sourceLine },
+    .{ @backingInt(M.locals), session_locals.locals },
     .{ @backingInt(M.periph), session_periph.periph },
     .{ @backingInt(M.folded), session_folded.folded },
     .{ @backingInt(M.rtc), session_rtc.rtc },

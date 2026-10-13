@@ -13,5 +13,6 @@ pub const host_listener = @import("host_listener.zig");
 pub const served_setup = @import("served_setup.zig");
 pub const session = @import("session/session.zig");
 pub const backtrace_wire = @import("backtrace_wire.zig");
+pub const locals_wire = @import("locals_wire.zig");
 pub const socket_transport = @import("socket_transport.zig");
 pub const stdio_transport = @import("stdio_transport.zig");
