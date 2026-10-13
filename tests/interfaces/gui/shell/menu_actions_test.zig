@@ -37,6 +37,52 @@ fn boards(s: *const shell_loop.Shell) usize {
     return found;
 }
 
+fn click(s: *shell_loop.Shell, window: *Headless, placed: *const pane_layout.Solved, x: i32, y: i32) void {
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = true, .x = x, .y = y } }, placed);
+    s.handle(window.platform(), .{ .button = .{ .button = 1, .down = false, .x = x, .y = y } }, placed);
+}
+
+fn viewItem(s: *shell_loop.Shell, window: *Headless, placed: *const pane_layout.Solved, at: usize) void {
+    const title = menu_bar.title(&menu.bar, width, 2);
+    click(s, window, placed, title.x + @divTrunc(title.w, 2), @divTrunc(title.h, 2));
+    const item = menu_bar.row(&menu.bar, width, 2, at, s.menu.os);
+    click(s, window, placed, item.x + 4, item.y + @divTrunc(item.h, 2));
+}
+
+test "View menu actions consume the press over a pane title and content" {
+    var window = Headless.init(std.testing.allocator, width, height);
+    defer window.deinit();
+    var s = shell_loop.Shell.init(std.testing.allocator, try pane_layout.Layout.init(std.testing.allocator, .{ .kind = .board, .core = .cpu0 }));
+    defer s.deinit();
+    var placed = try solved(&s);
+    defer placed.deinit(std.testing.allocator);
+    menu_actions.observe(&s, window.platform(), width);
+
+    viewItem(&s, &window, &placed, 0);
+    try std.testing.expectEqual(pane_layout.Kind.empty, s.layout.pane(s.layout.root).?.kind);
+    try std.testing.expectEqual(@as(?usize, null), s.menu.bar.open);
+    try std.testing.expectEqual(@as(?pane_layout.Gutter, null), s.held);
+
+    viewItem(&s, &window, &placed, 8);
+    try std.testing.expectEqual(pane_layout.Kind.timeline, s.layout.pane(s.layout.root).?.kind);
+    try std.testing.expectEqual(@as(?usize, null), s.menu.bar.open);
+
+    // An outside press closes an open menu without changing the title below.
+    const view = menu_bar.title(&menu.bar, width, 2);
+    click(&s, &window, &placed, view.x + @divTrunc(view.w, 2), @divTrunc(view.h, 2));
+    try std.testing.expectEqual(@as(?usize, 2), s.menu.bar.open);
+    const pane_title = shell_frame.titleOf(placed.panes.items[0].area);
+    const x = pane_title.x + 20;
+    const y = pane_title.y + @divTrunc(pane_title.h, 2);
+    click(&s, &window, &placed, x, y);
+    try std.testing.expectEqual(@as(?usize, null), s.menu.bar.open);
+    try std.testing.expectEqual(pane_layout.Kind.timeline, s.layout.pane(s.layout.root).?.kind);
+
+    // Once the menu is closed, the same title click still reaches the pane.
+    click(&s, &window, &placed, x, y);
+    try std.testing.expectEqual(pane_layout.Kind.empty, s.layout.pane(s.layout.root).?.kind);
+}
+
 test "a shortcut key toggles the pane kind empty and takes it back" {
     var window = Headless.init(std.testing.allocator, width, height);
     defer window.deinit();
