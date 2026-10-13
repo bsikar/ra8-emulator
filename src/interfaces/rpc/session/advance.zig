@@ -8,6 +8,11 @@
 //! can leave the target short, so the next round runs the rest; a round
 //! that moves no time ends it. A sleeping core goes by in wide chunks
 //! (RA8EMU-767), so minutes of sleep cost about a host second.
+//!
+//! Time here is the session's: the board's closed time plus what the open
+//! stretch has saved. A run that returns on its budget saves its progress
+//! and leaves the board unticked, so the board's own clock alone would read
+//! an advance inside one stretch as no time at all.
 const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
@@ -23,8 +28,7 @@ pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     if (args.ns == 0) return .{ .err = .bad_args };
     const session = context.session;
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const base = session.time_base orelse return refuse(error.NoTime);
-    const from = base.now();
+    const from = session.now() catch |err| return refuse(err);
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = .bad_args };
     const kept = budgetOf(session, which) catch |err| return refuse(err);
     const ended = rounds(session, which, target) catch |err| {
@@ -34,21 +38,28 @@ pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     session.setRunBudget(which, kept) catch |err| return refuse(err);
     const stop = handlers.stopped(session, args.core, ended);
     context.pending = stop;
-    return .{ .ok = .{ .core = args.core, .from_ns = from, .to_ns = base.now(), .reason = stop.reason, .address = stop.address } };
+    const to = session.now() catch |err| return refuse(err);
+    return .{ .ok = .{ .core = args.core, .from_ns = from, .to_ns = to, .reason = stop.reason, .address = stop.address } };
 }
 
-/// Run until board time reaches `target`, a stop, or a round that moves no time.
+/// Run until session time reaches `target`, a stop, or a round that moves no time.
 fn rounds(session: *api.Session, which: api.Core, target: u64) !api.Ended {
     const base = session.time_base.?;
     for (0..max_rounds) |_| {
-        const left = base.cyclesUntil(target);
+        const left = base.cyclesUntil(target) -| saved(session);
         if (left == 0) break;
-        const before = base.now();
+        const before = try session.now();
         try session.setRunBudget(which, left);
         const ended = try session.run(which, .cont);
-        if (ended != .count or base.now() == before) return ended;
+        if (ended != .count or try session.now() == before) return ended;
     }
     return .count;
+}
+
+/// Cycles the open stretch has saved, which the board's closed time lacks.
+fn saved(session: *const api.Session) u64 {
+    const grid = session.grid orelse return 0;
+    return grid.stretch.carry;
 }
 
 /// The run budget `which` holds now, whether it has the session or is parked.

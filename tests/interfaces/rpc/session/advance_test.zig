@@ -37,6 +37,9 @@ const Rig = struct {
     session: api.Session = undefined,
     scratch: [64]u8 = undefined,
     context: server.Context = undefined,
+    pending1: NvicSource = .{},
+    cpu1: Cpu = undefined,
+    machine1: Machine = .{},
 
     fn open(self: *Rig) !void {
         self.store = try store_board.Store.init(null);
@@ -70,10 +73,56 @@ const Rig = struct {
         };
     }
 
+    fn advanceCore(self: *Rig, core: proto.Core, ns: u64) !proto.Advanced {
+        return switch (advance.advance(&self.context, .{ .core = core, .ns = ns })) {
+            .ok => |moved| moved,
+            .err => error.Refused,
+        };
+    }
+
     fn wakes(self: *Rig) !u32 {
         return self.guest.readWord(idler.counter_at);
     }
+
+    /// Park a second core on the same image, holding `budget`.
+    fn park(self: *Rig, budget: u64) !void {
+        self.cpu1 = .{ .bus = self.memory.view(), .source = self.pending1.source() };
+        self.pending1.banked = &self.cpu1.banked;
+        try self.cpu1.reset(idler.base);
+        self.session.live.other = .{ .core = .{ .cpu = &self.cpu1 }, .machine = &self.machine1, .budget = budget };
+    }
+
+    fn seen(self: *Rig) !Seen {
+        return .{
+            .now_ns = try self.session.now(),
+            .closed_ns = self.board.time.base.now(),
+            .carry = self.edge.saved.stretch.carry,
+            .full = self.edge.saved.stretch.full,
+            .retired = self.cpu.retired,
+            .pc = self.cpu.regs.pc,
+            .wakes = try self.wakes(),
+        };
+    }
 };
+
+/// Where the guest and the grid stand: what a split advance must leave
+/// exactly as an unsplit one does.
+const Seen = struct {
+    now_ns: u64,
+    /// The board's own clock, which moves only when a stretch closes.
+    closed_ns: u64,
+    carry: u32,
+    full: u32,
+    retired: u64,
+    pc: u32,
+    wakes: u32,
+};
+
+const cycle_ns: u64 = ns_per_s / hz;
+
+fn failingTick(_: *anyopaque, _: u32) anyerror!void {
+    return error.Injected;
+}
 
 // The first wake lands at the start (idler.zig arms SysTick with CVR at
 // zero), so the second is due ten virtual minutes later.
@@ -91,6 +140,7 @@ test "advance sleeps ten virtual minutes, wakes on time, in under a host second"
     const short = try rig.advanceBy(598 * ns_per_s);
     try std.testing.expect(started.durationTo(std.Io.Timestamp.now(std.testing.io, .awake)).toNanoseconds() < ns_per_s);
     try std.testing.expectEqual(599 * ns_per_s, short.to_ns);
+    try std.testing.expectEqual(short.to_ns, try rig.session.now());
     try std.testing.expectEqual(baseline, try rig.wakes());
 
     const over = try rig.advanceBy(2 * ns_per_s);
@@ -109,6 +159,9 @@ test "a breakpoint ends an advance early, at the time it reached" {
     try std.testing.expectEqual(proto.StopReason.breakpoint, moved.reason);
     try std.testing.expectEqual(idler.handler_at, moved.address);
     try std.testing.expect(moved.to_ns < moved.from_ns + 600 * ns_per_s);
+    try std.testing.expect(moved.to_ns > moved.from_ns);
+    try std.testing.expectEqual(moved.to_ns, try rig.session.now());
+    try std.testing.expectEqual(@as(u64, 1000), rig.session.live.budget);
     try std.testing.expect(rig.context.pending != null);
 }
 
@@ -118,4 +171,128 @@ test "a zero duration is refused as bad arguments" {
     defer rig.close();
     const outcome = advance.advance(&rig.context, .{ .core = .cpu0, .ns = 0 });
     try std.testing.expect(outcome == .err);
+}
+
+// One cycle, then three: each reply is the session's time, while the board's
+// own clock waits for the stretch to close.
+test "an advance inside an open stretch moves by its duration and leaves the board unticked" {
+    var rig: Rig = .{};
+    try rig.open();
+    defer rig.close();
+    const one = try rig.advanceBy(cycle_ns);
+    try std.testing.expectEqual(@as(u64, 0), one.from_ns);
+    try std.testing.expectEqual(cycle_ns, one.to_ns);
+    const closed = rig.board.time.base.now();
+    const three = try rig.advanceBy(3 * cycle_ns);
+    try std.testing.expectEqual(one.to_ns, three.from_ns);
+    try std.testing.expectEqual(4 * cycle_ns, three.to_ns);
+    const at = try rig.seen();
+    try std.testing.expectEqual(closed, at.closed_ns);
+    try std.testing.expect(at.carry != 0);
+    try std.testing.expect(at.closed_ns < at.now_ns);
+    try std.testing.expectEqual(at.now_ns, rig.board.time.base.nowAfter(at.carry));
+    try std.testing.expectEqual(three.to_ns, at.now_ns);
+}
+
+test "split advances leave the guest, the time and the stretch where one advance does" {
+    var whole: Rig = .{};
+    try whole.open();
+    defer whole.close();
+    var parts: Rig = .{};
+    try parts.open();
+    defer parts.close();
+    // The 599 s step crosses the wake at ten minutes, which closes a stretch.
+    const steps = [_]u64{ cycle_ns, 3 * cycle_ns, ns_per_s, 12_496 * cycle_ns, 599 * ns_per_s, ns_per_s };
+    var total: u64 = 0;
+    for (steps) |step| {
+        const moved = try parts.advanceBy(step);
+        try std.testing.expectEqual(total, moved.from_ns);
+        try std.testing.expectEqual(total + step, moved.to_ns);
+        try std.testing.expectEqual(proto.StopReason.count, moved.reason);
+        total += step;
+    }
+    const once = try whole.advanceBy(total);
+    try std.testing.expectEqual(total, once.to_ns);
+    const left = try whole.seen();
+    // The advance crossed a close and ended inside a stretch, so both clocks are in play.
+    try std.testing.expect(left.closed_ns != 0);
+    try std.testing.expect(left.carry != 0);
+    try std.testing.expect(left.closed_ns < left.now_ns);
+    try std.testing.expectEqual(left, try parts.seen());
+}
+
+// 30 kHz has no whole number of nanoseconds per cycle.
+test "a fractional cycle period lands on the first cycle at or past the target" {
+    var rig: Rig = .{};
+    try rig.open();
+    defer rig.close();
+    rig.board.time.base.setRate(30_000);
+    var at: u64 = 0;
+    for (0..5) |_| {
+        const moved = try rig.advanceBy(50_000);
+        try std.testing.expectEqual(at, moved.from_ns);
+        try std.testing.expect(moved.to_ns >= moved.from_ns + 50_000);
+        try std.testing.expect(moved.to_ns - moved.from_ns - 50_000 < 33_334);
+        try std.testing.expectEqual(moved.to_ns, try rig.session.now());
+        at = moved.to_ns;
+    }
+    try std.testing.expectEqual(@as(u64, 333_333), at);
+}
+
+test "a break mid-advance reports the position a plain run reaches" {
+    var served: Rig = .{};
+    try served.open();
+    defer served.close();
+    var plain: Rig = .{};
+    try plain.open();
+    defer plain.close();
+    _ = try served.advanceBy(ns_per_s);
+    _ = try plain.advanceBy(ns_per_s);
+    _ = try served.machine.addBreak(.{ .address = idler.handler_at });
+    _ = try plain.machine.addBreak(.{ .address = idler.handler_at });
+    const moved = try served.advanceBy(700 * ns_per_s);
+    try std.testing.expectEqual(proto.StopReason.breakpoint, moved.reason);
+    try plain.session.setRunBudget(.cpu0, 700 * hz);
+    try std.testing.expect(try plain.session.run(.cpu0, .cont) == .stop);
+    try plain.session.setRunBudget(.cpu0, 1000);
+    const at = try served.seen();
+    try std.testing.expectEqual(moved.to_ns, at.now_ns);
+    try std.testing.expectEqual(idler.handler_at, at.pc);
+    try std.testing.expectEqual(try plain.seen(), at);
+}
+
+test "an advance the board refuses gives the run budget back" {
+    var rig: Rig = .{};
+    try rig.open();
+    defer rig.close();
+    rig.session.live.boundary.?.tickFn = failingTick;
+    // Inside the first stretch nothing ticks, so nothing fails.
+    const inside = try rig.advanceBy(cycle_ns);
+    try std.testing.expectEqual(cycle_ns, inside.to_ns);
+    const outcome = advance.advance(&rig.context, .{ .core = .cpu0, .ns = 700 * ns_per_s });
+    try std.testing.expect(outcome == .err);
+    try std.testing.expectEqual(@as(u64, 1000), rig.session.live.budget);
+}
+
+// This board has no second core paired, so the parked core cannot run: the
+// refusal comes back after the adapter has switched to it and set a budget.
+test "an advance on a parked core the board cannot run is refused with both budgets kept" {
+    var rig: Rig = .{};
+    try rig.open();
+    defer rig.close();
+    try rig.park(77);
+    const first = try rig.advanceCore(.cpu0, 5 * cycle_ns);
+    try std.testing.expectEqual(5 * cycle_ns, first.to_ns);
+    try std.testing.expectEqual(@as(u64, 77), rig.session.live.other.?.budget);
+    const outcome = advance.advance(&rig.context, .{ .core = .cpu1, .ns = 7 * cycle_ns });
+    try std.testing.expect(outcome == .err);
+    try std.testing.expectEqual(first.to_ns, try rig.session.now());
+    try std.testing.expectEqual(@as(u8, 1), rig.session.live.index);
+    try std.testing.expectEqual(@as(u64, 77), rig.session.live.budget);
+    try std.testing.expectEqual(@as(u64, 1000), rig.session.live.other.?.budget);
+    const back = try rig.advanceCore(.cpu0, ns_per_s);
+    try std.testing.expectEqual(first.to_ns, back.from_ns);
+    try std.testing.expectEqual(5 * cycle_ns + ns_per_s, back.to_ns);
+    try std.testing.expectEqual(@as(u64, 1000), rig.session.live.budget);
+    try std.testing.expectEqual(@as(u64, 77), rig.session.live.other.?.budget);
 }
