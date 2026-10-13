@@ -35,7 +35,6 @@
 //! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
 const std = @import("std");
 const Translator = @import("translate_c").Translator;
-const build_tests = @import("build_tests.zig");
 const gui_smoke = @import("tools/gui_smoke.zig");
 
 pub fn build(b: *std.Build) void {
@@ -94,14 +93,14 @@ pub fn build(b: *std.Build) void {
     const gui_exe = if (sdl_mod) |mod| guiExe(b, target, optimize, apps.gui, libs.host, mod) else null;
     guiTest(b, target, optimize, emu, gui, sdl_mod, gui_exe);
 
-    const imports: build_tests.Imports = .{ .filter = b.option([]const u8, "test-filter", "Compile only tests whose name contains this text"), .emu = emu, .cli = apps.cli, .gui = apps.gui, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod };
-    // Each suite can be built and run in its own command window (RA8EMU-1182).
+    const imports: TestImports = .{ .emu = emu, .cli = apps.cli, .gui = apps.gui, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod };
+    // Three roots, one after the other under -j1, so peak memory is the largest half's (RA8EMU-785).
     const tests = [_]*std.Build.Step.Compile{
-        build_tests.compile(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe),
-        build_tests.compile(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe),
-        build_tests.compile(b, "ra8_gui_link_tests", "tests/interfaces/gui/link_test.zig", target, optimize, imports, exe), // RA8EMU-1176
+        testBinary(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe),
+        testBinary(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe),
+        testBinary(b, "ra8_gui_link_tests", "tests/interfaces/gui/link_test.zig", target, optimize, imports, exe), // RA8EMU-1176
     };
-    build_tests.add(b, &tests, target, optimize, emu, &exe.step);
+    unitTests(b, &tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
 }
@@ -213,11 +212,77 @@ fn toolModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
     return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });
 }
 
+/// The modules every unit test root imports.
+const TestImports = struct {
+    emu: *std.Build.Module,
+    cli: *std.Build.Module,
+    gui: *std.Build.Module,
+    widget: *std.Build.Module,
+    gate: *std.Build.Module,
+    terms: *std.Build.Module,
+    table: *std.Build.Module,
+};
+
+/// One unit test binary over `root`, with every module the tests import.
+fn testBinary(b: *std.Build, name: []const u8, root: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, imports: TestImports, exe: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    const tests = b.addTest(.{ .name = name, .root_module = b.createModule(.{ .root_source_file = b.path(root), .target = target, .optimize = optimize, .link_libc = true }) });
+    tests.root_module.addImport("ra8", imports.emu);
+    tests.root_module.addImport("cli_app", imports.cli);
+    tests.root_module.addImport("gui_app", imports.gui);
+    tests.root_module.addImport("ra8_widget", imports.widget);
+    tests.root_module.addImport("gate", imports.gate);
+    tests.root_module.addImport("terms", imports.terms);
+    tests.root_module.addImport("example_table", imports.table);
+    testPaths(b, tests, exe);
+    return tests;
+}
+
+/// The serve test (RA8EMU-737) spawns the emulator this build produced;
+/// guest images built from Zig source ride along (RA8EMU-955).
+fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile) void {
+    const paths = b.addOptions();
+    paths.addOptionPath("emulator", exe.getEmittedBin());
+    if (exe.root_module.resolved_target.?.result.os.tag == .windows) {
+        const fixture = b.addExecutable(.{ .name = "ssh_fixture", .root_module = toolModule(b, exe.root_module.resolved_target.?, exe.root_module.optimize.?, "tests/interfaces/cli/ctl_host_test.zig") });
+        paths.addOptionPath("ssh_fixture", fixture.getEmittedBin());
+    }
+    @import("tests/fixtures/guests.zig").add(b, paths);
+    tests.root_module.addOptions("test_paths", paths);
+}
+
+/// `test` runs the unit tests and the harness checks; `test-exe` installs the
+/// same test binaries without running them, so a cross build can run on another host.
+fn unitTests(b: *std.Build, tests: []const *std.Build.Step.Compile, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, exe_step: *std.Build.Step) void {
+    const test_step = b.step("test", "Run the unit tests and compile the emulator");
+    for (tests) |binary| test_step.dependOn(&b.addRunArtifact(binary).step);
+    harnessChecks(b, target, optimize, emu, test_step, exe_step);
+    const test_exe = b.step("test-exe", "Install the unit test binaries without running them, for a run on another host");
+    for (tests) |binary| test_exe.dependOn(&b.addInstallArtifact(binary, .{}).step);
+}
+
+fn harnessChecks(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, emu: *std.Build.Module, test_step: *std.Build.Step, exe_step: *std.Build.Step) void {
+    const consumer = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "run" });
+    consumer.setCwd(b.path("tests/consumer"));
+    const consumer_step = b.step("consumer-smoke", "Build and run the public harness consumer");
+    consumer_step.dependOn(&consumer.step);
+    test_step.dependOn(&consumer.step);
+    test_step.dependOn(exe_step);
+    const harness_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("tests/session/harness/harness_test.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    }) });
+    harness_tests.root_module.addImport("ra8", emu);
+    const harness_step = b.step("harness-test", "Run public harness behavior tests");
+    harness_step.dependOn(&b.addRunArtifact(harness_tests).step);
+}
+
 /// The light gate AGENTS.md promises and nothing more: `zig fmt --check` over
 /// everything we write, then a file and function length check over the same
 /// paths. Anything heavier belongs in ra8-firmware, not in a tool.
 fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths = [_][]const u8{ "build.zig", "build_tests.zig", "src", "tests", "tools" };
+    const paths = [_][]const u8{ "build.zig", "src", "tests", "tools" };
 
     var fmt_paths: [paths.len]std.Build.LazyPath = undefined;
     for (paths, &fmt_paths) |path, *lazy| lazy.* = b.path(path);
@@ -241,7 +306,7 @@ fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
 
 /// tools/terms.zig over everything we write.
 fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths: []const []const u8 = &.{ "build.zig", "build_tests.zig", "build.zig.zon", "src", "tests", "tools", "README.md", "AGENTS.md" };
+    const paths: []const []const u8 = &.{ "build.zig", "build.zig.zon", "src", "tests", "tools", "README.md", "AGENTS.md" };
     const checker = b.addExecutable(.{
         .name = "terms",
         .root_module = b.createModule(.{
