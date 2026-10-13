@@ -8,27 +8,27 @@ const Plugs = ra8.session.board.plug.Plugs;
 const Panel = c.eink.Panel;
 const at: c.endpoint.Endpoint = .{ .spi = .{ .channel = 1, .select = 2 } };
 
-fn startup(rig: *Rig) !*Panel {
+pub fn startup(rig: *Rig) !*Panel {
     rig.board.asks.keep(rig.arena.allocator(), &.{.{ .name = "eink", .at = at }});
     try ra8.board.plug.all(&rig.board);
     rig.plugs = Plugs.init(&rig.board, rig.arena.allocator());
     return rig.board.asks.attached_eink.?;
 }
 
-fn pixels(panel: *Panel, allocator: std.mem.Allocator) !void {
+pub fn pixels(panel: *Panel, allocator: std.mem.Allocator) !void {
     panel.planes.allocator = allocator;
     panel.planes.geometry = .{ .width = 3, .height = 2 };
     try std.testing.expect(panel.planes.ready());
     panel.planes.image.set(2, 1, 0xa5);
 }
 
-const Observer = struct {
+pub const Observer = struct {
     frames: usize = 0,
     events: usize = 0,
     logs: usize = 0,
     pixel: u8 = 0,
 
-    fn bind(self: *Observer, panel: *Panel) void {
+    pub fn bind(self: *Observer, panel: *Panel) void {
         panel.refresh_hook = .{ .context = self, .refreshFn = frame };
         panel.event_hook = .{ .context = self, .refreshFn = event };
         panel.refresh_log_hook = .{ .context = self, .refreshFn = log };
@@ -50,7 +50,7 @@ const Observer = struct {
         if (value.width == 3 and value.height == 2) self.logs += 1;
     }
 
-    fn matches(self: *Observer, panel: *const Panel) !void {
+    pub fn matches(self: *Observer, panel: *const Panel) !void {
         try std.testing.expect(panel.refresh_hook.?.context == @as(*anyopaque, self));
         try std.testing.expect(panel.event_hook.?.context == @as(*anyopaque, self));
         try std.testing.expect(panel.refresh_log_hook.?.context == @as(*anyopaque, self));
@@ -66,7 +66,7 @@ fn word(rig: *Rig, value: u16) void {
     _ = device.exchange(@intCast(value & 0xff));
 }
 
-fn render(rig: *Rig) void {
+pub fn render(rig: *Rig) void {
     word(rig, c.eink.wire.preamble.command);
     word(rig, @backingInt(c.eink.wire.Command.display_area));
     for ([_]u16{ 0, 0, 3, 2, c.eink.wire.waveform.gc16 }) |value| {
