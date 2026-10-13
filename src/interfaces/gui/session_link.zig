@@ -141,8 +141,20 @@ pub const Local = struct {
 
     /// Start `exe serve --stdio elf`. Its stderr stays the GUI's.
     pub fn spawn(self: *Local, io: std.Io, exe: []const u8, elf: []const u8) !void {
-        const argv: []const []const u8 = &.{ exe, "serve", "--stdio", elf };
-        self.* = .{ .io = io, .child = try std.process.spawn(io, .{ .argv = argv, .stdin = .pipe, .stdout = .pipe, .stderr = .inherit }) };
+        return self.spawnArgs(io, exe, elf, &.{});
+    }
+
+    /// Start `exe serve --stdio elf <args>`; args are the session's own flags
+    /// (for example `--cpu1 <image>` to arm the second core).
+    pub fn spawnArgs(self: *Local, io: std.Io, exe: []const u8, elf: []const u8, args: []const []const u8) !void {
+        var argv: [8][]const u8 = undefined;
+        std.debug.assert(4 + args.len <= argv.len);
+        argv[0] = exe;
+        argv[1] = "serve";
+        for (args, 0..) |a, i| argv[2 + i] = a;
+        argv[2 + args.len] = "--stdio";
+        argv[3 + args.len] = elf;
+        self.* = .{ .io = io, .child = try std.process.spawn(io, .{ .argv = argv[0 .. 4 + args.len], .stdin = .pipe, .stdout = .pipe, .stderr = .inherit }) };
         self.pipes = .{ .input = self.child.stdout.?.handle, .output = self.child.stdin.?.handle };
     }
 
