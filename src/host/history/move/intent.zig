@@ -5,8 +5,13 @@ const file = @import("file.zig");
 const Context = @import("context.zig").Context;
 pub const note = "native-moving";
 pub const suffix = ".native-move";
+const commit_flag = "\nCOMMIT\n";
+const cancel_flag = "\nCANCEL\n";
 pub const Record = struct {
-    version: u32 = 1,
+    version: u32 = 2,
+    /// Set by read from the anchor's synced journal, never from the note.
+    committed: bool = false,
+    cancelled: bool = false,
     nonce: h.name.Id,
     from_path: []const u8,
     to_path: []const u8,
@@ -33,14 +38,27 @@ pub fn pending(io: std.Io, root: std.Io.Dir, id: []const u8) bool {
 pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, path: []const u8, anchor: bool) !std.json.Parsed(Record) {
     const held = try h.metadata.open(io, dir, path, .read_only);
     defer held.close(io);
-    var bytes: [32768]u8 = undefined;
+    var bytes: [32768 + commit_flag.len + cancel_flag.len]u8 = undefined;
     const size = (try held.stat(io)).size;
     if (size == 0 or size > bytes.len) return error.BadReceipt;
     if (try held.readPositionalAll(io, bytes[0..@intCast(size)], 0) != size) return error.BadReceipt;
-    const parsed = std.json.parseFromSlice(Record, allocator, bytes[0..@intCast(size)], .{ .allocate = .alloc_always }) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
+    const text = bytes[0..@intCast(size)];
+    const end = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
+    if (end == 0 or end > 32768) return error.BadReceipt;
+    var parsed = std.json.parseFromSlice(Record, allocator, text[0..end], .{ .allocate = .alloc_always }) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
     errdefer parsed.deinit();
+    if ((parsed.value.version == 1 or parsed.value.version == 2) and !parsed.value.committed and !parsed.value.cancelled) {
+        const tail = text[end..];
+        if (tail.len != 0 and !anchor) return error.BadReceipt;
+        if (std.mem.eql(u8, tail, commit_flag ++ cancel_flag)) {
+            parsed.value.cancelled = true;
+        } else if (std.mem.eql(u8, tail, commit_flag) or (tail.len == 0 and parsed.value.version == 1)) {
+            // Old intents cannot prove that COMMIT never began.
+            parsed.value.committed = true;
+        } else if (tail.len != 0) return error.BadReceipt;
+    } else return error.BadReceipt;
     const record = parsed.value;
-    if (record.version != 1 or !h.name.isId(&record.nonce) or !std.fs.path.isAbsolute(record.from_path) or !std.fs.path.isAbsolute(record.to_path)) return error.BadReceipt;
+    if (!h.name.isId(&record.nonce) or !std.fs.path.isAbsolute(record.from_path) or !std.fs.path.isAbsolute(record.to_path)) return error.BadReceipt;
     _ = try h.name.component(record.from);
     _ = try h.name.component(record.to);
     try names(record);
@@ -66,6 +84,7 @@ pub fn start(allocator: std.mem.Allocator, context: Context, from: []const u8, t
     try names(record);
     const bytes = try std.json.Stringify.valueAlloc(allocator, record, .{});
     defer allocator.free(bytes);
+    if (bytes.len > 32768) return error.BadReceipt;
     try marker.writeStreamingAll(io, bytes);
     try marker.sync(io);
     try anchor.writeStreamingAll(io, bytes);
@@ -82,6 +101,45 @@ pub fn scope(context: Context, record: Record, from: []const u8, to: []const u8)
     if (!record.source_root.same(try file.here(base.dir)) or !record.target_root.same(try file.here(context.target.dir))) return error.IdentityConflict;
     const nonce = try h.lease.nonce(base.io, base.dir, h.name.classify(from).id);
     if (!std.mem.eql(u8, &nonce, &record.nonce)) return error.IdentityConflict;
+}
+
+/// Sync before even beginning a COMMIT write. A torn journal is unreadable
+/// and retained, so it can never be mistaken for a known cancellation.
+pub fn commit(context: Context, record: Record) !void {
+    try journal(context, record, commit_flag);
+}
+
+/// Record a verified refusal before unlinking either intent marker. If the
+/// caller crashes during cleanup, providerless recovery still cannot move.
+pub fn cancel(context: Context, record: Record) !void {
+    try scope(context, record, record.from, record.to);
+    try context.validate(record.from);
+    try context.recheck(record.from, record.source, record.source_root, record.target_root);
+    try journal(context, record, cancel_flag);
+    try cleanup(context, record, false);
+}
+
+fn journal(context: Context, record: Record, flag: []const u8) !void {
+    const base = context.source;
+    var buffer: h.name.Buffer = undefined;
+    const path = try leaf(&buffer, h.name.classify(record.from).id);
+    const current = try read(base.allocator, base.io, base.dir, path, true);
+    defer current.deinit();
+    try scope(context, current.value, record.from, record.to);
+    if (!record.source.same(current.value.source) or !record.anchor.same(current.value.anchor) or !record.marker.same(current.value.marker) or !std.mem.eql(u8, &record.nonce, &current.value.nonce)) return error.IdentityConflict;
+    if (std.mem.eql(u8, flag, commit_flag) and current.value.cancelled) return error.NativeMoveCancelled;
+    if (std.mem.eql(u8, flag, commit_flag) == current.value.committed) return;
+    const held = try h.metadata.open(base.io, base.dir, path, .read_write);
+    defer held.close(base.io);
+    if (!record.anchor.same(try file.opened(held))) return error.IdentityConflict;
+    const size = (try held.stat(base.io)).size;
+    var bytes: [32768 + commit_flag.len + cancel_flag.len]u8 = undefined;
+    if (size > bytes.len) return error.BadReceipt;
+    if (try held.readPositionalAll(base.io, bytes[0..@intCast(size)], 0) != size) return error.BadReceipt;
+    const has_flag = std.mem.indexOfScalar(u8, bytes[0..@intCast(size)], '\n') != null;
+    const appended = if (current.value.version == 1 and !has_flag) commit_flag ++ cancel_flag else flag;
+    try held.writePositionalAll(base.io, appended, size);
+    try held.sync(base.io);
 }
 
 pub fn cleanup(context: Context, record: Record, moved: bool) !void {
