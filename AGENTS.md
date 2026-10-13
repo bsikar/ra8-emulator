@@ -148,7 +148,7 @@ a hardware manual's name is reworded rather than copied.
 
 ## Commits and pull requests
 
-One commit per slice, subject starting `#14 `, authored and committed as the
+One commit per slice, with a concise descriptive subject, authored and committed as the
 repository owner. Every slice gets its own branch and its own pull request,
 rebase-merged the same session with the head branch deleted. A pull request is
 indexable history, not a review queue, so nothing is left open. The pull
