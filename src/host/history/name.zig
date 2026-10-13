@@ -14,7 +14,7 @@ pub const limits = struct {
     pub const entry = id_len + 16;
 };
 
-pub const Kind = enum { session, creating, trash, pointer, lease, reserved, foreign };
+pub const Kind = enum { session, creating, trash, pointer, lease, native_move, reserved, foreign };
 pub const Entry = struct { kind: Kind, id: []const u8 = "" };
 
 /// `text` when it is a single safe path component: letters, digits, `_`,
@@ -66,6 +66,7 @@ pub fn classify(text: []const u8) Entry {
     if (cut(text, "", layout.affix.creating)) |inner| return .{ .kind = .creating, .id = inner };
     if (cut(text, "", layout.affix.pointer)) |inner| return .{ .kind = .pointer, .id = inner };
     if (cut(text, "", layout.affix.lease)) |inner| return .{ .kind = .lease, .id = inner };
+    if (cut(text, "", ".native-move")) |inner| return .{ .kind = .native_move, .id = inner };
     if (cut(text, layout.affix.trash, "")) |inner| return .{ .kind = .trash, .id = inner };
     for ([_][]const u8{ layout.root.marker, layout.root.gate, layout.root.tag }) |own| {
         if (std.mem.eql(u8, text, own)) return .{ .kind = .reserved };

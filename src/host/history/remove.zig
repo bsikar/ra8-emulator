@@ -40,12 +40,13 @@ pub fn entryRemove(root: *const Base, entry: []const u8, options: Options) !void
     var gate = try root.gate(.exclusive);
     defer gate.release();
     try root.owns(entry);
+    if (move.intent.pending(root.io, root.dir, found.id)) return error.Moving;
     if (try move.tree.moving(root.io, root.dir, entry)) return error.Moving;
     if (found.kind == .creating) try oldDraft(root, entry, options);
     // The lease is held from here until the directory is gone, and then
     // its name goes too.
     const held = try authorize(root, entry, found.id, options.allow_kept);
-    trashed(root, entry, found.kind, found.id, options.move_probe) catch |err| {
+    trashed(root, entry, found.kind, found.id, options.move_probe, &.{ gate.file, held }) catch |err| {
         held.close(root.io);
         return err;
     };
@@ -62,6 +63,7 @@ pub fn withHeld(root: *const Base, entry: []const u8, options: Options, held: st
     var gate = try root.gate(.exclusive);
     defer gate.release();
     try root.owns(entry);
+    if (move.intent.pending(root.io, root.dir, found.id)) return error.Moving;
     if (try move.tree.moving(root.io, root.dir, entry)) return error.Moving;
     try provenance.validate(root.io, root.dir, held, found.id);
     var buffer: name.Buffer = undefined;
@@ -69,13 +71,13 @@ pub fn withHeld(root: *const Base, entry: []const u8, options: Options, held: st
     defer file.close(root.io);
     if ((try file.stat(root.io)).inode != (try held.stat(root.io)).inode) return error.OutsideRoot;
     try validateOwner(root, entry, options.allow_kept);
-    try trashed(root, entry, found.kind, found.id, options.move_probe);
+    try trashed(root, entry, found.kind, found.id, options.move_probe, &.{ gate.file, held });
     held_open = false;
     try lock.retire(root.io, root.dir, found.id, held);
 }
 
 /// Move `entry` to the trash name of its session and delete it there.
-fn trashed(root: *const Base, entry: []const u8, kind: name.Kind, id: []const u8, probe: ?move.probe.Probe) !void {
+fn trashed(root: *const Base, entry: []const u8, kind: name.Kind, id: []const u8, probe: ?move.probe.Probe, authorities: []const std.Io.File) !void {
     {
         var dir = try root.dir.openDir(root.io, entry, .{ .iterate = true, .follow_symlinks = false });
         defer dir.close(root.io);
@@ -87,7 +89,7 @@ fn trashed(root: *const Base, entry: []const u8, kind: name.Kind, id: []const u8
     root.dir.access(root.io, bin, .{}) catch |err| switch (err) {
         error.FileNotFound => {
             try root.owns(entry);
-            try move.tree.directoryProbed(root.allocator, root.io, root.dir, entry, root.dir, bin, layout.moves.trash, probe);
+            try move.dispatch.directory(.{ .source = root, .target = root, .authorities = authorities }, entry, bin, layout.moves.trash, probe);
             return purgeOwned(root, bin);
         },
         else => return err,

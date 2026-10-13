@@ -36,6 +36,7 @@ pub fn directoryProbed(allocator: std.mem.Allocator, io: std.Io, from_dir: std.I
 pub fn moving(io: std.Io, dir: std.Io.Dir, entry: []const u8) !bool {
     var found = try dir.openDir(io, entry, .{ .follow_symlinks = false });
     defer found.close(io);
+    if (present(io, found, @import("intent.zig").note)) return true;
     if (present(io, found, h.layout.files.moving)) return true;
     return present(io, found, proof.origin) and !present(io, found, proof.ready);
 }
@@ -255,7 +256,7 @@ fn removeMarker(io: std.Io, dir: std.Io.Dir, leaf: []const u8, expected: file.St
     try file.syncDir(dir);
 }
 
-fn preflight(io: std.Io, dir: std.Io.Dir, depth: usize) anyerror!void {
+pub fn preflight(io: std.Io, dir: std.Io.Dir, depth: usize) anyerror!void {
     if (depth >= limits.depth) return error.TooDeep;
     var entries = dir.iterate();
     while (try entries.next(io)) |entry| {

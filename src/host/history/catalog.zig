@@ -35,7 +35,7 @@ pub const Iterator = struct {
         while (try self.entries.next(self.base.io)) |entry| {
             const found = name.classify(entry.name);
             // A lease is the root's own file, read through its session.
-            if (found.kind == .reserved or found.kind == .lease) continue;
+            if (found.kind == .reserved or found.kind == .lease or found.kind == .native_move) continue;
             var result: Entry = .{ .name = entry.name, .kind = found.kind, .status = .foreign };
             if (found.kind == .pointer) {
                 const stat = try self.base.dir.statFile(self.base.io, entry.name, .{ .follow_symlinks = false });
@@ -52,7 +52,7 @@ pub const Iterator = struct {
             var dir = try self.base.dir.openDir(self.base.io, entry.name, .{ .follow_symlinks = false });
             defer dir.close(self.base.io);
             // One end of a move that has not ended is not a session yet.
-            if (@import("move/root.zig").tree.moving(self.base.io, self.base.dir, entry.name) catch true) {
+            if (@import("move/intent.zig").pending(self.base.io, self.base.dir, found.id) or (@import("move/root.zig").tree.moving(self.base.io, self.base.dir, entry.name) catch true)) {
                 result.status = .unmarked;
                 return result;
             }

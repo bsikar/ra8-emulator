@@ -1,0 +1,42 @@
+const std = @import("std");
+const builtin = @import("builtin");
+const history = @import("ra8").host.history;
+const fixture = @import("../root_test.zig");
+
+test "native intent binds nonce and roots and cleans only its two recorded markers" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var f = try fixture.Fixture.init();
+    defer f.deinit();
+    var session = try f.create('b');
+    defer fixture.Fixture.abandon(&session);
+    try session.dir.writeFile(fixture.io, .{ .sub_path = "log/events", .data = "intent payload" });
+    var gate = try f.cache.gate(.exclusive);
+    defer gate.release();
+    const context: history.move.context.Context = .{ .source = &f.cache, .target = &f.cache, .authorities = &.{ gate.file, session.lock } };
+    try std.testing.expectError(error.BadReceipt, history.move.intent.start(fixture.allocator, context, &session.id, "foreign", history.layout.moves.publish));
+    try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
+    var target_buffer: history.name.Buffer = undefined;
+    const target = history.name.trash(&target_buffer, &session.id);
+    const parsed = try history.move.intent.start(fixture.allocator, context, &session.id, target, history.layout.moves.trash);
+    defer parsed.deinit();
+    try history.move.intent.scope(context, parsed.value, &session.id, target);
+    var changed = parsed.value;
+    changed.nonce = @splat('c');
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.scope(context, changed, &session.id, target));
+    changed = parsed.value;
+    changed.to = "foreign";
+    try std.testing.expectError(error.BadReceipt, history.move.intent.scope(context, changed, &session.id, "foreign"));
+    try std.testing.expect(history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
+    var buffer: history.name.Buffer = undefined;
+    const anchor = try history.move.intent.leaf(&buffer, &session.id);
+    try history.move.file.link(f.cache.dir, anchor, f.cache.dir, "anchor-alias");
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false));
+    try f.cache.dir.deleteFile(fixture.io, "anchor-alias");
+    try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false));
+    try session.dir.deleteFile(fixture.io, "note-alias");
+    try history.move.intent.cleanup(context, parsed.value, false);
+    try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
+    var bytes: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("intent payload", try session.dir.readFile(fixture.io, "log/events", &bytes));
+}
