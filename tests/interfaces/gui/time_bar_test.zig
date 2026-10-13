@@ -89,7 +89,9 @@ test "the controls sit left to right and the clock takes what is left" {
     try std.testing.expectEqual(@as(i32, bar.pad), layout.run.x);
     try std.testing.expectEqual(layout.run.x + layout.run.w + bar.gap, layout.pause.x);
     try std.testing.expectEqual(layout.pause.x + layout.pause.w + bar.gap, layout.step.x);
-    try std.testing.expectEqual(layout.step.x + layout.step.w + bar.gap, layout.field.x);
+    try std.testing.expectEqual(layout.step.x + layout.step.w + bar.gap, layout.over.x);
+    try std.testing.expectEqual(layout.over.x + layout.over.w + bar.gap, layout.out.x);
+    try std.testing.expectEqual(layout.out.x + layout.out.w + bar.gap, layout.field.x);
     try std.testing.expectEqual(@as(i32, @intCast(font.textWidth(bar.field_chars))) + 2 * bar.pad, layout.field.w);
     try std.testing.expectEqual(area.w - bar.pad, layout.clock.x + layout.clock.w);
     try std.testing.expectEqual(@as(i32, bar.control_h), layout.run.h);
@@ -98,7 +100,7 @@ test "the controls sit left to right and the clock takes what is left" {
 test "a click lands on the control under it, and nothing in the gaps or the clock" {
     const area: Rect = .{ .x = 20, .y = 100, .w = 480, .h = bar.height };
     const layout = bar.Layout.of(area);
-    for ([_]bar.Control{ .run, .pause, .step, .field }) |control| {
+    for ([_]bar.Control{ .run, .pause, .step, .over, .out, .field }) |control| {
         const at = middle(layout.rect(control));
         try std.testing.expectEqual(@as(?bar.Control, control), bar.hit(area, at[0], at[1]));
     }

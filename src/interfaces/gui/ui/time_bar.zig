@@ -30,6 +30,8 @@ pub const Control = enum {
     run,
     pause,
     step,
+    over,
+    out,
     field,
 
     pub fn label(self: Control) []const u8 {
@@ -37,6 +39,8 @@ pub const Control = enum {
             .run => "Run",
             .pause => "Pause",
             .step => "Step",
+            .over => "Over",
+            .out => "Out",
             .field => "",
         };
     }
@@ -48,6 +52,8 @@ pub const Layout = struct {
     run: Rect,
     pause: Rect,
     step: Rect,
+    over: Rect,
+    out: Rect,
     field: Rect,
     clock: Rect,
 
@@ -57,12 +63,14 @@ pub const Layout = struct {
         const run = place(bar, &x, top, .run);
         const pause_at = if (run.empty()) run else place(bar, &x, top, .pause);
         const step = if (pause_at.empty()) pause_at else place(bar, &x, top, .step);
-        const field = if (step.empty() or bar.x + bar.w - pad - x < width(.field) + gap + clock_min)
+        const over = if (step.empty()) step else place(bar, &x, top, .over);
+        const out = if (over.empty()) over else place(bar, &x, top, .out);
+        const field = if (out.empty() or bar.x + bar.w - pad - x < width(.field) + gap + clock_min)
             Rect{ .x = x, .y = top, .w = 0, .h = 0 }
         else
             place(bar, &x, top, .field);
         const clock_rect = bar.intersect(.{ .x = x, .y = top, .w = bar.x + bar.w - pad - x, .h = control_h });
-        return .{ .run = run, .pause = pause_at, .step = step, .field = field, .clock = clock_rect };
+        return .{ .run = run, .pause = pause_at, .step = step, .over = over, .out = out, .field = field, .clock = clock_rect };
     }
 
     /// Only whole controls have paint and hit targets. Leave room for the clock.
@@ -81,6 +89,8 @@ pub const Layout = struct {
             .run => self.run,
             .pause => self.pause,
             .step => self.step,
+            .over => self.over,
+            .out => self.out,
             .field => self.field,
         };
     }
@@ -100,6 +110,8 @@ pub const View = struct {
     run_enabled: bool = false,
     pause_enabled: bool = false,
     step_enabled: bool = false,
+    over_enabled: bool = false,
+    out_enabled: bool = false,
     /// Concise command refusal or unavailable reason, after elapsed time.
     note: ?[]const u8 = null,
     command_refused: bool = false,
@@ -124,7 +136,7 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, bar: Rect, vi
     fillArea(table, bar, theme.ribbon_bg);
     fillArea(table, .{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, theme.border);
     const layout = Layout.of(bar);
-    for ([_]Control{ .run, .pause, .step }) |control| {
+    for ([_]Control{ .run, .pause, .step, .over, .out }) |control| {
         button(table, theme, layout.rect(control), control, view);
     }
     fieldBox(table, theme, layout.field, view);
@@ -166,7 +178,7 @@ fn lights(control: Control, view: View) bool {
     return switch (control) {
         .run => view.run_lit,
         .pause => view.pause_lit,
-        .step, .field => false,
+        .step, .over, .out, .field => false,
     };
 }
 
@@ -179,6 +191,8 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
         .run => view.run_enabled,
         .pause => view.pause_enabled,
         .step => view.step_enabled,
+        .over => view.over_enabled,
+        .out => view.out_enabled,
         .field => true,
     };
     const on = lights(control, view) and (enabled or control == .run);
@@ -188,6 +202,8 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .run => "Run",
             .pause => "Pause",
             .step => "Step",
+            .over => "Over",
+            .out => "Out",
             .field => "",
         },
         .on_press = null,
@@ -196,13 +212,13 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
         .face_pressed = word(switch (control) {
             .run => theme.runLit(),
             .pause => theme.pauseLit(),
-            .step => theme.step_active,
+            .step, .over, .out => theme.step_active,
             .field => theme.accent,
         }),
         .border = word(if (on) switch (control) {
             .run => theme.good,
             .pause => theme.highlight,
-            .step => theme.step_active,
+            .step, .over, .out => theme.step_active,
             .field => theme.accent,
         } else theme.control_border),
         .presses = 0,
@@ -335,7 +351,7 @@ fn label(table: *const widget.types.Paint, area: Rect, line: []const u8, color: 
 /// The control under (`x`, `y`) in `bar`, or null for the gaps and the clock.
 pub fn hit(bar: Rect, x: i32, y: i32) ?Control {
     const layout = Layout.of(bar);
-    for ([_]Control{ .run, .pause, .step, .field }) |control| {
+    for ([_]Control{ .run, .pause, .step, .over, .out, .field }) |control| {
         if (layout.rect(control).contains(x, y)) return control;
     }
     return null;
