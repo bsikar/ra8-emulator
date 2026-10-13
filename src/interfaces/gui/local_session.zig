@@ -32,6 +32,11 @@ pub const LocalSession = struct {
     }
 
     /// The shell's end of the link.
+    /// Bring up cpu1 from `path` in the already-open session (RA8EMU-1192).
+    pub fn openSecond(self: *LocalSession, path: []const u8) !void {
+        try self.setup.openSecond(path);
+    }
+
     pub fn transport(self: *LocalSession) rpc.Transport {
         return self.loop.a();
     }

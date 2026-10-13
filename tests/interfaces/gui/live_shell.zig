@@ -70,6 +70,12 @@ pub const Live = struct {
         try self.untilRead(0);
     }
 
+    /// Bring up cpu1 from `path` in the already-open session (RA8EMU-1192).
+    pub fn openSecond(self: *Live, path: []const u8) !void {
+        try self.session.openSecond(path);
+        try self.step();
+    }
+
     pub fn deinit(self: *Live) void {
         const gpa = std.testing.allocator;
         self.board.deinit();
@@ -88,7 +94,13 @@ pub const Live = struct {
     /// Step until the core is halted and the registers leaf has published
     /// a batch after batch `serial`, for at most thirty frames.
     pub fn untilRead(self: *Live, serial: u32) !void {
-        const registers = &self.registers.cores[0];
+        return self.untilReadOn(0, serial);
+    }
+
+    /// Step until core `index`'s registers leaf has published a batch after
+    /// batch `serial`, for at most thirty frames (RA8EMU-1192).
+    pub fn untilReadOn(self: *Live, index: usize, serial: u32) !void {
+        const registers = &self.registers.cores[index];
         for (0..30) |_| {
             if (self.shell.status.run == .halted and registers.serial != serial and !registers.want and registers.left == 0) return;
             try self.step();
@@ -138,7 +150,13 @@ pub const Live = struct {
     /// Step until cpu0's stack leaf shows a chain whose innermost frame is
     /// at `pc` with no ask due or in flight, for at most thirty frames.
     pub fn untilStack(self: *Live, pc_at: u32) !void {
-        const stack = &self.stack.cores[0];
+        return self.untilStackOn(0, pc_at);
+    }
+
+    /// Step until core `index`'s stack leaf shows a chain whose innermost
+    /// frame is at `pc` with no ask due or in flight, thirty frames at most.
+    pub fn untilStackOn(self: *Live, index: usize, pc_at: u32) !void {
+        const stack = &self.stack.cores[index];
         for (0..30) |_| {
             if (stack.now) |*now| if (now.count != 0 and now.frames[0].pc == pc_at and !stack.want and stack.asked == null) return;
             try self.step();
@@ -149,6 +167,11 @@ pub const Live = struct {
     /// CPU0's PC as the registers leaf shows it.
     pub fn pc(self: *const Live) u32 {
         return self.registers.cores[0].value(.pc).?;
+    }
+
+    /// Core `index`'s PC as the registers leaf shows it (RA8EMU-1192).
+    pub fn pcOn(self: *const Live, index: usize) u32 {
+        return self.registers.cores[index].value(.pc).?;
     }
 
     /// The pixel at (`x`, `y`) of the last frame the window was shown.
