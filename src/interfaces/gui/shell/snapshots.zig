@@ -7,7 +7,6 @@
 
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
-const draw_list = @import("ra8_render").draw_list;
 const pane_layout = @import("../ui/pane_layout.zig");
 const timeline_model = @import("../timeline_model.zig");
 const timeline_pane = @import("../timeline_pane.zig");
@@ -67,7 +66,10 @@ pub const Snapshots = struct {
         for (solved.panes.items) |placed| {
             const pane = layout.pane(placed.index) orelse continue;
             if (pane.kind != .timeline) continue;
-            const hit = timeline_pane.hitAt(shell_frame.bodyOf(placed.area), found, self.view(found, placed.area), x, y) orelse return false;
+            const body = shell_frame.bodyOf(placed.area);
+            if (!body.contains(x, y)) continue;
+            const geometry = timeline_pane.Geometry.recorded(body, found) orelse continue;
+            const hit = timeline_pane.hitAt(geometry.area, found, geometry.view, x, y) orelse continue;
             self.startRewind(link, hit.start_ns);
             return true;
         }
@@ -154,17 +156,5 @@ pub const Snapshots = struct {
     fn fail(self: *Snapshots) void {
         self.step = .none;
         self.notice = "rewind refused";
-    }
-
-    /// The record window as the record pane draws it.
-    fn view(self: *const Snapshots, found: *const timeline_model.Model, area: draw_list.Rect) timeline_model.View {
-        _ = self;
-        const win = found.recorded() orelse return .{ .start_ns = 0, .span_ns = 1, .width_px = 1 };
-        const rows = timeline_pane.rowsRect(area);
-        return .{
-            .start_ns = win.from,
-            .span_ns = @max(win.to - win.from, 1),
-            .width_px = @intCast(@max(rows.w, 1)),
-        };
     }
 };

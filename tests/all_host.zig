@@ -200,6 +200,8 @@ test {
     _ = @import("interfaces/gui/shell/locals_test.zig");
     _ = @import("interfaces/gui/shell/map_test.zig");
     _ = @import("interfaces/rpc/session/timeline_trace_test.zig");
+    _ = @import("interfaces/gui/timeline_hit_test.zig");
+    _ = @import("interfaces/gui/timeline_feed_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/board_pick_test.zig");
@@ -209,6 +211,8 @@ test {
     _ = @import("interfaces/gui/shell/layout_store_test.zig");
     _ = @import("interfaces/gui/shell/window_store_test.zig");
     _ = @import("interfaces/gui/shell/frame_buffer_test.zig");
+    _ = @import("interfaces/gui/shell/execution_test.zig");
+    _ = @import("interfaces/gui/shell/snapshots_test.zig");
     _ = @import("interfaces/gui/shell/loop_test.zig");
     _ = @import("interfaces/gui/wall_clock_test.zig");
     _ = @import("interfaces/gui/shell/run_test.zig");

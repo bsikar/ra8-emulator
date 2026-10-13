@@ -28,6 +28,29 @@ pub fn rowsRect(area: Rect) Rect {
     return .{ .x = area.x + col_w, .y = area.y, .w = area.w - col_w, .h = area.h - ruler_h };
 }
 
+/// The shell's recorded view and the pixel rectangles shared by paint and clicks.
+pub const Geometry = struct {
+    area: Rect,
+    view: View,
+
+    pub fn recorded(area: Rect, model: *const Model) ?Geometry {
+        const window = model.recorded() orelse return null;
+        return .{ .area = area, .view = .{
+            .start_ns = window.from,
+            .span_ns = @max(window.to - window.from, 1),
+            .width_px = @intCast(@max(area.w - 2 * pad, 1)),
+        } };
+    }
+
+    /// Half-open visible pixels of a slice, excluding the lane's two-pixel gap.
+    pub fn slice(self: Geometry, one: timeline_model.Slice, y: i32) Rect {
+        const rows = rowsRect(self.area);
+        const x0 = @max(self.view.nsToX(one.start_ns), 0);
+        const x1 = @min(self.view.nsToX(one.end_ns), rows.w);
+        return .{ .x = rows.x + x0, .y = y, .w = @max(x1 - x0, 0), .h = row_h - 2 };
+    }
+};
+
 /// Lanes in draw order for one core: ISR rows above thread rows, idle
 /// last, each group ascending by id. Fills `buf`, capped at its length.
 pub fn laneOrder(model: *const Model, core: u1, buf: *[64]usize) []usize {
@@ -117,7 +140,6 @@ fn drawCore(table: *const widget.types.Paint, theme: *const Theme, area: Rect, m
 
 fn drawLane(table: *const widget.types.Paint, theme: *const Theme, area: Rect, model: *const Model, view: View, index: usize, y: i32) void {
     const lane = model.laneAt(index);
-    const rows = rowsRect(area);
     var nbuf: [40]u8 = undefined;
     const name = laneName(lane, &nbuf);
     var lbuf: [48]u8 = undefined;
@@ -127,10 +149,10 @@ fn drawLane(table: *const widget.types.Paint, theme: *const Theme, area: Rect, m
         name;
     drawText(table, area.x + pad, y + 2, label, if (lane.kind == .idle) theme.muted else theme.ink, theme.face);
     const color = sliceColor(theme, lane.kind);
+    const geometry = Geometry{ .area = area, .view = view };
     for (model.slicesOf(index)) |one| {
-        const x0 = @max(view.nsToX(one.start_ns), 0);
-        const x1 = @min(view.nsToX(one.end_ns), rows.w);
-        if (x1 > x0) fillArea(table, .{ .x = rows.x + x0, .y = y, .w = x1 - x0, .h = row_h - 2 }, color);
+        const shown = geometry.slice(one, y);
+        if (!shown.empty()) fillArea(table, shown, color);
     }
 }
 
@@ -217,11 +239,12 @@ fn stampLabel(ns: u64, into: []u8) []const u8 {
 /// The slice under a pane click, or null when the point sits on the
 /// name column, a core header, the ruler, or empty lane space. Mirrors
 /// draw's row walk so a click lands on the slice painted there; `x`
-/// and `y` are pane-local.
+/// and `y` are window coordinates, as is `area`.
 pub fn hitAt(area: Rect, model: *const Model, view: View, x: i32, y: i32) ?timeline_model.Slice {
     if (area.w < col_w + 16 or area.h < ruler_h + header_h + row_h) return null;
     const rows = rowsRect(area);
-    if (x < rows.x or y < area.y or y >= area.y + rows.h) return null;
+    if (!rows.contains(x, y)) return null;
+    const geometry = Geometry{ .area = area, .view = view };
     const bottom = area.y + rows.h;
     var y_top = area.y;
     for (0..timeline_model.limits.cores) |ci| {
@@ -231,7 +254,10 @@ pub fn hitAt(area: Rect, model: *const Model, view: View, x: i32, y: i32) ?timel
         var row_y = y_top + header_h;
         for (laneOrder(model, @intCast(ci), &order_buf)) |index| {
             if (row_y + row_h > bottom) break;
-            if (y >= row_y and y < row_y + row_h) return model.hit(index, view, x - rows.x);
+            if (y >= row_y and y < row_y + row_h) {
+                for (model.slicesOf(index)) |one| if (geometry.slice(one, row_y).contains(x, y)) return one;
+                return null;
+            }
             row_y += row_h;
         }
         y_top = row_y;

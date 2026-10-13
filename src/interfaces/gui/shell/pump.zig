@@ -2,6 +2,7 @@
 //! takes its arrivals (RA8EMU-1189 moved it out of loop.zig beside the link fan-out).
 const std = @import("std");
 const loop = @import("loop.zig");
+const execution = @import("execution.zig");
 const Shell = loop.Shell;
 const session_link = @import("../session_link.zig");
 const timeline_feed = @import("../timeline_feed.zig");
@@ -53,7 +54,7 @@ pub fn pump(self: *Shell) !void {
         if (self.plug) |plug| if (plug.observe(arrival)) self.wants();
         if (self.startup) |startup| if (startup.observe(arrival)) self.wants();
     }
-    self.settle();
+    execution.settle(self);
 }
 
 /// The stack, registers, memory and code leaves: start over after a

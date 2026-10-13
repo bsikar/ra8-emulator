@@ -7,6 +7,7 @@ const widget_paint = @import("ra8_render").widget_paint;
 const raster = @import("ra8_render").raster;
 const font = @import("ra8_render").font;
 pub const frame_buffer = @import("frame_buffer.zig");
+pub const execution = @import("execution.zig");
 const platform = @import("../platform.zig");
 const shell_press = @import("press.zig");
 /// A session served in this process, answering on the shell's own thread.
@@ -17,7 +18,6 @@ const status_capture = @import("../status/capture.zig");
 const status_bar = @import("../status/bar.zig");
 const session_link = @import("../session_link.zig");
 const timeline_model = @import("../timeline_model.zig");
-const timeline_feed = @import("../timeline_feed.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
 const shell_board_input = @import("board/input.zig");
@@ -52,7 +52,7 @@ const shell_pump = @import("pump.zig");
 const session_worker = @import("../session_worker.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
-pub const max_arrivals: usize = 64;
+pub const max_arrivals = execution.max_arrivals;
 /// Starts the session on the first image opened (boot.zig).
 pub const Boot = struct {
     context: *anyopaque,
@@ -169,9 +169,9 @@ pub const Shell = struct {
         if (!self.open) return false;
         if (!self.themes.styled) self.themes.restyle(window.appearance());
         if (self.raise) |asked| if (asked.swap(false, .acq_rel)) window.focus();
-        try self.exchange();
+        try execution.exchange(self);
         if (self.registers) |registers| if (self.time) |time| registers.live(time.run.lit, self.now(), self.settings.display.registers.interval());
-        try self.paySlices(.fresh);
+        try execution.paySlices(self, .fresh);
         if (self.files) |files| files.frame(window, &self.status);
         if (!window.visible()) return true;
         if (self.pick) |pick| pick.frame(window);
@@ -217,6 +217,7 @@ pub const Shell = struct {
                 if (shell_press.pressFields(self, press.x, press.y)) return;
                 if (shell_press.pressValue(self, press.x, press.y, solved)) return;
                 if (self.titles.press(&self.layout, solved, press.x, press.y)) return;
+                if (self.link) |link| if (self.timeline) |*model| if (self.snaps.pressed(link, &self.layout, solved, model, press.x, press.y)) return;
                 if (shell_press.pressBoard(self, solved, press.x, press.y)) return;
                 if (self.link) |link| if (shell_press.pressLink(self, link, solved, press.x, press.y)) return;
                 if (shell_press.pressMap(self, solved, press.x, press.y)) return;
@@ -272,50 +273,13 @@ pub const Shell = struct {
         const clock = self.clock orelse return 0;
         return clock.now();
     }
-    /// One round with the session: send what is due and take what arrived.
-    fn exchange(self: *Shell) !void {
-        if (self.link) |link| self.snaps.rewind(link);
-        try self.pump();
-        if (self.server) |server| try server.answer();
-        if (self.listener) |listener| try listener.answer();
-        try self.pump();
-    }
-
     /// Between two frames: take what a session on a thread of its own has
     /// answered and send a lit run its next slice, so the image is not left
     /// waiting for the window's next frame.
     pub fn service(self: *Shell) !void {
         if (self.server) |server| try server.answer();
         try self.pump();
-        try self.paySlices(.same);
-    }
-
-    /// Pay what this frame owes a lit run (shell_run.zig), one slice at a time,
-    /// each answered before the next goes out; a session on a thread of its
-    /// own, or in another process, answers in its own time.
-    fn paySlices(self: *Shell, frame: enum { fresh, same }) !void {
-        const time = self.time orelse return;
-        const link = self.link orelse return;
-        defer self.settle();
-        if (frame == .fresh) time.frame(link, self.now());
-        // No slice goes out behind a load: the image it would run may be gone.
-        while (self.drained and self.status.load_id == null and time.run.next(link, self.now())) {
-            const server = self.server orelse return;
-            try server.answer();
-            if (self.listener) |listener| try listener.answer();
-            try self.pump();
-        }
-    }
-
-    /// A pause the time bar settled: the status bar shows the halt, and the
-    /// core's leaves read it again.
-    pub fn settle(self: *Shell) void {
-        const time = self.time orelse return;
-        if (!time.settle(&self.status)) return;
-        if (self.registers) |registers| registers.refresh();
-        if (self.stack) |stack| stack.refresh();
-        if (self.source) |source| source.refresh();
-        if (self.locals) |locals| locals.refresh();
+        try execution.paySlices(self, .same);
     }
     /// Feed what the session sent into the status bar model and the leaves.
     pub fn pump(self: *Shell) !void {

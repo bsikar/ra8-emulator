@@ -160,13 +160,8 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .timeline) if (self.timeline) |model| {
-        const window = model.recorded() orelse return;
-        const room = body.w - 2 * shell_frame.pad;
-        timeline_pane.draw(table, theme, toList(body), model, .{
-            .start_ns = window.from,
-            .span_ns = @max(window.to - window.from, 1),
-            .width_px = @intCast(@max(room, 1)),
-        });
+        const geometry = timeline_pane.Geometry.recorded(toList(body), model) orelse return;
+        timeline_pane.draw(table, theme, geometry.area, model, geometry.view);
         return;
     };
     if (pane.kind == .devices) if (self.devices) |devices| {
