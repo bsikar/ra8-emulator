@@ -123,7 +123,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     const self: *Panes = @ptrCast(@alignCast(context));
     if (pane.kind == .console) if (self.console) |console| {
         if (console.hasOutput()) {
-            try console_strip.draw(list, theme, toList(body), console.saved);
+            console_strip.draw(table, theme, toList(body), console.saved);
             return console_pane.draw(list, theme, console_strip.below(toList(body)), &console.log, console.scroll.back);
         }
     };
