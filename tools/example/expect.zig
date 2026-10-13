@@ -16,6 +16,14 @@
 //!
 //! usb_host_file_ops: main.c prints "ALL FILE OPS PASSED" after the ninth
 //! step, and the step runner prints "fileops: FAIL" when one goes wrong.
+//!
+//! devcfg_record_demo commits to a RAM medium and probes the real extra-MRAM
+//! store read-only, so it ships no bench conf (RA8EMU-1193). Its verdict line
+//! is the unit state it prints last. The emulator's OTP is read-only and ships
+//! unprovisioned by design, so a good run ends on the unprovisioned line, and
+//! a provisioned unit on the emulator would be an OTP-model gap. The
+//! round-trip PASS or FAIL prints one line earlier and never reaches the
+//! table: the report carries the last console line only.
 const std = @import("std");
 const hil_conf = @import("hil_conf");
 
@@ -37,6 +45,11 @@ const table = [_]Expect{
         .image = "usb_host_file_ops.elf",
         .pass = "ra8d2 fileops: ALL FILE OPS PASSED",
         .fail = "ra8d2 fileops: FAIL",
+    },
+    .{
+        .image = "devcfg_record_demo.elf",
+        .pass = "devcfg_record_demo: unit UNPROVISIONED (read-only probe)",
+        .fail = "devcfg_record_demo: unit provisioned",
     },
 };
 
