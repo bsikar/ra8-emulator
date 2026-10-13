@@ -69,7 +69,15 @@ pub const Model = struct {
 
     /// Close both cores' open slices at `now`, as the run ends.
     pub fn finish(self: *Model, now: u64) !void {
-        for (0..limits.cores) |index| try self.charge(@intCast(index), now);
+        for (0..limits.cores) |index| {
+            const one = &self.fold[index];
+            // A run that ended on its last event leaves that owner open with
+            // nothing to charge; keep the zero-width slice so the event that
+            // opened it is still a slice edge.
+            const owner = one.running();
+            if (now == one.since and owner.kind != .before) try self.append(owner, @intCast(index), now, now);
+            try self.charge(@intCast(index), now);
+        }
     }
 
     /// The lanes, in the order they were first charged.
