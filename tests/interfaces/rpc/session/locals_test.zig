@@ -93,15 +93,28 @@ test "a stop inside ra8_sci_init answers each frame's own locals" {
     const top = try ask(&opened, &top_scratch, 0);
     try std.testing.expectEqual(proto.Core.cpu0, top.core);
     try std.testing.expect(top.count > 0);
-    // Frame 2's call site sits in main, so its locals are main's, not the
-    // top frame's.
-    const deep = try ask(&opened, &deep_scratch, 2);
-    try std.testing.expect(deep.count > 0);
+    // Frame 1's call site sits in uart_irq_setup_or_halt, so its locals are
+    // that frame's own, not the top frame's.
+    var mid_scratch: [proto.locals_bytes]u8 = undefined;
+    const mid = try ask(&opened, &mid_scratch, 1);
+    try std.testing.expect(mid.count > 0);
+    // Frame 2's call site sits in main, and this image's DWARF gives main
+    // no block-scoped locals: main's DIE is childless because the function
+    // works through statics and constants, so the answer is an empty set.
+    // (Before the childless-DWARF fix the scan answered main's frame with
+    // whatever variables followed it in the DIE stream.)
+    const bare = try ask(&opened, &deep_scratch, 2);
+    try std.testing.expectEqual(@as(usize, 0), bare.count);
     const top_names = try names(top);
-    const deep_names = try names(deep);
+    const mid_names = try names(mid);
+    var sci_cfg = false;
+    for (mid_names[0..mid.count]) |b| {
+        if (std.mem.eql(u8, b.name, "sci_cfg")) sci_cfg = true;
+    }
+    try std.testing.expect(sci_cfg);
     var shared: usize = 0;
     outer: for (top_names[0..top.count]) |a| {
-        for (deep_names[0..deep.count]) |b| {
+        for (mid_names[0..mid.count]) |b| {
             if (std.mem.eql(u8, a.name, b.name)) {
                 shared += 1;
                 continue :outer;
