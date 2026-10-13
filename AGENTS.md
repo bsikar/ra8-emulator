@@ -166,3 +166,22 @@ repository owner. Every slice gets its own branch and its own pull request,
 rebase-merged the same session with the head branch deleted. A pull request is
 indexable history, not a review queue, so nothing is left open. The pull
 request body says what was run and what could not be.
+
+## Local environment note (this Linux sandbox only; kept uncommitted)
+
+Zig 0.17 test binaries linked with glibc panic `integer overflow` at startup
+and then hang on this box. Zero repo code is involved: `zig test -lc` on an
+empty file reproduces it, the same file without `-lc` passes, musl test
+binaries run clean, and glibc main binaries run fine. It is a toolchain plus
+sandbox interaction, not a bug in this tree.
+
+To run tests here, build them against musl instead:
+`zig build <suite>-exe -Dtarget=x86_64-linux-musl -j1`, then run via
+`tools/test_batch.sh` as usual. Validated 2026-10-13: ra8_tests COMPLETE
+(7673 passed, 8 skipped, 0 failed), consumer-smoke via
+`cd tests/consumer && zig build run -Dtarget=x86_64-linux-musl -j1`,
+test_batch self-test passed, and the host suite fully covered (1532/1539 OK
+in the capped unfiltered run plus the last 7 in targeted filtered runs).
+This box has 2 vCPUs, so the unfiltered host run needs a few seconds past
+test_batch's 800s cap; a single unfiltered under-800s PASS belongs on a
+faster machine.
