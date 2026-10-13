@@ -357,8 +357,8 @@ fn winnerStops(asked: api.Core, winner: api.Core, at: u32) !void {
     try std.testing.expectEqual(@backingInt(winner), ended_index);
     try std.testing.expectEqual(plain.harness.session().live.ended_index, ended_index);
     try std.testing.expectEqual(proto.StopReason.breakpoint, moved.reason);
-    // The stop the server publishes names the winner; the reply's own `core`
-    // is advance.zig's and still echoes the request (see the contract).
+    // The stop the server publishes and the reply both name the winner.
+    try std.testing.expectEqual(@backingInt(winner), @backingInt(moved.core));
     try std.testing.expectEqual(@backingInt(winner), @backingInt(rpc.context.pending.?.core));
     try std.testing.expectEqual(at, rpc.context.pending.?.address);
     try std.testing.expectEqual(at, moved.address);

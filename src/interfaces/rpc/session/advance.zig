@@ -39,7 +39,7 @@ pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     const stop = handlers.stopped(session, args.core, ended);
     context.pending = stop;
     const to = session.now() catch |err| return refuse(err);
-    return .{ .ok = .{ .core = args.core, .from_ns = from, .to_ns = to, .reason = stop.reason, .address = stop.address } };
+    return .{ .ok = .{ .core = stop.core, .from_ns = from, .to_ns = to, .reason = stop.reason, .address = stop.address } };
 }
 
 /// Run until session time reaches `target`, a stop, or a round that moves no time.
