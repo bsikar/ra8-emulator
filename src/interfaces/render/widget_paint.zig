@@ -10,6 +10,7 @@ const std = @import("std");
 const widget = @import("ra8_widget");
 const draw_list = @import("draw_list.zig");
 const font = @import("gfx_font.zig");
+const mono = @import("gfx_mono.zig");
 
 const log = std.log.scoped(.widget);
 
@@ -30,6 +31,8 @@ export fn ra8_log_emit_error(tag: [*:0]const u8, message: [*:0]const u8) void {
 pub const Target = struct {
     list: *draw_list.DrawList,
     failed: bool = false,
+    /// Dense panes draw their text through the mono face (RA8EMU-1169).
+    mono: bool = false,
 
     pub fn paint(self: *Target) widget.types.Paint {
         return .{
@@ -70,6 +73,12 @@ fn drawLine(user: ?*anyopaque, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) c
 
 fn drawText(user: ?*anyopaque, x: i32, y: i32, str: [*:0]const u8, fg: u32, _: u32) callconv(.c) void {
     const target = targetOf(user);
+    if (target.mono) {
+        mono.draw(target.list, x, y, std.mem.span(str), colorOf(fg)) catch {
+            target.failed = true;
+        };
+        return;
+    }
     font.draw(target.list, x, y, std.mem.span(str), colorOf(fg)) catch {
         target.failed = true;
     };
@@ -84,7 +93,9 @@ fn popClip(user: ?*anyopaque) callconv(.c) void {
     targetOf(user).list.popClip();
 }
 
-fn textSize(_: ?*anyopaque, str: [*:0]const u8, out_w: *i32, out_h: *i32) callconv(.c) void {
-    out_w.* = @intCast(font.textWidth(std.mem.len(str)));
+fn textSize(user: ?*anyopaque, str: [*:0]const u8, out_w: *i32, out_h: *i32) callconv(.c) void {
+    const target = targetOf(user);
+    const width = if (target.mono) mono.textWidth(std.mem.len(str)) else font.textWidth(std.mem.len(str));
+    out_w.* = @intCast(width);
     out_h.* = @intCast(font.cell_h);
 }

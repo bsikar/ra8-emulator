@@ -17,6 +17,7 @@
 const Theme = @import("../ui/colors.zig").Theme;
 const widget = @import("ra8_widget");
 const draw_list = @import("ra8_render").draw_list;
+const widget_paint = @import("ra8_render").widget_paint;
 const font = @import("ra8_render").font;
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
@@ -124,6 +125,30 @@ fn toList(r: Rect) draw_list.Rect {
     return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
 }
 
+/// The mono-font leaves: registers and memory paint through the widget
+/// target over the list (RA8EMU-1169).
+fn drawMono(self: *Panes, list: *draw_list.DrawList, theme: *const Theme, pane: pane_layout.Pane, body: Rect) anyerror!bool {
+    if (pane.kind == .registers) if (self.registers) |pair| {
+        const model = pair.of(pane.core);
+        if (model.now) |now| {
+            var mono_target = widget_paint.Target{ .list = list, .mono = true };
+            const mono_paint = mono_target.paint();
+            try registers_pane.draw(&mono_paint, theme, body, now, model.before, model.fold);
+            if (self.edit) |edit| edit.draw(&mono_paint, theme, body, model.fold, model.core);
+            return;
+        }
+    };
+    if (pane.kind == .memory) if (self.memory) |pair| {
+        if (pair.of(pane.core).now) |*now| {
+            var mono_target = widget_paint.Target{ .list = list, .mono = true };
+            const mono_paint = mono_target.paint();
+            if (self.memory_field) |field| return shell_memory_field.draw(&mono_paint, theme, body, now, field);
+            return memory_pane.draw(&mono_paint, theme, body, now);
+        }
+    };
+    return false;
+}
+
 fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: pane_layout.Pane, body: Rect) anyerror!void {
     const self: *Panes = @ptrCast(@alignCast(context));
     if (pane.kind == .console) if (self.console) |console| {
@@ -157,20 +182,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         if (self.camera_file) |file| return shell_camera_file.draw(table, theme, toList(body), camera, file);
         return shell_camera.draw(table, theme, toList(body), camera);
     };
-    if (pane.kind == .registers) if (self.registers) |pair| {
-        const model = pair.of(pane.core);
-        if (model.now) |now| {
-            try registers_pane.draw(table, theme, body, now, model.before, model.fold);
-            if (self.edit) |edit| edit.draw(table, theme, body, model.fold, model.core);
-            return;
-        }
-    };
-    if (pane.kind == .memory) if (self.memory) |pair| {
-        if (pair.of(pane.core).now) |*now| {
-            if (self.memory_field) |field| return shell_memory_field.draw(table, theme, body, now, field);
-            return memory_pane.draw(table, theme, body, now);
-        }
-    };
+    if (try drawMono(self, list, theme, pane, body)) return;
     if (pane.kind == .disasm) if (self.code) |pair| {
         const model = pair.of(pane.core);
         if (model.now) |*read| {

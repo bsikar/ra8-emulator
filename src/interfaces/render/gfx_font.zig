@@ -2,10 +2,14 @@
 //! face from ra8_gfx, so desktop text uses the same glyphs as the panel.
 //! Printable ASCII is drawn through ra8_gfx at compile time into a
 //! raster.Atlas, sixteen cells to a row. No font files are read at run time.
+//! The mono face for the debugger's dense panes (RA8EMU-1169) expands into
+//! the same atlas below these rows.
 const std = @import("std");
 const gfx = @import("ra8_gfx");
 const raster = @import("raster.zig");
 const draw_list = @import("draw_list.zig");
+const mono = @import("gfx_mono.zig");
+const mono_data = @import("gfx_mono_data.zig");
 
 pub const glyph_w: u32 = gfx.text.sans.width;
 pub const glyph_h: u32 = gfx.text.sans.height;
@@ -16,7 +20,8 @@ pub const last: u8 = 0x7E;
 const per_row: u32 = 16;
 const rows: u32 = (last - first + per_row) / per_row;
 const atlas_w = per_row * cell_w;
-const atlas_h = rows * cell_h;
+/// The atlas holds the sans rows plus the mono block (RA8EMU-1169).
+const atlas_h = rows * cell_h * 2;
 
 const coverage: [atlas_w * atlas_h]u8 = expand();
 
@@ -82,6 +87,19 @@ fn expand() [atlas_w * atlas_h]u8 {
         const origin = cell(char);
         const run = [2:0]u8{ char, 0 };
         gfx.text.drawSans(&run, @intCast(origin.x), @intCast(origin.y), 0xFFFFFF, 0, &sink, plot);
+    }
+    var index: u32 = 0;
+    const count: u32 = mono.last - mono.first + 1;
+    while (index < count) : (index += 1) {
+        const origin = mono.cell(mono.first + @as(u8, @intCast(index)));
+        const bits = mono_data.glyphs[@as(usize, index) * mono.glyph_h ..][0..mono.glyph_h];
+        for (bits, 0..) |row_bits, row| {
+            for (0..mono.glyph_w) |col| {
+                if (row_bits & (@as(u8, 1) << @intCast(7 - col)) != 0) {
+                    out[(origin.y + @as(u32, @intCast(row))) * atlas_w + origin.x + @as(u32, @intCast(col))] = 255;
+                }
+            }
+        }
     }
     return out;
 }

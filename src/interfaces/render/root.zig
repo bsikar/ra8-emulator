@@ -8,6 +8,7 @@
 pub const draw_list = @import("draw_list.zig");
 pub const raster = @import("raster.zig");
 pub const font = @import("gfx_font.zig");
+pub const mono_font = @import("gfx_mono.zig");
 pub const geometry = @import("geometry.zig");
 pub const widget_paint = @import("widget_paint.zig");
 pub const paint_backend = @import("paint_backend.zig");

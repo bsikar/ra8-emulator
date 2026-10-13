@@ -256,8 +256,7 @@ pub const Shell = struct {
         const clock = self.clock orelse return 0;
         return clock.now();
     }
-    /// One round with the session: send what is due and take what arrived;
-    /// a session served in this process answers and is taken too.
+    /// One round with the session: send what is due and take what arrived.
     fn exchange(self: *Shell) !void {
         if (self.link) |link| self.snaps.rewind(link);
         try self.pump();

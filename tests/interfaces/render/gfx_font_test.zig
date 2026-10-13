@@ -27,7 +27,7 @@ test "the atlas uses the firmware's 8x16 sans cells, sixteen to a row" {
     try std.testing.expectEqual(@as(u32, 8), font.cell_w);
     try std.testing.expectEqual(@as(u32, 16), font.cell_h);
     try std.testing.expectEqual(@as(u32, 128), font.atlas.width);
-    try std.testing.expectEqual(@as(u32, 96), font.atlas.height);
+    try std.testing.expectEqual(@as(u32, 192), font.atlas.height);
 }
 
 test "every printable glyph but space has ink and space has none" {
