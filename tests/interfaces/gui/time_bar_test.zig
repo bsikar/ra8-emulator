@@ -67,7 +67,9 @@ const Scene = struct {
     }
 
     fn render(self: *Scene, area: Rect, view: bar.View) !void {
-        try bar.draw(&self.list, self.theme, area, view);
+        var target = ra8.render.widget_paint.Target{ .list = &self.list };
+        const paint = target.paint();
+        bar.draw(&paint, self.theme, area, view);
         raster.draw(&self.frame, &self.list, font.atlas);
     }
 
@@ -275,7 +277,9 @@ test "an empty bar draws nothing" {
     var list = draw_list.DrawList.init(std.testing.allocator, 8, 8);
     defer list.deinit();
     var models = Models.sample();
-    try bar.draw(&list, dark, .{ .x = 0, .y = 0, .w = 0, .h = bar.height }, models.view(false));
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    bar.draw(&paint, dark, .{ .x = 0, .y = 0, .w = 0, .h = bar.height }, models.view(false));
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
