@@ -80,7 +80,7 @@ test "View menu actions consume the press over a pane title and content" {
 
     // Once the menu is closed, the same title click still reaches the pane.
     click(&s, &window, &placed, x, y);
-    try std.testing.expectEqual(pane_layout.Kind.empty, s.layout.pane(s.layout.root).?.kind);
+    try std.testing.expectEqual(pane_layout.Kind.source, s.layout.pane(s.layout.root).?.kind);
 }
 
 test "a shortcut key toggles the pane kind empty and takes it back" {
