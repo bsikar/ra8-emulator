@@ -21,6 +21,7 @@ pub const part = @import("core/part/part.zig");
 pub const pend_clear = @import("core/pend_clear.zig");
 pub const reboot = @import("core/reboot.zig");
 pub const second = @import("core/second/second.zig");
+pub const scheduler = @import("core/scheduler/scheduler.zig");
 pub const session = @import("core/session.zig");
 pub const sleep_pace = @import("core/sleep_pace.zig");
 pub const stop = @import("core/stop.zig");

@@ -18,23 +18,27 @@ pub const Entry = struct {
 pub const Run = struct {
     allocator: std.mem.Allocator,
     board: *Board,
-    panel: *eink.Panel,
     entries: std.ArrayList(Entry),
     allocation_failed: bool = false,
 
     pub fn init(allocator: std.mem.Allocator, board: *Board) Run {
-        return .{ .allocator = allocator, .board = board, .panel = board.asks.attached_eink orelse &board.panel, .entries = .empty };
+        return .{ .allocator = allocator, .board = board, .entries = .empty };
     }
 
     pub fn arm(self: *Run) void {
-        self.panel.refresh_log_hook = .{ .context = self, .refreshFn = onRefresh };
+        self.panel().refresh_log_hook = .{ .context = self, .refreshFn = onRefresh };
     }
 
     pub fn deinit(self: *Run) void {
-        if (self.panel.refresh_log_hook) |hook| {
-            if (hook.context == @as(*anyopaque, @ptrCast(self))) self.panel.refresh_log_hook = null;
+        const current = self.panel();
+        if (current.refresh_log_hook) |hook| {
+            if (hook.context == @as(*anyopaque, @ptrCast(self))) current.refresh_log_hook = null;
         }
         self.entries.deinit(self.allocator);
+    }
+
+    fn panel(self: *const Run) *eink.Panel {
+        return self.board.asks.attached_eink orelse &self.board.panel;
     }
 
     pub fn write(self: *Run, io: std.Io, path: []const u8) !void {
@@ -103,7 +107,7 @@ pub const Run = struct {
 
 fn onRefresh(context: *anyopaque, event: refresh.Event) void {
     const self: *Run = @ptrCast(@alignCast(context));
-    const geometry = self.panel.planes.geometry;
+    const geometry = self.panel().planes.geometry;
     self.entries.append(self.allocator, .{
         .virtual_time_ns = self.board.time.base.now(),
         .x = event.x,

@@ -8,6 +8,101 @@ const ra8 = @import("ra8");
 const image_path = "tests/fixtures/display/ra8_ui.elf";
 const input_path = "tests/fixtures/display/tap.input";
 
+test "grid repair G2 installed advance accepts tiny open interval and WFI progress" {
+    for ([_]bool{ false, true }) |sleep| {
+        var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+        defer opened.deinit();
+        opened.state.edge.idle_skip = false;
+        opened.state.edge.timebase.per_chunk = 64;
+        opened.session().live.boundary.?.chunk = 64;
+        opened.session().history = null;
+        const at = ra8.chip.core.memmap.sram_base + 0x6000;
+        try opened.guest().write(at, if (sleep) &.{ 0x30, 0xbf, 0xfe, 0xe7 } else &.{ 0xfe, 0xe7 });
+        opened.primaryCpu().regs.pc = at;
+        opened.primaryCpu().regs.primask = 1;
+        opened.primaryCpu().waiting = null;
+        const before = try opened.session().now();
+        try opened.state.display.advance.advanceFn(opened.state.display.advance.context, 1);
+        try std.testing.expectEqual(before + 1, try opened.session().now());
+        try std.testing.expectEqual(@as(u64, 0), opened.board().time.base.now());
+        try std.testing.expectEqual(@as(u32, 1), opened.state.edge.saved.stretch.carry);
+        try opened.state.display.advance.advanceFn(opened.state.display.advance.context, 63);
+        try std.testing.expectEqual(@as(u64, 64), opened.board().time.base.now());
+    }
+}
+
+test "grid repair G2 partial calls and snapshot continuation keep exact elapsed slots" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .history_frames = 2 });
+    defer opened.deinit();
+    opened.state.edge.idle_skip = false;
+    opened.state.edge.timebase.per_chunk = 64;
+    opened.session().live.boundary.?.chunk = 64;
+    opened.session().history = null;
+    const at = ra8.chip.core.memmap.sram_base + 0x6000;
+    try opened.guest().write(at, &.{ 0xfe, 0xe7 });
+    opened.primaryCpu().regs.pc = at;
+    opened.primaryCpu().regs.primask = 1;
+    opened.primaryCpu().waiting = null;
+    const advance = opened.state.display.advance;
+    try advance.advanceFn(advance.context, 1);
+    try advance.advanceFn(advance.context, 13);
+    try std.testing.expectEqual(@as(u64, 14), try opened.session().now());
+    try std.testing.expectEqual(@as(u64, 14), opened.primaryCpu().slots);
+    try std.testing.expectEqual(@as(u32, 14), opened.state.edge.saved.stretch.carry);
+    try std.testing.expectEqual(@as(u64, 0), opened.board().time.base.now());
+    var partial = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer partial.deinit();
+    try opened.state.files.writeTo(&partial.writer);
+    try advance.advanceFn(advance.context, 50);
+    try std.testing.expectEqual(@as(u64, 64), try opened.session().now());
+    try std.testing.expectEqual(@as(u64, 64), opened.primaryCpu().slots);
+    try std.testing.expectEqual(@as(u64, 64), opened.board().time.base.now());
+    var completed = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer completed.deinit();
+    try opened.state.files.writeTo(&completed.writer);
+    try opened.state.files.readFrom(partial.written());
+    try std.testing.expectEqual(@as(u64, 14), try opened.session().now());
+    try advance.advanceFn(advance.context, 50);
+    var resumed = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer resumed.deinit();
+    try opened.state.files.writeTo(&resumed.writer);
+    try std.testing.expectEqualSlices(u8, completed.written(), resumed.written());
+}
+
+test "grid repair G2 installed advance still refuses a guest stopped before progress" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    opened.session().history = null;
+    const at = ra8.chip.core.memmap.sram_base + 0x6000;
+    try opened.guest().write(at, &.{ 0xfe, 0xe7 });
+    opened.primaryCpu().regs.pc = at;
+    opened.primaryCpu().regs.primask = 1;
+    opened.primaryCpu().waiting = null;
+    _ = try opened.session().setBreakpoint(.cpu0, .{ .address = at });
+    const before = try opened.session().now();
+    const slots = opened.primaryCpu().slots;
+    const advance = opened.state.display.advance;
+    try std.testing.expectError(error.NoVirtualProgress, advance.advanceFn(advance.context, 1));
+    try std.testing.expectEqual(before, try opened.session().now());
+    try std.testing.expectEqual(slots, opened.primaryCpu().slots);
+}
+
+test "grid repair G2 public tiny settle uses projected progress" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    opened.state.edge.idle_skip = false;
+    opened.state.edge.timebase.per_chunk = 64;
+    opened.session().live.boundary.?.chunk = 64;
+    opened.session().history = null;
+    const at = ra8.chip.core.memmap.sram_base + 0x6000;
+    try opened.guest().write(at, &.{ 0xfe, 0xe7 });
+    opened.primaryCpu().regs.pc = at;
+    opened.primaryCpu().regs.primask = 1;
+    opened.primaryCpu().waiting = null;
+    try std.testing.expectError(error.Timeout, opened.session().waitSettled(1));
+    try std.testing.expectEqual(@as(u64, 1), try opened.session().now());
+}
+
 test "public harness opens real display firmware, taps, settles, and frames" {
     if (builtin.mode != .fast) return error.SkipZigTest;
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{

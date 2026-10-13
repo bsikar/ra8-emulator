@@ -127,29 +127,18 @@ pub fn replacement(bytes: []const u8, kind: file.Kind, payload: []const u8) !std
 }
 
 pub fn continued(opened: *ra8.session.harness.Harness, budget: usize) !void {
-    if (opened.state.files.pair != null) {
-        // The served API is all-stop: exercise both parked cores explicitly.
-        var left = budget;
-        while (left != 0) {
-            const slice = @min(left, 1000);
-            try runCore(opened, .cpu0, slice);
-            try runCore(opened, .cpu1, slice);
-            left -= slice;
-        }
-        try opened.session().switchTo(.cpu0);
-    } else try runCore(opened, .cpu0, budget);
+    try runCore(opened, .cpu0, budget);
 }
 fn runCore(opened: *ra8.session.harness.Harness, core: ra8.session.api.Core, budget: usize) !void {
     try opened.session().switchTo(core);
     opened.session().live.budget = budget;
-    const cpu = opened.session().live.core.cpu;
-    const before = cpu.retired;
+    const before = try opened.session().now();
     const result = try opened.session().run(core, .cont);
     if (result != .count) {
         std.debug.print("unexpected served fixture outcome: {any}\n", .{result});
         return error.UnexpectedFixtureStop;
     }
-    try std.testing.expect(cpu.retired > before);
+    try std.testing.expect(try opened.session().now() > before);
 }
 
 pub fn sameGuest(left: *ra8.session.harness.Harness, right: *ra8.session.harness.Harness) !void {
@@ -187,6 +176,7 @@ pub fn cacheOracle(opened: *ra8.session.harness.Harness, captureFn: anytype) !vo
     cpu.regs.xpsr = ra8.chip.core.cpu.regs.xpsr_bits.thumb;
     cpu.regs.primask = 1;
     cpu.banked.current = .secure;
+    cpu.waiting = null; // The fixture deliberately starts a new executable path.
     var saved = try captureFn(opened);
     defer saved.deinit();
     try opened.guest().write(code, &.{ 0x02, 0x20 });

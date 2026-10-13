@@ -9,6 +9,8 @@
 //! no fraction; an old twelve-byte section has no saved boundary rate.
 const std = @import("std");
 const file = @import("ra8_snapshot").file;
+const fields = @import("ra8_snapshot").fields;
+const scheduler = @import("ra8_chip").core.scheduler;
 
 pub const Error = file.Error || error{BadValue};
 
@@ -18,6 +20,22 @@ pub const State = struct {
     rate_known: bool = false,
     boundary_hz: ?u64 = null,
 };
+
+pub fn saveGrid(state: scheduler.State, writer: *std.Io.Writer) !void {
+    if (!state.valid()) return error.BadValue;
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try fields.write(&counter.writer, state);
+    try file.writeSectionHeader(writer, .grid, counter.fullCount());
+    try fields.write(writer, state);
+}
+
+pub fn loadGrid(bytes: []const u8) !scheduler.State {
+    const section = try file.Reader.find(bytes, .grid) orelse return error.Missing;
+    var cursor: fields.Cursor = .{ .bytes = section.payload };
+    const state = try fields.read(scheduler.State, &cursor);
+    if (!cursor.done() or !state.valid()) return error.BadValue;
+    return state;
+}
 
 pub fn save(state: State, writer: anytype) !void {
     try file.writeSectionHeader(writer, .stretch, @sizeOf(u32) + @sizeOf(u64) + 1 + @sizeOf(u64));

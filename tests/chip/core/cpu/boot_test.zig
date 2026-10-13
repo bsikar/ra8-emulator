@@ -6,6 +6,7 @@ const boot = ra8.chip.core.cpu.boot;
 const elf = ra8.board.image.elf;
 const Store = ra8.chip.core.cpu.memory.store.Store;
 const Until = ra8.chip.core.stop.until.Until;
+const scheduler = ra8.chip.core.scheduler;
 
 /// Copies bytes into the store, the way a loader would.
 fn put(store: *Store, address: u32, bytes: []const u8) !void {
@@ -62,9 +63,10 @@ const Edges = struct {
     width: u32,
     closes: u32 = 0,
     charged: u64 = 0,
+    saved: scheduler.State = .{},
 
     fn boundary(self: *Edges) boot.Boundary {
-        return .{ .context = self, .widthFn = widthOf, .closeFn = closeOf };
+        return .{ .context = self, .widthFn = widthOf, .closeFn = closeOf, .saved = &self.saved };
     }
 
     fn widthOf(context: *anyopaque) u32 {
@@ -120,7 +122,7 @@ test "a zig run hands back its registers as it left them (RA8EMU-579)" {
     try std.testing.expectEqual(memmap.sram_base + 0x1000, final.get(13));
 }
 
-test "a stretch the core stops inside is never closed" {
+test "a terminal core stop charges its final partial stretch once" {
     var store = try Store.init(null);
     defer store.deinit();
     try loadTiny(&store);
@@ -131,7 +133,7 @@ test "a stretch the core stops inside is never closed" {
     defer periph.deinit();
     const status = try boot.runOnBoard(&stream, .{ .store = &store }, &periph, memmap.sram_base, 100, null, .{ .boundary = edges.boundary() });
     try std.testing.expectEqual(@as(u8, 1), status);
-    try std.testing.expectEqual(@as(u32, 0), edges.closes);
+    try std.testing.expectEqual(@as(u32, 1), edges.closes);
 }
 
 test "a console success reached before an unknown encoding ends the Zig run" {
@@ -155,7 +157,7 @@ test "a console success reached before an unknown encoding ends the Zig run" {
     );
     try std.testing.expectEqual(@as(u8, 0), status);
     try std.testing.expect(until.reached);
-    try std.testing.expectEqual(@as(u32, 0), edges.closes);
+    try std.testing.expectEqual(@as(u32, 1), edges.closes);
     try std.testing.expectEqualStrings(
         "zig core: ran 1 instructions clean, pc 0x2200000A\nstopped clean on the console line \"PASS\", pc 0x2200000A\n",
         stream.buffered(),
@@ -355,6 +357,15 @@ test "a loaded run starts its first stretch as far in as the saved run owed" {
     try std.testing.expectEqual(@as(u64, 8), edges.charged);
 }
 
+test "a loaded pending cut closes before CPU0 executes again" {
+    var probe: Probe = .{};
+    var edges: Edges = .{ .width = 4 };
+    edges.saved.stretch = .{ .full = 4, .carry = 2 };
+    edges.saved.cut = true;
+    try runOwed(&probe, &edges, 2);
+    try std.testing.expectEqual(@as(u32, 2), edges.closes);
+    try std.testing.expectEqual(scheduler.position.Phase.cpu0, edges.saved.at.phase);
+}
 test "the snapshot hook loads after reset and saves once the budget is spent" {
     var store = try Store.init(null);
     defer store.deinit();

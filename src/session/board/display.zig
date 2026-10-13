@@ -5,6 +5,7 @@ const display_settled = @import("ra8_board").display_settled;
 const FrameCapture = @import("ra8_board").frame_capture.FrameCapture;
 const eink = @import("ra8_components").eink;
 const session_display = @import("../display.zig");
+const session_api = @import("../api.zig");
 const panel_watch = @import("../panel/watch.zig");
 
 pub const Error = error{ Timeout, NoVirtualProgress, NoFrame };
@@ -12,6 +13,7 @@ pub const Error = error{ Timeout, NoVirtualProgress, NoFrame };
 pub const Advance = struct {
     context: *anyopaque,
     advanceFn: *const fn (*anyopaque, max_ns: u64) anyerror!void,
+    session: ?*const session_api.Session = null,
 };
 
 /// Adapts a Board and its run loop to the core-addressed Session API.
@@ -68,7 +70,7 @@ pub const Host = struct {
     }
 
     pub fn waitSettled(self: *Host, timeout_ns: u64) !void {
-        const started = self.board.time.base.now();
+        const started = try self.virtualNow();
         self.settled.resetWait();
         while (true) {
             if (einkPanel(self.board)) |panel| return self.waitEink(panel, started, timeout_ns);
@@ -77,7 +79,7 @@ pub const Host = struct {
                 capture.deinit(self.board);
                 return self.waitGlcdc(started, timeout_ns);
             }
-            const now = self.board.time.base.now();
+            const now = try self.virtualNow();
             const elapsed = now -| started;
             if (elapsed >= timeout_ns) return Error.Timeout;
             try self.advanceOne(@min(self.quantum_ns, timeout_ns - elapsed), now);
@@ -87,7 +89,7 @@ pub const Host = struct {
     fn waitEink(self: *Host, panel: *eink.Panel, started: u64, timeout_ns: u64) !void {
         while (true) {
             if (self.settled.observeEink(panel)) return;
-            const now = self.board.time.base.now();
+            const now = try self.virtualNow();
             const elapsed = now -| started;
             if (elapsed >= timeout_ns) return Error.Timeout;
             try self.advanceOne(@min(self.quantum_ns, timeout_ns - elapsed), now);
@@ -98,7 +100,7 @@ pub const Host = struct {
         var capture = (try FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
         defer capture.deinit(self.board);
         while (true) {
-            const now = self.board.time.base.now();
+            const now = try self.virtualNow();
             if (self.board.display.scanOut() != null and
                 try self.settled.observeFrame(capture.width, capture.height, capture.pixels, now)) return;
             const elapsed = now -| started;
@@ -110,7 +112,12 @@ pub const Host = struct {
     fn advanceOne(self: *Host, amount_ns: u64, before: u64) !void {
         if (amount_ns == 0) return Error.Timeout;
         try self.advance.advanceFn(self.advance.context, amount_ns);
-        if (self.board.time.base.now() <= before) return Error.NoVirtualProgress;
+        if ((try self.virtualNow()) <= before) return Error.NoVirtualProgress;
+    }
+
+    fn virtualNow(self: *const Host) !u64 {
+        if (self.advance.session) |session| return session.now();
+        return self.board.time.base.now();
     }
 
     pub fn frame(self: *Host, allocator: std.mem.Allocator) !session_display.Frame {

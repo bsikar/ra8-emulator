@@ -46,9 +46,10 @@ const Ticks = struct {
     seen: [8]u32 = @splat(0),
     len: usize = 0,
     fail: bool = false,
+    saved: ra8.chip.core.scheduler.State = .{},
 
     fn hook(self: *Ticks, chunk: u32) zig_boundary.Boundary {
-        return .{ .context = self, .tickFn = tick, .chunk = chunk };
+        return .{ .context = self, .tickFn = tick, .chunk = chunk, .saved = &self.saved };
     }
 
     fn tick(context: *anyopaque, instructions: u32) anyerror!void {
@@ -65,7 +66,7 @@ const Ticks = struct {
     }
 };
 
-test "a run passes the boundary every chunk and once for the remainder" {
+test "a run closes whole stretches and saves the budget remainder" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
@@ -75,11 +76,12 @@ test "a run passes the boundary every chunk and once for the remainder" {
     var ticks: Ticks = .{};
     const ended = try zig_boundary.run(core, &machine, 2500, null, null, ticks.hook(1024));
     try std.testing.expect(ended == .count);
-    try std.testing.expectEqualSlices(u32, &.{ 1024, 1024, 452 }, ticks.seen[0..ticks.len]);
-    try std.testing.expectEqual(cpu.retired, ticks.total());
+    try std.testing.expectEqualSlices(u32, &.{ 1024, 1024 }, ticks.seen[0..ticks.len]);
+    try std.testing.expectEqual(@as(u32, 452), ticks.saved.stretch.carry);
+    try std.testing.expectEqual(cpu.slots, ticks.total() + ticks.saved.stretch.carry);
 }
 
-test "a stop mid chunk ticks only what ran before it" {
+test "a stop mid stretch saves progress without ticking" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
@@ -90,8 +92,8 @@ test "a stop mid chunk ticks only what ran before it" {
     var ticks: Ticks = .{};
     const ended = try zig_boundary.run(core, &machine, 100, null, null, ticks.hook(16));
     try std.testing.expect(ended == .stop);
-    try std.testing.expectEqualSlices(u32, &.{3}, ticks.seen[0..ticks.len]);
-    try std.testing.expectEqual(cpu.retired, ticks.total());
+    try std.testing.expectEqual(@as(usize, 0), ticks.len);
+    try std.testing.expectEqual(cpu.slots, ticks.saved.stretch.carry);
 }
 
 test "a refused boundary ends the run as BoundaryFailed" {
@@ -105,7 +107,7 @@ test "a refused boundary ends the run as BoundaryFailed" {
     try std.testing.expectError(zig_boundary.Error.BoundaryFailed, zig_boundary.run(core, &machine, 10, null, null, ticks.hook(4)));
 }
 
-test "the session's step passes the boundary for the one instruction" {
+test "the session's step preserves its open stretch" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
@@ -113,5 +115,6 @@ test "the session's step passes the boundary for the one instruction" {
     var ticks: Ticks = .{};
     var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100, .boundary = ticks.hook(64) };
     try std.testing.expect((try session.go(.step)).stop == .stepped);
-    try std.testing.expectEqualSlices(u32, &.{1}, ticks.seen[0..ticks.len]);
+    try std.testing.expectEqual(@as(usize, 0), ticks.len);
+    try std.testing.expectEqual(@as(u32, 1), ticks.saved.stretch.carry);
 }

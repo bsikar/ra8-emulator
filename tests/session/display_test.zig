@@ -71,6 +71,20 @@ const Idle = struct {
     }
 };
 
+const Projected = struct {
+    grid: *ra8.chip.core.scheduler.State,
+    calls: usize = 0,
+    requested: u64 = 0,
+    stalled: bool = false,
+
+    fn advance(context: *anyopaque, amount_ns: u64) anyerror!void {
+        const self: *Projected = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        self.requested = amount_ns;
+        if (!self.stalled) self.grid.stretch.carry += @intCast(amount_ns);
+    }
+};
+
 test "tap reaches GT911, settles e-ink, and returns a changed native grayscale frame" {
     var board = ra8.board.board.Board.init(std.testing.allocator);
     defer board.deinit();
@@ -145,6 +159,34 @@ test "session display reports a timeout when no refresh settles" {
     var session: api.Session = .{ .live = undefined };
     session.attachDisplay(host.interface());
     try std.testing.expectError(error.Timeout, session.waitSettled(2_000_000));
+}
+
+test "session display uses projected partial time for exact deadline and real stall" {
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.asks.attached_eink = &board.panel;
+    board.panel.planes.resize(.{ .width = 1, .height = 1 });
+    var grid: ra8.chip.core.scheduler.State = .{ .stretch = .{ .full = 64, .carry = 13 } };
+    var session: api.Session = .{ .live = undefined };
+    session.attachTimeBase(&board.time.base);
+    session.grid = &grid;
+    var projected: Projected = .{ .grid = &grid };
+    var host = Host.init(std.testing.allocator, &board, .{
+        .context = &projected,
+        .advanceFn = Projected.advance,
+        .session = &session,
+    });
+    defer host.deinit();
+    session.attachDisplay(host.interface());
+    try std.testing.expectError(error.Timeout, session.waitSettled(2));
+    try std.testing.expectEqual(@as(u64, 15), try session.now());
+    try std.testing.expectEqual(@as(u64, 0), board.time.base.now());
+    try std.testing.expectEqual(@as(u64, 2), projected.requested);
+    try std.testing.expectEqual(@as(usize, 1), projected.calls);
+    projected.stalled = true;
+    try std.testing.expectError(error.NoVirtualProgress, session.waitSettled(1));
+    try std.testing.expectEqual(@as(u64, 15), try session.now());
+    try std.testing.expectEqual(@as(usize, 2), projected.calls);
 }
 
 fn panelWord(panel: *eink.Panel, value: u16) void {

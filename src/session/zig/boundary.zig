@@ -1,36 +1,32 @@
-//! The board's chunk boundary under the debugger (RA8EMU-709). A plain run
-//! passes the boundary every chunk, which is where board time advances,
-//! timed blocks raise their events and the pacer holds wall time. The
-//! debugger owns its own loop, so without this nothing past the core moved
-//! while a script ran. Here the session's run is cut into chunks and the
-//! board is ticked by what each chunk retired, including a chunk a stop cut
-//! short, so board time always equals instructions run.
+//! Board callbacks and a standalone single-core adapter for the saved grid.
+//! Stops and budget returns preserve progress without closing the interval.
 const zig_core = @import("core.zig");
 const zig_cycles = @import("cycles.zig");
 const zig_drive = @import("drive.zig");
 const stop_machine = @import("../stop_machine.zig");
 const watch_bus = @import("../watch/bus.zig");
-const sleep_pace = @import("ra8_chip").core.sleep_pace;
+const chip = @import("ra8_chip");
+const scheduler = chip.core.scheduler;
 
 /// Instructions between boundaries when the board names none.
 pub const default_chunk: u32 = 1024;
 
 pub const Error = error{BoundaryFailed};
 
-/// What the board offers: advance by `instructions` retired.
+/// Board completion after the core phases finish, measured in elapsed slots.
 pub const Boundary = struct {
     context: *anyopaque,
     tickFn: *const fn (context: *anyopaque, instructions: u32) anyerror!void,
     chunk: u32 = default_chunk,
-    /// How far past `normal` the next chunk may reach while the core sleeps
-    /// with nothing to wake it (RA8EMU-767). Null keeps every chunk at `chunk`.
+    /// Compatibility reach hook forwarded by instrumentation wrappers.
     sleepFn: ?*const fn (context: *anyopaque, normal: u32) u32 = null,
-    /// How far past `normal` an awake chunk may reach with nothing armed:
-    /// to the board's next edge, as wide as a plain run's stretch
-    /// (RA8EMU-1120). Null keeps every awake chunk at `chunk`.
+    /// Root grid configuration and board edges choose the frozen width.
     awakeFn: ?*const fn (context: *anyopaque, normal: u32) u32 = null,
+    saved: ?*scheduler.State = null,
+    pair: ?*chip.core.second.core.zig.run.Driver = null,
+    cut: ?*chip.core.cpu.cpu.systick_cut.Cut = null,
 
-    fn tick(self: Boundary, instructions: u64) Error!void {
+    pub fn tick(self: Boundary, instructions: u64) Error!void {
         if (instructions == 0) return;
         self.tickFn(self.context, @intCast(instructions)) catch return Error.BoundaryFailed;
     }
@@ -38,32 +34,50 @@ pub const Boundary = struct {
 
 /// As zig_drive.runClocked, passing `edge` after every chunk.
 pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, edge: Boundary) Error!zig_drive.Ended {
-    const normal: u32 = @max(edge.chunk, 1);
-    // A park noted before this call may predate a debugger edit.
-    core.cpu.trip.parked = false;
+    var local: scheduler.State = .{};
+    const saved = edge.saved orelse &local;
+    if (edge.cut) |cut| cut.instruction = &core.cpu.slots;
     var left = count;
     while (left > 0) {
-        const want = @min(left, widthOf(core, machine, edge, normal));
-        var retired: u64 = 0;
-        const ended = zig_drive.runCounted(core, machine, want, watch, clock, &retired);
-        try edge.tick(retired);
-        switch (ended) {
-            .count => left -= want,
-            else => return ended,
+        if (saved.cut) {
+            try edge.tick(saved.stretch.carry);
+            saved.next();
+            continue;
         }
+        if (saved.stretch.full == 0) saved.open(widthOf(edge), core.cpu.slots);
+        const want = @min(left, saved.stretch.left());
+        var slots: u64 = 0;
+        const ended = zig_drive.runCounted(core, machine, want, watch, clock, &slots);
+        const elapsed = if (ended == .count and core.cpu.waiting != null) want else slots;
+        saved.advance(@intCast(elapsed), @intCast(slots));
+        const pending = if (edge.cut) |latch| latch.takePending() else null;
+        const cut = pending != null;
+        saved.cut = cut;
+        saved.cut_pending = pending orelse .{};
+        if (ended != .count) {
+            saved.at.gap = gapOf(ended);
+            return ended;
+        }
+        left -= elapsed;
+        if (cut or saved.stretch.left() == 0) {
+            try edge.tick(saved.stretch.carry);
+            saved.next();
+        } else if (elapsed < want) return .count;
     }
     return .count;
 }
 
-/// The next chunk's width: `normal`, reached to the board's next edge by its
-/// `sleepFn` while the core sleeps or sits parked on a loop that changes
-/// nothing (RA8EMU-1120) with nothing to wake it, as a plain run's
-/// stretch is (src/chip/core/cpu/boot.zig widthOf), or by its `awakeFn` while
-/// the core runs. Anything armed in the stop machine keeps the normal width,
-/// so a stop lands where it always did.
-fn widthOf(core: zig_core.ZigCore, machine: *stop_machine.Machine, edge: Boundary, normal: u32) u64 {
-    if (!machine.quiet()) return normal;
-    const reach = if (sleep_pace.still(core.cpu) or sleep_pace.parked(core.cpu)) edge.sleepFn else edge.awakeFn;
-    const far = reach orelse return normal;
-    return @max(normal, far(edge.context, normal));
+/// Called only when an interval opens, independent of debugger state.
+pub fn widthOf(edge: Boundary) u32 {
+    const normal = @max(edge.chunk, 1);
+    const far = edge.awakeFn orelse return normal;
+    return @max(1, far(edge.context, normal));
+}
+
+pub fn gapOf(ended: zig_drive.Ended) scheduler.position.Gap {
+    if (ended == .stop) return switch (ended.stop) {
+        .watchpoint, .unit_watch => .retired,
+        else => .polled,
+    };
+    return .retired;
 }

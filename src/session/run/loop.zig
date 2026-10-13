@@ -77,9 +77,10 @@ pub const Loop = struct {
     /// Run `image` from `vector_base` until its budget or one of `ends`.
     /// `said` takes the boot lines and `out` the ITM console. `cpu1` is the
     /// second core the application brought up, or null.
-    pub fn run(self: *Loop, said: anytype, out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, cpu1: ?*second_core.zig.run.Driver, ends: Ends) !void {
-        self.clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .state = options.state, .cpu1 = cpu1, .image_identity = zig_snapshot.imageIdentity(image.bytes) };
+    pub fn run(self: *Loop, said: anytype, out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, cpu1: ?*second_core.zig.run.Driver, cpu1_identity: ?[16]u8, ends: Ends) !void {
+        self.clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .state = options.state, .cpu1 = cpu1, .image_identity = zig_snapshot.imageIdentity(image.bytes), .cpu1_image_identity = cpu1_identity };
         const clock = &self.clock;
+        if (options.state.wanted()) _ = clock.snapshotBinding();
         var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
         if (ends.policy) |asked| if (asked.soak.armed) soak_symbols.resolve(image, &asked.soak.threads);
         // --trace-rtos listens in front of the core (src/session/rtos/zig.zig).
@@ -94,8 +95,10 @@ pub const Loop = struct {
         var stacks = stack_profile.Run.of(profile_table, image, options.budget, &clock.wall_cycles, if (self.tracer) |*found| &found.trace else null);
         var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
         if (options.console) try itm_console.prime(clock.memory, &itm_port);
+        var edge = try fault_file.boundary(ends.schedule, clock.boundary());
+        edge.saved = &clock.saved;
         self.status = try boot.start(said, options.cpu, clock.memory.asInitiator(.cpu0), &board.bus, vector_base, options.budget, &self.ran, .{
-            .boundary = try fault_file.boundary(ends.schedule, clock.boundary()),
+            .boundary = edge,
             .partitions = &board.partitions,
             .idau = &board.idau,
             .regions = &board.regions,

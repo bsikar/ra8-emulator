@@ -150,16 +150,15 @@ const State = struct {
         const selected = self.session.currentCore();
         try self.session.switchTo(.cpu0);
         defer self.session.switchTo(selected) catch {};
-        const started = self.board.time.base.now();
-        const deadline = started +| max_ns;
+        const deadline = (try self.session.now()) +| max_ns;
         const budget = self.session.live.budget;
         defer self.session.live.budget = budget;
-        while (self.board.time.base.now() < deadline) {
-            const remaining = self.board.time.base.cyclesUntil(deadline);
+        while ((try self.session.now()) < deadline) {
+            const remaining = self.board.time.base.cyclesUntil(deadline) -| self.edge.saved.stretch.carry;
             self.session.live.budget = @max(1, @min(budget, remaining));
-            const before = self.board.time.base.now();
+            const before = try self.session.now();
             _ = try self.session.run(.cpu0, .cont);
-            if (self.board.time.base.now() <= before) return error.NoVirtualProgress;
+            if ((try self.session.now()) <= before) return error.NoVirtualProgress;
         }
     }
 };
@@ -389,7 +388,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
-    state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance });
+    state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance, .session = &state.session });
     errdefer state.display.deinit();
     state.display.settled.window_ns = options.settle_window_ns;
     state.display.watch.events = &state.session.event_sources;

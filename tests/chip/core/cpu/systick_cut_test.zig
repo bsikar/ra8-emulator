@@ -4,6 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const bus = ra8.chip.core.cpu.bus;
 const Cut = ra8.chip.core.cpu.cpu.systick_cut.Cut;
+const Pending = ra8.chip.core.cpu.cpu.systick_cut.Pending;
 const Clocks = ra8.chip.periph.clocks.Clocks;
 const Words = ra8.chip.periph.clocks.Words;
 
@@ -50,6 +51,50 @@ fn store(cut: *Cut, ram: *Ram, address: u32, value: u32) !void {
 
 const csr = (Words{}).csr;
 const rvr = (Words{}).rvr;
+const cvr = (Words{}).cvr;
+
+test "cut tail zero old reload remains legal with either ENABLE state" {
+    for ([_]u8{ 0, 1, 2, 3 }) |control| {
+        try std.testing.expect((Pending{ .old_control = control }).valid());
+        try std.testing.expectEqual(control & 1 != 0, (Pending{ .old_control = control, .old_reload = 9 }).valid());
+        var ram: Ram = .{};
+        var clock: Clocks = .{};
+        var cut: Cut = .{ .clocks = .{ &clock, null } };
+        try ram.view().write(csr, &word(control));
+        try store(&cut, &ram, rvr, 9);
+        if (control & 1 == 0) try store(&cut, &ram, csr, control | 1);
+        const pending = cut.takePending().?;
+        try std.testing.expect(pending.valid());
+        try std.testing.expectEqual(@as(u32, 0), pending.old_reload);
+        try std.testing.expectEqual(control, pending.old_control);
+    }
+}
+
+test "cut tail CVR before or after rearm retains the first counter" {
+    for ([_]bool{ false, true }) |counter_first| {
+        var ram: Ram = .{};
+        var clock: Clocks = .{};
+        var slot: u64 = 4;
+        var cut: Cut = .{ .clocks = .{ &clock, null }, .instruction = &slot };
+        try ram.view().write(csr, &word(5));
+        try ram.view().write(rvr, &word(9));
+        try ram.view().write(cvr, &word(8));
+        if (counter_first) try store(&cut, &ram, cvr, 0);
+        try store(&cut, &ram, csr, 7);
+        try store(&cut, &ram, rvr, 4);
+        if (!counter_first) try store(&cut, &ram, cvr, 0);
+        const pending = cut.takePending().?;
+        try std.testing.expect(pending.valid());
+        try std.testing.expect(pending.current_written);
+        try std.testing.expectEqual(@as(u32, 8), pending.old_current);
+        try std.testing.expectEqual(@as(u8, 1), pending.old_control);
+        slot += 1;
+        try store(&cut, &ram, rvr, 6);
+        const next = cut.takePending().?;
+        try std.testing.expect(!next.current_written);
+        try std.testing.expectEqual(@as(u32, 0), next.old_current);
+    }
+}
 
 test "starting the counter with a reload staged cuts the stretch once" {
     var ram: Ram = .{};
@@ -60,6 +105,8 @@ test "starting the counter with a reload staged cuts the stretch once" {
     try store(&cut, &ram, csr, 0x7);
     try std.testing.expect(cut.fired);
     try std.testing.expectEqual(@as(u64, 1), clock.rearms);
+    try std.testing.expectEqual(Pending.Bank.secure, cut.pending.?.bank);
+    try std.testing.expectEqual(@as(u32, 0), cut.pending.?.old_reload);
     try std.testing.expect(cut.take());
     try std.testing.expect(!cut.take());
     try std.testing.expect(!clock.restart);
@@ -75,6 +122,7 @@ test "a running counter cuts only when its reload moves" {
     try store(&cut, &ram, rvr, 8399);
     try std.testing.expect(!cut.fired);
     try store(&cut, &ram, rvr, 4199);
+    try std.testing.expectEqual(@as(u32, 8399), cut.pending.?.old_reload);
     try std.testing.expect(cut.take());
 }
 
@@ -88,6 +136,7 @@ test "the Non-secure timer is watched at its own words" {
     try std.testing.expect(cut.fired);
     try std.testing.expectEqual(@as(u64, 0), secure.rearms);
     try std.testing.expectEqual(@as(u64, 1), non_secure.rearms);
+    try std.testing.expectEqual(Pending.Bank.non_secure, cut.pending.?.bank);
 }
 
 test "a narrow store never cuts" {
@@ -98,4 +147,28 @@ test "a narrow store never cuts" {
     const half = [_]u8{ 0x07, 0x00 };
     try cut.see(ram.view(), csr, &half);
     try std.testing.expect(!cut.fired);
+}
+
+test "multiple stores retain the first state of their instruction" {
+    var ram: Ram = .{};
+    var clock: Clocks = .{};
+    var slot: u64 = 2;
+    var cut: Cut = .{ .clocks = .{ &clock, null }, .instruction = &slot };
+    try store(&cut, &ram, rvr, 9);
+    try store(&cut, &ram, csr, 7);
+    try store(&cut, &ram, rvr, 4);
+    try std.testing.expectEqual(@as(u32, 0), cut.pending.?.old_reload);
+    try std.testing.expectEqual(@as(u8, 0), cut.pending.?.old_control);
+    try std.testing.expectEqual(@as(u64, 2), clock.rearms);
+    _ = cut.takePending();
+
+    slot += 1;
+    try store(&cut, &ram, rvr, 9);
+    try store(&cut, &ram, csr, 5);
+    _ = cut.takePending();
+    slot += 1;
+    try store(&cut, &ram, csr, 7);
+    try store(&cut, &ram, rvr, 4);
+    try std.testing.expectEqual(@as(u32, 9), cut.pending.?.old_reload);
+    try std.testing.expectEqual(@as(u8, 5 & 3), cut.pending.?.old_control);
 }

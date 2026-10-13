@@ -12,8 +12,14 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 /// Open `driver` on the image at `path`. The bytes are written into CPU1's
 /// store before this returns, so they are freed here.
 pub fn open(driver: *Driver, allocator: std.mem.Allocator, io: std.Io, wiring: Wiring, path: []const u8, memory: Guest) !void {
+    _ = try openIdentified(driver, allocator, io, wiring, path, memory);
+}
+
+/// Open CPU1 and return the identity of the exact ELF bytes it consumed.
+pub fn openIdentified(driver: *Driver, allocator: std.mem.Allocator, io: std.Io, wiring: Wiring, path: []const u8, memory: Guest) ![16]u8 {
     const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
     defer allocator.free(bytes);
     const loaded = try loader.read(try elf.Image.init(bytes));
     try driver.open(wiring, loaded.image(), memory);
+    return @import("ra8_board").snapshot.run.imageIdentity(bytes);
 }

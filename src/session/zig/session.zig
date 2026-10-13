@@ -4,10 +4,9 @@
 //! printers and the unwinder the Zig core, so `registers`, `x`, `print`
 //! and `bt` read the core.
 //!
-//! With CPU1 attached (RA8EMU-337) the other core is parked in `other`,
-//! and switchTo swaps it in. As in session.zig, only the selected core
-//! runs; the other holds where it stopped: gdb's all-stop with the
-//! scheduler locked.
+//! With a board boundary both cores follow one saved round. Selection
+//! changes the view, while all-stop preserves the current round phase.
+//! A bare core without a boundary retains its standalone driver.
 const zig_core = @import("core.zig");
 const zig_cycles = @import("cycles.zig");
 const zig_drive = @import("drive.zig");
@@ -15,6 +14,8 @@ const zig_boundary = @import("boundary.zig");
 const core_view = @import("../core_view.zig");
 const stop_machine = @import("../stop_machine.zig");
 const watch_bus = @import("../watch/bus.zig");
+const scheduler = @import("ra8_chip").core.scheduler;
+const round = @import("round.zig");
 
 pub const Error = error{ AlreadyRunning, CoreNotAttached, BoundaryFailed };
 
@@ -51,6 +52,8 @@ pub const ZigSession = struct {
     /// The board's boundary, passed whichever core runs (RA8EMU-709). Null
     /// runs the core alone, as a bare-core session does.
     boundary: ?zig_boundary.Boundary = null,
+    saved: scheduler.State = .{},
+    ended_index: u8 = 0,
 
     /// Give the session to CPU `index`. The core left behind holds where
     /// it stopped, with its own breaks, watches and clock.
@@ -69,6 +72,7 @@ pub const ZigSession = struct {
 
     /// Arm the machine for `command`, then run.
     pub fn go(self: *ZigSession, command: Command) Error!zig_drive.Ended {
+        if (self.boundary) |edge| if (self.index == 1 and edge.pair == null) return Error.CoreNotAttached;
         switch (command) {
             .run => {
                 if (self.started) return Error.AlreadyRunning;
@@ -80,12 +84,32 @@ pub const ZigSession = struct {
             .finish => self.machine.stepOut(self.core.register(.lr), self.core.register(.sp)),
         }
         self.started = true;
+        self.ended_index = self.index;
         const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
-        return zig_boundary.run(self.core, self.machine, self.budget, self.watch, &self.clock, edge);
+        const target: ?round.Target = if (command == .step) .{ .core = @intCast(self.index), .slots = self.core.cpu.slots + 1 } else null;
+        if (self.other) |*other| {
+            if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
+            other.started = true;
+        }
+        return round.run(self, edge, target);
     }
 
     /// The core as the printers and the unwinder read it.
     pub fn view(self: ZigSession) core_view.View {
         return .{ .zig = self.core };
+    }
+
+    /// Replay toward C_S(target), using the caller's bounded CPU0-time budget.
+    /// A phase-end count is reached in the next eligible turn of that core.
+    pub fn runToCount(self: *ZigSession, core: u1, target: u64) Error!zig_drive.Ended {
+        const edge = self.boundary orelse return Error.BoundaryFailed;
+        if (core == 1 and (self.other == null or edge.pair == null)) return Error.CoreNotAttached;
+        self.machine.begin();
+        self.started = true;
+        if (self.other) |*other| {
+            other.machine.begin();
+            other.started = true;
+        }
+        return round.run(self, edge, .{ .core = core, .slots = target });
     }
 };

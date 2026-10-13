@@ -45,11 +45,14 @@ pub const Cpu1 = struct {
         self.watching = .{ .inner = cpu1.bus, .driver = &self.driver };
         cpu1.bus = self.watching.view();
         exclusive_peer.pair(opened.primaryCpu(), cpu1);
+        @import("ra8_chip").core.scheduler.pairEvents(opened.primaryCpu(), cpu1);
         self.paired = opened.primaryCpu();
         const live = opened.session();
         live.live.other = .{ .core = .{ .cpu = cpu1 }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = live.live.budget };
         opened.attachCore(.cpu1, cpu1, self.pair.guest());
         opened.bindSecondDriver(&self.pair);
+        opened.state.edge.pair = &self.pair;
+        if (live.live.boundary) |*edge| edge.pair = &self.pair;
         try live.load(.cpu1, self.bytes);
         try live.switchTo(.cpu0);
     }
@@ -93,7 +96,10 @@ pub const Cpu1 = struct {
     }
 
     pub fn close(self: *Cpu1, allocator: std.mem.Allocator) void {
-        if (self.paired) |cpu0| exclusive_peer.unpair(cpu0, &self.pair.core.cpu);
+        if (self.paired) |cpu0| {
+            exclusive_peer.unpair(cpu0, &self.pair.core.cpu);
+            cpu0.event_sender = null;
+        }
         if (self.image != null) self.pair.close();
         allocator.free(self.bytes);
         self.* = .{};

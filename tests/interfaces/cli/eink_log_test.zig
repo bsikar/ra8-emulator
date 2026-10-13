@@ -5,6 +5,7 @@ const cli_app = @import("cli_app");
 const eink_log = cli_app.eink_log;
 const eink = ra8.components.eink;
 const proto = ra8.components.eink.wire;
+const Rig = @import("../../session/board/attachments_test.zig").Rig;
 
 fn word(panel: *eink.Panel, value: u16) void {
     _ = panel.exchange(@intCast(value >> 8));
@@ -64,4 +65,23 @@ test "scripted full and partial refreshes produce JSONL and totals by waveform" 
     try std.testing.expect(std.mem.indexOf(u8, lines.next().?, "\"virtual_time_ns\":") != null);
     try std.testing.expect(std.mem.indexOf(u8, lines.next().?, "\"waveform\":3") != null);
     try std.testing.expect(std.mem.indexOf(u8, lines.next().?, "\"full\":false") != null);
+}
+
+test "recorder follows a replaced named panel and detaches before owner cleanup" {
+    const rig = try Rig.create();
+    defer rig.destroy();
+    const at: ra8.components.endpoint.Endpoint = .{ .spi = .{ .channel = 1, .select = 2 } };
+    try rig.plugs.set(at, "eink");
+    var recorder = eink_log.Run.init(std.testing.allocator, &rig.board);
+    defer recorder.deinit();
+    recorder.arm();
+    var saved = try rig.save();
+    defer saved.deinit();
+    rig.board.asks.attached_eink.?.planes.geometry.width = 1;
+    try rig.restore(saved.written());
+    const panel = rig.board.asks.attached_eink.?;
+    const geometry = panel.planes.geometry;
+    refresh(panel, 0, 0, geometry.width, geometry.height, 2);
+    try std.testing.expectEqual(@as(usize, 1), recorder.entries.items.len);
+    try std.testing.expect(recorder.entries.items[0].full);
 }

@@ -69,12 +69,16 @@ pub const Clock = run_loop.Clock;
 pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: cli.Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, ends: Ends) !u8 {
     var pair: second_core.zig.run.Driver = undefined;
     var cpu1: ?*second_core.zig.run.Driver = null;
+    var cpu1_identity: ?[16]u8 = null;
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
-        if (!openSecond(&pair, io, board, named, memory, options.blocks)) return 1;
+        cpu1_identity = openSecond(&pair, io, board, named, memory, options.blocks) orelse return 1;
         cpu1 = &pair;
         rtos_hook.second.armZig(&pair, io, options.rtosWanted(), named);
     }
     defer if (cpu1) |second| second.close();
+    var loop: run_loop.Loop = .{};
+    var loop_open = false;
+    defer if (loop_open) loop.clock.deinitSnapshot();
     var eink_recorder = eink_log.Run.init(std.heap.page_allocator, board);
     if (options.frames.eink_log != null) eink_recorder.arm();
     defer eink_recorder.deinit();
@@ -82,8 +86,8 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     audio.arm(board, if (options.cpu == .zig) options.audio else .{});
     defer audio.deinit();
     const budget = options.budgetFor(ends.stop != null);
-    var loop: run_loop.Loop = .{};
-    try loop.run(BootWriter{ .output = out, .quiet = options.ctl_cpu_load }, out, io, memory, board, timebase, image, loopOptions(options, budget), vector_base, profile_table, until, cpu1, ends);
+    loop_open = true;
+    try loop.run(BootWriter{ .output = out, .quiet = options.ctl_cpu_load }, out, io, memory, board, timebase, image, loopOptions(options, budget), vector_base, profile_table, until, cpu1, cpu1_identity, ends);
     const clock = &loop.clock;
     const final = &loop.final;
     const status = loop.status;
@@ -152,17 +156,17 @@ fn finishEinkLog(out: *std.Io.Writer, io: std.Io, options: cli.Options, recorder
 
 /// Bring CPU1 up from `named`, with its block cache when asked; false once
 /// the reason it could not is printed.
-fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool) bool {
-    @import("ra8_session").cpu1.image.open(pair, std.heap.page_allocator, io, board_wiring.cpu1(board), named, memory) catch |err| {
+fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool) ?[16]u8 {
+    const identity = @import("ra8_session").cpu1.image.openIdentified(pair, std.heap.page_allocator, io, board_wiring.cpu1(board), named, memory) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
-        return false;
+        return null;
     };
     if (blocks) pair.core.useBlocks() catch |err| {
         pair.close();
         std.debug.print("cannot give the second core its block cache: {s}\n", .{@errorName(err)});
-        return false;
+        return null;
     };
-    return true;
+    return identity;
 }
 
 /// The flag-asked dumps of a text run, in the engine report's order

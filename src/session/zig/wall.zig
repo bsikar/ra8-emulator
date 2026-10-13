@@ -7,6 +7,7 @@ const std = @import("std");
 const backing = @import("ra8_board").external.backing;
 const clocks = @import("ra8_chip").periph.clocks;
 const Clock = @import("../run/clock.zig").Clock;
+const board_boundary = @import("../board/boundary.zig");
 
 /// Charge `instructions` retired by CPU0 to both cores and the board.
 pub fn close(clock: *Clock, instructions: u32) !void {
@@ -18,25 +19,30 @@ pub fn close(clock: *Clock, instructions: u32) !void {
     } else instructions;
     const fabric = backing.fabricOf(clock.memory.store);
     const cpu0_stall = if (fabric) |unit| unit.takePending(.cpu0) else 0;
-    if (clock.cpu1) |second| if (rate_scaled)
-        second.roundAt(instructions, clock.boundary_hz.?)
-    else
-        second.round(instructions);
+    if (clock.cpu1) |second| if (!clock.saved.cut) {
+        const before = second.core.cpu.slots;
+        if (rate_scaled)
+            second.roundAt(instructions, clock.boundary_hz.?)
+        else
+            second.round(instructions);
+        clock.saved.lengths[1] += @intCast(second.core.cpu.slots - before);
+    };
     const cpu1_stall = if (fabric) |unit| unit.takePending(.cpu1) else 0;
     const ethos_stall = if (fabric) |unit| unit.takePending(.ethos_u55) else 0;
-    const cpu1_ran = if (clock.cpu1) |second| second.last_ran else 0;
+    const cpu1_ran = if (clock.cpu1) |second| if (clock.saved.cut) @as(u64, 0) else second.last_ran else 0;
     const duration = @max(@max(cycles +| cpu0_stall, cpu1_ran +| cpu1_stall), ethos_stall);
     if (clock.cpu1) |second| second.advanceTime(duration -| cpu1_ran);
     clock.wall_cycles +|= duration;
     if (fabric) |unit| unit.setWall(clock.wall_cycles);
     var left = duration;
+    var pending_cut = clock.saved.cut_pending;
     while (left != 0) {
         const piece: u32 = @intCast(@min(left, std.math.maxInt(u32)));
-        try clock.timebase.advance(clock.memory, piece);
-        try clock.ns_timebase.advanceSysTick(clock.memory, piece);
+        try board_boundary.charge(clock.timebase, &clock.ns_timebase, clock.memory, piece, clock.saved.cut, &pending_cut);
         try clock.board.tick(clock.memory, piece);
         left -= piece;
     }
+    if (clock.board.reboot) |pending| if (pending.requested) clock.board.events.clearLatches();
     clock.accounted += instructions;
     clock.resume_boundary = false;
     clock.resume_unscaled = false;
@@ -48,9 +54,10 @@ pub fn close(clock: *Clock, instructions: u32) !void {
 /// fabric service owed with nothing retired: vector reads, a faulting
 /// fetch, or a synchronous NPU command.
 pub fn finish(clock: *Clock, ran: u64) !void {
-    while (clock.accounted < ran) {
-        const piece: u32 = @intCast(@min(ran - clock.accounted, std.math.maxInt(u32)));
-        try close(clock, piece);
+    _ = ran;
+    if (clock.saved.stretch.carry != 0) {
+        try close(clock, clock.saved.stretch.carry);
+        clock.saved.next();
     }
     try close(clock, 0);
 }

@@ -18,7 +18,14 @@ pub const magic = "RA8SNAP\x00".*;
 /// Version 7 saves the configured GLCDC vsync phase and counters.
 /// Version 8 requires the typed attachment graph: catalog parts, topology and
 /// fault wrappers. A version 7 file has none and is refused before decoding.
-pub const version: u32 = 8;
+/// Version 9 saves the frozen scheduler interval and an open CPU1 turn.
+/// Version 10 adds the cut timer's pre-store bank and reload to the grid.
+/// Version 9 snapshots cannot restore an in-flight cut without losing time.
+/// Version 11 also saves its pre-instruction ENABLE and TICKINT bits.
+/// Version 10 cannot restore multiple SysTick stores in one instruction.
+/// Version 12 saves an overwritten pre-instruction CVR and its write marker.
+/// Version 11 loses that counter when one instruction also stores CVR.
+pub const version: u32 = 12;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated, DuplicateSection };
 
@@ -83,6 +90,7 @@ pub const Kind = enum(u32) {
     board_inputs = 32,
     session_runtime = 33,
     attachments = 34,
+    grid = 35,
     _,
 };
 

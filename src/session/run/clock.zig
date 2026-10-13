@@ -24,6 +24,36 @@ const break_sym = @import("../zig/break_sym.zig");
 const undefined_sites = @import("../zig/undefined_sites.zig");
 const state_options = @import("../state_options.zig");
 const wall = @import("../zig/wall.zig");
+const scheduler = @import("ra8_chip").core.scheduler;
+const attachments = @import("../board/attachments.zig");
+const attachment_ownership = @import("../board/attachment_ownership.zig");
+const Plugs = @import("../board/plug.zig").Plugs;
+const Faults = @import("../board/faults/faults.zig").Faults;
+
+const SnapshotOwner = struct {
+    arena: std.heap.ArenaAllocator,
+    plugs: Plugs,
+    faults: Faults,
+
+    fn init(board: *Board) SnapshotOwner {
+        const allocator = board.asks.arena orelse board.bus.cells.allocator;
+        return .{
+            .arena = .init(board.bus.cells.allocator),
+            .plugs = Plugs.init(board, allocator),
+            .faults = Faults.init(board, allocator),
+        };
+    }
+
+    fn binding(self: *SnapshotOwner) attachments.Binding {
+        return .{ .arena = &self.arena, .plugs = &self.plugs, .faults = &self.faults };
+    }
+
+    fn deinit(self: *SnapshotOwner) void {
+        attachment_ownership.destroyStartup(self.plugs.board, &self.plugs);
+        self.plugs.deinit();
+        self.arena.deinit();
+    }
+};
 
 /// The board side of a Zig-core boundary.
 pub const Clock = struct {
@@ -54,6 +84,7 @@ pub const Clock = struct {
     state: state_options.Options = .{},
     /// Identity of the loaded ELF, fixed before executing or restoring.
     image_identity: ?[16]u8 = null,
+    cpu1_image_identity: ?[16]u8 = null,
     resume_boundary: bool = false,
     resume_unscaled: bool = false,
     /// Rates selected when the current boundary opened.
@@ -63,9 +94,21 @@ pub const Clock = struct {
     /// already closed into it.
     wall_cycles: u64 = 0,
     accounted: u64 = 0,
+    saved: scheduler.State = .{},
+    snapshot_owner: ?SnapshotOwner = null,
+
+    pub fn snapshotBinding(self: *Clock) attachments.Binding {
+        if (self.snapshot_owner == null) self.snapshot_owner = SnapshotOwner.init(self.board);
+        return (&self.snapshot_owner.?).binding();
+    }
+
+    pub fn deinitSnapshot(self: *Clock) void {
+        if (self.snapshot_owner) |*owner| owner.deinit();
+        self.snapshot_owner = null;
+    }
 
     pub fn boundary(self: *Clock) boot.Boundary {
-        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .abortFn = abortThunk, .cyclesFn = cyclesThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .sleepFn = if (self.idle_skip) sleepThunk else null };
+        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .abortFn = abortThunk, .cyclesFn = cyclesThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .saved = &self.saved };
     }
 
     /// A sleeping CPU0's width: to the nearest armed SysTick period, the
@@ -122,10 +165,11 @@ pub const Clock = struct {
     }
     /// The chunk, cut down so a stretch never swallows a SysTick wrap.
     pub fn width(self: *Clock) u32 {
-        const period_cycles = systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory));
-        const period: u32 = @intCast(@min(self.instructionsForCycles(period_cycles), std.math.maxInt(u32)));
-        if (period != 0 and period < self.timebase.per_chunk) return period;
-        return self.timebase.per_chunk;
+        if (self.saved.stretch.full == 0) self.saved.base[1] = if (self.cpu1) |second| second.core.cpu.slots else 0;
+        var edges: [6]u64 = undefined;
+        for (edges[0..5], 0..) |*edge, which| edge.* = self.instructionsForCycles(self.edgeCycles(which));
+        edges[5] = if (self.board.input_script.nextDue()) |at| self.instructionsForCycles(self.board.time.base.cyclesUntil(at)) else 0;
+        return scheduler.stretch.width(self.timebase.per_chunk, &edges, self.idle_skip and self.cpu1 == null and quiet_due.quietUntilDue(self.board));
     }
     fn instructionsForCycles(self: *Clock, cycles: u64) u64 {
         if (cycles == 0 or !self.rateScaled()) return cycles;

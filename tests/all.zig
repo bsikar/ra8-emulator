@@ -10,6 +10,7 @@ test {
     _ = @import("session/harness/harness_test.zig");
     _ = @import("session/harness/files_test.zig");
     _ = @import("session/board/state_test.zig");
+    _ = @import("session/board/grid_test.zig");
     _ = @import("session/harness/snapshot_inventory_test.zig");
     _ = @import("board/snapshot/inputs_test.zig");
     _ = @import("session/harness/stacks_test.zig");
@@ -39,6 +40,12 @@ test {
     _ = @import("chip/core/cpu/memory/all_test.zig");
     _ = @import("chip/core/cpu/cpu_test.zig");
     _ = @import("chip/core/cpu/count_test.zig");
+    _ = @import("chip/core/scheduler/position_test.zig");
+    _ = @import("chip/core/scheduler/scheduler_test.zig");
+    _ = @import("chip/core/scheduler/stretch_test.zig");
+    _ = @import("session/zig/round_test.zig");
+    _ = @import("session/zig/wall_test.zig");
+    _ = @import("session/zig/cut_bus_test.zig");
     _ = @import("chip/core/cpu/exception/reset_scs_test.zig");
     _ = @import("chip/core/cpu/decode/decode_test.zig");
     _ = @import("chip/core/cpu/decode/cache_test.zig");

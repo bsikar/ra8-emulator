@@ -7,6 +7,23 @@ const Machine = ra8.session.stop_machine.Machine;
 const session_view = ra8.session.view;
 const zig_session = ra8.session.step_hook.zig.session;
 
+const NoTick = struct {
+    fn tick(_: *anyopaque, _: u32) anyerror!void {
+        return error.UnexpectedTick;
+    }
+};
+
+test "grid strict an unattached canonical core is refused before any turn or tick" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine: Machine = .{};
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100, .boundary = .{ .context = &cpu, .tickFn = NoTick.tick } };
+    try std.testing.expectError(zig_session.Error.CoreNotAttached, session.runToCount(1, 1));
+    try std.testing.expectEqual(@as(u64, 0), cpu.slots);
+    try std.testing.expect(!session.started);
+}
+
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
     bytes: [64]u8,

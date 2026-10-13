@@ -54,6 +54,36 @@ const LoadLog = struct {
     }
 };
 
+test "grid strict register memory unit and point reads preserve the selected core" {
+    var memory0 = Ram.init();
+    var memory1 = Ram.init();
+    var cpu0: Cpu = .{ .bus = memory0.view() };
+    var cpu1: Cpu = .{ .bus = memory1.view() };
+    try cpu0.reset(0);
+    try cpu1.reset(0);
+    var m0: Machine = .{};
+    var m1: Machine = .{};
+    var session: api.Session = .{ .live = .{ .core = .{ .cpu = &cpu0 }, .machine = &m0, .budget = 17, .other = .{ .core = .{ .cpu = &cpu1 }, .machine = &m1, .budget = 31 } } };
+    const point = try session.setBreakpoint(.cpu1, .{ .address = 14 });
+    const watch = try session.setWatchpoint(.cpu1, .{ .first = 32, .last = 35, .kind = .write });
+    try session.switchTo(.cpu0);
+    _ = try session.register(.cpu1, .pc);
+    var bytes: [2]u8 = undefined;
+    try session.read(.cpu1, 8, &bytes);
+    _ = try session.view(.cpu1);
+    try std.testing.expect(try session.machine(.cpu1) == &m1);
+    try std.testing.expect(try session.itmPort(.cpu1) == &m1.itm);
+    try std.testing.expect(try session.breakpointExists(.cpu1, point));
+    try std.testing.expectEqual(ra8.session.watch.table.Kind.write, (try session.watchKind(.cpu1, watch)).?);
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+    try session.flushItm(.cpu1, &out.writer, true);
+    try std.testing.expectEqual(api.Core.cpu0, session.currentCore());
+    try std.testing.expectEqual(@as(u64, 17), session.live.budget);
+    try std.testing.expectEqual(@as(u64, 0), cpu0.slots);
+    try std.testing.expectEqual(@as(u64, 0), cpu1.slots);
+}
+
 const ClockBoard = struct {
     base: *timebase.TimeBase,
 
@@ -168,7 +198,8 @@ test "one API loads and drives CPU0 and CPU1 with per-core registers, memory, an
     try std.testing.expectEqual(.stepped, std.meta.activeTag(ended0.stop));
     try std.testing.expectEqual(@as(u32, 0x0A), try session.register(.cpu0, .pc));
     _ = try session.register(.cpu1, .pc);
-    try std.testing.expectEqual(@as(u64, 2_000_000), session.live.budget);
+    try std.testing.expectEqual(api.Core.cpu0, session.currentCore());
+    try std.testing.expectEqual(@as(u64, 100), session.live.budget);
     var queued_events: [32]api.Event = undefined;
     const observed = session.pollEvents(observer, &queued_events).?;
     try std.testing.expect(observed.count >= 8);

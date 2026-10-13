@@ -33,6 +33,7 @@ const mpu_check = @import("mpu_check.zig");
 const Source = @import("exception/source.zig").Source;
 const Until = @import("../until.zig").Until;
 const Reboot = @import("../reboot.zig").Reboot;
+const scheduler = @import("../scheduler/scheduler.zig");
 /// The register file a `--cpu zig` run hands back when it ends.
 pub const Regs = @import("regs.zig").Regs;
 
@@ -60,6 +61,8 @@ pub const Boundary = struct {
     /// nothing to wake it, and returns the width it gets (`--idle-skip`,
     /// RA8EMU-185). Null keeps every stretch at `widthFn`.
     sleepFn: ?*const fn (context: *anyopaque, normal: u32) u32 = null,
+    /// The open interval survives caller budgets and stops.
+    saved: ?*scheduler.State = null,
 };
 
 /// A debugger listening to a `--cpu zig` run: handed the bus and the
@@ -188,8 +191,14 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         .{ .bus = quiet.bus(), .source = quiet.source(), .quiet = &quiet };
     if (wrap == null) pending.clear_due = &quiet.clear_due;
     pending.banked = &cpu.banked;
-    if (watch.peer) |other| exclusive_peer.pair(&cpu, other);
-    defer if (watch.peer) |other| exclusive_peer.unpair(&cpu, other);
+    if (watch.peer) |other| {
+        exclusive_peer.pair(&cpu, other);
+        scheduler.pairEvents(&cpu, other);
+    }
+    defer if (watch.peer) |other| {
+        exclusive_peer.unpair(&cpu, other);
+        other.event_sender = null;
+    };
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
     const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
@@ -239,7 +248,10 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     };
     const stopped = try stretches(&cpu, budget, boundary, until, &owed, watch.snapshot);
     if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu, owed.out);
-    if (owed.out != 0) if (boundary) |edge| try edge.closeFn(edge.context, owed.out);
+    if (owed.out != 0) if (boundary) |edge| {
+        try edge.closeFn(edge.context, owed.out);
+        if (edge.saved) |saved| saved.next();
+    };
     if (ran) |count| count.* = cpu.retired;
     if (final) |into| into.* = cpu.regs;
     const code = try report(out, cpu, stopped);
@@ -254,36 +266,49 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
 /// stops inside is not closed: it never ran to its edge. `owed` carries a
 /// stretch across a save and a load (RA8EMU-700).
 pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until, owed: *Owed, snapshot: ?Snapshot) !cpu_mod.Stop {
+    _ = until;
     const edge = boundary orelse return cpu.run(budget);
+    if (cpu.cut) |latch| latch.instruction = &cpu.slots;
+    var local: scheduler.State = .{};
+    const saved = edge.saved orelse &local;
+    if (saved.stretch.full == 0) saved.stretch.carry = owed.in;
+    owed.out = 0;
     var left = budget;
-    var carry = owed.in;
     while (left > 0) {
-        const full = widthOf(cpu, edge);
-        if (carry >= full) {
-            try edge.closeFn(edge.context, carry);
-            carry = 0;
+        // A loaded run can begin after CPU0 already finished this interval.
+        if (saved.cut or saved.at.phase != .cpu0) {
+            if (saved.at.phase == .cpu0) saved.endCpu0(true, false);
+            if (saved.at.phase == .cpu1) saved.endCpu0(false, false);
+            try edge.closeFn(edge.context, saved.stretch.carry);
+            saved.next();
+            if (edge.doneFn) |done| if (done(edge.context)) return .count;
+            if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
+            if (snapshot) |hook| try midway(hook, cpu);
             continue;
         }
-        const width: u32 = @intCast(@min(left, full - carry));
-        const stopped = cpu.run(width);
-        if (until) |wait| if (wait.reached) return .count;
-        if (stopped != .count) return stopped;
-        // The firmware armed SysTick inside this stretch: charge it one instruction and no time, and cut the next
-        // stretch from the period now armed (RA8EMU-464). What the stretch carried in goes uncharged with it,
-        // so a loaded run hands those instructions back to its budget, as the run left whole never spent them (RA8EMU-701).
-        if (cpu.cut) |cut| if (cut.take()) {
-            if (edge.abortFn) |abort| abort(edge.context);
-            left = left - 1 + carry;
-            carry = 0;
-            continue;
-        };
-        left -= width;
-        if (left == 0 and owed.hold and carry + width < full) {
-            owed.out = carry + width;
+        if (saved.stretch.full == 0) saved.open(widthOf(cpu, edge), cpu.slots);
+        const width: u32 = @intCast(@min(left, saved.stretch.left()));
+        const before = cpu.slots;
+        const stopped = cpu.runToCount(width, cpu.slots + width);
+        const ran: u32 = @intCast(cpu.slots - before);
+        const elapsed = if (stopped == .count and cpu.waiting != null) width else ran;
+        saved.advance(elapsed, ran);
+        left -= elapsed;
+        const cut_pending = if (cpu.cut) |latch| latch.takePending() else null;
+        const cut = cut_pending != null;
+        saved.cut = cut;
+        saved.cut_pending = cut_pending orelse .{};
+        if (stopped != .count) {
+            owed.out = saved.stretch.carry;
+            return stopped;
+        }
+        if (!cut and saved.stretch.carry < saved.stretch.full) {
+            owed.out = saved.stretch.carry;
             return .count;
         }
-        try edge.closeFn(edge.context, carry + width);
-        carry = 0;
+        saved.endCpu0(cut, false);
+        try edge.closeFn(edge.context, saved.stretch.carry);
+        saved.next();
         if (edge.doneFn) |done| if (done(edge.context)) return .count;
         if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
         if (snapshot) |hook| try midway(hook, cpu);
@@ -301,9 +326,9 @@ fn midway(hook: Snapshot, cpu: *const cpu_mod.Cpu) !void {
 /// The next stretch's width: the boundary's, reached to the next edge by
 /// its `sleepFn` while the core sleeps with nothing to wake it.
 fn widthOf(cpu: *cpu_mod.Cpu, edge: Boundary) u32 {
+    _ = cpu;
     const normal = @max(1, edge.widthFn(edge.context));
     const reach = edge.sleepFn orelse return normal;
-    if (!sleep_pace.still(cpu)) return normal;
     return @max(normal, reach(edge.context, normal));
 }
 

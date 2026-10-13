@@ -24,6 +24,9 @@ fn bring(driver: *Driver, board: *Board, program: []const u16) !void {
     driver.second = .{ .state = .{ .vector_base = vectors } };
     driver.wiring = null;
     driver.cycle_remainder = 0;
+    driver.turn_state = .{};
+    driver.last_ran = 0;
+    driver.ns_timebase = .{};
     driver.store = try Store.init(null);
     errdefer driver.close();
     const memory: Guest = .{ .store = &driver.store.? };
