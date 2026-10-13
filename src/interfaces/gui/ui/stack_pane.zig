@@ -13,7 +13,6 @@ const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const Theme = @import("colors.zig").Theme;
-const widget_paint = @import("ra8_render").widget_paint;
 const widget = @import("ra8_widget");
 
 const Color = draw_list.Color;
@@ -80,20 +79,18 @@ pub fn frameAt(area: Rect, snapshot: *const Snapshot, y: i32) ?usize {
     return row;
 }
 
-/// Draw the pane through the shared Paint table (RA8EMU-1159): the
+/// Draw the pane through the handed Paint table (RA8EMU-1157): the
 /// background and the selected-frame band fill dispatch through the table,
 /// and the text is the firmware's label widget, so no pane code emits raw
-/// glyph commands.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, snapshot: *const Snapshot, selected: usize) !void {
+/// glyph commands. The list clip the pane used to push is a documented
+/// temporary the table cannot carry until RA8FW-951; rows fit the width
+/// and the height they are handed.
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, snapshot: *const Snapshot, selected: usize) void {
     if (area.w < min_w or rows(area) == 0) return;
-    try list.pushClip(area);
-    defer list.popClip();
-    var target = widget_paint.Target{ .list = list };
-    const paint = target.paint();
-    fillArea(&paint, area, word(theme.background));
+    fillArea(table, area, word(theme.background));
     for (0..@min(rows(area), snapshot.count)) |row| {
-        if (row == selected) fillArea(&paint, rowRect(area, row), word(theme.band));
-        drawFrame(&paint, theme, area, row, &snapshot.frames[row], row == selected);
+        if (row == selected) fillArea(table, rowRect(area, row), word(theme.band));
+        drawFrame(table, theme, area, row, &snapshot.frames[row], row == selected);
     }
 }
 
