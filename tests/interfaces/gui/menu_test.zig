@@ -32,12 +32,16 @@ test "the Board menu lists the shipped profiles and the OS picker" {
 test "File opens an ELF, closes it and quits" {
     try std.testing.expectEqualStrings("Open ELF...", menu.file[0].label);
     try std.testing.expect(menu.file[0].action.eql(.{ .command = .open_elf }));
-    try std.testing.expect(menu.file[1].action.eql(.{ .command = .close }));
-    try std.testing.expectEqualStrings("Settings...", menu.file[2].label);
-    try std.testing.expect(menu.file[2].action.eql(.{ .command = .settings }));
-    try std.testing.expectEqual(@as(u8, ','), menu.file[2].shortcut.?.key);
-    try std.testing.expect(menu.file[3].action.eql(.{ .command = .quit }));
-    try std.testing.expect(menu.file[3].divided);
+    try std.testing.expectEqualStrings("Reload", menu.file[1].label);
+    try std.testing.expect(menu.file[1].action.eql(.{ .command = .reload }));
+    try std.testing.expectEqual(@as(?menu.Shortcut, null), menu.file[1].shortcut);
+    try std.testing.expectEqualStrings("Close", menu.file[2].label);
+    try std.testing.expect(menu.file[2].action.eql(.{ .command = .close }));
+    try std.testing.expectEqualStrings("Settings...", menu.file[3].label);
+    try std.testing.expect(menu.file[3].action.eql(.{ .command = .settings }));
+    try std.testing.expectEqual(@as(u8, ','), menu.file[3].shortcut.?.key);
+    try std.testing.expect(menu.file[4].action.eql(.{ .command = .quit }));
+    try std.testing.expect(menu.file[4].divided);
 }
 
 test "View toggles every pane kind but empty" {
@@ -50,7 +54,7 @@ test "View toggles every pane kind but empty" {
     try std.testing.expectEqual(@as(u8, '8'), menu.view[7].shortcut.?.key);
     for (menu.view) |item| switch (item.action) {
         .toggle => |kind| try std.testing.expect(kind != .empty),
-        .command, .choice => {},
+        .command, .choice, .recent => {},
     };
 }
 
@@ -99,7 +103,7 @@ test "a buffer too small for the text is an error" {
 }
 
 test "Quit leaves File on macOS only" {
-    const quit = menu.file[3];
+    const quit = menu.file[4];
     try std.testing.expect(!menu.shows(quit, .macos));
     try std.testing.expect(menu.shows(quit, .windows));
     try std.testing.expect(menu.shows(quit, .linux));

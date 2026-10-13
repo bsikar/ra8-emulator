@@ -12,7 +12,7 @@ pub const board_profiles = @import("shell/board_profiles.zig");
 const Kind = pane_layout.Kind;
 
 /// The fixed commands. Run, Pause and Step are the time bar's controls.
-pub const Command = enum { open_elf, open_profile, close, settings, quit, run, pause, step, reset, toggle_fullscreen };
+pub const Command = enum { open_elf, open_profile, close, settings, quit, run, pause, step, reset, toggle_fullscreen, reload };
 
 /// Pick a shipped board or panel profile (RA8EMU-1152). An empty panel
 /// stem means the board's own panel, "none" means no panel at all.
@@ -27,12 +27,16 @@ pub const Action = union(enum) {
     toggle: Kind,
     /// Open the shipped profile the choice names (RA8EMU-1152).
     choice: Choice,
+    /// The recent image the File drop-down numbered (RA8EMU-1153), newest
+    /// first.
+    recent: usize,
 
     pub fn eql(self: Action, other: Action) bool {
         return switch (self) {
             .command => |command| other == .command and other.command == command,
             .toggle => |kind| other == .toggle and other.toggle == kind,
             .choice => |choice| other == .choice and other.choice.kind == choice.kind and std.mem.eql(u8, other.choice.stem, choice.stem),
+            .recent => |at| other == .recent and other.recent == at,
         };
     }
 };
@@ -60,6 +64,7 @@ pub const Menu = struct {
 
 pub const file = [_]Item{
     .{ .label = "Open ELF...", .action = .{ .command = .open_elf }, .shortcut = .{ .key = 'O' } },
+    .{ .label = "Reload", .action = .{ .command = .reload } },
     .{ .label = "Close", .action = .{ .command = .close }, .shortcut = .{ .key = 'W' } },
     .{ .label = "Settings...", .action = .{ .command = .settings }, .shortcut = .{ .key = ',' } },
     .{ .label = "Quit", .action = .{ .command = .quit }, .shortcut = .{ .key = 'Q' }, .divided = true },
@@ -187,7 +192,7 @@ pub fn label(item: Item, state: State) []const u8 {
                 return if (state.fullscreen) "Exit Full Screen" else "Enter Full Screen";
             }
         },
-        .toggle, .choice => {},
+        .toggle, .choice, .recent => {},
     }
     return item.label;
 }
@@ -195,10 +200,10 @@ pub fn label(item: Item, state: State) []const u8 {
 /// Whether `action` can fire now. Disabled items draw muted and never fire.
 pub fn enabled(action: Action, state: State) bool {
     return switch (action) {
-        .toggle, .choice => true,
+        .toggle, .choice, .recent => true,
         .command => |command| switch (command) {
             .open_elf, .open_profile, .settings, .quit, .toggle_fullscreen => true,
-            .close, .reset => state.loaded,
+            .close, .reset, .reload => state.loaded,
             .run, .step => state.loaded and !state.running,
             .pause => state.running,
         },

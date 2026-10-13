@@ -10,6 +10,7 @@ const std = @import("std");
 const platform = @import("../platform.zig");
 const status_bar = @import("../status/bar.zig");
 const session_link = @import("../session_link.zig");
+const shell_recents = @import("recents.zig");
 
 const Status = status_bar.Status;
 const Link = session_link.Link;
@@ -20,6 +21,8 @@ pub const letter_o: u32 = 'o';
 pub const title_tail = " - ra8 emulator";
 /// Largest file read, as for the image on the command line.
 pub const max_image: usize = 64 * 1024 * 1024;
+/// Longest kept path, as in the recents list.
+pub const path_max: usize = 512;
 
 pub const Open = struct {
     io: std.Io,
@@ -28,6 +31,11 @@ pub const Open = struct {
     asked: bool = false,
     /// The image the window's title names.
     titled: ?status_bar.Image = null,
+    /// The recents list this open records into (RA8EMU-1153); null keeps none.
+    history: ?*shell_recents.List = null,
+    /// The loaded image's whole path, kept for Reload.
+    path_buf: [path_max]u8 = undefined,
+    path_len: usize = 0,
 
     /// Ask for the picker, as the menu's Open ELF item does.
     pub fn ask(self: *Open) void {
@@ -66,6 +74,21 @@ pub const Open = struct {
     /// refusal on the status strip, and the session's own answer follows
     /// the load the usual way.
     pub fn picked(self: *Open, path: []const u8, link: *Link, status: *Status) void {
+        self.loadPath(path, link, status);
+    }
+
+    /// Re-reads and loads the image already open (RA8EMU-1153), so a
+    /// rebuilt image takes without a fresh pick. Nothing kept: quiet.
+    pub fn reload(self: *Open, link: *Link, status: *Status) void {
+        if (self.path_len == 0) return;
+        self.loadPath(self.path_buf[0..self.path_len], link, status);
+    }
+
+    /// Reads `path` and loads it on the status bar's core. What goes wrong
+    /// before the session is asked shows as a refusal on the status strip,
+    /// and the session's own answer follows the load the usual way. A load
+    /// that took is kept and recorded in the history.
+    pub fn loadPath(self: *Open, path: []const u8, link: *Link, status: *Status) void {
         const bytes = std.Io.Dir.cwd().readFileAlloc(self.io, path, self.allocator, .limited(max_image)) catch {
             status.refused = .unread;
             return;
@@ -73,7 +96,11 @@ pub const Open = struct {
         defer self.allocator.free(bytes);
         status.load(link, path, bytes) catch |err| {
             status.refused = if (err == error.Oversize) .too_large else .load;
+            return;
         };
+        if (self.history) |list| _ = list.add(path);
+        self.path_len = @min(path.len, path_max);
+        @memcpy(self.path_buf[0..self.path_len], path[0..self.path_len]);
     }
 };
 

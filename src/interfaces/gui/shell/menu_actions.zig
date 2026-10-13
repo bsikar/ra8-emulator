@@ -13,6 +13,7 @@ const Shell = shell_loop.Shell;
 
 /// What the strip's enabled rules read from the session this frame.
 pub fn observe(shell: *Shell, window: platform.Platform, width: i32) void {
+    if (shell.recent_menu) |m| shell.menu.menus = m.sync();
     shell.width = width;
     shell.menu.state = .{
         .loaded = shell.loaded,
@@ -46,7 +47,7 @@ pub fn key(shell: *Shell, window: platform.Platform, event: platform.Event) bool
     };
     if (!pressed.down or !pressed.primary) return false;
     const code = std.math.cast(u8, pressed.code) orelse return false;
-    const action = menu.find(&menu.bar, code, pressed.shift) orelse return false;
+    const action = menu.find(shell.menu.menus, code, pressed.shift) orelse return false;
     fire(shell, window, action);
     return true;
 }
@@ -57,6 +58,7 @@ pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void 
     switch (action) {
         .command => |command| switch (command) {
             .open_elf => if (shell.files) |files| files.ask(),
+            .reload => if (shell.files) |files| if (shell.link) |link| files.reload(link, &shell.status),
             .open_profile => if (shell.pick) |pick| pick.ask(),
             .settings => shell.settings.ask(),
             // The wire has no unload or reset method yet; those items wait
@@ -70,6 +72,7 @@ pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void 
         },
         .choice => |choice| if (shell.pick) |pick| pick.choose(choice),
         .toggle => |kind| togglePane(shell, kind),
+        .recent => |at| if (shell.recent_menu) |m| if (m.recents) |list| if (list.path(at)) |path| if (shell.files) |files| if (shell.link) |link| files.picked(path, link, &shell.status),
     }
 }
 
