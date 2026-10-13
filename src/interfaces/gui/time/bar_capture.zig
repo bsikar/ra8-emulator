@@ -21,6 +21,19 @@ comptime {
 /// A step is one instruction; the session takes no budget for it.
 pub const step_budget: u64 = 0;
 
+/// The debugger step keys' keycodes (SDL: F-keys carry the scan-code mask).
+pub const key_f10: u32 = 0x40000043;
+pub const key_f11: u32 = 0x40000044;
+
+/// F10 steps over, F11 steps into, shift+F11 steps out; null when not one.
+pub fn keyControl(code: u32, shift: bool) ?bar.Control {
+    return switch (code) {
+        key_f10 => .over,
+        key_f11 => if (shift) .out else .step,
+        else => null,
+    };
+}
+
 /// The buffers the view's field and clock text live in; they outlive the view.
 pub const Texts = struct {
     field: [speed_field.max_chars + 4]u8 = undefined,
