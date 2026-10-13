@@ -10,6 +10,21 @@ const session_link = @import("../session_link.zig");
 
 const Shell = shell_loop.Shell;
 
+/// A debugger step key over a source or disassembly pane (RA8EMU-1188).
+pub fn stepKeys(shell: *Shell, event: platform.Event, solved: *const pane_layout.Solved) bool {
+    const key = if (event == .key) event.key else return false;
+    if (!key.down or key.primary) return false;
+    var in_pane = false;
+    for (solved.panes.items) |placed| {
+        const pane = shell.layout.pane(placed.index) orelse continue;
+        if (pane.kind != .source and pane.kind != .disasm) continue;
+        if (shell_frame.bodyOf(placed.area).contains(shell.pointer_at.x, shell.pointer_at.y)) in_pane = true;
+    }
+    if (!in_pane) return false;
+    const time = shell.time orelse return false;
+    const link = shell.link orelse return false;
+    return time.stepKey(key.code, key.shift, &shell.status, link);
+}
 /// Page Up or Page Down over a console leaf (RA8EMU-1122).
 pub fn pageConsole(shell: *Shell, event: platform.Event, solved: *const pane_layout.Solved) bool {
     const key = if (event == .key) event.key else return false;

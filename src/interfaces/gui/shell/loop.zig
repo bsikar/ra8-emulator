@@ -224,6 +224,7 @@ pub const Shell = struct {
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (shell_press.pageConsole(self, event, solved)) return;
+                if (shell_press.stepKeys(self, event, solved)) return;
                 if (self.time) |time| if (self.link) |link| if (time.handle(event, link)) return;
                 if (self.plug) |plug| _ = plug.handle(event);
                 if (self.camera_file) |file| _ = file.handle(event);
