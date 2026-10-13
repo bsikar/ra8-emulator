@@ -31,9 +31,11 @@ test "snapshot owner restores mid-run topology and refuses an unbound owner or s
     try opened.state.files.readFrom(empty.written());
     if (opened.board().display.output.vsync) |vsync| try std.testing.expectEqual(@as(u64, 0), vsync.next_ns);
     const binding = opened.state.files.attachments;
-    opened.state.files.attachments = null;
-    try refuse(&opened, empty.written());
+    // A board-native profile fit lets a plain snapshot through (RA8EMU-1185);
+    // a named catalog ask is what the unbound owner must refuse.
+    opened.board().asks.asked[0] = .{ .name = "max17048", .at = gauge_at, .fault = .{ .stuck = 0x33 } };
     opened.board().asks.count = 1;
+    opened.state.files.attachments = null;
     try refuse(&opened, empty.written());
     opened.board().asks.count = 0;
     opened.state.files.attachments = binding;
