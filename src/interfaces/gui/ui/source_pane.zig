@@ -12,6 +12,7 @@ const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const Theme = @import("colors.zig").Theme;
+const widget = @import("ra8_widget");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -111,33 +112,72 @@ pub fn markRect(area: Rect, row: usize) Rect {
     return .{ .x = area.x + pad + 2, .y = band.y + 3, .w = font.glyph_w, .h = row_h - 6 };
 }
 
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, snapshot: *const Snapshot, marks: *const Marks) !void {
+/// Draw the pane through the handed Paint table (RA8EMU-1157): the
+/// background, the current-line band and the breakpoint marks dispatch
+/// through the table, and the text is the firmware's label widget, so no
+/// pane code emits raw glyph commands. The list clip the pane used to push
+/// is a documented temporary the table cannot carry until RA8FW-951; rows
+/// fit the width and the height they are handed.
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, snapshot: *const Snapshot, marks: *const Marks) void {
     if (area.w < min_w or rows(area) == 0) return;
-    try list.fill(area, theme.background);
-    try list.pushClip(area);
-    defer list.popClip();
+    fillArea(table, area, word(theme.background));
     var message: [path_cap + 32]u8 = undefined;
     switch (snapshot.state) {
-        .no_line => return drawText(list, area, 0, text_at, try std.fmt.bufPrint(&message, "No line information for 0x{X:0>8}", .{snapshot.pc}), theme.muted),
-        .no_file => return drawText(list, area, 0, text_at, try std.fmt.bufPrint(&message, "{s}: No such file", .{snapshot.path()}), theme.muted),
+        .no_line => return drawText(table, area, 0, text_at, std.fmt.bufPrint(&message, "No line information for 0x{X:0>8}", .{snapshot.pc}) catch return, word(theme.muted), word(theme.background)),
+        .no_file => return drawText(table, area, 0, text_at, std.fmt.bufPrint(&message, "{s}: No such file", .{snapshot.path()}) catch return, word(theme.muted), word(theme.background)),
         .shown => {},
     }
     for (0..@min(rows(area), snapshot.count)) |row| {
         const line = &snapshot.rows[row];
         const current = line.number == snapshot.current;
-        if (current) try list.fill(rowRect(area, row), theme.band);
-        if (marks.find(snapshot.path(), line.number) != null) try list.fill(markRect(area, row), theme.bad);
-        if (current) try drawText(list, area, row, 1, ">", theme.highlight);
+        const bg = word(if (current) theme.band else theme.background);
+        if (current) fillArea(table, rowRect(area, row), word(theme.band));
+        if (marks.find(snapshot.path(), line.number) != null) fillArea(table, markRect(area, row), word(theme.bad));
+        if (current) drawText(table, area, row, 1, ">", word(theme.highlight), bg);
         var number: [number_len]u8 = undefined;
-        try drawText(list, area, row, number_at, try std.fmt.bufPrint(&number, "{d: >5}", .{line.number}), if (current) theme.highlight else theme.muted);
-        try drawText(list, area, row, text_at, line.text(), theme.ink);
+        drawText(table, area, row, number_at, std.fmt.bufPrint(&number, "{d: >5}", .{line.number}) catch return, word(if (current) theme.highlight else theme.muted), bg);
+        drawText(table, area, row, text_at, line.text(), word(theme.ink), bg);
     }
 }
 
-fn drawText(list: *draw_list.DrawList, area: Rect, row: usize, at: usize, text: []const u8, color: Color) !void {
+/// One line of text as the firmware's label widget (RA8EMU-1159): the label
+/// owns the face and the aligned rendering; the rect is this row's cell.
+fn drawText(table: *const widget.types.Paint, area: Rect, row: usize, at: usize, text: []const u8, fg: u32, bg: u32) void {
     const x = area.x + pad + 2 + column(at);
     const room: u32 = @intCast(@max(area.x + area.w - pad - x, 0));
-    try font.draw(list, x, rowRect(area, row).y + 2, font.fit(text, room), color);
+    const shown = font.fit(text, room);
+    var buffer: [text_cap + 1]u8 = undefined;
+    const n = @min(shown.len, buffer.len - 1);
+    @memcpy(buffer[0..n], shown[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = fg,
+        .bg = bg,
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = rowRect(area, row).y + 2,
+        .w = @intCast(font.textWidth(shown.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `area` filled with `color` through the shared Paint table.
+fn fillArea(table: *const widget.types.Paint, area: Rect, color: u32) void {
+    table.fill_rect.?(table.user, area.x, area.y, area.w, area.h, color);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
 
 fn column(chars: usize) i32 {
