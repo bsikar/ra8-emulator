@@ -97,3 +97,60 @@ test "a bad CRC on the newer slot falls back to Slot A" {
     try std.testing.expect(std.mem.indexOf(u8, console.text(), "Slot A") != null);
     try std.testing.expect(std.mem.indexOf(u8, console.text(), "Slot B ->") == null);
 }
+
+/// The session-level clause of the pure-reads slice (RA8EMU-1120): the real
+/// DFU device enumerates on the device jack while the core sleeps, and the
+/// landing is the same with idle skip on or off and with the debugger
+/// inspecting through the quiet read path or not. Corrupting both slots keeps
+/// the bootloader in DFU mode instead of booting a payload.
+const enum_chunks = 12;
+
+const Landing = struct {
+    step: usize,
+    quiet: bool,
+    syscfg: u32,
+    intsts0: u32,
+};
+
+/// A debugger read of the USBFS window through the session's view: the
+/// debugger path peeks before it reads, so inspection never stirs the device.
+fn readWindow(view: anytype, offset: u32) !u32 {
+    var word: [4]u8 = undefined;
+    try view.read(0x4025_0000 + offset, &word);
+    return std.mem.readInt(u32, &word, .little);
+}
+
+fn enumerate(skip: bool, inspect: bool) !Landing {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path, .idle_skip = skip });
+    defer opened.deinit();
+    opened.board().usb.device.connectVbus();
+    const guest = opened.guest();
+    try stage(guest, .a, signed_a, 1, true);
+    try stage(guest, .b, signed_b, 2, true);
+    const session = opened.session();
+    session.live.budget = chunk;
+    const view = session.live.view();
+    for (0..enum_chunks) |_| {
+        _ = try session.run(.cpu0, .cont);
+        if (inspect) {
+            _ = try readWindow(view, 0);
+            _ = try readWindow(view, 4);
+        }
+    }
+    return .{
+        .step = @backingInt(opened.board().usb.script.step),
+        .quiet = opened.board().usb.quiet(),
+        .syscfg = try readWindow(view, 0),
+        .intsts0 = try readWindow(view, 4),
+    };
+}
+
+test "the DFU device enumerates to the same landing with idle skip on and off, inspected and not" {
+    if (builtin.mode != .fast) return error.SkipZigTest;
+    const expected = try enumerate(true, false);
+    try std.testing.expect(expected.quiet);
+    inline for (.{ .{ true, true }, .{ false, false }, .{ false, true } }) |combo| {
+        const got = try enumerate(combo[0], combo[1]);
+        try std.testing.expectEqual(expected, got);
+    }
+}

@@ -62,6 +62,8 @@ pub const Options = struct {
     /// frame falls off past it.
     history_frames: u32 = 240,
     settle_window_ns: u64 = 50_000_000,
+    /// Whether the boundary stretches across idle sleeps (RA8EMU-1120).
+    idle_skip: bool = true,
 };
 
 const LoaderState = struct {
@@ -380,7 +382,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.loading.reboot = &state.reboot;
     state.chunk = .{ .cpu = &state.cpu, .mark = state.cpu.retired };
     state.session.event_sources.chunk = &state.chunk;
-    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk };
+    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk, .idle_skip = options.idle_skip };
     state.session.live.boundary = state.edge.hook();
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
     state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
