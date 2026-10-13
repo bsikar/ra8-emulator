@@ -192,7 +192,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     };
     if (pane.kind == .source) if (self.source) |pair| {
         const model = pair.of(pane.core);
-        if (model.now) |*now| return source_pane.draw(list, theme, toList(body), now, &model.marks);
+        if (model.now) |*now| return source_pane.draw(table, theme, toList(body), now, &model.marks);
     };
     if (pane.kind == .board) if (self.board) |board| {
         const pressed = if (self.board_input) |pointer| pointer.press.held else null;
