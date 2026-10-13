@@ -6,8 +6,7 @@
 //!
 //! Not saved, because it is wiring: the protection pointers, the IDAU's
 //! SRAM unit and bank table (chosen by part), SYRSTMSK's protection and
-//! armed-flag pointers, and the MPU guard's unit pointer, engine hooks and
-//! live hook count. A load keeps the target's.
+//! armed-flag pointers, and the MPU guard's unit pointer. A load keeps the target's.
 const std = @import("std");
 const file = @import("ra8_snapshot").file;
 const fields = @import("ra8_snapshot").fields;
@@ -38,7 +37,7 @@ const parts = [_]Part{
     .{ .name = "caches" },
     .{ .name = "regions" },
     .{ .name = "regions_ns" },
-    .{ .name = "guard", .skip = &.{ "unit", "hooks", "live" } },
+    .{ .name = "guard", .skip = &.{"unit"} },
     .{ .name = "partitions" },
 };
 

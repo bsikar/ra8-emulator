@@ -24,8 +24,8 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     var copy: @TypeOf(board.c6) = .{ .pins = board.c6.pins };
     try fields.readOver(&cursor, &copy, wiring);
     if (!cursor.done() or !fits(copy.wire)) return Error.BadValue;
-    board.c6.deinit();
-    copy.wire.bridge = .{};
+    board.c6.wire.bridge.closeFlows();
+    copy.wire.bridge = board.c6.wire.bridge;
     board.c6 = copy;
 }
 

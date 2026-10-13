@@ -89,3 +89,23 @@ test "a dotted skip leaves out a field inside structs and arrays" {
     try std.testing.expectEqual(@as(u8, 3), out.one.keep);
     try std.testing.expect(out.items[0].wire == &wire_b and out.one.wire == &wire_b);
 }
+
+test "a skip path resolves only when every dotted part names a field" {
+    try std.testing.expect(comptime fields.skipsResolve(Holder, leaf_skip));
+    try std.testing.expect(comptime fields.skipsResolve(Holder, .{ "head", "items.keep" }));
+    try std.testing.expect(comptime !fields.skipsResolve(Holder, .{"gone"}));
+    try std.testing.expect(comptime !fields.skipsResolve(Holder, .{"items.gone"}));
+    try std.testing.expect(comptime !fields.skipsResolve(Holder, .{ "one.wire", "head.wire" }));
+    try std.testing.expect(comptime !fields.skipsResolve(Holder, .{"one."}));
+    try std.testing.expect(comptime !fields.skipsResolve(Holder, .{""}));
+}
+
+test "an inventory classifies every field exactly once and gives a reason" {
+    const why = "wiring";
+    try std.testing.expect(comptime fields.complete(Leaf, .{"keep"}, .{.{ .name = "wire", .reason = why }}));
+    try std.testing.expect(comptime !fields.complete(Leaf, .{"keep"}, .{}));
+    try std.testing.expect(comptime !fields.complete(Leaf, .{ "keep", "wire" }, .{.{ .name = "wire", .reason = why }}));
+    try std.testing.expect(comptime !fields.complete(Leaf, .{"keep"}, .{.{ .name = "wire", .reason = "" }}));
+    try std.testing.expect(comptime !fields.complete(Leaf, .{ "keep", "gone" }, .{.{ .name = "wire", .reason = why }}));
+    try std.testing.expect(comptime !fields.complete(Leaf, .{"keep"}, .{ .{ .name = "wire", .reason = why }, .{ .name = "gone", .reason = why } }));
+}
