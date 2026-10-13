@@ -136,10 +136,12 @@ test "the strip draws bare and with a drop-down open" {
     const gpa = std.testing.allocator;
     var list = draw_list.DrawList.init(gpa, width, menu_bar.height + 200);
     defer list.deinit();
-    try menu_bar.draw(&list, dark, loaded, width);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    menu_bar.draw(&paint, dark, loaded, width);
     try std.testing.expect(list.commands.items.len > 0);
     list.clear();
-    try menu_bar.draw(&list, dark, .{ .bar = .{ .open = 0 }, .state = .{ .loaded = true }, .os = linux }, width);
+    menu_bar.draw(&paint, dark, .{ .bar = .{ .open = 0 }, .state = .{ .loaded = true }, .os = linux }, width);
     // The open pass drew the drop-down over the strip's fills.
     try std.testing.expect(list.commands.items.len > 3);
 }
