@@ -8,6 +8,7 @@ const raster = @import("ra8_render").raster;
 const font = @import("ra8_render").font;
 pub const frame_buffer = @import("frame_buffer.zig");
 const platform = @import("../platform.zig");
+const shell_press = @import("press.zig");
 /// A session served in this process, answering on the shell's own thread.
 const Server = @import("server.zig").Server;
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -195,14 +196,14 @@ pub const Shell = struct {
                 if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
-                if (!press.down) return self.releaseBoard(solved, press.x, press.y);
+                if (!press.down) return shell_press.releaseBoard(self, solved, press.x, press.y);
                 if (self.held != null) return;
-                if (self.pressFields(press.x, press.y)) return;
-                if (self.pressValue(press.x, press.y, solved)) return;
+                if (shell_press.pressFields(self, press.x, press.y)) return;
+                if (shell_press.pressValue(self, press.x, press.y, solved)) return;
                 if (self.titles.press(&self.layout, solved, press.x, press.y)) return;
-                if (self.pressBoard(solved, press.x, press.y)) return;
-                if (self.link) |link| if (self.pressLink(link, solved, press.x, press.y)) return;
-                if (self.pressMap(solved, press.x, press.y)) return;
+                if (shell_press.pressBoard(self, solved, press.x, press.y)) return;
+                if (self.link) |link| if (shell_press.pressLink(self, link, solved, press.x, press.y)) return;
+                if (shell_press.pressMap(self, solved, press.x, press.y)) return;
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
                 if (self.console) |console| if (console.clickIn(&self.layout, solved, press.x, press.y)) return;
                 const camera = self.camera orelse return;
@@ -210,7 +211,7 @@ pub const Shell = struct {
             },
             .pointer => |at| {
                 self.pointer_at = .{ .x = at.x, .y = at.y };
-                const found = self.held orelse return self.moveBoard(at.x, at.y);
+                const found = self.held orelse return shell_press.moveBoard(self, at.x, at.y);
                 const axis = self.layout.node(found.split).body.split.axis;
                 self.layout.drag(found, if (axis == .across) at.x else at.y);
             },
@@ -222,7 +223,7 @@ pub const Shell = struct {
                 if (menu_actions.key(self, window, event)) return;
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
-                if (self.pageConsole(event, solved)) return;
+                if (shell_press.pageConsole(self, event, solved)) return;
                 if (self.time) |time| if (self.link) |link| if (time.handle(event, link)) return;
                 if (self.plug) |plug| _ = plug.handle(event);
                 if (self.camera_file) |file| _ = file.handle(event);
@@ -236,81 +237,10 @@ pub const Shell = struct {
             else => {},
         }
     }
-    /// Page Up or Page Down over a console leaf (RA8EMU-1122).
-    fn pageConsole(self: *Shell, event: platform.Event, solved: *const pane_layout.Solved) bool {
-        const key = if (event == .key) event.key else return false;
-        const console = self.console orelse return false;
-        if (!key.down) return false;
-        return console.pageIn(&self.layout, solved, self.pointer_at.x, self.pointer_at.y, key.code);
-    }
-    /// Offer a press to the register editor over a value cell.
-    fn pressValue(self: *Shell, x: i32, y: i32, solved: *const pane_layout.Solved) bool {
-        const edit = self.edit orelse return false;
-        const registers = self.registers orelse return false;
-        return edit.press(registers, &self.layout, solved, x, y);
-    }
-    /// A click on a map block pins the memory leaf to the block's start.
-    fn pressMap(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
-        const map = self.map orelse return false;
-        const model = &(map.layout orelse return false);
-        for (solved.panes.items) |placed| {
-            const pane = self.layout.pane(placed.index) orelse continue;
-            if (pane.kind != .map) continue;
-            const address = map_pane.click(model, shell_frame.bodyOf(placed.area), x, y) orelse continue;
-            if (self.memory) |memory| memory.pinTo(address);
-            return true;
-        }
-        return false;
-    }
 
-    /// Offer a press to the text fields and the time bar.
-    fn pressFields(self: *Shell, x: i32, y: i32) bool {
-        const in_plug = if (self.plug) |plug| plug.press(x, y) else false;
-        const in_file = if (self.camera_file) |file| file.press(x, y) else false;
-        const in_memory = if (self.memory_field) |field| field.press(x, y) else false;
-        return self.pressBar(x, y) or in_plug or in_file or in_memory;
-    }
-    /// Offer a press to the time bar: the timeline cursor's home.
-    fn pressBar(self: *Shell, x: i32, y: i32) bool {
-        const time = self.time orelse return false;
-        const link = self.link orelse return false;
-        return time.press(self.bar, x, y, &self.status, link);
-    }
-    /// Board time for an input: what the time bar last knew, or zero.
-    fn boardNow(self: *const Shell) u64 {
-        const time = self.time orelse return 0;
-        return time.boardNow();
-    }
     /// A pane changed the device list: the shell's rows are stale.
     pub fn wants(self: *Shell) void {
         if (self.devices) |devices| devices.want = true;
-    }
-    /// Offer a press to the session-backed panes: faults, devices, run-to points.
-    fn pressLink(self: *Shell, link: *session_link.Link, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
-        const devices = self.devices orelse return false;
-        if (self.faults) |faults| if (faults.clickIn(link, devices, &self.layout, solved, x, y)) return true;
-        if (devices.clickIn(link, &self.layout, solved, x, y)) return true;
-        if (self.breaks) |breaks| if (self.code) |code| if (breaks.clickIn(link, code, &self.layout, solved, x, y)) return true;
-        return false;
-    }
-    /// Offer a left press to the board leaf: a switch, or the panel.
-    fn pressBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
-        const pointer = self.board_input orelse return false;
-        const board = self.board orelse return false;
-        return pointer.down(board, &self.layout, solved, x, y, self.boardNow());
-    }
-    fn moveBoard(self: *Shell, x: i32, y: i32) void {
-        const pointer = self.board_input orelse return;
-        const board = self.board orelse return;
-        pointer.move(board, x, y);
-    }
-    /// The left button came up: the board leaf sends the click or touch under way.
-    fn releaseBoard(self: *Shell, solved: *const pane_layout.Solved, x: i32, y: i32) void {
-        if (self.titles.release(&self.layout, solved, x, y)) return;
-        const pointer = self.board_input orelse return;
-        const board = self.board orelse return;
-        const link = self.link orelse return;
-        pointer.up(board, link, x, y, self.boardNow());
     }
     /// The wall clock, or zero for a shell that was given none.
     pub fn now(self: *const Shell) u64 {
