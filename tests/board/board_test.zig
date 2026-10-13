@@ -11,11 +11,34 @@ const icu = ra8.chip.periph.icu;
 const reboot = ra8.chip.core.reboot;
 const reset = ra8.chip.periph.reset;
 const wdt = ra8.chip.periph.wdt;
+const FrameSource = ra8.chip.periph.frame_source.FrameSource;
+
+const CloseProbe = struct {
+    calls: usize = 0,
+
+    fn close(context: *anyopaque) void {
+        const self: *CloseProbe = @ptrCast(@alignCast(context));
+        self.calls += 1;
+    }
+
+    fn frame(_: *anyopaque, _: u64, _: ra8.chip.periph.frame_source.Shape) void {}
+    fn fill(_: *anyopaque, _: u32, _: u32, _: []u8) void {}
+
+    const vtable: FrameSource.VTable = .{ .frame = frame, .fill = fill, .close = close };
+};
 
 /// A board with a bus but no CPU behind it. attach() needs an engine, so the
 /// tests that only ask about the peripheral state build the board directly.
 fn board() Board {
     return Board.init(std.testing.allocator);
+}
+
+test "board shutdown closes its active camera source" {
+    var unit = board();
+    var probe: CloseProbe = .{};
+    unit.capture.source = .{ .context = &probe, .vtable = &CloseProbe.vtable };
+    unit.deinit();
+    try std.testing.expectEqual(@as(usize, 1), probe.calls);
 }
 
 /// The PPB words the boundary reads, standing in for the engine. AIRCR is
