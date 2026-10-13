@@ -1,4 +1,6 @@
 *.zig text eol=lf
 *.zon text eol=lf
+*.sh text eol=lf
+tests/fixtures/pacbti/pacbti_smoke.S text eol=lf
 tools/*_expected.md text eol=lf
 tests/chip/core/cpu/conformance/coverage.md text eol=lf
