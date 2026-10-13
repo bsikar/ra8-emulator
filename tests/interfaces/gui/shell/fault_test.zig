@@ -37,7 +37,7 @@ const Wire = struct {
     }
 };
 
-const body: draw_list.Rect = .{ .x = 10, .y = 20, .w = 300, .h = 120 };
+const body: gui_app.geom.Rect = .{ .x = 10, .y = 20, .w = 300, .h = 120 };
 
 test "the cycle steps through every mode and back to none" {
     var mode: usize = 0;

@@ -10,6 +10,7 @@ const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
 const Theme = @import("../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
+const geom = @import("../geom.zig");
 const font = @import("ra8_render").font;
 const widget = @import("ra8_widget");
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -117,7 +118,7 @@ pub const Faults = struct {
         for (solved.panes.items) |placed| {
             const pane = layout.pane(placed.index) orelse continue;
             if (pane.kind != .devices) continue;
-            const row = rowAt(shell_frame.bodyOf(placed.area), x, y) orelse continue;
+            const row = rowAt(shell_frame.toGeom(shell_frame.bodyOf(placed.area)), x, y) orelse continue;
             const line = devices.line(row) orelse return false;
             return self.cycle(link, shell_devices.split(line).at);
         }
@@ -126,7 +127,7 @@ pub const Faults = struct {
 };
 
 /// Row `row`'s fault cell inside `body`, just left of its unplug cell.
-pub fn cell(body: draw_list.Rect, row: usize) draw_list.Rect {
+pub fn cell(body: geom.Rect, row: usize) geom.Rect {
     const unplug = shell_devices.unplugCell(body, row);
     const w: i32 = @intCast(font.textWidth(cells));
     const gap: i32 = @intCast(font.textWidth(1));
@@ -134,16 +135,16 @@ pub fn cell(body: draw_list.Rect, row: usize) draw_list.Rect {
 }
 
 /// The row whose fault cell holds (`x`, `y`) inside `body`, or null.
-pub fn rowAt(body: draw_list.Rect, x: i32, y: i32) ?usize {
-    if (!body.contains(x, y) or y < body.y + shell_frame.pad) return null;
+pub fn rowAt(body: geom.Rect, x: i32, y: i32) ?usize {
+    if (!geom.contains(body, x, y) or y < body.y + shell_frame.pad) return null;
     const row: usize = @intCast(@divTrunc(y - body.y - shell_frame.pad, shell_devices.row_h));
-    return if (cell(body, row).contains(x, y)) row else null;
+    return if (geom.contains(cell(body, row), x, y)) row else null;
 }
 
 /// Draw each listed row's mode in its fault cell: a mode in ink, none muted.
 /// A refused ask leaves its note on the line under the rows (and under the
 /// unplug refusal when that is up too).
-pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_list.Rect, devices: *const shell_devices.Devices, faults: *const Faults) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: geom.Rect, devices: *const shell_devices.Devices, faults: *const Faults) !void {
     var rows = devices.lines();
     var row: usize = 0;
     while (rows.next()) |text| : (row += 1) {

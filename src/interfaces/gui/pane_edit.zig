@@ -11,7 +11,7 @@ const registers_capture = @import("registers_capture.zig");
 const registers_pane = @import("ui/registers_pane.zig");
 const session_api = @import("ra8_session").api;
 
-const Rect = draw_list.Rect;
+const Rect = @import("geom.zig").Rect;
 
 pub const Target = union(enum) {
     /// An index into registers_capture.shown.

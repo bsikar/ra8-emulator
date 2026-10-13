@@ -19,7 +19,8 @@ const shell_frame = @import("../ui/shell/frame.zig");
 const shell_registers = @import("registers.zig");
 
 const Theme = @import("../ui/colors.zig").Theme;
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 pub const refused_note = "the session refused the write";
 
@@ -69,7 +70,7 @@ pub const Editor = struct {
             if (pane.kind != .registers) continue;
             const model = pair.of(pane.core);
             const now = model.now orelse continue;
-            const cell = cellAt(shell_frame.bodyOf(placed.area), model.fold, now.mve, x, y) orelse continue;
+            const cell = cellAt(shell_frame.toGeom(shell_frame.bodyOf(placed.area)), model.fold, now.mve, x, y) orelse continue;
             self.open = .{ .core = model.core, .cell = cell };
             self.refused[@backingInt(model.core)] = false;
             return true;

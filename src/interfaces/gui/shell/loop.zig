@@ -99,7 +99,7 @@ pub const Shell = struct {
     /// The wall clock a run is paced against; none, and time stands still.
     clock: ?wall_clock.Clock = null,
     drained: bool = true,
-    bar: draw_list.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
+    bar: shell_frame.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
     held: ?pane_layout.Gutter = null,
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},

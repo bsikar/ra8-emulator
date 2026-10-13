@@ -10,7 +10,9 @@ const colors = @import("../ui/colors.zig");
 const theme_picker = @import("../ui/theme_picker.zig");
 const codes = @import("../ui/hex_entry.zig").codes;
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const shell_frame = @import("../ui/shell/frame.zig");
+const Rect = geom.Rect;
 
 pub const Themes = struct {
     /// The palette every leaf, bar and strip paints with.
@@ -55,7 +57,7 @@ pub const Themes = struct {
     /// theme and closes it; a press anywhere else closes it and goes no
     /// further. Returns whether the picker took the press.
     pub fn press(self: *Themes, strip: Rect, x: i32, y: i32) bool {
-        const found = theme_picker.hit(strip, self.open, x, y) orelse {
+        const found = theme_picker.hit(shell_frame.toList(strip), self.open, x, y) orelse {
             if (!self.open) return false;
             self.open = false;
             return true;

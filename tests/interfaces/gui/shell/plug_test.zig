@@ -39,7 +39,7 @@ const Wire = struct {
     }
 };
 
-const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 120 };
+const body: gui_app.geom.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 120 };
 
 /// A picker drawn once in `body` with its field focused and `spec` typed
 /// (one text event holds at most 8 bytes).

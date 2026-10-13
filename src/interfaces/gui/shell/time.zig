@@ -17,7 +17,9 @@ const status_bar = @import("../status/bar.zig");
 const session_link = @import("../session_link.zig");
 const shell_run = @import("run.zig");
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const shell_frame = @import("../ui/shell/frame.zig");
+const Rect = geom.Rect;
 const Link = session_link.Link;
 const Status = status_bar.Status;
 
@@ -38,9 +40,9 @@ pub const Time = struct {
     /// A left press at (`x`, `y`) with the bar drawn in `bar`. A press off
     /// the speed field lets the keyboard go. Returns whether the bar took it.
     pub fn press(self: *Time, bar: Rect, x: i32, y: i32, status: *Status, link: *Link) bool {
-        const control = time_bar.hit(bar, x, y);
+        const control = time_bar.hit(shell_frame.toList(bar), x, y);
         self.editing = control != null and control.? == .field;
-        const found = control orelse return bar.contains(x, y);
+        const found = control orelse return geom.contains(bar, x, y);
         self.pressCommand(found, link, status);
         return true;
     }

@@ -21,7 +21,8 @@ const colors = @import("../colors.zig");
 const Theme = colors.Theme;
 
 const Color = draw_list.Color;
-const Rect = draw_list.Rect;
+const geom = @import("../../geom.zig");
+pub const Rect = geom.Rect;
 const Pane = pane_layout.Pane;
 const Layout = pane_layout.Layout;
 const Solved = pane_layout.Solved;
@@ -35,7 +36,7 @@ pub const Tabs = struct { panes: []const pane_layout.Pane, active: u8 };
 /// The `which`th tab cell of a row drawn over `title`, left to right; a
 /// cell names its pane and takes its own page. Null when the row has no
 /// such cell or it does not fit in the strip.
-pub fn tabAt(title: Rect, panes: []const pane_layout.Pane, which: usize) ?Rect {
+pub fn tabAt(title: draw_list.Rect, panes: []const pane_layout.Pane, which: usize) ?draw_list.Rect {
     var x = title.x + pad;
     for (panes, 0..) |pane, at| {
         const w: i32 = 2 * pad + @as(i32, @intCast(font.textWidth(kindName(pane.kind).len)));
@@ -110,11 +111,11 @@ pub fn barArea(width: i32, height: i32) Rect {
     return .{ .x = 0, .y = height - status_strip.height - time_bar.height, .w = width, .h = time_bar.height };
 }
 
-pub fn titleOf(area: Rect) Rect {
+pub fn titleOf(area: draw_list.Rect) draw_list.Rect {
     return .{ .x = area.x, .y = area.y, .w = area.w, .h = @min(title_h, area.h) };
 }
 
-pub fn bodyOf(area: Rect) Rect {
+pub fn bodyOf(area: draw_list.Rect) draw_list.Rect {
     const top = @min(title_h, area.h);
     return .{ .x = area.x, .y = area.y + top, .w = area.w, .h = area.h - top };
 }
@@ -125,14 +126,26 @@ pub fn stripUnder(bar: Rect) Rect {
 }
 
 /// Lays the panes out for a window of `width` by `height` pixels.
+/// The solved layout's rect in the gui geometry (RA8EMU-1157 temporary:
+/// the layout still solves in the draw list's rect).
+pub fn toGeom(r: draw_list.Rect) Rect {
+    return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
+}
+
+/// The gui geometry in the draw list's own type (RA8EMU-1157 temporary:
+/// leaves and chrome that still paint through the list).
+pub fn toList(r: Rect) draw_list.Rect {
+    return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
+}
+
 pub fn solve(layout: *const Layout, allocator: std.mem.Allocator, width: i32, height: i32) !Solved {
-    return layout.solve(allocator, panesArea(width, height));
+    return layout.solve(allocator, toList(panesArea(width, height)));
 }
 
 pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void {
     var target = widget_paint.Target{ .list = list };
     const paint = target.paint();
-    for (shell.solved.gutters.items) |found| fillArea(&paint, found.area, word(theme.gutter));
+    for (shell.solved.gutters.items) |found| fillArea(&paint, toGeom(found.area), word(theme.gutter));
     var deck_buf: [pane_layout.max_deck]pane_layout.Pane = undefined;
     for (shell.solved.panes.items) |placed| {
         const pane = shell.layout.pane(placed.index) orelse continue;
@@ -145,9 +158,9 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
                 tabs = .{ .panes = deck_buf[0..deck.count], .active = deck.active };
             }
         }
-        try drawLeaf(list, &paint, theme, pane, placed.area, shell.painter, tabs);
+        try drawLeaf(list, &paint, theme, pane, toGeom(placed.area), shell.painter, tabs);
     }
-    try time_bar.draw(list, theme, barArea(shell.width, shell.height), shell.bar);
+    try time_bar.draw(list, theme, toList(barArea(shell.width, shell.height)), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {
         try status_strip.draw(list, theme, theme_picker.rest(strip), &shell.strip);
@@ -158,17 +171,17 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
 }
 
 fn drawLeaf(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: Pane, area: Rect, painter: ?Painter, tabs: ?Tabs) !void {
-    if (area.empty()) return;
-    try list.pushClip(area);
+    if (geom.empty(area)) return;
+    try list.pushClip(toList(area));
     defer list.popClip();
     fillArea(table, area, word(theme.background));
-    const title = titleOf(area);
+    const title = toGeom(titleOf(toList(area)));
     fillArea(table, title, word(theme.face));
     fillArea(table, .{ .x = title.x, .y = title.y + title.h - 1, .w = title.w, .h = 1 }, word(theme.border));
     const top = title.y + draw_list.centre(title.h, font.glyph_h);
     if (tabs) |row| {
         for (row.panes, 0..) |tab, at| {
-            const cell = tabAt(title, row.panes, at) orelse continue;
+            const cell = toGeom(tabAt(toList(title), row.panes, at) orelse continue);
             const lit = at == row.active;
             if (lit) fillArea(table, cell, word(theme.background));
             const label = kindName(tab.kind);
@@ -184,9 +197,9 @@ fn drawLeaf(list: *draw_list.DrawList, table: *const widget.types.Paint, theme: 
         if (room >= name_w + pad + core_w) drawText(table, title.x + title.w - pad - core_w, top, core, word(theme.muted), word(theme.face));
     }
     if (painter) |p| {
-        const body = bodyOf(area);
-        if (!body.empty()) {
-            try list.pushClip(body);
+        const body = toGeom(bodyOf(toList(area)));
+        if (!geom.empty(body)) {
+            try list.pushClip(toList(body));
             defer list.popClip();
             try p.paint(p.context, list, table, theme, pane, body);
         }
