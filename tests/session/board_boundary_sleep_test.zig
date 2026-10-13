@@ -66,7 +66,7 @@ fn sleepRun(reaching: bool, armed: bool) !Counter {
     machine.begin();
     if (armed) _ = try machine.addBreak(.{ .address = memmap.sram_base + 0x7F0 });
     var counter: Counter = .{};
-    const hook: zig_boundary.Boundary = .{ .context = &counter, .tickFn = Counter.tick, .chunk = 100, .sleepFn = if (reaching) Counter.reach else null };
+    const hook: zig_boundary.Boundary = .{ .context = &counter, .tickFn = Counter.tick, .chunk = 100, .awakeFn = if (reaching) Counter.reach else null };
     try std.testing.expect(try zig_boundary.run(.{ .cpu = &sleeper.cpu }, &machine, 50_000, null, null, hook) == .count);
     return counter;
 }
@@ -80,10 +80,10 @@ test "a sleeping core's chunks reach as far as the boundary allows, and time sti
     try std.testing.expect(reached.ticks <= 51);
 }
 
-test "a breakpoint armed keeps every chunk at its normal width" {
+test "a breakpoint armed preserves the same frozen reach" {
     const armed = try sleepRun(true, true);
     try std.testing.expectEqual(@as(u64, 50_000), armed.total);
-    try std.testing.expectEqual(@as(u32, 500), armed.ticks);
+    try std.testing.expectEqual(@as(u32, 50), armed.ticks);
 }
 
 /// The idler image on a real board: SysTick armed one period ahead.
@@ -120,12 +120,14 @@ test "the board reaches a sleeping CPU0 to its next SysTick wrap in whole chunks
     try std.testing.expectEqual(@as(u32, 0), width % idler.chunk);
 }
 
-test "CPU1 selected keeps the normal width" {
+test "CPU1 selected does not change the board edge width" {
     var idle: Idle = .{};
     const core = try idle.open();
     defer idle.close();
     const cpu1: u8 = @backingInt(ra8.chip.periph.registry.Issuer.cpu1);
     var edge: BoardBoundary = .{ .board = &idle.board, .core = core, .selected = &cpu1 };
     const hook = edge.hook();
-    try std.testing.expectEqual(idler.chunk, hook.sleepFn.?(hook.context, idler.chunk));
+    const selected = hook.awakeFn.?(hook.context, idler.chunk);
+    edge.selected = null;
+    try std.testing.expectEqual(selected, hook.awakeFn.?(hook.context, idler.chunk));
 }

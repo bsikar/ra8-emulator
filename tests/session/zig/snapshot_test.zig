@@ -13,11 +13,47 @@ const main_path = zig_run.main_path;
 const Cpu0 = ra8.board.cpu0_store.Cpu0;
 const Parts = cli_app.parts.Parts;
 const Options = cli_app.cli.Options;
+const Harness = ra8.session.harness.Harness;
+const Cpu1 = ra8.session.cpu1.bringup.Cpu1;
+const Clock = ra8.session.run.loop.Clock;
+const state_fixture = @import("../board/state_fixture.zig");
 
 const stkof = @embedFile("../../fixtures/threadx/threadx_stkof.elf");
+const dual0 = @embedFile("../../fixtures/trustzone/cpu1_pingpong_ipc.elf");
+const dual1 = @embedFile("../../fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
 const page: usize = 0x1000;
 const vectors: u32 = memmap.mram_base;
 const stack: u32 = memmap.sram_base + 0x800;
+
+test "grid repair G1 actual CLI partial save retains required canonical grid" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+    const path = try std.fs.path.join(std.testing.allocator, &.{ root, "partial" });
+    defer std.testing.allocator.free(path);
+    const chunk = ra8.chip.periph.clocks.chunk_instructions;
+    _ = try run(tmp.dir, chunk + 37, .{ .save = path });
+    const bytes = try read(tmp.dir, "partial");
+    defer std.testing.allocator.free(bytes);
+    const section = try ra8.snapshot.file.Reader.find(bytes, .grid);
+    try std.testing.expect((try ra8.snapshot.file.Reader.find(bytes, .attachments)) != null);
+    std.debug.print("CHECK=G1 actual CLI Kind35 present={}\n", .{section != null});
+    try std.testing.expect(section != null);
+    const saved = try ra8.board.snapshot.stretch.loadGrid(bytes);
+    try std.testing.expectEqual(@as(u64, 1), saved.at.r);
+    try std.testing.expectEqual(@as(u32, 37), saved.stretch.carry);
+    var corrupt: [63]u8 = undefined;
+    @memcpy(&corrupt, section.?.payload);
+    corrupt[12] = 2; // Valid enum, impossible premature board phase.
+    const fixture = @import("../board/state_fixture.zig");
+    var bad = try fixture.replacement(bytes, .grid, &corrupt);
+    defer bad.deinit();
+    var bad_file = try tmp.dir.createFile(std.testing.io, "partial", .{});
+    defer bad_file.close(std.testing.io);
+    try bad_file.writeStreamingAll(std.testing.io, bad.written());
+    try std.testing.expectError(error.BadValue, run(tmp.dir, 1, .{ .load = path }));
+}
 
 /// SP, reset, then a loop that counts r0 up and stores it to SRAM, so the
 /// core, memory and the run's time all move.
@@ -174,4 +210,157 @@ test "no flag, no hook" {
     clock.state = .{ .at = .{ .ns = 1, .path = "y" } };
     const at = zig_run.zig_snapshot.hook(&clock).?;
     try std.testing.expect(at.saveFn == null and at.dueFn != null and at.atFn != null);
+}
+
+fn dual(second: *Cpu1) !Harness {
+    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
+    errdefer h.deinit();
+    try second.open(std.testing.allocator, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    h.state.edge.idle_skip = false;
+    return h;
+}
+
+fn capture(h: *Harness) !std.Io.Writer.Allocating {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    errdefer out.deinit();
+    try h.state.files.writeTo(&out.writer);
+    return out;
+}
+
+fn fileAt(tmp: std.Io.Dir, name: []const u8, bytes: []const u8) ![]u8 {
+    var out = try tmp.createFile(std.testing.io, name, .{});
+    defer out.close(std.testing.io);
+    try out.writeStreamingAll(std.testing.io, bytes);
+    const root = try tmp.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+    return std.fs.path.join(std.testing.allocator, &.{ root, name });
+}
+
+fn restorePlain(h: *Harness, clock: *Clock, path: []const u8) !void {
+    clock.* = .{ .io = std.testing.io, .memory = h.guest(), .board = h.board(), .timebase = &h.state.edge.timebase, .cpu1 = h.state.files.pair, .state = .{ .load = path }, .image_identity = zig_run.zig_snapshot.imageIdentity(dual0), .cpu1_image_identity = zig_run.zig_snapshot.imageIdentity(dual1) };
+    const hook = zig_run.zig_snapshot.hook(clock).?;
+    const owed = try hook.loadFn.?(hook.context, h.primaryCpu());
+    try std.testing.expectEqual(clock.saved.stretch.carry, owed);
+    h.state.memory.scs.cut = &h.state.edge.cut;
+    h.primaryCpu().cut = &h.state.edge.cut;
+}
+
+fn continuePlain(h: *Harness, clock: *Clock, budget: u64) !void {
+    var owed: ra8.chip.core.cpu.boot.Owed = .{ .hold = true };
+    try std.testing.expectEqual(ra8.chip.core.cpu.cpu.Stop.count, try ra8.chip.core.cpu.boot.stretches(h.primaryCpu(), budget, clock.boundary(), null, &owed, null));
+    h.state.edge.saved = clock.saved;
+    h.state.edge.ns_timebase = clock.ns_timebase;
+}
+
+fn sameContinuation(live: *Harness, plain: *Harness) !void {
+    try state_fixture.sameGuest(live, plain);
+    try std.testing.expectEqualDeep(live.state.edge.saved, plain.state.edge.saved);
+    try std.testing.expectEqualDeep(live.state.edge.timebase, plain.state.edge.timebase);
+    try std.testing.expectEqualDeep(live.state.edge.ns_timebase, plain.state.edge.ns_timebase);
+    try std.testing.expectEqualDeep(live.state.files.pair.?.turn_state, plain.state.files.pair.?.turn_state);
+}
+
+test "grid CLI restores an open CPU1 turn and resumes the saved phase" {
+    var a1: Cpu1 = .{};
+    var live = try dual(&a1);
+    defer live.deinit();
+    defer a1.close(std.testing.allocator);
+    const id = try live.session().setBreakpoint(.cpu1, .{ .address = a1.cpu().regs.pc });
+    try live.session().setRunBudget(.cpu0, 100_000);
+    const ended = try live.session().run(.cpu0, .cont);
+    try std.testing.expect(ended == .stop and ended.stop == .breakpoint);
+    try std.testing.expect(a1.pair.turn_state.open);
+    try live.session().clearBreakpoint(.cpu1, id);
+    const stepped = try live.session().step(.cpu1);
+    try std.testing.expect(stepped == .stop and stepped.stop == .stepped);
+    try std.testing.expect(a1.pair.turn_state.slots > 0);
+    try std.testing.expectEqual(a1.pair.turn_state.slots, live.state.edge.saved.lengths[1]);
+    var bytes = try capture(&live);
+    defer bytes.deinit();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try fileAt(tmp.dir, "open", bytes.written());
+    defer std.testing.allocator.free(path);
+    var b1: Cpu1 = .{};
+    var plain = try dual(&b1);
+    defer plain.deinit();
+    defer b1.close(std.testing.allocator);
+    var clock: Clock = undefined;
+    try restorePlain(&plain, &clock, path);
+    defer clock.deinitSnapshot();
+    try std.testing.expectEqual(ra8.chip.core.scheduler.position.Phase.cpu1, clock.saved.at.phase);
+    try std.testing.expect(b1.pair.turn_state.open);
+    const clean_path = try fileAt(tmp.dir, "clean", &.{});
+    defer std.testing.allocator.free(clean_path);
+    clock.state.save = clean_path;
+    const hook = zig_run.zig_snapshot.hook(&clock).?;
+    try hook.saveFn.?(hook.context, plain.primaryCpu(), clock.saved.stretch.carry);
+    const clean = try read(tmp.dir, "clean");
+    defer std.testing.allocator.free(clean);
+    const section = (try ra8.snapshot.file.Reader.find(clean, .attachments)).?;
+    const offset = @intFromPtr(section.payload.ptr) - @intFromPtr(clean.ptr);
+    var bad = try std.testing.allocator.dupe(u8, clean);
+    defer std.testing.allocator.free(bad);
+    bad[offset] = 0xff; // Last section, after the guest and second-core bodies.
+    const bad_path = try fileAt(tmp.dir, "bad", bad);
+    defer std.testing.allocator.free(bad_path);
+    clock.state.load = bad_path;
+    try std.testing.expectError(error.BadValue, hook.loadFn.?(hook.context, plain.primaryCpu()));
+    const recapture_path = try fileAt(tmp.dir, "recapture", &.{});
+    defer std.testing.allocator.free(recapture_path);
+    clock.state.save = recapture_path;
+    try hook.saveFn.?(hook.context, plain.primaryCpu(), clock.saved.stretch.carry);
+    const recapture = try read(tmp.dir, "recapture");
+    defer std.testing.allocator.free(recapture);
+    try std.testing.expectEqualSlices(u8, clean, recapture);
+    try live.session().setRunBudget(.cpu0, 43_219);
+    try std.testing.expectEqual(ra8.session.api.Ended.count, try live.session().run(.cpu0, .cont));
+    try continuePlain(&plain, &clock, 43_219);
+    try sameContinuation(&live, &plain);
+}
+
+test "grid CLI restores stopped STORE and STM cuts before CPU0 continues" {
+    for ([_]u16{ 0x6001, 0xc002 }) |opcode| {
+        var a1: Cpu1 = .{};
+        var live = try dual(&a1);
+        defer live.deinit();
+        defer a1.close(std.testing.allocator);
+        const at = memmap.sram_base + 0x6000;
+        var code = [_]u8{ 0, 0, 0xfe, 0xe7 };
+        std.mem.writeInt(u16, code[0..2], opcode, .little);
+        try live.guest().write(at, &code);
+        const cpu = live.primaryCpu();
+        cpu.regs.pc = at;
+        cpu.regs.low[0] = memmap.syst.csr;
+        cpu.regs.low[1] = 7;
+        cpu.regs.primask = 1;
+        cpu.waiting = null;
+        try live.guest().writeWord(memmap.syst.csr, 0);
+        try live.guest().writeWord(memmap.syst.rvr, 4);
+        try live.guest().writeWord(memmap.syst.cvr, 0);
+        const id = try live.session().setWatchpoint(.cpu0, .{ .first = memmap.syst.csr, .last = memmap.syst.csr + 3, .kind = .write });
+        try live.session().setRunBudget(.cpu0, 1);
+        const ended = try live.session().run(.cpu0, .cont);
+        try std.testing.expect(ended == .stop and ended.stop == .watchpoint);
+        try std.testing.expect(live.state.edge.saved.cut);
+        var bytes = try capture(&live);
+        defer bytes.deinit();
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        const path = try fileAt(tmp.dir, "cut", bytes.written());
+        defer std.testing.allocator.free(path);
+        var b1: Cpu1 = .{};
+        var plain = try dual(&b1);
+        defer plain.deinit();
+        defer b1.close(std.testing.allocator);
+        var clock: Clock = undefined;
+        try restorePlain(&plain, &clock, path);
+        defer clock.deinitSnapshot();
+        try std.testing.expect(clock.saved.cut);
+        try live.session().clearWatchpoint(.cpu0, id);
+        try live.session().setRunBudget(.cpu0, 37);
+        try std.testing.expectEqual(ra8.session.api.Ended.count, try live.session().run(.cpu0, .cont));
+        try continuePlain(&plain, &clock, 37);
+        try sameContinuation(&live, &plain);
+    }
 }

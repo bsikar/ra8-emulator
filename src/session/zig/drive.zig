@@ -6,7 +6,6 @@ const zig_core = @import("core.zig");
 const stop_machine = @import("../stop_machine.zig");
 const call_decode = @import("../call_decode.zig");
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const dispatch = @import("ra8_chip").core.cpu.exception.dispatch;
 const watch_bus = @import("../watch/bus.zig");
 const zig_cycles = @import("cycles.zig");
 /// Re-exported for tests/session/zig/monitor_test.zig.
@@ -53,35 +52,58 @@ pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
     return runClocked(core, machine, count, watch, null);
 }
 
-/// As `runWatched`, with `clock` counting DWT_CYCCNT for a Cycle Counter
-/// comparator and recording each halt in DFSR (RA8EMU-172).
+/// As `runWatched`, with a non-writing projection for DWT cycle comparators.
 pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock) Ended {
     var retired: u64 = 0;
     return runCounted(core, machine, count, watch, clock, &retired);
 }
 
-/// As `runClocked`, adding each instruction that ran to `retired`, so a
-/// caller passing the board's boundary knows how far time moved
-/// (RA8EMU-709).
+/// As `runClocked`, adding architectural slots to the legacy-named output.
+/// The scheduler accounts for sleep tails separately as elapsed time.
 pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64) Ended {
+    return runTarget(core, machine, count, watch, clock, retired, null);
+}
+
+/// Stop at a canonical per-core slot count after polling and waking, before
+/// the next instruction. A phase-end target is checked in the next phase.
+pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64, target: ?u64) Ended {
     // The board moved, or the debugger wrote state, since the last chunk:
     // the poll asks the source afresh before trusting a hush again.
     if (core.cpu.quiet) |hushing| hushing.stirAll();
-    var left = count;
+    var left = if (target != null and target.? <= core.cpu.slots) @max(count, 1) else count;
     while (left > 0) {
         // Nothing armed: run as a plain run does. The watch bus stays armed
         // so firmware that programs the FPB or DWT still reaches them.
         if (machine.quiet()) {
             if (clock) |counting| counting.tick(core, machine);
-            const went = quietRun(core, watch, left);
+            const went = quietRun(core, watch, left, target);
             retired.* += went.ran;
             left -= went.ran;
             if (went.stop) |stopped| return .{ .core = stopped };
+            if (went.ran == 0 or core.cpu.waiting != null) return .count;
+            if (target) |at| if (core.cpu.slots >= at) return .count;
+            if (core.cpu.cut) |cut| if (cut.fired) return .count;
             continue;
         }
-        _ = dispatch.poll(core.cpu) catch return .{ .core = .{ .bus_fault = core.register(.pc) } };
+        if (!machine.resumed and (machine.watch_pending != null or machine.unit_pending != null or machine.halt_pending)) {
+            const stop = machine.onInstruction(event(core));
+            zig_monitor.take(core, machine);
+            if (stop) |why| {
+                if (clock) |counting| counting.halted(core, machine, why);
+                return .{ .stop = why };
+            }
+        }
+        const pc = core.cpu.regs.pc;
+        const polled = core.cpu.runToCount(1, core.cpu.slots);
+        if (polled != .count) return .{ .core = polled };
+        if (core.cpu.waiting != null) return .count;
+        if (target) |at| if (core.cpu.slots >= at) return .count;
+        if (core.cpu.fetch_guard) |guard| if (guard.holds(core.cpu.regs.pc)) return .count;
         if (clock) |counting| counting.tick(core, machine);
         const now = event(core);
+        // The poll entered an exception: the resume grace belongs to the old
+        // PC, and a step ends here, before the handler's first instruction.
+        if (machine.resumed and pc != now.pc) machine.resumed = false;
         const stop = machine.onInstruction(now);
         // A unit event with halting off pends DebugMonitor, as step_hook does.
         zig_monitor.take(core, machine);
@@ -91,58 +113,43 @@ pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count:
         }
         if (watch) |listening| listening.arm(now.pc, now.size);
         defer if (watch) |listening| listening.disarm();
+        const before = core.cpu.slots;
         if (core.cpu.step()) |stopped| return .{ .core = stopped };
-        retired.* += 1;
-        left -= 1;
+        const ran = core.cpu.slots - before;
+        retired.* += ran;
+        left -= ran;
+        if (core.cpu.until) |wait| if (wait.met()) return .count;
+        if (core.cpu.cut) |cut| if (cut.fired) return .count;
     }
     return .count;
 }
 
-/// What a quiet stretch did: instructions retired, and the core's own stop.
+/// What a quiet interval did: architectural slots and the core's own stop.
 const Quiet = struct { ran: u64, stop: ?cpu_mod.Stop = null };
 
 /// The rest of a chunk with nothing armed, through `Cpu.run`, so park loops
 /// and trips that change nothing go by at once as in a plain run
 /// (RA8EMU-712). A store into the PPB ends it, since it may arm the FPB or
-/// DWT. A core asleep with nothing to wake it lets the rest of the chunk go
-/// by as time, as a plain run charges a sleeping stretch to the clocks. A
-/// core already waiting on a console line, or a stretch that moved nothing,
-/// goes one instruction at a time instead.
-fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64) Quiet {
+/// DWT. An asleep core returns its actual slots. The caller consumes the
+/// remaining time without fetching another instruction.
+fn quietRun(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus, left: u64, target: ?u64) Quiet {
     const cpu = core.cpu;
-    if (cpu.until != null) return quietOne(core, watch);
-    const before = cpu.retired;
-    if (watch) |listening| {
-        listening.ppb = .{ .needle = "" };
-        listening.arm(0, 0);
-        listening.quiet = true;
-        cpu.until = &listening.ppb;
+    const before = cpu.slots;
+    const previous_until = cpu.until;
+    const listening = watch;
+    if (listening) |held| {
+        held.ppb = .{ .needle = "" };
+        held.arm(0, 0);
+        held.quiet = true;
+        if (previous_until == null) cpu.until = &held.ppb;
     }
-    defer if (watch) |listening| {
-        listening.disarm();
-        listening.quiet = false;
-        cpu.until = null;
+    defer if (listening) |held| {
+        held.disarm();
+        held.quiet = false;
+        cpu.until = previous_until;
     };
-    const stop = cpu.run(left);
-    const ran = cpu.retired - before;
+    const stop = cpu.runToCount(left, target orelse cpu.slots + left);
+    const ran = cpu.slots - before;
     if (stop != .count) return .{ .ran = ran, .stop = stop };
-    if (cpu.waiting != null) return .{ .ran = left };
-    if (ran == 0) return quietOne(core, watch);
     return .{ .ran = ran };
-}
-
-/// One quiet instruction, its interrupt poll first.
-fn quietOne(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus) Quiet {
-    core.cpu.trip.parked = false;
-    _ = dispatch.poll(core.cpu) catch return .{ .ran = 0, .stop = .{ .bus_fault = core.register(.pc) } };
-    if (quietStep(core, watch)) |stopped| return .{ .ran = 0, .stop = stopped };
-    return .{ .ran = 1 };
-}
-
-/// One instruction with nothing to stop on. The fetch window is the widest
-/// instruction at pc; no watch is set, so its exact width does not matter.
-fn quietStep(core: zig_core.ZigCore, watch: ?*watch_bus.WatchBus) ?cpu_mod.Stop {
-    if (watch) |listening| listening.arm(core.register(.pc), 4);
-    defer if (watch) |listening| listening.disarm();
-    return core.cpu.step();
 }

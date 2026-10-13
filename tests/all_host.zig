@@ -266,6 +266,8 @@ test {
     _ = @import("session/zig/break_sym_test.zig");
     _ = @import("session/zig/undefined_sites_test.zig");
     _ = @import("session/zig/snapshot_test.zig");
+    _ = @import("session/cpu1/image_test.zig");
+    _ = @import("session/run/clock_test.zig");
     _ = @import("interfaces/cli/report/undefined_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
     _ = @import("interfaces/cli/count_pc_test.zig");

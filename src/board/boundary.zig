@@ -103,6 +103,8 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("r
     try drain(self, core, self.links.takeEvents());
     try self.events.repend(core);
     if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
+    // Drains after the reset request may have latched a line again.
+    if (self.reboot) |pending| if (pending.requested) self.events.clearLatches();
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 

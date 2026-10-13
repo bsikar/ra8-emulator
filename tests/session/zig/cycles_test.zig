@@ -13,6 +13,7 @@ const dfsr: u32 = 0xE000_ED30;
 const Rig = struct {
     bytes: [64]u8 = @splat(0),
     cycles: u32 = 0,
+    control: u32 = 1,
     dfsr: u32 = 0,
 
     fn view(self: *Rig) bus.Bus {
@@ -21,6 +22,7 @@ const Rig = struct {
 
     fn word(self: *Rig, address: u32) ?*u32 {
         if (address == cyccnt) return &self.cycles;
+        if (address == 0xE000_1000) return &self.control;
         if (address == dfsr) return &self.dfsr;
         return null;
     }
@@ -63,6 +65,26 @@ fn armCycles(machine: *Machine, at: u32) void {
     _ = machine.dwt.write(0x28, 0x11);
 }
 
+test "grid strict disabled CYCCNT and repeated stop bookkeeping leave guest words unchanged" {
+    var memory = rig();
+    memory.control = 0;
+    memory.dfsr = 0x10;
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine: Machine = .{};
+    armCycles(&machine, 1);
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
+    try std.testing.expect((try session.go(.cont)) == .count);
+    try std.testing.expectEqual(@as(u64, 100), cpu.slots);
+    try std.testing.expectEqual(@as(u32, 0), memory.cycles);
+    try std.testing.expectEqual(@as(u32, 0x10), memory.dfsr);
+    try std.testing.expect(!machine.dwt.cycles_primed);
+    session.clock.halted(session.core, &machine, .stepped);
+    session.clock.halted(session.core, &machine, .halt_requested);
+    try std.testing.expectEqual(@as(u32, 0), memory.cycles);
+    try std.testing.expectEqual(@as(u32, 0x10), memory.dfsr);
+}
+
 test "a Cycle Counter comparator stops the Zig core on the count it names" {
     var memory = rig();
     var cpu: Cpu = .{ .bus = memory.view() };
@@ -72,11 +94,14 @@ test "a Cycle Counter comparator stops the Zig core on the count it names" {
     var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1000 };
     const ended = try session.go(.cont);
     try std.testing.expectEqual(.unit_watch, std.meta.activeTag(ended.stop));
-    try std.testing.expectEqual(@as(u32, 40), memory.cycles);
-    try std.testing.expectEqual(@as(u32, 0x4), memory.dfsr & 0x4);
+    try std.testing.expectEqual(@as(u64, 40), cpu.slots);
+    try std.testing.expectEqual(@as(u32, 40), machine.dwt.cycles_seen);
+    try std.testing.expectEqual(@as(u32, 4), machine.dcb.dfsr);
+    try std.testing.expectEqual(@as(u32, 0), memory.cycles);
+    try std.testing.expectEqual(@as(u32, 0), memory.dfsr);
 }
 
-test "without a Cycle Counter comparator nothing is counted, and a break latches DFSR.BKPT" {
+test "without a Cycle Counter comparator a debugger break leaves guest status unchanged" {
     var memory = rig();
     var cpu: Cpu = .{ .bus = memory.view() };
     try cpu.reset(0);
@@ -86,6 +111,6 @@ test "without a Cycle Counter comparator nothing is counted, and a break latches
     try std.testing.expectEqual(@as(u32, 0), memory.cycles);
     _ = try machine.addBreak(.{ .address = 0x08 });
     try std.testing.expectEqual(.breakpoint, std.meta.activeTag((try session.go(.cont)).stop));
-    try std.testing.expectEqual(@as(u32, 0x2), memory.dfsr & 0x2);
+    try std.testing.expectEqual(@as(u32, 0), memory.dfsr);
     try std.testing.expectEqual(@as(u32, 0), memory.cycles);
 }

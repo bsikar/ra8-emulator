@@ -15,6 +15,131 @@ const store_board = @import("../store_board.zig");
 const Store = store_board.Store;
 const Guest = store_board.Guest;
 const attach = store_board.attach;
+const elf = ra8.board.image.elf;
+const Cpu0 = ra8.board.cpu0_store.Cpu0;
+const Parts = cli_app.parts.Parts;
+const cpu0_image = @embedFile("../../../fixtures/trustzone/cpu1_pingpong_ipc.elf");
+const cpu1_image = @embedFile("../../../fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+const cpu1_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf";
+const Rig = @import("../../../session/board/attachments_test.zig").Rig;
+
+fn snapshotRun(second: []const u8, state: zig_run.state_args.Options, with_panel: bool, log: ?[]const u8) !u8 {
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    var options: cli_app.cli.Options = .{ .path = "cpu0.elf", .cpu = .zig, .cpu1_path = second, .instructions = 1_000, .state = state };
+    options.frames.eink_log = log;
+    if (with_panel) {
+        options.attaches[0] = try ra8.components.request.parse("eink:64x64@spi:spi1@ssl2");
+        options.attach_count = 1;
+    }
+    try zig_run.main_path.fit(&board, std.testing.allocator, std.testing.io, options);
+    var cpu0: Cpu0 = .{};
+    defer cpu0.close();
+    var parts = Parts{};
+    defer parts.deinit();
+    const image = try elf.Image.init(cpu0_image);
+    _ = try zig_run.main_path.prepare(&cpu0, &board, std.testing.io, image, &parts, options);
+    var output = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer output.deinit();
+    return zig_run.run(&output.writer, std.testing.io, cpu0.own(), &board, &parts.timebase, image, options, image.vectorBase().?, null, parts.tap.waiting(), .{});
+}
+
+test "CLI dual snapshot rejects a different valid CPU1 ELF before restore" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+    const saved = try std.fs.path.join(std.testing.allocator, &.{ root, "dual.state" });
+    defer std.testing.allocator.free(saved);
+    const other = try std.fs.path.join(std.testing.allocator, &.{ root, "other.elf" });
+    defer std.testing.allocator.free(other);
+    const log = try std.fs.path.join(std.testing.allocator, &.{ root, "wrong.jsonl" });
+    defer std.testing.allocator.free(log);
+    var alternate = try std.testing.allocator.alloc(u8, cpu1_image.len + 1);
+    defer std.testing.allocator.free(alternate);
+    @memcpy(alternate[0..cpu1_image.len], cpu1_image);
+    alternate[cpu1_image.len] = 0x42;
+    _ = try elf.Image.init(alternate);
+    var out = try tmp.dir.createFile(std.testing.io, "other.elf", .{});
+    defer out.close(std.testing.io);
+    try out.writeStreamingAll(std.testing.io, alternate);
+    try std.testing.expectEqual(@as(u8, 0), try snapshotRun(cpu1_path, .{ .save = saved }, true, log));
+    try std.testing.expectError(error.ImageMismatch, snapshotRun(other, .{ .load = saved }, true, log));
+}
+
+test "CLI named panel snapshot save and load keep e-ink log available" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+    const saved = try std.fs.path.join(std.testing.allocator, &.{ root, "panel.state" });
+    defer std.testing.allocator.free(saved);
+    const log = try std.fs.path.join(std.testing.allocator, &.{ root, "panel.jsonl" });
+    defer std.testing.allocator.free(log);
+    try std.testing.expectEqual(@as(u8, 0), try snapshotRun(cpu1_path, .{ .save = saved }, true, log));
+    try std.testing.expectEqual(@as(u8, 0), try snapshotRun(cpu1_path, .{ .load = saved }, true, log));
+    const bytes = try tmp.dir.readFileAlloc(std.testing.io, "panel.state", std.testing.allocator, .limited(1 << 27));
+    defer std.testing.allocator.free(bytes);
+    try std.testing.expect((try ra8.snapshot.file.Reader.find(bytes, .attachments)) != null);
+    const records = try tmp.dir.readFileAlloc(std.testing.io, "panel.jsonl", std.testing.allocator, .limited(1 << 20));
+    defer std.testing.allocator.free(records);
+}
+
+test "plain Clock restore transfers named panel owner and keeps recorder and failed load stable" {
+    const rig = try Rig.create();
+    defer rig.destroy();
+    const asks = [_]ra8.components.request.Request{.{ .name = "eink", .at = .{ .spi = .{ .channel = 1, .select = 2 } } }};
+    rig.board.asks.keep(rig.arena.allocator(), &asks);
+    try ra8.board.plug.all(&rig.board);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
+    defer std.testing.allocator.free(root);
+    const save_path = try std.fs.path.join(std.testing.allocator, &.{ root, "clean" });
+    defer std.testing.allocator.free(save_path);
+    const bad_path = try std.fs.path.join(std.testing.allocator, &.{ root, "bad" });
+    defer std.testing.allocator.free(bad_path);
+    const after_path = try std.fs.path.join(std.testing.allocator, &.{ root, "after" });
+    defer std.testing.allocator.free(after_path);
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = .{ .store = &rig.store }, .board = &rig.board, .timebase = &rig.edge.timebase, .state = .{ .save = save_path } };
+    defer clock.deinitSnapshot();
+    var recorder = cli_app.eink_log.Run.init(std.testing.allocator, &rig.board);
+    defer recorder.deinit();
+    recorder.arm();
+    var hook = zig_run.zig_snapshot.hook(&clock).?;
+    try hook.saveFn.?(hook.context, &rig.cpu, 0);
+    const old_panel = rig.board.asks.attached_eink.?;
+    clock.state.load = save_path;
+    hook = zig_run.zig_snapshot.hook(&clock).?;
+    _ = try hook.loadFn.?(hook.context, &rig.cpu);
+    const panel = rig.board.asks.attached_eink.?;
+    try std.testing.expect(panel != old_panel);
+    try std.testing.expectEqual(@as(usize, 1), clock.snapshot_owner.?.plugs.snapshot_owned_count);
+    const geometry = panel.planes.geometry;
+    const callback = panel.refresh_log_hook.?;
+    callback.refreshFn(callback.context, .{ .x = 0, .y = 0, .width = geometry.width, .height = geometry.height, .waveform = 2 });
+    try std.testing.expectEqual(@as(usize, 1), recorder.entries.items.len);
+    try std.testing.expect(recorder.entries.items[0].full);
+    const clean = try tmp.dir.readFileAlloc(std.testing.io, "clean", std.testing.allocator, .limited(1 << 27));
+    defer std.testing.allocator.free(clean);
+    const section = (try ra8.snapshot.file.Reader.find(clean, .attachments)).?;
+    const offset = @intFromPtr(section.payload.ptr) - @intFromPtr(clean.ptr);
+    var bad = try std.testing.allocator.dupe(u8, clean);
+    defer std.testing.allocator.free(bad);
+    bad[offset] = 0xff;
+    var out = try tmp.dir.createFile(std.testing.io, "bad", .{});
+    defer out.close(std.testing.io);
+    try out.writeStreamingAll(std.testing.io, bad);
+    clock.state.load = bad_path;
+    try std.testing.expectError(error.BadValue, hook.loadFn.?(hook.context, &rig.cpu));
+    try std.testing.expect(rig.board.asks.attached_eink.? == panel);
+    try std.testing.expectEqual(@as(usize, 1), recorder.entries.items.len);
+    clock.state.save = after_path;
+    try hook.saveFn.?(hook.context, &rig.cpu, 0);
+    const after = try tmp.dir.readFileAlloc(std.testing.io, "after", std.testing.allocator, .limited(1 << 27));
+    defer std.testing.allocator.free(after);
+    try std.testing.expectEqualSlices(u8, clean, after);
+}
 
 test "a boundary is the chunk until SysTick is armed, then its period" {
     var store = try Store.init(null);

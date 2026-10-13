@@ -12,6 +12,33 @@ const zig_boundary = ra8.session.step_hook.zig.boundary;
 const board_boundary = ra8.session.board.boundary;
 const pacing = ra8.session.run.pacing;
 
+test "cut tail successive charge pieces preserve final CVR and old wrap" {
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const memory: ra8.chip.core.cpu.memory.guest.Guest = .{ .store = &store };
+    const clocks = ra8.chip.periph.clocks;
+    var secure: clocks.Clocks = .{};
+    var non_secure: clocks.Clocks = .{ .words = clocks.Words.non_secure };
+    var pending: ra8.chip.core.cpu.cpu.systick_cut.Pending = .{
+        .old_reload = 9,
+        .old_control = 1,
+        .old_current = 3,
+        .current_written = true,
+    };
+    try memory.writeWord(secure.words.csr, 7);
+    try memory.writeWord(secure.words.rvr, 4);
+    try memory.writeWord(secure.words.cvr, 6);
+    try board_boundary.charge(&secure, &non_secure, memory, 2, true, &pending);
+    try std.testing.expectEqual(@as(u32, 1), pending.old_current);
+    try std.testing.expectEqual(@as(u32, 6), try memory.readWord(secure.words.cvr));
+    try board_boundary.charge(&secure, &non_secure, memory, 1, true, &pending);
+    try std.testing.expectEqual(@as(u32, 0), pending.old_current);
+    try std.testing.expectEqual(@as(u32, 6), try memory.readWord(secure.words.cvr));
+    try std.testing.expectEqual(@as(u64, 1), secure.ticks);
+    try std.testing.expectEqual(@as(u64, 0), secure.pends);
+    try std.testing.expectEqual(@as(u32, 0x10007), try memory.readWord(secure.words.csr));
+}
+
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
     bytes: [64]u8,

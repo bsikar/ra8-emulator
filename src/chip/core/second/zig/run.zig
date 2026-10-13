@@ -17,6 +17,16 @@ const second_zig = @import("zig.zig");
 const Store = @import("../../cpu/memory/store.zig").Store;
 const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
 const memmap = @import("../../memmap.zig");
+const cpu_mod = @import("../../cpu/cpu.zig");
+
+/// A latched turn survives debugger stops without consulting the divider again.
+pub const Turn = struct {
+    open: bool = false,
+    share: u32 = 0,
+    elapsed: u32 = 0,
+    slots: u32 = 0,
+    hz: u64 = clocks.timebase.default_hz,
+};
 
 pub const Driver = struct {
     second: second_core.Second,
@@ -36,6 +46,7 @@ pub const Driver = struct {
     /// CPU1 cycles charged by the last round, for the shared 1 ns wall clock
     /// (RA8EMU-643).
     last_ran: u64 = 0,
+    turn_state: Turn = .{},
 
     /// CPU1 from `image`, which the board's loader read, on `wiring`'s board,
     /// ready to take turns. `memory` is CPU0's store; CPU1 borrows its shared
@@ -47,6 +58,8 @@ pub const Driver = struct {
         self.store = null;
         self.wiring = null;
         self.cycle_remainder = 0;
+        self.last_ran = 0;
+        self.turn_state = .{};
         return self.openOwn(lender, wiring, image);
     }
 
@@ -111,6 +124,13 @@ pub const Driver = struct {
 
     /// CPU1's turn with retired instructions charged at its running rate.
     pub fn roundAt(self: *Driver, round_size: u32, hz: u64) void {
+        self.openTurn(round_size, hz);
+        if (self.turn_state.open) _ = self.continueTurn(self.turn_state.share, null);
+        self.closeTurn();
+    }
+
+    pub fn openTurn(self: *Driver, round_size: u32, hz: u64) void {
+        if (self.turn_state.open) return;
         self.last_ran = 0;
         if (round_size == 0) return;
         const second = &self.second;
@@ -127,13 +147,34 @@ pub const Driver = struct {
                 return;
             };
         }
-        const share = second.state.turn(round_size);
+        self.turn_state = .{ .open = true, .share = second.state.turn(round_size), .hz = hz };
         second.state.turns += 1;
-        const before = self.core.cpu.retired;
-        const stopped = self.core.turn(share);
-        const ran = self.core.cpu.retired - before;
-        second.state.ran += @intCast(ran);
-        const value = ran * hz + self.cycle_remainder;
+    }
+
+    pub fn continueTurn(self: *Driver, count: u64, target: ?u64) cpu_mod.Stop {
+        if (!self.turn_state.open) return .count;
+        const want = @min(count, self.turn_state.share - self.turn_state.elapsed);
+        const cpu = &self.core.cpu;
+        const before = cpu.slots;
+        const stopped = cpu.runToCount(want, target orelse cpu.slots + want);
+        const ran: u32 = @intCast(cpu.slots - before);
+        const elapsed: u32 = if (stopped == .count and cpu.waiting != null) @intCast(want) else ran;
+        self.noteTurn(elapsed, ran);
+        if (stopped != .count) self.second.state.fault = .{ .pc = cpu.regs.pc, .detail = @tagName(stopped) };
+        return stopped;
+    }
+
+    pub fn noteTurn(self: *Driver, elapsed: u32, slots: u32) void {
+        self.turn_state.elapsed += elapsed;
+        self.turn_state.slots += slots;
+    }
+
+    pub fn closeTurn(self: *Driver) void {
+        if (!self.turn_state.open) return;
+        const second = &self.second;
+        const turn = self.turn_state;
+        second.state.ran += turn.slots;
+        const value = @as(u64, turn.elapsed) * turn.hz + self.cycle_remainder;
         self.cycle_remainder = value % clocks.timebase.default_hz;
         const cycles: u32 = @intCast(value / clocks.timebase.default_hz);
         self.last_ran = cycles;
@@ -141,7 +182,7 @@ pub const Driver = struct {
         self.ns_timebase.advanceSysTick(self.core.memory, cycles) catch {};
         second.state.pc = self.core.cpu.regs.pc;
         second.takeResetRequest(self.core.memory);
-        if (stopped != .count) second.state.fault = .{ .pc = second.state.pc, .detail = @tagName(stopped) };
+        self.turn_state = .{};
     }
     pub fn advanceTime(self: *Driver, cycles: u64) void {
         var left = cycles;

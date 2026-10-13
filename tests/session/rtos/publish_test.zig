@@ -11,7 +11,28 @@ const Counter = struct {
         const self: *Counter = @ptrCast(@alignCast(context));
         self.ticked += instructions;
     }
+
+    fn awake(_: *anyopaque, normal: u32) u32 {
+        return normal * 7;
+    }
 };
+
+test "grid strict stacked RTOS and TXM preserve awake reach and saved boundary wiring" {
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    var trace: rtos.rtos.trace.Trace = .{};
+    var stream: stream_mod.Stream = .{};
+    var counter: Counter = .{};
+    var saved: ra8.chip.core.scheduler.State = .{};
+    var cut: ra8.chip.core.cpu.cpu.systick_cut.Cut = .{};
+    var publisher: Publisher = .{ .trace = &trace, .stream = &stream, .inner = .{ .context = &counter, .tickFn = Counter.tick, .awakeFn = Counter.awake, .saved = &saved, .cut = &cut } };
+    var modules: ra8.session.txm.publish.Watcher = .{ .head_at = 0, .memory = .{ .guest = .{ .store = &store } }, .stream = &stream, .inner = publisher.hook() };
+    const hook = modules.hook();
+    try std.testing.expect(hook.awakeFn != null);
+    try std.testing.expectEqual(@as(u32, 700), hook.awakeFn.?(hook.context, 100));
+    try std.testing.expect(hook.saved == &saved);
+    try std.testing.expect(hook.cut == &cut);
+}
 
 fn expectRtos(event: stream_mod.Event, kind: stream_mod.Event.Kind, core: stream_mod.Core, when: u64, thread: u32, exception: u16) !void {
     try std.testing.expectEqual(kind, event.kind);

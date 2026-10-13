@@ -60,7 +60,8 @@ pub const Files = struct {
         const cores = self.coresOf();
         try run_file.savePairAttached(writer, stores[0..count], cores[0..count], self.board, self.identity());
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
-        try stretch.save(.{}, writer);
+        try stretch.save(.{ .owed = self.edge.saved.stretch.carry }, writer);
+        try stretch.saveGrid(self.edge.saved, writer);
         if (self.pair) |pair| try saveSecond(pair, writer);
         var counter: std.Io.Writer.Discarding = .init(&.{});
         try self.debugBody(&counter.writer);
@@ -76,7 +77,9 @@ pub const Files = struct {
         var bases = .{ self.edge.timebase, self.edge.ns_timebase };
         try systick.load(.{ &bases[0], &bases[1] }, bytes);
         _ = try file.Reader.find(bytes, .stretch) orelse return error.Missing;
-        _ = try stretch.load(bytes);
+        const debt = try stretch.load(bytes);
+        const grid = try stretch.loadGrid(bytes);
+        if (debt.owed != grid.stretch.carry or debt.cycle_remainder != 0 or debt.boundary_hz != null) return error.BadValue;
         const count: usize = if (self.pair != null) 2 else 1;
         var units: [2]Units = @splat(.{});
         const cores = self.coresOf();
@@ -90,12 +93,37 @@ pub const Files = struct {
         const stores = self.storesOf();
         var staged = try run_file.prepareAttached(bytes, stores[0..count], cores[0..count], self.board, self.identity());
         defer staged.deinit();
+        if (grid.cut) {
+            const selected = if (grid.cut_pending.bank == .secure) bases[0] else bases[1];
+            if (selected.rearms == 0) return error.BadValue;
+        }
+        if (grid.stretch.full != 0) {
+            for (0..count) |index| if (grid.base[index] +| grid.lengths[index] != staged.cores[index].slots) return error.BadValue;
+        }
+        for (units[0..count], 0..) |unit, index| if (unit.count.slots > staged.cores[index].slots) return error.BadValue;
+        if (second) |saved| {
+            if (saved.turn.open and grid.at.phase != .cpu1) return error.BadValue;
+            if (saved.turn.open and saved.turn.slots != grid.lengths[1]) return error.BadValue;
+            if (saved.turn.open and (!chip.core.scheduler.validTurnShare(grid.stretch.carry, saved.turn.share) or saved.last_ran != 0)) return error.BadValue;
+            if (saved.second.state.ran > 0xffffffffffffffff - @as(u64, saved.turn.slots)) return error.BadValue;
+            if (saved.last_ran > std.math.maxInt(u32)) return error.BadValue;
+            // Completed turns charge ran; only the current open turn still has uncharged slots.
+            if (grid.stretch.full != 0 and saved.second.state.ran + saved.turn.slots != staged.cores[1].slots) return error.BadValue;
+            // A closed turn in CPU1's phase is one not opened yet: slots there mean a turn was dropped.
+            if (!saved.turn.open and grid.at.phase == .cpu1 and grid.lengths[1] != 0) return error.BadValue;
+        } else if (grid.at.phase == .cpu1 or grid.lengths[1] != 0) return error.BadValue;
         var attachment_state = try attachment_snapshot.prepare(self.board, self.attachments, bytes);
         defer attachment_state.deinit();
         staged.commit(stores[0..count], cores[0..count], self.board);
         attachment_state.commit(self.board, self.attachments);
         self.edge.timebase = bases[0];
         self.edge.ns_timebase = bases[1];
+        self.edge.saved = grid;
+        if (self.session) |session| session.grid = &self.edge.saved;
+        self.edge.cut.fired = false;
+        self.edge.cut.pending = null;
+        self.edge.cut.seen = .{ null, null };
+        self.edge.cut.seen_slot = null;
         if (second) |saved| saved.commit(self.pair.?);
         for (units[0..count], 0..) |unit, index| {
             if (self.machineOf(index)) |machine| unit.commit(machine);
@@ -153,8 +181,8 @@ pub const Files = struct {
 
     fn slotOf(self: *Files, index: usize) ?Slot {
         const session = self.session orelse return null;
-        if (session.live.index == index) return .{ .started = &session.live.started, .count = &session.live.clock.count };
-        if (session.live.other) |*other| return .{ .started = &other.started, .count = &other.clock.count };
+        if (session.live.index == index) return .{ .started = &session.live.started, .count = &session.live.clock };
+        if (session.live.other) |*other| return .{ .started = &other.started, .count = &other.clock };
         return null;
     }
 
@@ -190,7 +218,8 @@ pub const Files = struct {
 };
 
 const Count = @FieldType(Driver, "cycles");
-const Slot = struct { started: *bool, count: *Count };
+const CycleClock = @import("../zig/cycles.zig").Clock;
+const Slot = struct { started: *bool, count: *CycleClock };
 const unit_fields = .{ "fpb", "dwt", "itm", "dcb", "unit_pending", "monitor_pending", "halting" };
 
 /// Classifies the fields this file picks by name. Second, its State and both
@@ -207,8 +236,17 @@ pub fn complete() bool {
     }) and fields.complete(Driver, .{"cycles"}, .{
         .{ .name = "machine", .reason = "Session wiring" }, .{ .name = "last", .reason = transient },
         .{ .name = "latch", .reason = "Session wiring" },   .{ .name = "unit_dirty", .reason = derived },
-    }) and fields.complete(Pair, .{ "second", "core", "ns_timebase", "store", "cycle_remainder", "last_ran" }, .{
+    }) and fields.complete(Pair, .{ "second", "core", "ns_timebase", "store", "cycle_remainder", "last_ran", "turn_state" }, .{
         .{ .name = "wiring", .reason = "Boundary wiring" },
+    }) and fields.complete(chip.core.scheduler.State, .{ "at", "stretch", "base", "lengths", "cut", "cut_pending" }, .{}) and
+        fields.complete(@FieldType(Pair, "turn_state"), .{ "open", "share", "elapsed", "slots", "hz" }, .{}) and
+        fields.complete(CycleClock, .{ "count", "slots" }, .{}) and fields.complete(BoardBoundary, .{ "timebase", "ns_timebase", "saved" }, .{
+        .{ .name = "board", .reason = "Saved board wiring" },                           .{ .name = "core", .reason = "Saved guest store wiring" },
+        .{ .name = "cpu", .reason = "Saved core wiring" },                              .{ .name = "reboot", .reason = "Saved board reboot wiring" },
+        .{ .name = "selected", .reason = "Debugger view selection outside execution" }, .{ .name = "second", .reason = "Saved second-core wiring" },
+        .{ .name = "second_memory", .reason = "Saved second store wiring" },            .{ .name = "pair", .reason = "Saved pair wiring" },
+        .{ .name = "chunk", .reason = "Mark saved in session_runtime" },                .{ .name = "cut", .reason = "Clock pointers retained; consumed cut carried by saved.cut" },
+        .{ .name = "idle_skip", .reason = "Immutable root grid configuration" },
     }) and fields.complete(@FieldType(Pair, "core"), .{ "pending", "cpu" }, .{
         .{ .name = "memory", .reason = "Guest memory wiring" },    .{ .name = "board", .reason = "Board bus wiring" },
         .{ .name = "quiet", .reason = derived },                   .{ .name = "decoded", .reason = derived },
@@ -226,7 +264,7 @@ pub const Units = struct {
     halting: bool = true,
     cycles: Count = .{},
     /// The Session slot's own CYCCNT bookkeeping and whether it has run.
-    count: Count = .{},
+    count: CycleClock = .{},
     started: bool = false,
     nvic: ?@FieldType(NvicSource, "model") = null,
     last_non_secure: ?u9 = null,
@@ -263,6 +301,7 @@ fn readDebug(bytes: []const u8, units: []Units, cores: []const *Cpu) !void {
 }
 
 const second_wiring = .{ "state", "guard.unit" };
+
 const state_wiring = .{ "wiring", "dividers", "timebase", "fault" };
 const clock_wiring = .{ "per_chunk", "words" };
 const FaultState = struct { pc: u32, access: @FieldType(chip.core.fault.Fault, "access") };
@@ -285,6 +324,7 @@ fn secondBody(pair: *const Pair, writer: *std.Io.Writer) !void {
     try fields.writeExcept(writer, pair.ns_timebase, clock_wiring);
     try fields.write(writer, pair.cycle_remainder);
     try fields.write(writer, pair.last_ran);
+    try fields.write(writer, pair.turn_state);
     var pending = pair.core.pending;
     pending.model = normalized(pending.model);
     try fields.writeExcept(writer, pending, .{ "banked", "clear_due" });
@@ -295,6 +335,7 @@ pub const PairState = struct {
     ns_timebase: @FieldType(Pair, "ns_timebase"),
     cycle_remainder: u64,
     last_ran: u64,
+    turn: @FieldType(Pair, "turn_state"),
     pending: NvicSource,
 
     pub fn commit(self: PairState, pair: *Pair) void {
@@ -302,6 +343,7 @@ pub const PairState = struct {
         pair.ns_timebase = self.ns_timebase;
         pair.cycle_remainder = self.cycle_remainder;
         pair.last_ran = self.last_ran;
+        pair.turn_state = self.turn;
         pair.core.pending = self.pending;
     }
 };
@@ -319,10 +361,13 @@ pub fn readSecond(pair: *const Pair, bytes: []const u8) !PairState {
     try fields.readOver(&cursor, &ns_timebase, clock_wiring);
     const remainder = try fields.read(u64, &cursor);
     const ran = try fields.read(u64, &cursor);
+    const turn = try fields.read(@FieldType(Pair, "turn_state"), &cursor);
+    if (turn.elapsed > turn.share or turn.slots > turn.elapsed or turn.hz == 0 or turn.hz > chip.periph.clocks.timebase.default_hz or remainder >= chip.periph.clocks.timebase.default_hz) return error.BadValue;
+    if (!turn.open and (turn.share != 0 or turn.elapsed != 0 or turn.slots != 0)) return error.BadValue;
     var pending = pair.core.pending;
     try fields.readOver(&cursor, &pending, .{ "banked", "clear_due" });
     if (!cursor.done() or second.regions.selected >= second.regions.table.len or second.partitions.selected >= second.partitions.table.len or second.state.interrupts.depth > second.state.interrupts.active.len or pending.model.depth > pending.model.active.len) return error.BadValue;
-    return .{ .second = second, .ns_timebase = ns_timebase, .cycle_remainder = remainder, .last_ran = ran, .pending = pending };
+    return .{ .second = second, .ns_timebase = ns_timebase, .cycle_remainder = remainder, .last_ran = ran, .turn = turn, .pending = pending };
 }
 
 fn normalized(model: @FieldType(NvicSource, "model")) @FieldType(NvicSource, "model") {

@@ -1,13 +1,10 @@
-//! The `--save-state` / `--load-state` hook on a Zig run (RA8EMU-696): the
-//! run file (src/board/snapshot/run.zig: board, CPU0's store, the core), the two
-//! SysTick bases the run keeps beside the board (src/chip/snapshot/systick.zig)
-//! and what the run owed its clocks (src/board/snapshot/stretch.zig, RA8EMU-700).
+//! The `--save-state` / `--load-state` hook on a plain Zig run. The run file,
+//! typed attachment owner, scheduler grid, both SysTick bases and clock debt
+//! are one prepared restore, with no guest mutation before validation.
 //!
 //! `--snapshot-at` writes the same file at the first closed stretch at or
 //! past its time, owing nothing, and the run goes on (RA8EMU-769).
 //!
-//! A run with `--cpu1` is refused: the second core lives in its own driver
-//! and its state is not in the file yet.
 const std = @import("std");
 const backing = @import("ra8_board").external.backing;
 const boot = @import("ra8_chip").core.cpu.boot;
@@ -16,12 +13,15 @@ const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 const run_file = @import("ra8_board").snapshot.run;
 const systick = @import("ra8_chip").snapshot.systick;
 const stretch = @import("ra8_board").snapshot.stretch;
+const scheduler = @import("ra8_chip").core.scheduler;
+const attachments = @import("../board/attachments.zig");
+const state = @import("../board/state.zig");
 const Clock = @import("../run/clock.zig").Clock;
 
 /// The largest file a load reads.
 const max_bytes = 1 << 30;
 
-pub const Error = error{SecondCoreNotSaved};
+pub const Error = error{ SecondCoreNotSaved, MissingImageIdentity };
 pub const imageIdentity = run_file.imageIdentity;
 
 /// The hook for `clock`'s run, or null when neither flag was given.
@@ -38,28 +38,57 @@ pub fn hook(clock: *Clock) ?boot.Snapshot {
 
 fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const clock: *Clock = @ptrCast(@alignCast(context));
-    const store = try storeOf(clock);
     const allocator = std.heap.page_allocator;
     const bytes = try std.Io.Dir.cwd().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
     defer allocator.free(bytes);
     var bases = .{ clock.timebase.*, clock.ns_timebase };
     try systick.load(.{ &bases[0], &bases[1] }, bytes);
-    const saved = try stretch.load(bytes);
-    var staged = try run_file.prepare(bytes, &.{store}, &.{core}, clock.board, .{ clock.image_identity, null });
+    _ = try run_file.file.Reader.find(bytes, .stretch) orelse return error.Missing;
+    const debt = try stretch.load(bytes);
+    const grid = try stretch.loadGrid(bytes);
+    if (debt.owed != grid.stretch.carry) return error.BadValue;
+    if (grid.cut) {
+        const selected = if (grid.cut_pending.bank == .secure) bases[0] else bases[1];
+        if (selected.rearms == 0) return error.BadValue;
+    }
+    const pair = clock.cpu1;
+    try checkMode(bytes, pair != null);
+    const count: usize = if (pair != null) 2 else 1;
+    const stores: [2]*Store = .{ clock.memory.store, if (pair) |second| if (second.store != null) &second.store.? else return Error.SecondCoreNotSaved else clock.memory.store };
+    const cores: [2]*Cpu = .{ core, if (pair) |second| &second.core.cpu else core };
+    const second = if (pair) |held| try state.readSecond(held, bytes) else null;
+    var staged = try run_file.prepareAttached(bytes, stores[0..count], cores[0..count], clock.board, try identities(clock));
     defer staged.deinit();
-    staged.commit(&.{store}, &.{core}, clock.board);
+    if (grid.stretch.full != 0) {
+        for (0..count) |index| if (grid.base[index] +| grid.lengths[index] != staged.cores[index].slots) return error.BadValue;
+    }
+    if (second) |saved| {
+        if (saved.turn.open and grid.at.phase != .cpu1) return error.BadValue;
+        if (saved.turn.open and saved.turn.slots != grid.lengths[1]) return error.BadValue;
+        if (saved.turn.open and (!scheduler.validTurnShare(grid.stretch.carry, saved.turn.share) or saved.last_ran != 0)) return error.BadValue;
+        if (saved.second.state.ran > std.math.maxInt(u64) - @as(u64, saved.turn.slots)) return error.BadValue;
+        if (grid.stretch.full != 0 and saved.second.state.ran + saved.turn.slots != staged.cores[1].slots) return error.BadValue;
+        if (!saved.turn.open and grid.at.phase == .cpu1 and grid.lengths[1] != 0) return error.BadValue;
+    } else if (grid.at.phase == .cpu1 or grid.lengths[1] != 0) return error.BadValue;
+    const binding = clock.snapshotBinding();
+    var attachment_state = try attachments.prepare(clock.board, binding, bytes);
+    defer attachment_state.deinit();
+    staged.commit(stores[0..count], cores[0..count], clock.board);
+    attachment_state.commit(clock.board, binding);
+    if (second) |saved| saved.commit(pair.?);
     clock.timebase.* = bases[0];
     clock.ns_timebase = bases[1];
-    clock.accounted = core.retired -| saved.owed;
-    clock.wall_cycles = if (backing.fabricOf(store)) |fabric| fabric.wall else 0;
-    clock.cycle_remainder = saved.cycle_remainder;
-    if (saved.owed != 0) {
-        if (saved.rate_known) {
-            clock.boundary_hz = saved.boundary_hz;
-            clock.resume_unscaled = saved.boundary_hz == null;
+    clock.saved = grid;
+    clock.accounted = core.retired -| debt.owed;
+    clock.wall_cycles = if (backing.fabricOf(clock.memory.store)) |fabric| fabric.wall else 0;
+    clock.cycle_remainder = debt.cycle_remainder;
+    if (debt.owed != 0) {
+        if (debt.rate_known) {
+            clock.boundary_hz = debt.boundary_hz;
+            clock.resume_unscaled = debt.boundary_hz == null;
         } else clock.resume_boundary = true;
     }
-    return saved.owed;
+    return debt.owed;
 }
 
 fn save(context: *anyopaque, core: *const Cpu, owed: u32) anyerror!void {
@@ -76,24 +105,49 @@ fn due(context: *anyopaque) bool {
 fn writeAt(context: *anyopaque, core: *const Cpu) anyerror!void {
     const clock: *Clock = @ptrCast(@alignCast(context));
     const at = &clock.state.at.?;
-    at.written = true;
     try write(clock, core, at.path, 0);
+    at.written = true;
+}
+
+fn checkMode(bytes: []const u8, dual: bool) !void {
+    const has_second = (try run_file.file.Reader.find(bytes, .second)) != null;
+    const has_memory = (try run_file.file.Reader.find(bytes, .second_memory)) != null;
+    if (has_second != dual or has_memory != dual) return error.BadValue;
+    var reader = try run_file.file.Reader.open(bytes);
+    var cpu_count: [2]usize = .{ 0, 0 };
+    while (try reader.next()) |section| {
+        if (section.kind != .cpu) continue;
+        if (section.payload.len == 0 or section.payload[0] > 1) return error.BadValue;
+        cpu_count[section.payload[0]] += 1;
+    }
+    if (cpu_count[0] != 1 or cpu_count[1] != @as(usize, if (dual) 1 else 0)) return error.BadValue;
 }
 
 fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
-    const store = try storeOf(clock);
+    if (owed != clock.saved.stretch.carry or !clock.saved.valid()) return error.BadValue;
+    const binding = clock.snapshotBinding();
+    var graph: attachments.graph.Graph = .{};
+    _ = try attachments.capture(clock.board, binding, &graph);
+    const pair = clock.cpu1;
+    const count: usize = if (pair != null) 2 else 1;
+    const stores: [2]*const Store = .{ clock.memory.store, if (pair) |second| if (second.store != null) &second.store.? else return Error.SecondCoreNotSaved else clock.memory.store };
+    const cores: [2]*const Cpu = .{ core, if (pair) |second| &second.core.cpu else core };
+    const image_ids = try identities(clock);
     const file = try std.Io.Dir.cwd().createFile(clock.io, path, .{});
     defer file.close(clock.io);
     var staging: [4096]u8 = undefined;
     var writer = file.writer(clock.io, &staging);
     const out = &writer.interface;
-    try run_file.savePair(out, &.{store}, &.{core}, clock.board, .{ clock.image_identity, null });
+    try run_file.savePairAttached(out, stores[0..count], cores[0..count], clock.board, image_ids);
     try systick.save(.{ clock.timebase, &clock.ns_timebase }, out);
     try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, out);
+    try stretch.saveGrid(clock.saved, out);
+    if (pair) |second| try state.saveSecond(second, out);
+    try attachments.save(clock.board, binding, out);
     try out.flush();
 }
 
-fn storeOf(clock: *const Clock) Error!*Store {
-    if (clock.cpu1 != null) return Error.SecondCoreNotSaved;
-    return clock.memory.store;
+fn identities(clock: *const Clock) Error!run_file.Identity {
+    if (clock.cpu1 != null and (clock.image_identity == null or clock.cpu1_image_identity == null)) return Error.MissingImageIdentity;
+    return .{ clock.image_identity, clock.cpu1_image_identity };
 }

@@ -284,7 +284,7 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
     }
 }
 
-test "state strict formats five through seven are refused before live guest state or host wiring changes" {
+test "state strict formats five through eight are refused before live guest state or host wiring changes" {
     const live = try Rig.create();
     defer live.destroy();
     try populated(live);
@@ -293,7 +293,7 @@ test "state strict formats five through seven are refused before live guest stat
     defer before.deinit();
     const old = try std.testing.allocator.dupe(u8, before.written());
     defer std.testing.allocator.free(old);
-    for ([_]u32{ 5, 6, 7 }) |version| {
+    for ([_]u32{ 5, 6, 7, 8 }) |version| {
         std.mem.writeInt(u32, old[file.magic.len..][0..4], version, .little);
         try std.testing.expectError(error.BadVersion, live.files.readFrom(old));
     }

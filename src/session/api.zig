@@ -1,6 +1,4 @@
-//! The core-addressed debugger API, shared by the script and GDB fronts.
-//! It keeps image construction with the board front end, but every operation
-//! on a loaded image goes through this interface and names CPU0 or CPU1.
+//! Core-addressed debugger operations shared by script, GDB and embedders.
 const std = @import("std");
 const debug_session = @import("session.zig");
 const stop_machine = @import("stop_machine.zig");
@@ -59,6 +57,7 @@ pub const Session = struct {
     live: zig_session.ZigSession,
     time_base: ?*const TimeBase = null,
     event_clock: ?EventClock = null,
+    grid: ?*const @import("ra8_chip").core.scheduler.State = null,
     loader: ?Loader = null,
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
@@ -82,9 +81,9 @@ pub const Session = struct {
     pub fn attachEventClock(self: *Session, clock: EventClock) void {
         self.event_clock = clock;
     }
-    /// Virtual nanoseconds since the attached board began its run.
     pub fn now(self: *const Session) Error!u64 {
-        return (self.time_base orelse return Error.NoTime).now();
+        const time = self.time_base orelse return Error.NoTime;
+        return time.nowAfter(if (self.grid) |grid| grid.stretch.carry else 0);
     }
     pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
         self.input_script = script;
@@ -144,6 +143,7 @@ pub const Session = struct {
         try self.select(core);
         const loader = self.loader orelse return Error.NoLoader;
         try loader.loadFn(loader.context, core, image);
+        self.dirty();
         const tree_address = if (elf.Image.init(image)) |parsed| symbols.addressOf(parsed, widget_tree.symbol) else |_| null;
         self.widget_tree_addresses[@backingInt(core)] = tree_address;
         self.publish(.{ .core = core, .kind = .loaded });
@@ -151,9 +151,8 @@ pub const Session = struct {
 
     /// Read the latest visible widget snapshot published by ra8_widget.
     pub fn widgets(self: *Session, allocator: std.mem.Allocator, core: Core) anyerror![]Widget {
-        try self.select(core);
         const address = self.widget_tree_addresses[@backingInt(core)] orelse return error.NoWidgetTree;
-        return widget_tree.read(self.live.view(), address, allocator);
+        return widget_tree.read(try self.view(core), address, allocator);
     }
 
     /// Tap the center of the uniquely named widget at virtual time `at_ns`.
@@ -208,23 +207,23 @@ pub const Session = struct {
 
     pub fn run(self: *Session, core: Core, command: Run) anyerror!Ended {
         try self.select(core);
-        const cpu = self.live.core.cpu;
-        const retired_before = cpu.retired;
+        self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
+        const retired_before = self.live.core.cpu.retired;
         const ended = try self.live.go(command);
-        if (self.live.boundary == null) try self.advanceBoard(core, cpu.retired - retired_before);
-        self.publish(.{ .core = core, .kind = .stopped, .ended = ended });
-        if (self.history) |h| try h.capture(self.live.core.cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
+        if (self.live.boundary == null) try self.advanceBoard(core, self.live.core.cpu.retired - retired_before);
+        const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index)); // A served round also runs the other core.
+        self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
+        if (self.history) |h| try h.capture((if (stopped == core) self.live.core else self.live.other.?.core).cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
         if (ended == .core) {
             const address: ?u32 = switch (ended.core) {
                 .count => null,
                 .unknown => |instruction| instruction.address,
                 inline else => |at| at,
             };
-            self.publish(.{ .core = core, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
+            self.publish(.{ .core = stopped, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
         }
         return ended;
     }
-
     pub fn step(self: *Session, core: Core) anyerror!Ended {
         return self.run(core, .step);
     }
@@ -276,6 +275,7 @@ pub const Session = struct {
 
     pub fn setRegister(self: *Session, core: Core, which: Register, value: u32) anyerror!void {
         try (try self.view(core)).setRegister(which, value);
+        self.dirty();
         self.publish(.{ .core = core, .kind = .register_written });
     }
 
@@ -284,6 +284,7 @@ pub const Session = struct {
     }
     pub fn write(self: *Session, core: Core, address: u32, bytes: []const u8) anyerror!void {
         try (try self.view(core)).write(address, bytes);
+        self.dirty();
         self.publish(.{ .core = core, .kind = .memory_written, .address = address });
     }
     pub fn setBreakpoint(self: *Session, core: Core, point: breakpoint.Break) anyerror!BreakId {
@@ -326,13 +327,11 @@ pub const Session = struct {
     }
 
     pub fn breakpointExists(self: *Session, core: Core, id: BreakId) anyerror!bool {
-        try self.select(core);
-        return self.live.machine.breaks.get(id) != null;
+        return (try self.machine(core)).breaks.get(id) != null;
     }
 
     pub fn watchKind(self: *Session, core: Core, id: WatchId) anyerror!?watch_table.Kind {
-        try self.select(core);
-        const point = self.live.machine.watches.get(id) orelse return null;
+        const point = (try self.machine(core)).watches.get(id) orelse return null;
         return point.kind;
     }
 
@@ -349,23 +348,22 @@ pub const Session = struct {
     }
 
     pub fn view(self: *Session, core: Core) anyerror!core_view.View {
-        try self.select(core);
-        return self.live.view();
+        if (@backingInt(core) == self.live.index) return self.live.view();
+        const other = self.live.other orelse return Error.CoreNotAttached;
+        return .{ .zig = other.core };
     }
 
     pub fn machine(self: *Session, core: Core) anyerror!*stop_machine.Machine {
-        try self.select(core);
-        return self.live.machine;
+        if (@backingInt(core) == self.live.index) return self.live.machine;
+        return (self.live.other orelse return Error.CoreNotAttached).machine;
     }
 
     pub fn itmPort(self: *Session, core: Core) anyerror!*itm.Itm {
-        try self.select(core);
-        return &self.live.machine.itm;
+        return &(try self.machine(core)).itm;
     }
 
     pub fn flushItm(self: *Session, core: Core, out: anytype, final: bool) anyerror!void {
-        try self.select(core);
-        try self.live.machine.itm.flush(out, final);
+        try (try self.itmPort(core)).flush(out, final);
     }
 
     /// Reserve a bounded event queue while the engine is stopped.
@@ -385,6 +383,12 @@ pub const Session = struct {
 
     fn select(self: *Session, core: Core) anyerror!void {
         return self.live.switchTo(@backingInt(core));
+    }
+
+    fn dirty(self: *Session) void {
+        if (self.live.boundary) |edge| if (edge.saved) |saved| {
+            saved.stretch.dirty = true;
+        };
     }
 
     /// Publish a board observation into bounded subscriber queues.
