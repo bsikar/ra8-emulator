@@ -243,3 +243,47 @@ test "the camera leaf paints the panel and its note in place of the wait note" {
     const below: draw_list.Rect = .{ .x = body.x, .y = area.y + area.h + frame.pad, .w = body.w, .h = font.glyph_h };
     try std.testing.expect(holds(&pixels, below, dark.muted));
 }
+
+test "clicking a listed picture makes it the image source's file" {
+    const gpa = std.testing.allocator;
+    var camera: Camera = .{};
+    camera.panel.active = .image;
+    var names = [_][]const u8{ "a.png", "b.png" };
+    camera.listings.picture_names = names[0..];
+    defer camera.listings.picture_names = &.{};
+    var layout = try cameraLayout(gpa);
+    defer layout.deinit();
+    var solved = try frame.solve(&layout, gpa, 480, 320);
+    defer solved.deinit(gpa);
+    const body = try cameraBody(&layout, &solved);
+    const stack = gui_app.camera.rows.stackFor(body, 0, 2).?;
+    const at = stack.media().?.slot(0);
+    try std.testing.expect(camera.clickIn(&layout, &solved, at.x + @divTrunc(at.w, 2), at.y + @divTrunc(at.h, 2)));
+    try std.testing.expectEqualStrings("a.png", camera.args.image);
+    try std.testing.expect(camera.panel.changes > 0);
+    const again = stack.media().?.slot(0);
+    const changes = camera.panel.changes;
+    _ = camera.clickIn(&layout, &solved, again.x + @divTrunc(again.w, 2), again.y + @divTrunc(again.h, 2));
+    try std.testing.expectEqual(changes, camera.panel.changes);
+}
+
+test "clicking a device slot names that webcam; while it runs that is a change" {
+    const gpa = std.testing.allocator;
+    var camera: Camera = .{};
+    var numbers = [_]u32{ 0, 2 };
+    camera.listings.host_devices = .{ .allocator = gpa, .numbers = numbers[0..] };
+    var layout = try cameraLayout(gpa);
+    defer layout.deinit();
+    var solved = try frame.solve(&layout, gpa, 480, 320);
+    defer solved.deinit(gpa);
+    const body = try cameraBody(&layout, &solved);
+    const stack = gui_app.camera.rows.stackFor(body, 2, 0).?;
+    const at = stack.device().?.slot(1);
+    try std.testing.expect(camera.clickIn(&layout, &solved, at.x + @divTrunc(at.w, 2), at.y + @divTrunc(at.h, 2)));
+    try std.testing.expectEqual(@as(u32, 2), camera.device.?);
+    try std.testing.expectEqual(@as(u32, 0), camera.panel.changes);
+    camera.panel.active = .webcam;
+    const other = stack.device().?.slot(0);
+    try std.testing.expect(camera.clickIn(&layout, &solved, other.x + @divTrunc(other.w, 2), other.y + @divTrunc(other.h, 2)));
+    try std.testing.expectEqual(@as(u32, 1), camera.panel.changes);
+}
