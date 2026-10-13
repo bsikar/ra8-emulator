@@ -44,7 +44,9 @@ const Scene = struct {
 
     fn render(self: *Scene, status: *const status_bar.Status, state: State) !void {
         const view = capture.strip(status, state);
-        try strip.draw(&self.list, self.theme, strip.area(@intCast(self.width), strip.height), &view);
+        var target = ra8.render.widget_paint.Target{ .list = &self.list };
+        const paint = target.paint();
+        strip.draw(&paint, self.theme, strip.area(@intCast(self.width), strip.height), &view);
         raster.draw(&self.frame, &self.list, font.atlas);
     }
 
@@ -108,6 +110,8 @@ test "an empty strip draws nothing" {
     defer list.deinit();
     const status = sample();
     const view = capture.strip(&status, up);
-    try strip.draw(&list, dark, .{ .x = 0, .y = 0, .w = 0, .h = strip.height }, &view);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    strip.draw(&paint, dark, .{ .x = 0, .y = 0, .w = 0, .h = strip.height }, &view);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }

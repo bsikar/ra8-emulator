@@ -163,9 +163,9 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
     try time_bar.draw(list, theme, toList(barArea(shell.width, shell.height)), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {
-        try status_strip.draw(list, theme, theme_picker.rest(strip), &shell.strip);
+        status_strip.draw(&paint, theme, theme_picker.rest(strip), &shell.strip);
         try theme_picker.draw(list, theme, strip, picker);
-    } else try status_strip.draw(list, theme, strip, &shell.strip);
+    } else status_strip.draw(&paint, theme, strip, &shell.strip);
     // The strip draws last, so an open drop-down covers the panes.
     try menu_bar.draw(list, theme, shell.menu, shell.width);
 }
