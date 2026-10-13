@@ -3,7 +3,9 @@
 //! answer becomes the shown rows, a stop of the bound core makes an ask
 //! due, a refused ask keeps the last rows with a note, an answer sent
 //! before a load is dropped, and a packed list whose count disagrees is
-//! refused.
+//! refused. The frame choice (RA8EMU-1187): a picked stack frame's ask
+//! replaces one in flight, a stop resets the choice, and a click on a
+//! stack pane's frame selects it.
 const std = @import("std");
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
@@ -14,6 +16,11 @@ const shell_locals = gui_app.shell.locals;
 const Locals = shell_locals.Locals;
 const Stdio = ra8.rpc.stdio_transport.Stdio;
 const session_link = gui_app.session_link;
+const draw_list = ra8.render.draw_list;
+const frame = gui_app.shell.frame;
+const shell_stack = gui_app.shell.stack;
+const stack_pane = gui_app.stack_pane;
+const pane_layout = gui_app.pane_layout;
 const Env = proto.Client.Env;
 
 /// A link that has finished its greeting, writing into a pipe nobody answers.
@@ -129,4 +136,90 @@ test "a packed list whose count disagrees is refused" {
     var model: Locals = .{ .core = .cpu0, .asked = 11 };
     try answer(&model, 11, 5);
     try std.testing.expect(model.refused);
+}
+
+/// A solved frame whose one leaf is a stack pane on cpu0.
+const StackFrame = struct {
+    layout: pane_layout.Layout,
+    solved: pane_layout.Solved,
+    body: draw_list.Rect,
+
+    fn init(gpa: std.mem.Allocator) !StackFrame {
+        var layout = try pane_layout.Layout.init(gpa, .{ .kind = .stack, .core = .cpu0 });
+        errdefer layout.deinit();
+        const solved = try frame.solve(&layout, gpa, 480, 320);
+        return .{ .layout = layout, .solved = solved, .body = frame.bodyOf(solved.panes.items[0].area) };
+    }
+
+    fn deinit(self: *StackFrame, gpa: std.mem.Allocator) void {
+        self.solved.deinit(gpa);
+        self.layout.deinit();
+    }
+};
+
+/// Publish a three-frame chain on cpu0, so a click has rows to land on.
+fn publishStack(pair: *shell_stack.Pair) void {
+    var snap: stack_pane.Snapshot = .{};
+    snap.count = 3;
+    for (0..3) |i| snap.frames[i].pc = @intCast(0x1000 + i * 4);
+    pair.cores[0].now = snap;
+}
+
+test "picking a frame re-asks there and drops the old answer" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    var model: Locals = .{ .core = .cpu0 };
+    model.reload();
+    model.attach(&wire.link);
+    const first = model.asked.?;
+    model.pickFrame(2);
+    try std.testing.expectEqual(@as(u32, 2), model.frame);
+    try std.testing.expect(model.want);
+    // The answer to the first ask describes frame 0: dropped, a fresh
+    // ask for the chosen frame goes out.
+    try answer(&model, first, 2);
+    try std.testing.expectEqual(@as(?shell_locals.Snapshot, null), model.now);
+    model.attach(&wire.link);
+    try std.testing.expect(model.asked != null and model.asked.? != first);
+}
+
+test "a click on the shown frame is a no-op" {
+    var model: Locals = .{ .core = .cpu0 };
+    model.pickFrame(0);
+    try std.testing.expect(!model.want);
+}
+
+test "a stop resets the choice to the stopped pc" {
+    var model: Locals = .{ .core = .cpu1 };
+    model.pickFrame(2);
+    try stop(&model, .cpu0);
+    try std.testing.expectEqual(@as(u32, 2), model.frame);
+    try stop(&model, .cpu1);
+    try std.testing.expectEqual(@as(u32, 0), model.frame);
+    try std.testing.expect(model.want);
+}
+
+test "a click on a stack pane's frame selects it" {
+    var wire: Wire = .{};
+    try wire.open();
+    defer wire.close();
+    const gpa = std.testing.allocator;
+    var f = try StackFrame.init(gpa);
+    defer f.deinit(gpa);
+    var pair: shell_locals.Pair = .{};
+    var chain: shell_stack.Pair = .{};
+    publishStack(&chain);
+
+    const band = stack_pane.rowRect(f.body, 2);
+    const at = .{ .x = band.x + @divTrunc(band.w, 2), .y = band.y + @divTrunc(band.h, 2), .w = 0, .h = 0 };
+    try std.testing.expect(pair.clickIn(&chain, &f.layout, &f.solved, at.x, at.y));
+    try std.testing.expectEqual(@as(u32, 2), pair.cores[0].frame);
+    try std.testing.expect(pair.cores[0].want);
+    // The ask goes out for the chosen frame.
+    pair.attach(&wire.link);
+    try std.testing.expect(!pair.cores[0].want);
+    // A click on the frame already shown is consumed and asks nothing new.
+    try std.testing.expect(pair.clickIn(&chain, &f.layout, &f.solved, at.x, at.y));
+    try std.testing.expect(!pair.cores[0].want);
 }

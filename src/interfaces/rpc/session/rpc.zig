@@ -6,7 +6,8 @@ pub const protocol_version: u16 = 1;
 /// Bit 2: advance. Bit 3: snapshot and restore. Bit 6: stack. Bit 7: rtc.
 /// Bit 8: input. Bit 9: backtrace. Bit 10: periph. Bit 11: folded.
 /// Bit 12: break by name. Bit 13: board parts.
-pub const capabilities: u32 = 0x0000_3FFF;
+/// Bit 14: the locals_at op (RA8EMU-1187), locals at a chosen frame.
+pub const capabilities: u32 = 0x0000_7FFF;
 pub const max_payload = 1_048_576;
 
 /// Refusal codes this message set adds above the library's own.
@@ -62,6 +63,7 @@ pub const Method = enum(u16) {
     board_parts = 0x0127,
     source_line = 0x0128,
     locals = 0x0129,
+    locals_at = 0x012A,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -93,6 +95,7 @@ pub const LoadChunk = struct {
 };
 pub const Run = struct { core: Core, mode: RunMode, budget: u64 };
 pub const CoreOnly = struct { core: Core };
+pub const CoreFrame = struct { core: Core, frame: u32 };
 pub const SetSpeed = struct { core: Core, milli: u64 };
 pub const ReadRegister = struct { core: Core, register: Register };
 pub const WriteRegister = struct { core: Core, register: Register, value: u32 };

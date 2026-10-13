@@ -1,7 +1,9 @@
-//! The shell's locals leaf (RA8EMU-805): one core's locals at the stopped
-//! pc asked over the session link (locals 0x0129) into the locals pane's
-//! (RA8EMU-805) Snapshot, so the pane draws in the shell unchanged. The
-//! session reads the image's .debug_info and packs each local with its
+//! The shell's locals leaf (RA8EMU-805): one core's locals asked over the
+//! session link (locals_at 0x012A, RA8EMU-1187) into the locals pane's
+//! Snapshot, so the pane draws in the shell unchanged. The ask names the
+//! frame the rows read at: frame 0 is the stopped pc, and a click on a
+//! call-stack frame switches the ask to that frame (a new stop resets it).
+//! The session reads the image's .debug_info and packs each local with its
 //! type, size, and where it lives; the leaf only copies the answer. One
 //! ask goes out once the image has loaded and after every stop of the
 //! leaf's core; a load starts over.
@@ -12,6 +14,9 @@ const locals_wire = rpc.locals_wire;
 const session_link = @import("../session_link.zig");
 const locals_pane = @import("../ui/locals_pane.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
+const stack_pane = @import("../ui/stack_pane.zig");
+const shell_frame = @import("../ui/shell/frame.zig");
+const shell_stack = @import("stack.zig");
 
 const Env = proto.Client.Env;
 pub const Snapshot = locals_pane.Snapshot;
@@ -24,6 +29,9 @@ comptime {
 
 pub const Locals = struct {
     core: proto.Core,
+    /// The frame the rows read at: 0 is the stopped pc, n the call
+    /// chain's frame n (RA8EMU-1187). A stop resets the choice.
+    frame: u32 = 0,
     /// An ask is due on the next attach.
     want: bool = false,
     /// The id of the ask in flight.
@@ -38,8 +46,8 @@ pub const Locals = struct {
     /// greeted.
     pub fn attach(self: *Locals, link: *session_link.Link) void {
         if (link.state != .connected or !self.want or self.asked != null) return;
-        const args: proto.CoreOnly = .{ .core = self.core };
-        self.asked = link.send(proto.CoreOnly, .locals, args) catch |err| switch (err) {
+        const args: proto.CoreFrame = .{ .core = self.core, .frame = self.frame };
+        self.asked = link.send(proto.CoreFrame, .locals_at, args) catch |err| switch (err) {
             error.TableFull => return,
             else => null,
         };
@@ -63,6 +71,16 @@ pub const Locals = struct {
         self.now = null;
     }
 
+    /// Clicking a call-stack frame selects it (RA8EMU-1187): the next ask
+    /// reads that frame's locals. A click on the frame already shown does
+    /// nothing; the rows stay until the new answer lands.
+    pub fn pickFrame(self: *Locals, frame: u32) void {
+        if (frame == self.frame) return;
+        self.frame = frame;
+        self.want = true;
+        self.stale = self.asked != null;
+    }
+
     /// The leaf's note while it has no rows to draw, or null.
     pub fn note(self: *const Locals) ?[]const u8 {
         if (self.refused) return "the session would not read the locals";
@@ -73,7 +91,12 @@ pub const Locals = struct {
     fn stopped(self: *Locals, event: Env.Event) void {
         if (event.topic != @backingInt(proto.Topic.stop)) return;
         const stop = proto.decode(proto.Stopped, event.payload) catch return;
-        if (stop.core == self.core) self.want = true;
+        if (stop.core == self.core) {
+            // A new chain starts at its top: the chosen frame belonged to
+            // the old one (RA8EMU-1187).
+            self.frame = 0;
+            self.want = true;
+        }
     }
 
     fn answered(self: *Locals, id: u32, result: Env.Result) void {
@@ -135,6 +158,24 @@ pub const Pair = struct {
 
     pub fn reload(self: *Pair) void {
         for (&self.cores) |*model| model.reload();
+    }
+
+    /// Route a left press at (`x`, `y`) to a stack pane's frame
+    /// (RA8EMU-1187): the hit frame becomes that core's locals ask.
+    /// Returns whether a frame was hit.
+    pub fn clickIn(self: *Pair, stack: *const shell_stack.Pair, layout: *const pane_layout.Layout, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
+        for (solved.panes.items) |placed| {
+            const pane = layout.pane(placed.index) orelse continue;
+            if (pane.kind != .stack) continue;
+            const body = shell_frame.bodyOf(placed.area);
+            if (x < body.x or y < body.y or x >= body.x + body.w or y >= body.y + body.h) continue;
+            const chain = stack.of(pane.core);
+            const snapshot = if (chain.now) |*snap| snap else continue;
+            const frame = stack_pane.frameAt(body, snapshot, y) orelse continue;
+            self.cores[@backingInt(pane.core)].pickFrame(@intCast(frame));
+            return true;
+        }
+        return false;
     }
 
     /// The cores halted with no stop event of their own, as a paused run

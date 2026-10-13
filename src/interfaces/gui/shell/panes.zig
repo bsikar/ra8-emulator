@@ -179,7 +179,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
-        if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, toList(body), now, 0);
+        if (pair.of(pane.core).now) |*now| {
+            const chosen = if (self.locals) |locals| locals.of(pane.core).frame else 0;
+            return stack_pane.draw(list, theme, toList(body), now, @intCast(chosen));
+        }
     };
     if (pane.kind == .locals) if (self.locals) |pair| {
         if (pair.of(pane.core).now) |*now| return locals_pane.draw(list, theme, toList(body), now);

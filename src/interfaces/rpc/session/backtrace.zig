@@ -37,7 +37,8 @@ pub fn backtrace(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     return .{ .ok = .{ .core = args.core, .count = @intCast(count), .frames = context.scratch[0..at] } };
 }
 
-fn walk(view: anytype, image: ?Image, into: *[unwind.limits.frames]unwind.Frame) !usize {
+/// The frame walk shared with the locals_at handler (RA8EMU-1187).
+pub fn walk(view: anytype, image: ?Image, into: *[unwind.limits.frames]unwind.Frame) !usize {
     const cfi = if (image) |found| dwarf_line.section(found, ".debug_frame") else &.{};
     var count = unwind.walk(cfi, try unwind.registersOf(view), try view.register(.psp), view, into);
     const lr = try view.register(.lr);

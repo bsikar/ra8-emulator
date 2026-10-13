@@ -67,7 +67,7 @@ pub const form = struct {
     pub const ref2: u64 = 0x12;
     pub const ref4: u64 = 0x13;
     pub const ref8: u64 = 0x14;
-    pub const ref_udata: u64 = 0x17;
+    pub const ref_udata: u64 = 0x15;
     pub const implicit_const: u64 = 0x21;
 };
 
