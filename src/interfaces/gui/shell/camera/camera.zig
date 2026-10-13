@@ -29,6 +29,13 @@ const Kind = camera_panel.Kind;
 pub const Status = enum { idle, asking, switched, refused, needs_file };
 
 pub const Camera = struct {
+    /// A camera whose panel keeps the consent Always for this run only.
+    pub fn opened(io: std.Io) Camera {
+        var camera: Camera = .{};
+        camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
+        return camera;
+    }
+
     panel: camera_panel.Panel = .{},
     /// Where the panel's Always is kept between runs; null keeps it for
     /// this run only.

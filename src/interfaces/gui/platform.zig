@@ -57,6 +57,9 @@ pub const Event = union(enum) {
     /// (RA8EMU-1152). The path is the backend's and holds until the next
     /// poll; a picker that was cancelled sends nothing.
     picked_profile: []const u8,
+    /// A file dropped onto the window (RA8EMU-1153). The path is the
+    /// backend's and holds until the next poll.
+    dropped: []const u8,
 };
 
 /// How an executable opens and closes its window. ra8_gui passes

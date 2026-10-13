@@ -47,6 +47,8 @@ const shell_window = @import("window_store.zig");
 const shell_hosted = @import("hosted.zig");
 const shell_rebuild = @import("rebuild.zig");
 const shell_board_store = @import("board_store.zig");
+const shell_recents = @import("recents.zig");
+const shell_recent_menu = @import("recent_menu.zig");
 const shell_board_pick = @import("board_pick.zig");
 const shell_board_profiles = @import("board_profiles.zig");
 const host_listener = @import("ra8_rpc").host_listener;
@@ -244,24 +246,22 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var render_buf: [64]u8 = undefined;
     shell.status.render = render_driver.status(&render_buf, render_driver.active, render_driver.gpu);
     var settings_store = shell_settings.Store{ .io = io, .allocator = allocator, .dir = prefs };
-    // An explicit --theme wins over the saved choice (RA8EMU-963).
-    shell.themes.choose(if (args.theme_set) args.theme else settings_store.load());
+    shell.themes.choose(if (args.theme_set) args.theme else settings_store.load()); // an explicit --theme wins (RA8EMU-963)
     shell.settings = .{ .store = &settings_store };
-    // The saved pane layout replaces the default before the first frame.
     var layout_store = shell_layout.Store{ .io = io, .allocator = allocator, .dir = prefs };
-    layout_store.restore(&shell.layout);
+    layout_store.restore(&shell.layout); // the saved layout replaces the default
     defer shell.deinit();
-    shell.link = &link;
-    shell_hosted.bindHosted(&hosted, allocator, io, env, window, args.image, &session, &shell);
+    shell_hosted.bindHosted(&hosted, allocator, io, env, window, args.image, &session, &link, &shell);
     var board_store = shell_board_store.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    var recent_store = shell_recents.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    var recent_list = recent_store.restore();
     shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, rx, tx, &board_store);
     var host_clock = wall_clock.Host.init(io);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
     shell.time = &time;
-    var console = shell_console.Console.init(allocator);
+    var console = shell_console.Console.init(allocator, .{ .io = io, .dir = std.Io.Dir.cwd() });
     defer console.deinit();
-    console.save_to = .{ .io = io, .dir = std.Io.Dir.cwd() };
     shell.console = &console;
     var board = shell_board.Board.init(allocator);
     defer board.deinit();
@@ -272,8 +272,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.devices = &devices;
     var faults: shell_fault.Faults = .{};
     shell.faults = &faults;
-    var camera: shell_camera.Camera = .{};
-    camera.kept = .begin(io, std.Io.Dir.cwd(), &camera.panel);
+    var camera = shell_camera.Camera.opened(io);
     if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
     shell.startup = startup;
@@ -298,12 +297,15 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.code = &code;
     var breaks: shell_breaks.Breaks = .{};
     shell.breaks = &breaks;
-    var files: shell_open.Open = .{ .io = io, .allocator = allocator };
+    var files: shell_open.Open = .{ .io = io, .allocator = allocator, .history = &recent_list };
     shell.files = &files;
+    var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
+    shell.recent_menu = &recent_menu;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &plug, .camera_file = &camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &memory_field, .code = &code, .breaks = &breaks, .stack = &stack };
     shell.painter = panes.painter();
     try drive(io, &shell, window, args.image, bytes, args.frames);
     layout_store.save(&shell.layout);
+    recent_store.save(recent_list);
     link.close();
 }
 

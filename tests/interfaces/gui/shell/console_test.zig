@@ -30,7 +30,7 @@ fn uart(console: *Console, text: []const u8, at_ns: u64) !void {
 }
 
 test "uart events land in the log at their own board time" {
-    var console = Console.init(std.testing.allocator);
+    var console = Console.init(std.testing.allocator, null);
     defer console.deinit();
     try std.testing.expect(!console.hasOutput());
     try uart(&console, "hi\n", 50);
@@ -44,7 +44,7 @@ test "uart events land in the log at their own board time" {
 }
 
 test "responses and other topics leave the log alone" {
-    var console = Console.init(std.testing.allocator);
+    var console = Console.init(std.testing.allocator, null);
     defer console.deinit();
     try console.observe(.{ .response = .{ .id = 1, .result = .{ .ok = "hi\n" } } });
     try console.observe(.{ .event = .{ .topic = @backingInt(proto.Topic.stop), .payload = "hi\n" } });
@@ -89,7 +89,7 @@ test "a local session's banner reaches the console stamped with board time" {
     var link: session_link.Link = undefined;
     link.open(local.transport(), rx, tx);
     var status: status_bar.Status = .{};
-    var console = Console.init(gpa);
+    var console = Console.init(gpa, null);
     defer console.deinit();
     try pumpUntil(&link, &status, &console, connected);
 
@@ -121,7 +121,7 @@ fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_li
 
 test "the console leaf draws the log in place of its note" {
     const gpa = std.testing.allocator;
-    var console = Console.init(gpa);
+    var console = Console.init(gpa, null);
     defer console.deinit();
     try uart(&console, "booted\n", 1_000);
     var layout = try pane_layout.twoCore(gpa);

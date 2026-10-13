@@ -141,6 +141,8 @@ test {
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/board_pick_test.zig");
     _ = @import("interfaces/gui/shell/board_store_test.zig");
+    _ = @import("interfaces/gui/shell/recents_test.zig");
+    _ = @import("interfaces/gui/shell/recent_menu_test.zig");
     _ = @import("interfaces/gui/shell/layout_store_test.zig");
     _ = @import("interfaces/gui/shell/window_store_test.zig");
     _ = @import("interfaces/gui/shell/frame_buffer_test.zig");

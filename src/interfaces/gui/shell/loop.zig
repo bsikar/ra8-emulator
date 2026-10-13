@@ -43,6 +43,7 @@ const shell_stack = @import("stack.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
+const shell_recent = @import("recent_menu.zig");
 const shell_settings = @import("settings_page.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
@@ -104,6 +105,8 @@ pub const Shell = struct {
     held: ?pane_layout.Gutter = null,
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},
+    /// The File menu's laid-in recents (RA8EMU-1153), or null when none is kept.
+    recent_menu: ?*shell_recent.State = null,
     width: i32 = 0,
     /// The window's height this frame (RA8EMU-963).
     height: i32 = 0,
@@ -217,6 +220,7 @@ pub const Shell = struct {
             },
             .picked => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
             .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
+            .dropped => |path| if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status),
             else => {},
         }
     }

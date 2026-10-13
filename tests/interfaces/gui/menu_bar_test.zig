@@ -23,7 +23,7 @@ const idle = Menu{ .bar = .{}, .state = .{}, .os = linux };
 
 /// The middle of title `index`, where a press opens it.
 fn titleMid(index: usize) draw_list.Rect {
-    const at = menu_bar.title(width, index);
+    const at = menu_bar.title(&menu.bar, width, index);
     return .{ .x = at.x + @divFloor(at.w, 2), .y = at.y + @divFloor(at.h, 2), .w = 0, .h = 0 };
 }
 
@@ -41,12 +41,12 @@ test "a press on a title opens its drop-down, and again closes it" {
     try std.testing.expect(std.meta.activeTag(second) == .taken);
     try std.testing.expectEqual(@as(?usize, null), bar.open);
     // Run's title starts where File's ends: two pads and "File".
-    try std.testing.expectEqual(2 * menu_bar.pad + 4 * 8, menu_bar.title(width, 1).x);
+    try std.testing.expectEqual(2 * menu_bar.pad + 4 * 8, menu_bar.title(&menu.bar, width, 1).x);
 }
 
 test "an enabled item fires its action and closes the menu" {
     var bar = Bar{ .open = 0 };
-    const at = menu_bar.row(width, 0, 0, linux);
+    const at = menu_bar.row(&menu.bar, width, 0, 0, linux);
     const did = menu_bar.press(&bar, loaded, width, at.x + 40, at.y + 2);
     try std.testing.expect(std.meta.activeTag(did) == .fire);
     try std.testing.expect(did.fire.eql(.{ .command = .open_elf }));
@@ -55,7 +55,7 @@ test "an enabled item fires its action and closes the menu" {
 
 test "a disabled item takes the press and never fires" {
     var bar = Bar{ .open = 1 };
-    const at = menu_bar.row(width, 1, 0, linux); // Run, with nothing loaded
+    const at = menu_bar.row(&menu.bar, width, 1, 0, linux); // Run, with nothing loaded
     const did = menu_bar.press(&bar, idle, width, at.x + 40, at.y + 2);
     try std.testing.expect(std.meta.activeTag(did) == .taken);
     try std.testing.expectEqual(@as(?usize, 1), bar.open);
@@ -82,33 +82,35 @@ test "escape closes a drop-down and reports one was out" {
 
 test "hover moves the open drop-down across the titles" {
     var bar = Bar{ .open = 0 };
-    menu_bar.hover(&bar, width, menu_bar.title(width, 2).x + 8);
+    menu_bar.hover(&bar, &menu.bar, width, menu_bar.title(&menu.bar, width, 2).x + 8);
     try std.testing.expectEqual(@as(?usize, 2), bar.open);
-    menu_bar.hover(&bar, width, 400);
+    menu_bar.hover(&bar, &menu.bar, width, 400);
     try std.testing.expectEqual(@as(?usize, 2), bar.open);
 }
 
 test "rows stack with two pixels of air over a divided row" {
-    const first = menu_bar.row(width, 0, 0, linux);
-    const second = menu_bar.row(width, 0, 1, linux);
-    const settings = menu_bar.row(width, 0, 2, linux);
-    const quit = menu_bar.row(width, 0, 3, linux);
+    const first = menu_bar.row(&menu.bar, width, 0, 0, linux);
+    const second = menu_bar.row(&menu.bar, width, 0, 1, linux);
+    const close = menu_bar.row(&menu.bar, width, 0, 2, linux);
+    const settings = menu_bar.row(&menu.bar, width, 0, 3, linux);
+    const quit = menu_bar.row(&menu.bar, width, 0, 4, linux);
     try std.testing.expectEqual(first.y + menu_bar.row_h, second.y);
-    try std.testing.expectEqual(second.y + menu_bar.row_h, settings.y);
+    try std.testing.expectEqual(second.y + menu_bar.row_h, close.y);
+    try std.testing.expectEqual(close.y + menu_bar.row_h, settings.y);
     try std.testing.expectEqual(settings.y + menu_bar.row_h + menu_bar.divide, quit.y);
-    try std.testing.expectEqual(1 + 4 * menu_bar.row_h + menu_bar.divide, menu_bar.drop(width, 0, linux).h);
-    try std.testing.expect(menu_bar.drop(width, 0, linux).contains(quit.x + 2, quit.y + 1));
+    try std.testing.expectEqual(1 + 5 * menu_bar.row_h + menu_bar.divide, menu_bar.drop(&menu.bar, width, 0, linux).h);
+    try std.testing.expect(menu_bar.drop(&menu.bar, width, 0, linux).contains(quit.x + 2, quit.y + 1));
 }
 
 test "macOS leaves Quit out of File" {
     const mac: Menu = .{ .state = .{ .loaded = true }, .os = macos };
-    try std.testing.expectEqual(menu_bar.drop(width, 0, linux).h - menu_bar.row_h - menu_bar.divide, menu_bar.drop(width, 0, macos).h);
-    try std.testing.expect(menu_bar.dropWidth(0, macos) < menu_bar.dropWidth(0, linux));
-    // With Quit hidden, the drop-down's second row is Close, and it fires.
+    try std.testing.expectEqual(menu_bar.drop(&menu.bar, width, 0, linux).h - menu_bar.row_h - menu_bar.divide, menu_bar.drop(&menu.bar, width, 0, macos).h);
+    try std.testing.expect(menu_bar.dropWidth(&menu.bar, 0, macos) < menu_bar.dropWidth(&menu.bar, 0, linux));
+    // With Quit hidden, the drop-down's third row is Close, and it fires.
     var bar = Bar{};
     const mid = titleMid(0);
     _ = menu_bar.press(&bar, mac, width, mid.x, mid.y);
-    const at = menu_bar.row(width, 0, 1, macos);
+    const at = menu_bar.row(&menu.bar, width, 0, 2, macos);
     const did = menu_bar.press(&bar, mac, width, at.x + 40, at.y + 2);
     try std.testing.expect(std.meta.activeTag(did) == .fire);
     try std.testing.expect(did.fire.eql(.{ .command = .close }));
@@ -117,7 +119,7 @@ test "macOS leaves Quit out of File" {
 test "the drop-down is wide enough for every shown label and its shortcut" {
     var buf: [16]u8 = undefined;
     for (0..menu.bar.len) |index| {
-        const box = menu_bar.drop(width, index, linux);
+        const box = menu_bar.drop(&menu.bar, width, index, linux);
         for (menu.bar[index].items) |item| {
             if (!menu.shows(item, linux)) continue;
             var need: i32 = 3 * menu_bar.pad + @as(i32, @intCast(font.textWidth(item.label.len)));
