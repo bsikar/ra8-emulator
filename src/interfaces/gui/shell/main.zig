@@ -310,7 +310,11 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.recent_menu = &recent_menu;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source };
     shell.painter = panes.painter();
-    try drive(io, &shell, window, args.image, bytes, args.frames);
+    try driveAndSave(io, &shell, window, args.image, bytes, args.frames, &layout_store, &recent_store, recent_list, &link);
+}
+
+fn driveAndSave(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, frames: ?u32, layout_store: *const shell_layout.Store, recent_store: *const shell_recents.Store, recent_list: shell_recents.List, link: *session_link.Link) !void {
+    try drive(io, shell, window, path, bytes, frames);
     layout_store.save(&shell.layout);
     recent_store.save(recent_list);
     link.close();
