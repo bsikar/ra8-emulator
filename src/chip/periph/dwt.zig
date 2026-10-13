@@ -197,7 +197,8 @@ pub const Dwt = struct {
 
     /// The halting comparator an instruction fetch at `pc` matches.
     pub fn matchesPc(self: *Dwt, pc: u32) ?usize {
-        return self.firstMatch(pc & ~@as(u32, 1), 2, null, null);
+        var found: [1]usize = undefined;
+        return if (self.accessAll(pc & ~@as(u32, 1), 2, null, null, &found) > 0) found[0] else null;
     }
 
     /// Whether comparator 0 is a live Cycle Counter comparator. Only it can
@@ -236,24 +237,24 @@ pub const Dwt = struct {
         return if (action == function_bits.action_debug) 0 else null;
     }
 
-    /// The halting comparator a data access matches. Every comparator it
-    /// matches has MATCHED set, halting or not. `value` is what the access
-    /// moved, when known; without it no Data Value comparator matches.
-    pub fn access(self: *Dwt, address: u32, width: u8, kind: Access, value: ?u32) ?usize {
-        return self.firstMatch(address, width, kind, value);
-    }
-
-    fn firstMatch(self: *Dwt, address: u32, width: u32, kind: ?Access, value: ?u32) ?usize {
-        if (!self.trcena) return null;
-        var halting: ?usize = null;
+    /// Every halting comparator an access matches, in comparator order,
+    /// filling `into`. Every comparator it matches has MATCHED set,
+    /// halting or not; `value` is what the access moved, when known,
+    /// without which no Data Value comparator matches.
+    pub fn accessAll(self: *Dwt, address: u32, width: u32, kind: ?Access, value: ?u32, into: []usize) usize {
+        if (!self.trcena) return 0;
+        var found: usize = 0;
         for (0..self.numcomp) |index| {
             const owner = self.reporter(index, address, width, kind, value) orelse continue;
             self.functions[owner] |= function_bits.matched;
             self.changed = true;
-            const action = (self.functions[owner] >> function_bits.action_shift) & function_bits.action_mask;
-            if (halting == null and action == function_bits.action_debug) halting = owner;
+            if ((self.functions[owner] >> function_bits.action_shift) & function_bits.action_mask != function_bits.action_debug) continue;
+            if (found < into.len) {
+                into[found] = owner;
+                found += 1;
+            }
         }
-        return halting;
+        return found;
     }
 
     /// The comparator that reports a match made by comparator `index`: itself,

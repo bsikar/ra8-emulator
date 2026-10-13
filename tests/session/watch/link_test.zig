@@ -21,7 +21,7 @@ test "a matching store leaves the machine running" {
     var watched = watchpoint.Watched{ .address = 0x2200_0040 };
     var made = watch_link.link(&watched);
     made.store(0x0200_0100, 0, 0x2200_0042, 2, 0xBEEF);
-    try std.testing.expect(made.machine.watch_pending == null);
+    try std.testing.expectEqual(@as(usize, 0), made.machine.arrivals().len);
     const event = ra8.session.stop_machine.Event{ .pc = 0x0200_0104, .size = 2, .sp = 0 };
     try std.testing.expect(made.machine.onInstruction(event) == null);
 }

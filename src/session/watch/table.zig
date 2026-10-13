@@ -114,13 +114,25 @@ pub const Table = struct {
     /// Count the access against every enabled watch it matches and say
     /// which one, the first set, stops the run.
     pub fn hit(self: *Table, address: u32, width: u8, access: Access) ?Hit {
-        var found: ?Hit = null;
+        var found: [1]Hit = undefined;
+        return if (self.collect(address, width, access, &found) > 0) found[0] else null;
+    }
+
+    /// Count the access against every enabled watch it matches and collect
+    /// them all, in table order, appending into `into`. Returns how many
+    /// were collected; one access can match every watch in the table, so
+    /// `into` should hold `limits.capacity` hits.
+    pub fn collect(self: *Table, address: u32, width: u8, access: Access, into: []Hit) usize {
+        var found: usize = 0;
         for (self.slots[0..self.len]) |*slot| {
             if (!slot.enabled) continue;
             if (!slot.watch.kind.covers(access)) continue;
             if (!slot.watch.overlaps(address, width)) continue;
             slot.watch.seen += 1;
-            if (found == null) found = .{ .id = slot.id, .address = address, .width = width, .access = access };
+            if (found < into.len) {
+                into[found] = .{ .id = slot.id, .address = address, .width = width, .access = access };
+                found += 1;
+            }
         }
         return found;
     }

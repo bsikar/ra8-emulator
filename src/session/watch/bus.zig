@@ -55,7 +55,7 @@ pub const WatchBus = struct {
         if (self.quiet and address < ppb_base) return;
         unit_view.overlay(self.driver.machine, address, into);
         self.driver.loaded(address);
-        self.driver.machine.onAccess(address, width(into.len), .read, value(into));
+        _ = self.driver.machine.onAccess(address, width(into.len), .read, value(into));
     }
 
     /// The core raising a fault status bit is not a guest access: no
@@ -72,7 +72,7 @@ pub const WatchBus = struct {
         if (address >= ppb_base) self.ppb.seen = true else if (self.quiet) return;
         const moved = value(bytes);
         self.driver.stored(address, moved, width(bytes.len));
-        self.driver.machine.onAccess(address, width(bytes.len), .write, moved);
+        _ = self.driver.machine.onAccess(address, width(bytes.len), .write, moved);
     }
 };
 

@@ -84,7 +84,7 @@ const Round = struct {
         // A store can both cut the interval and trigger a data comparator.
         // Deliver that stop at the following instruction before board close;
         // the saved cut then owns the deferred timer charge on resume.
-        if (cut and live.machine.halting and (live.machine.watch_pending != null or live.machine.unit_pending != null)) {
+        if (cut and live.machine.halting and live.machine.pendingData()) {
             var none: u64 = 0;
             const polled = drive.runTarget(live.core, live.machine, 0, live.watch, &live.clock, &none, cpu.slots);
             if (polled != .count) return stopped(live, saved, polled);

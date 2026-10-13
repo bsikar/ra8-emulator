@@ -13,8 +13,7 @@ const dcb = @import("ra8_chip").periph.dcb;
 
 /// Pend DebugMonitor for the event the last instruction raised, if any.
 pub fn take(core: zig_core.ZigCore, machine: *stop_machine.Machine) void {
-    const cause = machine.takeMonitor() orelse return;
-    pend(core, machine, cause);
+    while (machine.takeMonitor()) |cause| pend(core, machine, cause);
 }
 
 /// Set DEMCR.MON_PEND and latch DFSR for `cause` when DEMCR.MON_EN is set.
