@@ -41,6 +41,19 @@ pub const Asks = struct {
         self.count = asks.len;
         self.arena = arena;
     }
+
+    /// True when the kept asks hold attachment state a plain snapshot cannot
+    /// carry (RA8EMU-1185): an owned catalog instance or a fault wrapper
+    /// lives in the arena, so only the owner's typed graph carries it. A
+    /// board-native fit and the c6 companion (its state is `board.c6`) ride
+    /// the board sections, so they let a plain save through.
+    pub fn needsOwner(self: *const Asks) bool {
+        if (self.owned_count != 0) return true;
+        for (self.asked[0..self.count]) |asked| {
+            if (asked.fault != null) return true;
+        }
+        return false;
+    }
 };
 
 /// Make and plug every kept ask. A clash prints which ask caused it.

@@ -50,7 +50,7 @@ pub fn saveAttached(board: anytype, writer: anytype) !void {
 }
 
 fn saveMode(board: anytype, writer: anytype, owned: bool) !void {
-    if (!owned and board.asks.count != 0) return error.UnsupportedAttachments;
+    if (!owned and board.asks.needsOwner()) return error.UnsupportedAttachments;
     comptime if (!inventory.complete(@TypeOf(board.*))) @compileError("unclassified Board snapshot field");
     try file.writeSectionHeader(writer, .part, 1);
     try fields.write(writer, @as(u8, @backingInt(board.part)));
@@ -122,7 +122,7 @@ pub fn prepareAttached(board: anytype, bytes: []const u8) !Prepared(@TypeOf(boar
 }
 
 fn prepareMode(board: anytype, bytes: []const u8, owned: bool) !Prepared(@TypeOf(board.*)) {
-    if (!owned and board.asks.count != 0) return error.UnsupportedAttachments;
+    if (!owned and board.asks.needsOwner()) return error.UnsupportedAttachments;
     const B = @TypeOf(board.*);
     const next = try std.heap.page_allocator.create(B);
     next.* = board.*;
