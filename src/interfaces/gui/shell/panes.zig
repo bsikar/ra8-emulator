@@ -175,7 +175,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         const model = pair.of(pane.core);
         if (model.now) |*read| {
             const marks = if (self.breaks) |breaks| breaks.marks(pane.core) else null;
-            return drawCode(list, theme, body, model.from, read, marks);
+            return drawCode(table, theme, body, model.from, read, marks);
         }
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
@@ -215,8 +215,8 @@ fn drawFaults(self: *const Panes, table: *const widget.types.Paint, theme: *cons
 /// Instructions decoded forward from `pc` out of the rows read around it,
 /// with `marks` drawing the run-to points when the shell keeps them
 /// (RA8EMU-1171).
-fn drawCode(list: *draw_list.DrawList, theme: *const Theme, body: Rect, pc: u32, read: *const shell_memory.Snapshot, marks: ?[]const u32) !void {
-    return disasm_pane.draw(list, theme, toList(body), &codeSnapshotFrom(pc, read, body), marks orelse &.{});
+fn drawCode(table: *const widget.types.Paint, theme: *const Theme, body: Rect, pc: u32, read: *const shell_memory.Snapshot, marks: ?[]const u32) void {
+    return disasm_pane.draw(table, theme, toList(body), &codeSnapshotFrom(pc, read, body), marks orelse &.{});
 }
 
 /// The snapshot a code leaf shows (RA8EMU-1171): decoded forward from
