@@ -120,7 +120,7 @@ pub const Files = struct {
     pub fn single(self: *const Files) Error!void {
         if (self.edge.second != null and self.pair == null) return Error.SecondCoreNotSaved;
         const binding = self.attachments orelse {
-            if (self.board.asks.count != 0) return Error.UnsupportedAttachments;
+            if (self.board.asks.needsOwner()) return Error.UnsupportedAttachments;
             if (self.session) |session| if (session.plugs != null or session.faults != null) return Error.UnsupportedAttachments;
             return;
         };
