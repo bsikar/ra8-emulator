@@ -65,3 +65,53 @@ pub const Rig = struct {
         return error.NoAnswer;
     }
 };
+
+fn awakeClock() i64 {
+    return std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds();
+}
+
+/// A spawned `serve --stdio` child with a connected link, for the over-the-wire
+/// board pane tests. The child's stderr rides on the test run's.
+pub const Wire = struct {
+    local: gui_app.session_link.Local = undefined,
+    rx: []u8 = &.{},
+    tx: []u8 = &.{},
+    link: gui_app.session_link.Link = undefined,
+    open_done: bool = false,
+
+    /// Spawn the child and pump until the link is connected.
+    pub fn open(self: *Wire, exe: []const u8, elf: []const u8) !void {
+        const gpa = std.testing.allocator;
+        errdefer self.kill();
+        try self.local.spawn(std.testing.io, exe, elf);
+        self.rx = try gpa.alloc(u8, 2 * Env.max_frame);
+        errdefer gpa.free(self.rx);
+        self.tx = try gpa.alloc(u8, Env.max_frame);
+        errdefer gpa.free(self.tx);
+        self.link.open(self.local.transport(), self.rx, self.tx);
+        self.open_done = true;
+        const deadline = awakeClock() + 10_000;
+        while (self.link.state == .connecting and awakeClock() < deadline) {
+            _ = self.link.pump();
+            try std.testing.io.sleep(.fromMilliseconds(1), .awake);
+        }
+        try std.testing.expect(self.link.state == .connected);
+    }
+
+    pub fn kill(self: *Wire) void {
+        self.local.child.kill(std.testing.io);
+    }
+
+    /// Close the child's stdin, which tells `serve` to exit, and free the
+    /// frames. Safe to call more than once (the tests deinit before reaping
+    /// and again at scope exit).
+    pub fn deinit(self: *Wire) void {
+        if (!self.open_done) return;
+        self.open_done = false;
+        std.testing.allocator.free(self.tx);
+        self.tx = &.{};
+        std.testing.allocator.free(self.rx);
+        self.rx = &.{};
+        self.local.end();
+    }
+};
