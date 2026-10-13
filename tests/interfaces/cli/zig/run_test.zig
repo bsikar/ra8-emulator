@@ -23,6 +23,26 @@ const cpu1_image = @embedFile("../../../fixtures/trustzone/cpu1_pingpong_ipc_cpu
 const cpu1_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf";
 const Rig = @import("../../../session/board/attachments_test.zig").Rig;
 
+test "CLI Zig run reports its attached soak policy" {
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    const options: cli_app.cli.Options = .{ .path = "cpu0.elf", .cpu = .zig, .instructions = 1000 };
+    try zig_run.main_path.fit(&board, std.testing.allocator, std.testing.io, options);
+    var cpu0: Cpu0 = .{};
+    defer cpu0.close();
+    var parts = Parts{};
+    defer parts.deinit();
+    const image = try elf.Image.init(cpu0_image);
+    _ = try zig_run.main_path.prepare(&cpu0, &board, std.testing.io, image, &parts, options);
+    var asked: ra8.session.run.policy.RunPolicy = .{};
+    asked.soak.armed = true;
+    asked.attach(&board);
+    var output: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer output.deinit();
+    _ = try zig_run.run(&output.writer, std.testing.io, cpu0.own(), &board, &parts.timebase, image, options, image.vectorBase().?, null, parts.tap.waiting(), .{ .policy = &asked });
+    try std.testing.expect(std.mem.indexOf(u8, output.written(), "soak: ") != null);
+}
+
 fn snapshotRun(second: []const u8, state: zig_run.state_args.Options, with_panel: bool, log: ?[]const u8) !u8 {
     var board = ra8.board.board.Board.init(std.testing.allocator);
     defer board.deinit();
