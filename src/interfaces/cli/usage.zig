@@ -179,7 +179,8 @@ pub const text =
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or
     \\                     pipe:PATH|-,WxH,rgb24|yuyv|rgb565 (raw frames),
-    \\                     or webcam[:N|PATH] (Linux; asks before opening)
+    \\                     or webcam[:N|PATH] (Linux, asks before opening),
+    \\                     webcam[:N] (Windows/macOS, asks before opening)
     \\  --allow-webcam     open the webcam without asking (unattended runs)
     \\  --no-blocks        the Zig core steps one instruction at a time instead
     \\                     of running formed blocks (the default; --blocks
