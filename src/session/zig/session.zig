@@ -91,6 +91,7 @@ pub const ZigSession = struct {
             if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
             other.started = true;
         }
+        defer zig_boundary.observe(edge);
         return round.run(self, edge, target);
     }
 
@@ -110,6 +111,7 @@ pub const ZigSession = struct {
             other.machine.begin();
             other.started = true;
         }
+        defer zig_boundary.observe(edge);
         return round.run(self, edge, .{ .core = core, .slots = target });
     }
 };

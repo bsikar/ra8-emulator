@@ -144,7 +144,14 @@ pub const Watcher = struct {
     /// The inner boundary with a read after every chunk.
     pub fn hook(self: *Watcher) zig_boundary.Boundary {
         const chunk = if (self.inner) |inner| inner.chunk else zig_boundary.default_chunk;
-        return .{ .context = self, .tickFn = tick, .chunk = chunk, .sleepFn = asleep, .awakeFn = awake, .saved = if (self.inner) |inner| inner.saved else null, .pair = if (self.inner) |inner| inner.pair else null, .cut = if (self.inner) |inner| inner.cut else null };
+        return .{ .context = self, .tickFn = tick, .chunk = chunk, .sleepFn = asleep, .awakeFn = awake, .observeFn = observe, .saved = if (self.inner) |inner| inner.saved else null, .pair = if (self.inner) |inner| inner.pair else null, .cut = if (self.inner) |inner| inner.cut else null };
+    }
+
+    /// Only the inner boundary's observation: a module change waits for the
+    /// next closed interval, as it always has.
+    fn observe(context: *anyopaque) void {
+        const self: *Watcher = @ptrCast(@alignCast(context));
+        if (self.inner) |inner| zig_boundary.observe(inner);
     }
 
     fn awake(context: *anyopaque, normal: u32) u32 {

@@ -107,3 +107,50 @@ test "stamps are retired cycles turned into virtual ns at the time base's rate" 
     const raw: Publisher = .{ .trace = &trace, .stream = &stream };
     try std.testing.expectEqual(@as(u64, 1200), raw.nsOf(1200));
 }
+
+const Seen = struct {
+    ticked: u64 = 0,
+    observed: u32 = 0,
+
+    fn tick(context: *anyopaque, instructions: u32) anyerror!void {
+        const self: *Seen = @ptrCast(@alignCast(context));
+        self.ticked += instructions;
+    }
+
+    fn observe(context: *anyopaque) void {
+        const self: *Seen = @ptrCast(@alignCast(context));
+        self.observed += 1;
+    }
+};
+
+test "an observation drains stacked publishers in order, ticks nothing and repeats nothing" {
+    var trace0 = rtos.rtos.trace.Trace{};
+    var trace1 = rtos.rtos.trace.Trace{};
+    var stream = stream_mod.Stream{};
+    const id = stream.subscribe().?;
+    var seen: Seen = .{};
+    var first = Publisher{ .trace = &trace0, .stream = &stream, .inner = .{ .context = &seen, .tickFn = Seen.tick, .observeFn = Seen.observe } };
+    var second = Publisher{ .trace = &trace1, .stream = &stream, .inner = first.hook() };
+    const edge = second.hook();
+
+    trace0.store(0, 10, 0x2000_1000);
+    trace1.exception(1, 20, .enter, 15);
+    trace0.exception(0, 30, .leave, 11);
+    ra8.session.step_hook.zig.boundary.observe(edge);
+    try std.testing.expectEqual(@as(u32, 1), seen.observed);
+    try std.testing.expectEqual(@as(u64, 0), seen.ticked);
+    var out: [8]stream_mod.Event = undefined;
+    const read = stream.read(id, &out).?;
+    try std.testing.expectEqual(@as(usize, 3), read.count);
+    try expectRtos(out[0], .rtos_switch, .cpu0, 10, 0x2000_1000, 0);
+    try expectRtos(out[1], .isr_leave, .cpu0, 30, 0, 11);
+    try expectRtos(out[2], .isr_enter, .cpu1, 20, 0, 15);
+
+    ra8.session.step_hook.zig.boundary.observe(edge);
+    trace1.store(1, 40, 0x2000_2000);
+    try edge.tickFn(edge.context, 8);
+    try std.testing.expectEqual(@as(u64, 8), seen.ticked);
+    const later = stream.read(id, &out).?;
+    try std.testing.expectEqual(@as(usize, 1), later.count);
+    try expectRtos(out[0], .rtos_switch, .cpu1, 40, 0x2000_2000, 0);
+}

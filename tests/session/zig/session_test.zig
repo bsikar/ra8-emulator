@@ -140,3 +140,88 @@ test "only the selected core runs, and each keeps its own breaks" {
     try std.testing.expectEqual(@as(u32, 0x10), cpu0.regs.pc);
     try std.testing.expectEqual(@as(u32, 0x0E), cpu1.regs.pc);
 }
+
+/// A board that must not tick, counting the observations a run's return makes.
+const Probe = struct {
+    ticked: u32 = 0,
+    observed: u32 = 0,
+
+    fn tick(context: *anyopaque, _: u32) anyerror!void {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.ticked += 1;
+    }
+
+    fn observe(context: *anyopaque) void {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        self.observed += 1;
+    }
+};
+
+test "a budget return inside an open interval is observed once, without a tick or a guest step" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var probe: Probe = .{};
+    var saved: ra8.chip.core.scheduler.State = .{};
+    const edge: ra8.session.step_hook.zig.boundary.Boundary = .{ .context = &probe, .tickFn = Probe.tick, .chunk = 1000, .saved = &saved, .observeFn = Probe.observe };
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 2, .boundary = edge };
+    _ = try session.go(.cont);
+    try std.testing.expectEqual(@as(u32, 1), probe.observed);
+    try std.testing.expectEqual(@as(u32, 0), probe.ticked);
+    try std.testing.expect(saved.stretch.left() > 0);
+    const slots = cpu.slots;
+    const pc = cpu.regs.pc;
+    const carry = saved.stretch.carry;
+    ra8.session.step_hook.zig.boundary.observe(edge);
+    try std.testing.expectEqual(@as(u32, 2), probe.observed);
+    try std.testing.expectEqual(slots, cpu.slots);
+    try std.testing.expectEqual(pc, cpu.regs.pc);
+    try std.testing.expectEqual(carry, saved.stretch.carry);
+    try std.testing.expectEqual(@as(u32, 0), probe.ticked);
+}
+
+test "a runToCount return inside an open interval is observed once, without a tick or a guest step" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var probe: Probe = .{};
+    var saved: ra8.chip.core.scheduler.State = .{};
+    const edge: ra8.session.step_hook.zig.boundary.Boundary = .{ .context = &probe, .tickFn = Probe.tick, .chunk = 1000, .saved = &saved, .observeFn = Probe.observe };
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 5, .boundary = edge };
+    const ended = try session.runToCount(0, 2);
+    try std.testing.expectEqual(@as(u32, 1), probe.observed);
+    try std.testing.expectEqual(@as(u32, 0), probe.ticked);
+    try std.testing.expect(ended.stop == .stepped);
+    try std.testing.expect(saved.stretch.left() > 0);
+}
+
+test "a boundary failure return is observed on the way out" {
+    const Boom = struct {
+        attempted: u32 = 0,
+        observed: u32 = 0,
+
+        fn tick(context: *anyopaque, _: u32) anyerror!void {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.attempted += 1;
+            return error.BoomTick;
+        }
+
+        fn observe(context: *anyopaque) void {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.observed += 1;
+        }
+    };
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var boom: Boom = .{};
+    var saved: ra8.chip.core.scheduler.State = .{};
+    const edge: ra8.session.step_hook.zig.boundary.Boundary = .{ .context = &boom, .tickFn = Boom.tick, .chunk = 1, .saved = &saved, .observeFn = Boom.observe };
+    var session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 5, .boundary = edge };
+    try std.testing.expectError(zig_session.Error.BoundaryFailed, session.go(.cont));
+    try std.testing.expectEqual(@as(u32, 1), boom.observed);
+    try std.testing.expectEqual(@as(u32, 1), boom.attempted);
+}

@@ -118,3 +118,18 @@ test "the session's step preserves its open stretch" {
     try std.testing.expectEqual(@as(usize, 0), ticks.len);
     try std.testing.expectEqual(@as(u32, 1), ticks.saved.stretch.carry);
 }
+
+test "observe without a hook is a no-op and with one reaches its context once" {
+    var calls: u32 = 0;
+    const Hook = struct {
+        fn tick(_: *anyopaque, _: u32) anyerror!void {}
+        fn observe(context: *anyopaque) void {
+            const count: *u32 = @ptrCast(@alignCast(context));
+            count.* += 1;
+        }
+    };
+    zig_boundary.observe(.{ .context = &calls, .tickFn = Hook.tick });
+    try std.testing.expectEqual(@as(u32, 0), calls);
+    zig_boundary.observe(.{ .context = &calls, .tickFn = Hook.tick, .observeFn = Hook.observe });
+    try std.testing.expectEqual(@as(u32, 1), calls);
+}

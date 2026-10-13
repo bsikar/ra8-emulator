@@ -75,3 +75,26 @@ test "only a new thread or location in the fault record is a fresh fault" {
     try std.testing.expect(publish.fresh(first, .{ .thread = 0x2000_0900, .code = 0x6000_0020 }));
     try std.testing.expect(!publish.fresh(first, none));
 }
+
+test "an observation reaches the inner boundary and publishes no module change" {
+    const Seen = struct {
+        observed: u32 = 0,
+        fn tick(_: *anyopaque, _: u32) anyerror!void {}
+        fn observe(context: *anyopaque) void {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.observed += 1;
+        }
+    };
+    const stream_mod = ra8.session.event.stream;
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    var stream: stream_mod.Stream = .{};
+    const id = stream.subscribe().?;
+    var seen: Seen = .{};
+    var watcher: publish.Watcher = .{ .head_at = 0, .memory = .{ .guest = .{ .store = &store } }, .stream = &stream, .inner = .{ .context = &seen, .tickFn = Seen.tick, .observeFn = Seen.observe } };
+    const edge = watcher.hook();
+    ra8.session.step_hook.zig.boundary.observe(edge);
+    try std.testing.expectEqual(@as(u32, 1), seen.observed);
+    var out: [2]stream_mod.Event = undefined;
+    try std.testing.expectEqual(@as(usize, 0), stream.read(id, &out).?.count);
+}
