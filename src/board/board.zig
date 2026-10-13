@@ -353,6 +353,7 @@ pub const Board = struct {
     }
 
     pub fn deinit(self: *Board) void {
+        self.capture.source.close();
         self.c6.deinit();
         self.sd.deinit();
         self.host_card.deinit();

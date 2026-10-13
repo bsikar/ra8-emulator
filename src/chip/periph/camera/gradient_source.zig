@@ -15,7 +15,37 @@ pub fn source() frame_source.FrameSource {
     return .{ .context = undefined, .vtable = &vtable };
 }
 
-const vtable = frame_source.FrameSource.VTable{ .frame = frame, .fill = fill, .close = close };
+const vtable = frame_source.FrameSource.VTable{
+    .frame = frame,
+    .fill = fill,
+    .close = close,
+    .preview = preview,
+};
+
+const preview_w = 160;
+const preview_h = 120;
+const preview_pixels: [preview_w * preview_h * 3]u8 = blk: {
+    @setEvalBranchQuota(preview_w * preview_h * 10);
+    var pixels: [preview_w * preview_h * 3]u8 = undefined;
+    for (0..preview_h) |y| {
+        for (0..preview_w) |x| {
+            const b: u8 = @truncate((x +% y) & pattern.mask);
+            const i = (y * preview_w + x) * 3;
+            pixels[i] = b;
+            pixels[i + 1] = b;
+            pixels[i + 2] = b;
+        }
+    }
+    break :blk pixels;
+};
+
+fn preview(_: *anyopaque) ?frame_source.Preview {
+    return .{
+        .width = preview_w,
+        .height = preview_h,
+        .pixels = &preview_pixels,
+    };
+}
 
 fn frame(_: *anyopaque, _: u64, _: frame_source.Shape) void {}
 
