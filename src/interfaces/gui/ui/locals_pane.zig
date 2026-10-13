@@ -26,10 +26,13 @@ pub const max_rows: usize = 32;
 /// Characters a local's name and its type's name keep.
 pub const name_cap: usize = 40;
 pub const type_cap: usize = 40;
+/// Keep the stored names intact while fitting the four columns in a shell leaf.
+pub const display_name_cap: usize = 20;
+pub const display_type_cap: usize = 20;
 /// Character columns: the name, the type, the size, the where.
 pub const name_at: usize = 2;
-pub const type_at: usize = name_at + name_cap + 2;
-pub const size_at: usize = type_at + type_cap + 2;
+pub const type_at: usize = name_at + display_name_cap + 2;
+pub const size_at: usize = type_at + display_type_cap + 2;
 pub const where_at: usize = size_at + 8;
 /// The narrowest pane: the columns before the where and room for 12 more.
 pub const min_w: i32 = 2 * pad + 2 + @as(i32, @intCast(font.textWidth(where_at + 12)));
@@ -90,8 +93,10 @@ fn drawRow(table: *const widget.types.Paint, theme: *const Theme, area: Rect, ro
     const y = rowRect(area, row).y + 2;
     const bg = word(theme.background);
     const lead = if (row == 0) theme.highlight else theme.muted;
-    drawText(table, x, y, local.name(), word(if (local.name_len == 0) theme.muted else if (row == 0) theme.highlight else theme.ink), bg);
-    drawText(table, x + column(type_at), y, local.type_name(), word(theme.ink), bg);
+    const name = local.name();
+    const type_name = local.type_name();
+    drawText(table, x, y, name[0..@min(name.len, display_name_cap)], word(if (local.name_len == 0) theme.muted else if (row == 0) theme.highlight else theme.ink), bg);
+    drawText(table, x + column(type_at), y, type_name[0..@min(type_name.len, display_type_cap)], word(theme.ink), bg);
     var size: [14]u8 = undefined;
     const size_text = std.fmt.bufPrint(&size, "{d} B", .{local.size}) catch return;
     drawText(table, x + column(size_at), y, size_text, word(lead), bg);
