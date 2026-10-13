@@ -3,4 +3,5 @@
 pub const dispatch = @import("dispatch.zig");
 pub const features = @import("features.zig");
 pub const packet = @import("packet.zig");
+pub const console = @import("console.zig");
 pub const poll = @import("poll.zig");

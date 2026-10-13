@@ -116,3 +116,50 @@ fn blockSmallReply(server: std.Io.net.Stream) !void {
     }
     return error.Timeout;
 }
+
+test "host GDB sends port 0's console text as O packets ahead of the stop reply" {
+    const gpa = std.testing.allocator;
+    const home = try homePath(gpa);
+    defer gpa.free(home);
+    defer std.Io.Dir.cwd().deleteTree(io, home) catch {};
+    var env = std.process.Environ.Map.init(gpa);
+    defer env.deinit();
+    try env.put("HOME", home);
+    var opened: served_setup.Served = undefined;
+    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null);
+    defer opened.deinit();
+    var bound = try listener_mod.Listener.bind(gpa, io, &env);
+    defer bound.deinit();
+    const port = try bound.addGdb("fixture.elf", opened.context.session);
+    const host = bound.gdb.items[0];
+    const address = std.Io.net.IpAddress{ .ip4 = .loopback(port) };
+    const client = try address.connect(io, .{ .mode = .stream });
+    defer client.close(io);
+    try takeClient(host);
+
+    // Print through stimulus port 0 while the target is paused.
+    const itm = ra8.chip.periph.itm;
+    const itmp = try opened.context.session.itmPort(opened.context.session.currentCore());
+    _ = itmp.write(itm.offsets.tcr, itm.tcr_bits.itmena, 4);
+    _ = itmp.write(itm.offsets.ter, 1, 4);
+    for ("host console\n") |ch| _ = itmp.write(itm.offsets.stim0, ch, 1);
+
+    // A single step is a resume: its console text goes out as O packets
+    // before the stop reply, and the port is then empty.
+    try ready.sendAll(io, client.socket.handle, "$s#73", 1000);
+    var buffer: [1024]u8 = undefined;
+    const console_packet = try packet(host, client, &buffer);
+    try std.testing.expect(std.mem.startsWith(u8, console_packet, "$O"));
+    const hex = console_packet[2 .. console_packet.len - 3];
+    var said: [64]u8 = undefined;
+    const said_len = hex.len / 2;
+    try std.testing.expect(said_len <= said.len);
+    try std.testing.expectEqual(@as(usize, 2 * said_len), hex.len);
+    for (0..said_len) |at| {
+        said[at] = try std.fmt.parseInt(u8, hex[at * 2 .. at * 2 + 2], 16);
+    }
+    try std.testing.expect(std.mem.startsWith(u8, said[0..said_len], "host console\n"));
+    const stop = try packet(host, client, &buffer);
+    try std.testing.expect(stop.len > 1 and (stop[1] == 'T' or stop[1] == 'S'));
+    try std.testing.expectEqual(@as(usize, 0), itmp.output().len);
+}
