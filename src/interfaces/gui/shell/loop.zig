@@ -39,6 +39,7 @@ const shell_snaps = @import("snapshots.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
 const shell_source = @import("source.zig");
+const shell_locals = @import("locals.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
@@ -85,6 +86,7 @@ pub const Shell = struct {
     /// The call stack leaves, walked again after a load and every stop.
     stack: ?*shell_stack.Pair = null,
     source: ?*shell_source.Pair = null,
+    locals: ?*shell_locals.Pair = null,
     /// The time bar's models: the run, the speed field and the clock.
     time: ?*shell_time.Time = null,
     /// Opening another image (RA8EMU-959) and the Board menu's pick (RA8EMU-1152).
@@ -326,6 +328,7 @@ pub const Shell = struct {
         if (self.registers) |registers| registers.refresh();
         if (self.stack) |stack| stack.refresh();
         if (self.source) |source| source.refresh();
+        if (self.locals) |locals| locals.refresh();
     }
     /// Feed what the session sent into the status bar model and the leaves.
     pub fn pump(self: *Shell) !void {
@@ -347,6 +350,7 @@ pub const Shell = struct {
         if (self.breaks) |breaks| breaks.attach(link);
         if (self.stack) |stack| stack.attach(link);
         if (self.source) |source| source.attach(link);
+        if (self.locals) |locals| locals.attach(link);
         self.drained = false;
         var taken: usize = 0;
         while (taken < max_arrivals) : (taken += 1) {
@@ -384,6 +388,10 @@ pub const Shell = struct {
         if (self.source) |source| {
             if (loaded) source.reload();
             source.observe(arrival);
+        }
+        if (self.locals) |locals| {
+            if (loaded) locals.reload();
+            locals.observe(arrival);
         }
         const registers = self.registers orelse return;
         if (loaded) registers.reload();

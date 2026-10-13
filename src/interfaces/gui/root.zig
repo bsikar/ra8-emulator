@@ -41,6 +41,7 @@ pub const disasm_capture = @import("disasm_capture.zig");
 pub const source_pane = @import("ui/source_pane.zig");
 pub const source_capture = @import("source_capture.zig");
 pub const stack_pane = @import("ui/stack_pane.zig");
+pub const locals_pane = @import("ui/locals_pane.zig");
 pub const flame = @import("flame/flame.zig");
 pub const flame_pane = @import("ui/flame_pane.zig");
 pub const hex_entry = @import("ui/hex_entry.zig");

@@ -21,6 +21,7 @@ const font = @import("ra8_render").font;
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const console_pane = @import("../ui/console_pane.zig");
+const locals_pane = @import("../ui/locals_pane.zig");
 const console_strip = @import("../ui/console_strip.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
@@ -42,6 +43,7 @@ const memory_pane = @import("../ui/memory_pane.zig");
 const disasm_pane = @import("../ui/disasm_pane.zig");
 const disasm_capture = @import("../disasm_capture.zig");
 const shell_stack = @import("stack.zig");
+const shell_locals = @import("locals.zig");
 const stack_pane = @import("../ui/stack_pane.zig");
 const shell_source = @import("source.zig");
 const source_pane = @import("../ui/source_pane.zig");
@@ -65,6 +67,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .stack => "waiting for the call stack",
         .source => "waiting for the source line",
         .timeline => "waiting for the trace",
+        .locals => "waiting for the locals",
     };
 }
 
@@ -91,6 +94,7 @@ pub const Panes = struct {
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
+    locals: ?*const shell_locals.Pair = null,
     source: ?*shell_source.Pair = null,
     /// The timeline's RTOS record (RA8EMU-838).
     timeline: ?*timeline_model.Model = null,
@@ -172,6 +176,9 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     if (pane.kind == .stack) if (self.stack) |pair| {
         if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, toList(body), now, 0);
     };
+    if (pane.kind == .locals) if (self.locals) |pair| {
+        if (pair.of(pane.core).now) |*now| return locals_pane.draw(list, theme, toList(body), now);
+    };
     if (pane.kind == .source) if (self.source) |pair| {
         const model = pair.of(pane.core);
         if (model.now) |*now| return source_pane.draw(list, theme, toList(body), now, &model.marks);
@@ -225,6 +232,9 @@ fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
         if (pair.of(pane.core).refused) return "the session would not read the code";
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
+        if (pair.of(pane.core).note()) |note| return note;
+    };
+    if (pane.kind == .locals) if (self.locals) |pair| {
         if (pair.of(pane.core).note()) |note| return note;
     };
     if (pane.kind == .source) if (self.source) |pair| {
