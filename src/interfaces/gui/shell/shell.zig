@@ -27,6 +27,7 @@ pub const register_edit = @import("register_edit.zig");
 pub const registers = @import("registers.zig");
 pub const server = @import("server.zig");
 pub const stack = @import("stack.zig");
+pub const source = @import("source.zig");
 pub const run = @import("run.zig");
 pub const settings_page = @import("settings_page.zig");
 pub const startup = @import("startup.zig");

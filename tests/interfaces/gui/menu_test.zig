@@ -45,7 +45,7 @@ test "File opens an ELF, closes it and quits" {
 }
 
 test "View toggles every pane kind but empty" {
-    try std.testing.expectEqual(@as(usize, 10), menu.view.len);
+    try std.testing.expectEqual(@as(usize, 11), menu.view.len);
     try std.testing.expectEqualStrings("Board", menu.view[0].label);
     try std.testing.expect(menu.view[0].action.eql(.{ .toggle = .board }));
     try std.testing.expectEqualStrings("Disassembly", menu.view[6].label);
@@ -55,6 +55,10 @@ test "View toggles every pane kind but empty" {
     try std.testing.expectEqualStrings("Timeline", menu.view[8].label);
     try std.testing.expect(menu.view[8].action.eql(.{ .toggle = .timeline }));
     try std.testing.expectEqual(@as(u8, '9'), menu.view[8].shortcut.?.key);
+    // The tenth pane kind keys nothing: Ctrl/Cmd+1..9 are the window's digits.
+    try std.testing.expectEqualStrings("Source", menu.view[9].label);
+    try std.testing.expect(menu.view[9].action.eql(.{ .toggle = .source }));
+    try std.testing.expectEqual(@as(?menu.Shortcut, null), menu.view[9].shortcut);
     for (menu.view) |item| switch (item.action) {
         .toggle => |kind| try std.testing.expect(kind != .empty),
         .command, .choice, .recent => {},
@@ -62,7 +66,7 @@ test "View toggles every pane kind but empty" {
 }
 
 test "View's full-screen entry under a divider with no key" {
-    const item = menu.view[9];
+    const item = menu.view[10];
     try std.testing.expectEqualStrings("Enter Full Screen", item.label);
     try std.testing.expect(item.action.eql(.{ .command = .toggle_fullscreen }));
     try std.testing.expect(item.divided);
@@ -72,7 +76,7 @@ test "View's full-screen entry under a divider with no key" {
 }
 
 test "full-screen label follows the window's state" {
-    const item = menu.view[9];
+    const item = menu.view[10];
     try std.testing.expectEqualStrings("Enter Full Screen", menu.label(item, menu.State{}));
     try std.testing.expectEqualStrings("Exit Full Screen", menu.label(item, .{ .fullscreen = true }));
     try std.testing.expectEqualStrings("Board", menu.label(menu.view[0], .{ .fullscreen = true }));
