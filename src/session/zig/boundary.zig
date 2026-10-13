@@ -26,11 +26,21 @@ pub const Boundary = struct {
     pair: ?*chip.core.second.core.zig.run.Driver = null,
     cut: ?*chip.core.cpu.cpu.systick_cut.Cut = null,
 
+    /// Drains what instrumentation recorded, reached by every stop or budget
+    /// return. It runs no guest code and ticks no board.
+    observeFn: ?*const fn (context: *anyopaque) void = null,
+
     pub fn tick(self: Boundary, instructions: u64) Error!void {
         if (instructions == 0) return;
         self.tickFn(self.context, @intCast(instructions)) catch return Error.BoundaryFailed;
     }
 };
+
+/// The observation point of a run's return, also for a return that closed no
+/// interval.
+pub fn observe(edge: Boundary) void {
+    if (edge.observeFn) |look| look(edge.context);
+}
 
 /// As zig_drive.runClocked, passing `edge` after every chunk.
 pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, edge: Boundary) Error!zig_drive.Ended {

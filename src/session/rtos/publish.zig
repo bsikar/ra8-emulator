@@ -48,7 +48,14 @@ pub const Publisher = struct {
     /// The inner boundary with a drain after every chunk.
     pub fn hook(self: *Publisher) zig_boundary.Boundary {
         const chunk = if (self.inner) |inner| inner.chunk else zig_boundary.default_chunk;
-        return .{ .context = self, .tickFn = tick, .chunk = chunk, .sleepFn = asleep, .awakeFn = awake, .saved = if (self.inner) |inner| inner.saved else null, .pair = if (self.inner) |inner| inner.pair else null, .cut = if (self.inner) |inner| inner.cut else null };
+        return .{ .context = self, .tickFn = tick, .chunk = chunk, .sleepFn = asleep, .awakeFn = awake, .observeFn = observe, .saved = if (self.inner) |inner| inner.saved else null, .pair = if (self.inner) |inner| inner.pair else null, .cut = if (self.inner) |inner| inner.cut else null };
+    }
+
+    /// The inner boundary's observation, then every record not yet published.
+    fn observe(context: *anyopaque) void {
+        const self: *Publisher = @ptrCast(@alignCast(context));
+        if (self.inner) |inner| zig_boundary.observe(inner);
+        self.drain();
     }
 
     fn awake(context: *anyopaque, normal: u32) u32 {
