@@ -33,7 +33,8 @@ test "only the newest lines that fit are drawn, each stamped" {
     try log.feedAll("ccc\n", 3_000_000_000);
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 100);
     defer list.deinit();
-    try console_pane.draw(&list, dark, two_rows, &log, 0);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    console_pane.draw(&target.paint(), dark, two_rows, &log, 0);
     try std.testing.expectEqual(@as(usize, 2), console_pane.rows(two_rows));
     // "[   2.000000000] " has 13 glyphs; then "bb" and "ccc".
     try std.testing.expectEqual(@as(usize, 13 + 2 + 13 + 3), glyphs(&list));
@@ -46,7 +47,8 @@ test "the unfinished line takes the last row without a stamp" {
     try log.feedAll("typing", 2_000_000_000);
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 100);
     defer list.deinit();
-    try console_pane.draw(&list, dark, two_rows, &log, 0);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    console_pane.draw(&target.paint(), dark, two_rows, &log, 0);
     try std.testing.expectEqual(@as(usize, 13 + 4 + 6), glyphs(&list));
 }
 
@@ -56,7 +58,8 @@ test "a strip with no room for a row draws nothing" {
     try log.feedAll("hidden\n", 1_000_000_000);
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 100);
     defer list.deinit();
-    try console_pane.draw(&list, dark, .{ .x = 0, .y = 0, .w = 400, .h = 10 }, &log, 0);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    console_pane.draw(&target.paint(), dark, .{ .x = 0, .y = 0, .w = 400, .h = 10 }, &log, 0);
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
@@ -78,7 +81,8 @@ test "scrolled back, the lines ending there show and the unfinished one hides" {
     try log.feedAll("typing", 4_000_000_000);
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 100);
     defer list.deinit();
-    try console_pane.draw(&list, dark, two_rows, &log, 1);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    console_pane.draw(&target.paint(), dark, two_rows, &log, 1);
     try std.testing.expectEqual(@as(usize, 13 + 1 + 13 + 2), glyphs(&list));
 }
 
@@ -90,7 +94,8 @@ test "scrolled past the oldest line, the pane still fills from the top" {
     try log.feedAll("ccc\n", 3_000_000_000);
     var list = draw_list.DrawList.init(std.testing.allocator, 400, 100);
     defer list.deinit();
-    try console_pane.draw(&list, dark, two_rows, &log, 3);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    console_pane.draw(&target.paint(), dark, two_rows, &log, 3);
     try std.testing.expectEqual(@as(usize, 13 + 1 + 13 + 2), glyphs(&list));
 }
 
@@ -107,9 +112,10 @@ fn consoleDigest(theme: *const gui_app.colors.Theme) !u64 {
     const area = draw_list.Rect{ .x = 0, .y = 0, .w = 240, .h = 2 * console_pane.pad + 4 * 8 + 1 };
     var list = draw_list.DrawList.init(std.testing.allocator, 240, @intCast(area.h));
     defer list.deinit();
+    var target = ra8.render.widget_paint.Target{ .list = &list };
     var frame = try raster.Framebuffer.init(std.testing.allocator, 240, @intCast(area.h));
     defer frame.deinit(std.testing.allocator);
-    try console_pane.draw(&list, theme, area, &log, 0);
+    console_pane.draw(&target.paint(), theme, area, &log, 0);
     raster.draw(&frame, &list, ra8.render.font.atlas);
     const hash = std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
     return hash;
