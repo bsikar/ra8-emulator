@@ -165,7 +165,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {
         status_strip.draw(&paint, theme, theme_picker.rest(strip), &shell.strip);
-        try theme_picker.draw(list, theme, strip, picker);
+        theme_picker.draw(&paint, theme, strip, picker);
     } else status_strip.draw(&paint, theme, strip, &shell.strip);
     // The bar draws last, so an open drop-down covers the panes.
     menu_bar.draw(&paint, theme, shell.menu, shell.width);

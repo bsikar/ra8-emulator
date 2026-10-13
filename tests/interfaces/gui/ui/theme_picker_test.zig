@@ -37,7 +37,9 @@ const Scene = struct {
     fn render(self: *Scene, theme: *const colors.Theme, view: picker.View) !void {
         self.list.clear();
         try self.list.fill(.{ .x = 0, .y = 0, .w = width, .h = height }, theme.background);
-        try picker.draw(&self.list, theme, bar, view);
+        var target = ra8.render.widget_paint.Target{ .list = &self.list };
+        const paint = target.paint();
+        picker.draw(&paint, theme, bar, view);
         raster.draw(&self.frame, &self.list, font.atlas);
     }
 
@@ -64,7 +66,9 @@ test "a strip too narrow for the button has none and keeps its whole width" {
     try std.testing.expectEqual(@as(?picker.Hit, null), picker.hit(narrow, true, narrow.w - 1, 5));
     var list = draw_list.DrawList.init(std.testing.allocator, 32, 32);
     defer list.deinit();
-    try picker.draw(&list, dark, narrow, .{ .open = true });
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    picker.draw(&paint, dark, narrow, .{ .open = true });
     try std.testing.expectEqual(@as(usize, 0), list.commands.items.len);
 }
 
