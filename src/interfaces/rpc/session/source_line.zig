@@ -16,7 +16,7 @@ const Image = symbols.Image;
 const Outcome = rpc.Outcome(proto.SourceLine);
 
 /// The answer when the pc has no source place to show.
-const none: proto.SourceLine = .{ .found = 0, .line = 0, .path = "" };
+const none: proto.SourceLine = .{ .found = 0, .pc = 0, .line = 0, .path = "" };
 
 pub fn sourceLine(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
@@ -24,10 +24,9 @@ pub fn sourceLine(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const pc = view.register(.pc) catch |err| return refuse(err);
     const loaded = imageOf(context, which) orelse return .{ .ok = none };
     const place = (dwarf_line.lookup(dwarf_line.ofImage(loaded), pc) catch null) orelse return .{ .ok = none };
-    var spelled: [proto.source_path_cap]u8 = undefined;
-    var writer: std.Io.Writer = .fixed(&spelled);
+    var writer: std.Io.Writer = .fixed(context.scratch);
     session_source.path(&writer, place.file) catch return refuse(error.NoRoom);
-    return .{ .ok = .{ .found = 1, .line = place.line, .path = spelled[0..writer.buffered().len] } };
+    return .{ .ok = .{ .found = 1, .pc = pc, .line = place.line, .path = writer.buffered() } };
 }
 
 /// The image the serving side holds for `core`, if any.
