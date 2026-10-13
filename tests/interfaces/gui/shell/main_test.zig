@@ -209,3 +209,12 @@ test "with no window to open the shell says 2 and loads nothing" {
     try std.testing.expectEqual(@as(u32, 1), Window.opens);
     try std.testing.expectEqual(@as(u32, 0), Window.closes);
 }
+
+test "--headless runs without opener" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    Window.reset(null);
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "--headless", "--frames", "3", image }, .{ .open = Window.none, .close = Window.close }, null);
+    try std.testing.expectEqual(@as(u8, 0), code);
+    try std.testing.expectEqual(@as(u32, 0), Window.opens);
+}

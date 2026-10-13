@@ -57,3 +57,5 @@ pub const menu = @import("menu.zig");
 pub const menu_bar = @import("menu_bar.zig");
 pub const pane_layout = @import("ui/pane_layout.zig");
 pub const window = @import("window/window.zig");
+pub const script = @import("script/script.zig");
+pub const video = @import("video/video.zig");
