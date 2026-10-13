@@ -20,6 +20,7 @@ pub fn main(init: std.process.Init) !u8 {
     const allocator = init.arena.allocator();
     const io = init.io;
     const argv = try init.minimal.args.toSlice(allocator);
+    if (argv.len == 2 and std.mem.eql(u8, argv[1], "--internal-host-move")) return app.host.relocation.peer(init);
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return app.probe_ctl.run(allocator, io, argv);
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return app.session_ctl.run(allocator, io, init.environ_map, argv);
     if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "sessions") or std.mem.eql(u8, argv[2], "gdb-address"))) return app.ctl.discovery.run(allocator, io, init.environ_map, argv);

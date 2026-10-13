@@ -53,6 +53,15 @@ pub fn session(base: *const Base, id: []const u8) anyerror!Status {
     var bin_buffer: h.name.Buffer = undefined;
     const draft = h.name.creating(&draft_buffer, id);
     const bin = h.name.trash(&bin_buffer, id);
+    var native_buffer: h.name.Buffer = undefined;
+    if (present(base, try h.move.intent.leaf(&native_buffer, id))) {
+        held.close(base.io);
+        held_open = false;
+        gate.release();
+        gate_open = false;
+        try h.move.recovery.root(base, id);
+        return .completed;
+    }
     var anchor_buffer: [h.name.limits.component]u8 = undefined;
     const anchor = try proof.anchorName(&anchor_buffer, id);
     if (present(base, anchor)) {
@@ -93,7 +102,7 @@ pub fn session(base: *const Base, id: []const u8) anyerror!Status {
         }
         const target = if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.publish)) id else if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.trash)) bin else return error.BadReceipt;
         if (!try proof.localOwner(base.allocator, base.io, base.dir, entry, base.dir, target)) return error.OtherHost;
-        try h.move.directory(base.allocator, base.io, base.dir, entry, base.dir, target, parsed.value.purpose);
+        try h.move.dispatch.directory(.{ .source = base, .target = base, .authorities = &.{ gate.file, held } }, entry, target, parsed.value.purpose, null);
     }
     for ([_][]const u8{ id, draft, bin }) |entry| if (present(base, entry)) {
         base.owns(entry) catch return .unmarked;
@@ -123,7 +132,7 @@ fn claim(base: *const Base, id: []const u8, record: proof.Record) !void {
 
 fn kept(base: *const Base, id: []const u8, path: []const u8, anchored: bool) anyerror!Status {
     if (base.role != .cache) return error.BadReceipt;
-    var target = try Base.existing(base.allocator, base.io, path, .kept);
+    var target = try Base.existingConfigured(base.allocator, base.io, path, .kept, .{ .native_provider = base.native_provider });
     defer target.close();
     var gates = try h.gates.Pair.acquire(base, &target);
     defer gates.release();
@@ -147,7 +156,8 @@ fn kept(base: *const Base, id: []const u8, path: []const u8, anchored: bool) any
         if (!try proof.localOwner(base.allocator, base.io, base.dir, id, target.dir, id)) return error.OtherHost;
         var bytes: [h.move.tree.limits.receipt]u8 = undefined;
         const receipt = try h.move.tree.receiptOf(base.io, base.dir, id, &bytes);
-        try h.move.directory(base.allocator, base.io, base.dir, id, target.dir, id, receipt);
+        const authorities: []const std.Io.File = if (gates.second) |second| &[_]std.Io.File{ gates.first.file, second.file, held, arrived } else &[_]std.Io.File{ gates.first.file, held, arrived };
+        try h.move.dispatch.directory(.{ .source = base, .target = &target, .authorities = authorities }, id, id, receipt, null);
     }
     held_open = false;
     try h.lock.retire(base.io, base.dir, id, held);

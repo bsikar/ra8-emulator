@@ -15,6 +15,7 @@ pub fn leaf(space: layout.Space, text: []const u8) ![]const u8 {
 /// Caller closes the returned handle, including .top's duplicated handle.
 pub fn area(session: *const Session, space: layout.Space) !std.Io.Dir {
     try session.base.owns(&session.id);
+    if (@import("move/intent.zig").pending(session.base.io, session.base.dir, &session.id)) return error.Moving;
     const io = session.base.io;
     if (space == .top) return session.dir.openDir(io, ".", .{ .iterate = true, .follow_symlinks = false });
     const text = @tagName(space);

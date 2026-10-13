@@ -42,6 +42,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const gui = b.option(bool, "gui", "Fetch SDL3 and build ra8_gui and the GUI tests") orelse false;
+    const peer_only = b.option(bool, "host-move-peer-only", "Build the internal native directory move peer") orelse false;
 
     const firmware = b.dependency("ra8_firmware", .{});
     const libs = libraries(b, target, optimize, firmware);
@@ -57,9 +58,9 @@ pub fn build(b: *std.Build) void {
     const apps = applications(b, target, optimize, libs, firmware);
 
     const exe = b.addExecutable(.{
-        .name = "ra8_emulator",
+        .name = if (peer_only) "ra8_host_move_peer" else "ra8_emulator",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/interfaces/cli/main.zig"),
+            .root_source_file = b.path(if (peer_only) "src/interfaces/cli/host_move_main.zig" else "src/interfaces/cli/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,

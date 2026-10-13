@@ -8,6 +8,10 @@ const metadata = @import("metadata.zig");
 const recovery = @import("recover.zig");
 
 pub const Role = enum { cache, kept, runtime };
+pub const Options = struct {
+    native_provider: ?@import("move/provider.zig").Provider = null,
+    recover: bool = true,
+};
 
 pub const gate_wait = struct {
     pub const tries = 100;
@@ -30,21 +34,30 @@ pub const Base = struct {
     role: Role,
     /// The root's resolved absolute path.
     path: []u8,
+    native_provider: ?@import("move/provider.zig").Provider = null,
 
     /// The root at `path`, made and marked when it is new. `Unmarked` when
     /// the directory already holds something and is not a history root.
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role) !Base {
+        return openConfigured(allocator, io, path, role, .{});
+    }
+
+    pub fn openConfigured(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role, options: Options) !Base {
         if (!std.fs.path.isAbsolute(path)) return error.RelativePath;
         _ = try std.Io.Dir.cwd().createDirPathStatus(io, path, layout.directory_permissions);
-        return attach(allocator, io, path, role, true);
+        return attach(allocator, io, path, role, true, options);
     }
 
     /// The root at `path`, which must already be one.
     pub fn existing(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role) !Base {
-        return attach(allocator, io, path, role, false);
+        return existingConfigured(allocator, io, path, role, .{});
     }
 
-    fn attach(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role, adopt: bool) !Base {
+    pub fn existingConfigured(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role, options: Options) !Base {
+        return attach(allocator, io, path, role, false, options);
+    }
+
+    fn attach(allocator: std.mem.Allocator, io: std.Io, path: []const u8, role: Role, adopt: bool, options: Options) !Base {
         if (!std.fs.path.isAbsolute(path)) return error.RelativePath;
         var dir = try std.Io.Dir.cwd().openDir(io, path, .{ .iterate = true, .follow_symlinks = false });
         errdefer dir.close(io);
@@ -71,11 +84,11 @@ pub const Base = struct {
         } else try metadata.ensureTag(io, dir, layout.root.tag, layout.root.tag_text);
         var buffer: [std.fs.max_path_bytes]u8 = undefined;
         const len = try dir.realPath(io, &buffer);
-        var result: Base = .{ .allocator = allocator, .io = io, .dir = dir, .role = role, .path = try allocator.dupe(u8, buffer[0..len]) };
+        var result: Base = .{ .allocator = allocator, .io = io, .dir = dir, .role = role, .path = try allocator.dupe(u8, buffer[0..len]), .native_provider = options.native_provider };
         errdefer allocator.free(result.path);
         gate_file.close(io);
         gate_open = false;
-        if (role != .runtime) try result.recoverLocked();
+        if (role != .runtime and options.recover) try result.recoverLocked();
         return result;
     }
 

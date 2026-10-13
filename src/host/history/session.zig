@@ -66,7 +66,7 @@ pub const Session = struct {
         // Never recursively delete a partially initialized directory.
         errdefer held.close(io);
         try prepare(base, draft, options.owner);
-        try rename(base, draft, &id, options.move_probe);
+        try rename(base, draft, &id, options.move_probe, &.{ gate.file, held });
         return .{ .base = base, .id = id, .dir = try base.dir.openDir(io, &id, .{ .iterate = true }), .lock = held, .move_probe = options.move_probe };
     }
 
@@ -78,6 +78,7 @@ pub const Session = struct {
         var gate = try base.gate(.shared);
         defer gate.release();
         try base.owns(&id);
+        if (move.intent.pending(io, base.dir, &id)) return error.Moving;
         if (try move.tree.moving(io, base.dir, &id)) return error.Moving;
         var dir = try base.dir.openDir(io, &id, .{ .iterate = true, .follow_symlinks = false });
         errdefer dir.close(io);
@@ -125,7 +126,7 @@ pub const Session = struct {
         const target = kept_root orelse return .left;
         if (target == self.base) return .left;
         try self.base.owns(&self.id);
-        if (placement == .move and try arrive(self, target)) {
+        if (placement == .move and try arrive(self, target, &gate)) {
             held = null;
             try lock.retire(io, self.base.dir, &self.id, self.lock);
             return .moved;
@@ -138,12 +139,13 @@ pub const Session = struct {
 /// Move the closed session under `target`, where it has a lease before it
 /// arrives. False when no rename can take it there; `PathAlreadyExists`
 /// when the name is taken there, by a lease or by anything else.
-fn arrive(self: *Session, target: *const Base) !bool {
+fn arrive(self: *Session, target: *const Base, gate: *const gates.Pair) !bool {
     const io = self.base.io;
     var buffer: [move.tree.limits.receipt]u8 = undefined;
     const receipt = std.fmt.bufPrint(&buffer, layout.moves.keep ++ "{s}\n", .{target.path}) catch return false;
     const arrived = try lock.create(io, target.dir, &self.id);
-    move.tree.directoryProbed(self.base.allocator, io, self.base.dir, &self.id, target.dir, &self.id, receipt, self.move_probe) catch |err| {
+    const authorities: []const std.Io.File = if (gate.second) |second| &[_]std.Io.File{ gate.first.file, second.file, self.lock, arrived } else &[_]std.Io.File{ gate.first.file, self.lock, arrived };
+    move.dispatch.directory(.{ .source = self.base, .target = target, .authorities = authorities }, &self.id, &self.id, receipt, self.move_probe) catch |err| {
         // A move that began is carried on by recovery, under this lease.
         const began = move.tree.moving(io, self.base.dir, &self.id) catch true;
         if (began) arrived.close(io) else try lock.retire(io, target.dir, &self.id, arrived);
@@ -169,9 +171,9 @@ fn prepare(base: *const Base, draft: []const u8, record: ?owner.Record) !void {
 }
 
 /// Give the draft its final name. The lease is not in it and does not move.
-fn rename(base: *const Base, from: []const u8, to: []const u8, probe: ?move.probe.Probe) !void {
+fn rename(base: *const Base, from: []const u8, to: []const u8, probe: ?move.probe.Probe, authorities: []const std.Io.File) !void {
     try base.owns(from);
-    move.tree.directoryProbed(base.allocator, base.io, base.dir, from, base.dir, to, layout.moves.publish, probe) catch |err| switch (err) {
+    move.dispatch.directory(.{ .source = base, .target = base, .authorities = authorities }, from, to, layout.moves.publish, probe) catch |err| switch (err) {
         error.PathAlreadyExists => return error.IdTaken,
         else => return err,
     };
@@ -189,6 +191,7 @@ fn point(from: *const Base, kept_root: *const Base, id: *const name.Id) !void {
 }
 
 fn taken(base: *const Base, id: *const name.Id) bool {
+    if (move.intent.pending(base.io, base.dir, id)) return true;
     var buffer: name.Buffer = undefined;
     for ([_][]const u8{ id, name.trash(&buffer, id) }) |entry| {
         if (present(base.io, base.dir, entry)) return true;

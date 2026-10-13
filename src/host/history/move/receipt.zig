@@ -26,7 +26,7 @@ pub const Record = struct {
 };
 
 pub fn internal(leaf: []const u8) bool {
-    return std.mem.eql(u8, leaf, h.layout.files.moving) or std.mem.eql(u8, leaf, origin) or std.mem.eql(u8, leaf, ready);
+    return std.mem.eql(u8, leaf, h.layout.files.moving) or std.mem.eql(u8, leaf, @import("intent.zig").note) or std.mem.eql(u8, leaf, origin) or std.mem.eql(u8, leaf, ready);
 }
 
 pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, leaf: []const u8) !std.json.Parsed(Record) {

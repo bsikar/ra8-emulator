@@ -20,6 +20,15 @@ test {
     _ = @import("host/history/move/tree_test.zig");
     _ = @import("host/history/move/probe_test.zig");
     _ = @import("host/history/move/receipt_test.zig");
+    _ = @import("host/history/move/wire_test.zig");
+    _ = @import("host/history/move/provider_test.zig");
+    _ = @import("host/history/move/context_test.zig");
+    _ = @import("host/history/move/intent_test.zig");
+    _ = @import("host/history/move/bridge_test.zig");
+    _ = @import("host/history/move/recovery_test.zig");
+    _ = @import("host/history/move/dispatch_test.zig");
+    _ = @import("host/history/move/windows_test.zig");
+    _ = @import("interfaces/cli/host/relocation_test.zig");
     _ = @import("host/history/name_test.zig");
     _ = @import("host/history/owner_test.zig");
     _ = @import("host/history/paths_test.zig");
