@@ -38,3 +38,11 @@ test "an opened source replaces the old one and closes it" {
     try std.testing.expectEqualStrings("next", board.capture.source.label);
     board.capture.source = ra8.chip.periph.ceu.camera.gradient.source();
 }
+
+test "board deinit closes the active source exactly once" {
+    var board = Board.init(std.testing.allocator);
+    var stub: Stub = .{};
+    board.capture.source = stub.source("stub");
+    board.deinit();
+    try std.testing.expectEqual(@as(u32, 1), stub.closed);
+}

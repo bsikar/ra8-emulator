@@ -7,6 +7,7 @@ const std = @import("std");
 const Board = @import("ra8_board").board.Board;
 const camera_install = @import("ra8_board").camera_install;
 const hosted = @import("ra8_components").camera.hosted;
+pub const Preview = @import("ra8_chip").periph.frame_source.Preview;
 
 /// Install `input` as `board`'s camera source: a host input the caller
 /// opened, or null for the camera model's own gradient. The board owns the
@@ -15,4 +16,9 @@ const hosted = @import("ra8_components").camera.hosted;
 pub fn install(board: *Board, allocator: std.mem.Allocator, input: anytype) !void {
     const next = try hosted.wrap(allocator, input, &board.wire.sensor.format);
     camera_install.install(board, next);
+}
+
+/// Read an RGB preview frame from the installed camera source, if available (RA8EMU-1180).
+pub fn preview(board: *Board) ?Preview {
+    return board.capture.source.preview();
 }

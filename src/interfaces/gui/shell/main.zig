@@ -163,6 +163,16 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     return 0;
 }
 
+fn getCameraPreview(ctx: *anyopaque) ?shell_camera.PreviewFrame {
+    const session: *local_session.LocalSession = @ptrCast(@alignCast(ctx));
+    const prev = session.cameraPreview() orelse return null;
+    return .{
+        .width = prev.width,
+        .height = prev.height,
+        .pixels = prev.pixels,
+    };
+}
+
 const ShellFeeds = struct {
     board_input: shell_board_input.Pointer = .{},
     devices: shell_devices.Devices = .{},
@@ -265,6 +275,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var faults: shell_fault.Faults = .{};
     shell.faults = &faults;
     var camera = shell_camera.Camera.opened(io);
+    camera.preview_provider = .{ .context = &session, .previewFn = getCameraPreview };
     if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
     shell.startup = startup;

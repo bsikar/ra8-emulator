@@ -3,8 +3,7 @@
 //! console, board, device, camera and plug models, takes their presses (the menu strip
 //! RA8EMU-968, the pane titles RA8EMU-800, the settings page RA8EMU-963), and while Run is lit
 //! pays the board its slices on the shell's own thread, never more than one per frame. Then it
-//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless
-//! platform run it alike.
+//! draws the shell frame (RA8EMU-764) through the platform seam, so SDL and the headless platform run it alike.
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const widget_paint = @import("ra8_render").widget_paint;
@@ -163,6 +162,7 @@ pub const Shell = struct {
         var list = draw_list.DrawList.init(self.allocator, size.width, size.height);
         defer list.deinit();
         if (self.board) |board| board.pace(self.now());
+        if (self.camera) |camera| camera.pace(self.now(), self.allocator);
         try shell_frame.draw(&list, self.themes.active, .{
             .layout = &self.layout,
             .solved = &solved,

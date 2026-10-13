@@ -20,6 +20,12 @@ test "the command line takes an image and an optional instruction budget" {
     try std.testing.expectError(error.UnknownFlag, parse(&[_][]const u8{ "emu", "a.elf", "--nope" }));
 }
 
+test "CLI usage lists webcam forms on Windows and macOS as well as Linux" {
+    try std.testing.expect(std.mem.indexOf(u8, mod.usage, "webcam[:N|PATH] (Linux") != null);
+    try std.testing.expect(std.mem.indexOf(u8, mod.usage, "webcam[:N] (Windows/macOS") != null);
+    try std.testing.expect(std.mem.indexOf(u8, mod.usage, "--allow-webcam") != null);
+}
+
 test "--console streams finished SCI lines when requested" {
     try std.testing.expect(!(try parse(&[_][]const u8{ "emu", "a.elf" })).console);
     try std.testing.expect((try parse(&[_][]const u8{ "emu", "a.elf", "--console" })).console);
