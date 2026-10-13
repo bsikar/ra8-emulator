@@ -122,6 +122,10 @@ pub const Session = struct {
         // A pumped resume that has not stopped yet sends nothing: gdb waits
         // for the stop reply, and the pump delivers it when the run ends.
         if (reply.len == 0 and resumes(request)) return true;
+        if (resumes(request)) {
+            // A resume that stopped inside this packet already printed.
+            if (!self.consoleOut(c)) return false;
+        }
         const framed = rsp.packet.frame(&c.framed, reply) catch return false;
         if (!self.send(c, framed)) return false;
         c.last = reply;
@@ -136,9 +140,22 @@ pub const Session = struct {
             return;
         };
         if (reply.len == 0) return;
+        if (!self.consoleOut(c)) return;
         const framed = rsp.packet.frame(&c.framed, reply) catch return;
         if (!self.send(c, framed)) return;
         c.last = framed;
+    }
+
+    /// Send the ITM port 0 text the run just produced as `O` packets
+    /// (RA8EMU-1156): gdb takes them only while the target runs, so they
+    /// go out between a resume and its stop reply, and the text is then
+    /// forgotten. False when the connection has ended.
+    fn consoleOut(self: *Session, c: *Client) bool {
+        const live = self.live orelse return true;
+        const port = live.itmPort(live.currentCore()) catch return true;
+        var out = Sender{ .session = self, .client = c };
+        rsp.console.send(&out, port, &c.framed) catch return false;
+        return true;
     }
 
     fn send(self: *Session, c: *Client, bytes: []const u8) bool {
@@ -148,6 +165,18 @@ pub const Session = struct {
         };
         return true;
     }
+
+    /// The writer console.send frames each `O` packet into and sends.
+    const Sender = struct {
+        session: *Session,
+        client: *Client,
+
+        pub const Error = error{Closed};
+
+        pub fn writeAll(self: *Sender, bytes: []const u8) Error!void {
+            if (!self.session.send(self.client, bytes)) return error.Closed;
+        }
+    };
 
     fn drop(self: *Session) void {
         const c = &(self.client orelse return);
