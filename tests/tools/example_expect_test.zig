@@ -43,3 +43,21 @@ test "usb_host_file_ops passes on the ninth step and fails on a refused one" {
     try std.testing.expectEqual(.fail, expect.judge(found, "ra8d2 fileops: FAIL write").?);
     try std.testing.expect(expect.judge(found, "ra8d2 fileops: [9/9] unlink USBDONE.TXT") == null);
 }
+
+test "devcfg_record_demo passes on the expected unprovisioned unit line" {
+    const found = expect.find("devcfg_record_demo.elf").?;
+    try std.testing.expectEqual(.pass, expect.judge(found, "devcfg_record_demo: unit UNPROVISIONED (read-only probe)").?);
+}
+
+test "devcfg_record_demo fails on a provisioned unit line" {
+    const found = expect.find("devcfg_record_demo.elf").?;
+    try std.testing.expectEqual(.fail, expect.judge(found, "devcfg_record_demo: unit provisioned, vcom 3300 mV").?);
+    try std.testing.expectEqual(.fail, expect.judge(found, "devcfg_record_demo: unit provisioned, vcom not valid").?);
+}
+
+test "devcfg_record_demo's round-trip lines never decide the row" {
+    const found = expect.find("devcfg_record_demo.elf").?;
+    try std.testing.expect(expect.judge(found, "devcfg_record_demo: record round trip PASS") == null);
+    try std.testing.expect(expect.judge(found, "devcfg_record_demo: record round trip FAIL") == null);
+    try std.testing.expect(expect.judge(found, "devcfg_record_demo: boot") == null);
+}
