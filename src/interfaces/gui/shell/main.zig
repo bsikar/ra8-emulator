@@ -1,183 +1,101 @@
-//! ra8_gui's command line and its one window (RA8EMU-770, RA8EMU-1097): the
-//! docked debugger shell on an image, `ra8_gui [flags] IMAGE`. It picks the
-//! host (the local one unless --host names a profile in the hosts file),
-//! serves the local session in-process (local_session.zig), loads the image
-//! once the session greets, and runs the shell loop (RA8EMU-763) until the
-//! window closes, one frame every sixtieth of a second. The image stays
-//! halted at reset until Run is pressed on the time bar (RA8EMU-1118).
-//! Only the local host connects so far; SSH profiles join with RA8EMU-761.
+//! ra8_gui: the debugger GUI (RA8EMU-202).
+//!
+//! Run with an image to debug:
+//!
+//!   ra8_gui path/to/firmware.elf
+//!   ra8_gui --headless --gui-script test_run.txt --gui-video-out out.mp4 firmware.elf
+//!
+//! Opens an SDL window, serves the image on a local session (local_session.zig)
+//! and draws the debugger shell (shell/loop.zig).
 const std = @import("std");
-const host_profiles = @import("ra8_host").profiles;
-const platform = @import("../platform.zig");
-const pane_layout = @import("../ui/pane_layout.zig");
+const proto = @import("ra8_rpc").session.rpc;
+const session_link = @import("../session_link.zig");
+const local_session = @import("../local_session.zig");
+const wall_clock = @import("../wall_clock.zig");
 const render_driver = @import("../render_driver.zig");
+const pane_layout = @import("../ui/pane_layout.zig");
+const window_stills = @import("../window/stills.zig");
+const platform = @import("../platform.zig");
+const headless_mod = @import("../headless.zig");
+const chunked = @import("ra8_rpc").session.load_chunks;
 const shell_loop = @import("loop.zig");
-const shell_panes = @import("panes.zig");
+const shell_window = @import("window_store.zig");
+const shell_settings = @import("settings_page.zig");
+const shell_layout = @import("layout_store.zig");
+const shell_hosted = @import("hosted.zig");
+const shell_time = @import("time.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
+const shell_board_store = @import("board_store.zig");
 const shell_board_input = @import("board/input.zig");
 const shell_devices = @import("devices.zig");
 const shell_fault = @import("fault.zig");
 const shell_camera = @import("camera/camera.zig");
-const shell_plug = @import("plug.zig");
 const shell_camera_file = @import("camera/file.zig");
-const shell_server = @import("server.zig");
 const shell_startup = @import("startup.zig");
-const window_stills = @import("../window/stills.zig");
-const source_spec = @import("ra8_host").camera.source_spec;
+const shell_plug = @import("plug.zig");
 const shell_registers = @import("registers.zig");
 const shell_register_edit = @import("register_edit.zig");
-const shell_memory = @import("memory.zig");
-const shell_breaks = @import("breaks.zig");
-const shell_memory_field = @import("memory_field.zig");
-const session_link = @import("../session_link.zig");
-const local_session = @import("../local_session.zig");
-const card_apps = @import("ra8_rpc").card_apps;
-const shell_run = @import("run.zig");
-const shell_time = @import("time.zig");
-const wall_clock = @import("../wall_clock.zig");
-const proto = @import("ra8_rpc").session.rpc;
-const chunked = @import("ra8_rpc").session.load_chunks;
 const shell_stack = @import("stack.zig");
+const shell_memory = @import("memory.zig");
+const shell_memory_field = @import("memory_field.zig");
+const shell_breaks = @import("breaks.zig");
 const shell_open = @import("open.zig");
-const colors = @import("../ui/colors.zig");
-const shell_layout = @import("layout_store.zig");
-const shell_settings = @import("settings_page.zig");
-const shell_window = @import("window_store.zig");
-const shell_hosted = @import("hosted.zig");
+const shell_panes = @import("panes.zig");
 const shell_rebuild = @import("rebuild.zig");
-const shell_board_store = @import("board_store.zig");
 const shell_recents = @import("recents.zig");
 const shell_recent_menu = @import("recent_menu.zig");
 const shell_board_pick = @import("board_pick.zig");
 const shell_board_profiles = @import("board_profiles.zig");
+const shell_run = @import("run.zig");
+const host_profiles = @import("ra8_host").profiles;
 const host_listener = @import("ra8_rpc").host_listener;
+const script_mod = @import("../script/script.zig");
+const video_mod = @import("../video/video.zig");
+const args_mod = @import("args.zig");
+
+pub const Args = args_mod.Args;
+pub const parse = args_mod.parse;
+pub const pick = args_mod.pick;
+pub const usage = args_mod.usage;
 
 const Env = proto.Client.Env;
-const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
-    "    [--app FILE.ra8app[=MODULE.elf]]... [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]]\n" ++
-    "    [--frames N] [--theme dark|light|system] [--render-driver NAME] IMAGE\n";
-
-/// The word `ra8_gui shell IMAGE` carried while ra8_gui also had a live
-/// window; still taken in front of the flags, and it changes nothing.
-const shell_word = "shell";
-
-/// Largest image the shell reads, as main does for a run.
 const max_image: usize = 64 * 1024 * 1024;
-
-/// The window's frame: a lit run owes the board this much of its own time
-/// each one (shell_run.zig), so the loop holds to it.
 const frame_ns: u64 = shell_run.frame_ns;
 
-pub const Args = struct {
-    image: []const u8,
-    /// `--app FILE.ra8app[=MODULE.elf]`, repeatable (RA8EMU-1142): ThreadX
-    /// module apps the session stages onto the board's card before boot.
-    apps: [card_apps.max_apps][]const u8 = undefined,
-    app_count: usize = 0,
-    host: ?[]const u8 = null,
-    hosts: ?[]const u8 = null,
-    /// The `--attach` and `--click` plugs (RA8EMU-1095).
-    startup: shell_startup.Startup = .{},
-    /// `--camera-source`: the camera panel starts on this source.
-    camera: ?source_spec.Spec = null,
-    /// `--window-stills DIR` keeps every `stills_every`-th frame as a PNG.
-    stills: ?[]const u8 = null,
-    stills_every: u32 = 1,
-    /// `--frames N`: close the window after N frames drawn with the image
-    /// loaded, for a smoke run with nobody to close it (RA8EMU-1089).
-    frames: ?u32 = null,
-    /// `--theme dark|light|system`: the palette the window paints with
-    /// (RA8EMU-961); system follows the OS setting live (RA8EMU-962).
-    theme: colors.Choice = .dark,
-    /// Whether --theme was on the command line: it overrides the saved choice.
-    theme_set: bool = false,
-    /// `--render-driver NAME`: the only render driver tried (RA8EMU-226).
-    render_driver: ?[]const u8 = null,
+const WindowBackend = struct {
+    platform: platform.Platform,
+    headless: ?*headless_mod.Headless = null,
+    allocator: std.mem.Allocator,
+    opened: bool = false,
+
+    fn deinit(self: *WindowBackend, opener: platform.Opener) void {
+        if (self.headless) |h| {
+            h.deinit();
+            self.allocator.destroy(h);
+        }
+        if (self.opened) opener.close();
+    }
 };
 
-/// Parse `ra8_gui [flags] IMAGE`; see `usage`.
-/// One more `--app` value.
-fn addApp(args: *Args, path: []const u8) !void {
-    if (args.app_count == card_apps.max_apps) return error.TooManyApps;
-    args.apps[args.app_count] = path;
-    args.app_count += 1;
-}
-
-pub fn parse(argv: []const []const u8) error{Usage}!Args {
-    if (argv.len < 2) return error.Usage;
-    var args: Args = .{ .image = "" };
-    var image: ?[]const u8 = null;
-    var i: usize = if (std.mem.eql(u8, argv[1], shell_word)) 2 else 1;
-    while (i < argv.len) : (i += 1) {
-        const arg = argv[i];
-        if (std.mem.eql(u8, arg, "--click")) {
-            args.startup.addClick() catch return error.Usage;
-        } else if (valued(arg)) {
-            i += 1;
-            if (i >= argv.len) return error.Usage;
-            take(&args, arg, argv[i]) catch return error.Usage;
-        } else if (std.mem.startsWith(u8, arg, "-") or image != null) {
-            return error.Usage;
-        } else image = arg;
+fn initWindow(allocator: std.mem.Allocator, opener: platform.Opener, args: Args, geom: ?platform.WindowState) !WindowBackend {
+    const default_w = if (geom) |g| @max(g.width, 800) else 1024;
+    const default_h = if (geom) |g| @max(g.height, 500) else 768;
+    if (args.headless) {
+        const h = try allocator.create(headless_mod.Headless);
+        h.* = headless_mod.Headless.init(allocator, default_w, default_h);
+        return .{ .platform = h.platform(), .headless = h, .allocator = allocator };
     }
-    args.image = image orelse return error.Usage;
-    return args;
-}
-
-const valued_flags = [_][]const u8{ "--host", "--hosts", "--attach", "--app", "--camera-source", "--window-stills", "--window-stills-every", "--frames", "--theme", "--render-driver" };
-
-fn valued(arg: []const u8) bool {
-    for (valued_flags) |flag| if (std.mem.eql(u8, arg, flag)) return true;
-    return false;
-}
-
-/// Set the flag `flag` from its value.
-fn take(args: *Args, flag: []const u8, value: []const u8) !void {
-    if (std.mem.eql(u8, flag, "--host")) {
-        args.host = value;
-    } else if (std.mem.eql(u8, flag, "--hosts")) {
-        args.hosts = value;
-    } else if (std.mem.eql(u8, flag, "--attach")) {
-        try args.startup.add(value);
-    } else if (std.mem.eql(u8, flag, "--app")) {
-        addApp(args, value) catch return error.Usage;
-    } else if (std.mem.eql(u8, flag, "--camera-source")) {
-        args.camera = try source_spec.parse(value);
-    } else if (std.mem.eql(u8, flag, "--window-stills")) {
-        args.stills = value;
-    } else if (std.mem.eql(u8, flag, "--window-stills-every")) {
-        args.stills_every = try count(value);
-    } else if (std.mem.eql(u8, flag, "--theme")) {
-        args.theme = std.meta.stringToEnum(colors.Choice, value) orelse return error.BadValue;
-        args.theme_set = true;
-    } else if (std.mem.eql(u8, flag, "--render-driver")) {
-        args.render_driver = value;
-    } else {
-        args.frames = try count(value);
+    if (opener.open(geom)) |w| {
+        return .{ .platform = w, .opened = true, .allocator = allocator };
     }
+    std.debug.print("ra8_gui could not open a window\n", .{});
+    return error.NoWindow;
 }
 
-/// A count on the command line: a decimal above zero.
-fn count(text: []const u8) !u32 {
-    const value = try std.fmt.parseInt(u32, text, 10);
-    if (value == 0) return error.BadValue;
-    return value;
-}
-
-/// The host the shell connects to: the local one unless --host names a
-/// profile, which comes from the hosts file. "local" needs no file.
-pub fn pick(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, args: Args) !host_profiles.Profile {
-    const name = args.host orelse return .local;
-    if (std.mem.eql(u8, name, "local")) return .local;
-    return host_profiles.load(allocator, io, env, args.hosts, name);
-}
-
-/// Run the shell in the window `opener` opens; 2 when the command line,
-/// host, or window is unusable. `allocator` is main's arena.
 pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8, opener: platform.Opener, prefs: ?[]const u8) !u8 {
     const args = parse(argv) catch {
-        std.debug.print(usage, .{});
+        std.debug.print("{s}", .{usage});
         return 2;
     };
     const profile = pick(allocator, io, env, args) catch |err| {
@@ -188,8 +106,6 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         std.debug.print("the shell connects to the local host only so far; ctl --host reaches ssh hosts\n", .{});
         return 2;
     }
-    // A second launch hands off to the running app (RA8EMU-1156): focus
-    // its window and exit. It never spawns the app itself.
     if (host_listener.focusRunning(allocator, io, env)) |_| {
         std.debug.print("ra8_gui: focused the running emulator\n", .{});
         return 0;
@@ -199,20 +115,40 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         return 1;
     };
     render_driver.override = args.render_driver;
-    // The window opens where it last sat, and its geometry saves on the
-    // way out (RA8EMU-966).
+
     var window_store = shell_window.Store{ .io = io, .allocator = allocator, .dir = prefs };
-    const window = opener.open(window_store.restore()) orelse {
-        std.debug.print("ra8_gui could not open a window\n", .{});
-        return 2;
-    };
-    defer opener.close();
+    var backend = initWindow(allocator, opener, args, window_store.restore()) catch return 2;
+    defer backend.deinit(opener);
+
+    var script_runner: ?script_mod.runner.Runner = null;
+    var script_obj: ?script_mod.parser.Script = null;
+    defer if (script_obj) |*s| s.deinit();
+    defer if (script_runner) |*r| r.deinit();
+    if (args.gui_script) |p| {
+        const text = std.Io.Dir.cwd().readFileAlloc(io, p, allocator, .limited(1024 * 1024)) catch return 1;
+        script_obj = script_mod.parser.parse(allocator, text) catch return 1;
+        script_runner = script_mod.runner.Runner.init(allocator, script_obj.?.items.items, args.headless);
+    }
+
+    var video_writer: ?video_mod.writer.Writer = null;
+    defer if (video_writer) |*w| w.deinit();
+    defer if (video_writer) |*w| w.finish() catch {};
+    if (args.gui_video_out) |p| video_writer = video_mod.writer.Writer.init(allocator, io, p, args.gui_video_fps) catch return 1;
+
     const stills_dir = try window_stills.openDir(io, args.stills);
     defer if (stills_dir) |dir| dir.close(io);
-    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = window, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
-    const shown = if (stills_dir != null) recorder.platform() else window;
+    var recorder = window_stills.Recorder{ .allocator = allocator, .inner = backend.platform, .io = io, .dir = stills_dir orelse std.Io.Dir.cwd(), .stem = "window", .every = args.stills_every };
+    const inner_platform = if (stills_dir != null) recorder.platform() else backend.platform;
+
+    var cap = video_mod.capture.Capture.init(allocator, inner_platform);
+    defer cap.deinit();
+    if (script_runner) |*r| cap.runner = r;
+    if (video_writer) |*w| cap.writer = w;
+    cap.fps = args.gui_video_fps;
+    cap.show_cursor = args.show_cursor;
+
     var startup = args.startup;
-    local(allocator, io, env, shown, args, &startup, bytes, prefs) catch |err| switch (err) {
+    local(allocator, io, env, cap.platform(), &cap, args, &startup, bytes, prefs) catch |err| switch (err) {
         error.ImageNotLoaded => {
             std.debug.print("ra8_gui: the session did not load {s}\n", .{args.image});
             return 1;
@@ -223,19 +159,73 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         },
         else => return err,
     };
-    window_store.save(shell_window.capture(window));
+    window_store.save(shell_window.capture(backend.platform));
     return 0;
 }
 
-/// Serve the image in-process and run the shell on it.
-fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
+const ShellFeeds = struct {
+    board_input: shell_board_input.Pointer = .{},
+    devices: shell_devices.Devices = .{},
+    faults: shell_fault.Faults = .{},
+    camera: shell_camera.Camera = .{},
+    plug: shell_plug.Plug = .{},
+    camera_file: shell_camera_file.CameraFile = .{},
+    registers: shell_registers.Pair = .{},
+    edit: shell_register_edit.Editor = .{},
+    stack: shell_stack.Pair = .{},
+    memory: shell_memory.Pair = .{},
+    memory_field: shell_memory_field.Pin = .{},
+    code: shell_memory.Pair = .{ .follows = .pc },
+    breaks: shell_breaks.Breaks = .{},
+
+    fn init(self: *ShellFeeds) !void {
+        try self.plug.init();
+        try self.camera_file.init();
+        try self.memory_field.init();
+    }
+
+    fn bind(self: *ShellFeeds, shell: *shell_loop.Shell, console: *shell_console.Console, board: *shell_board.Board, files: *shell_open.Open) shell_panes.Panes {
+        shell.console = console;
+        shell.board = board;
+        shell.board_input = &self.board_input;
+        shell.devices = &self.devices;
+        shell.faults = &self.faults;
+        shell.camera = &self.camera;
+        shell.plug = &self.plug;
+        shell.camera_file = &self.camera_file;
+        shell.registers = &self.registers;
+        shell.edit = &self.edit;
+        shell.stack = &self.stack;
+        shell.memory = &self.memory;
+        shell.memory_field = &self.memory_field;
+        shell.code = &self.code;
+        shell.breaks = &self.breaks;
+        shell.files = files;
+        return .{
+            .console = console,
+            .board = board,
+            .board_input = &self.board_input,
+            .devices = &self.devices,
+            .faults = &self.faults,
+            .camera = &self.camera,
+            .plug = &self.plug,
+            .camera_file = &self.camera_file,
+            .registers = &self.registers,
+            .edit = &self.edit,
+            .memory = &self.memory,
+            .memory_field = &self.memory_field,
+            .code = &self.code,
+            .breaks = &self.breaks,
+            .stack = &self.stack,
+        };
+    }
+};
+
+fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, cap: ?*video_mod.capture.Capture, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
     var session: local_session.LocalSession = undefined;
     try session.open(allocator, io, args.image, null);
     defer session.deinit();
-    session.setup.stageApps(io, allocator, args.apps[0..args.app_count]) catch |err| {
-        std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
-        return err;
-    };
+    try session.setup.stageApps(io, allocator, args.apps[0..args.app_count]);
     var hosted: ?shell_hosted.Hosted = null;
     defer if (hosted) |*h| h.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
@@ -243,6 +233,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var link: session_link.Link = undefined;
     link.open(session.transport(), rx, tx);
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
+    if (cap) |c| c.bind(&shell);
+    defer if (cap) |c| c.unbind();
     var render_buf: [64]u8 = undefined;
     shell.status.render = render_driver.status(&render_buf, render_driver.active, render_driver.gpu);
     var settings_store = shell_settings.Store{ .io = io, .allocator = allocator, .dir = prefs };
@@ -309,10 +301,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     link.close();
 }
 
-/// Step `shell` once a frame until its window closes, loading the image once
-/// its session has greeted. With `frames` it also ends after that many
-/// frames drawn with the image loaded, and fails once the image can no
-/// longer load, so a run with nobody at the window always ends.
 pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, frames: ?u32) !void {
     var sent = false;
     var drawn: u32 = 0;
@@ -333,20 +321,16 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
             if (shell.status.image != null) drawn += 1;
             if (drawn == wanted) return;
         }
-        // The rest of the frame; a frame that ran over starts the next at once.
         const spent = clock.now() - began;
         if (spent < frame_ns) try io.sleep(.fromNanoseconds(frame_ns - spent), .awake);
     }
 }
 
-/// Whether a board-profile rebuild is waiting to reload the image
-/// (RA8EMU-1152).
 fn reloadDue(shell: *const shell_loop.Shell) bool {
-    const chosen = shell.pick orelse return false;
-    return chosen.reload;
+    const pick_state = shell.pick orelse return false;
+    return pick_state.reload;
 }
 
-/// Whether the image can no longer load: the session is gone or refused it.
 fn lost(shell: *const shell_loop.Shell) bool {
     return switch (shell.state()) {
         .failed, .closed => true,

@@ -177,6 +177,10 @@ test {
     _ = @import("interfaces/gui/shell/camera/camera_test.zig");
     _ = @import("interfaces/gui/shell/camera/file_test.zig");
     _ = @import("interfaces/gui/shell/titles_test.zig");
+    _ = @import("interfaces/gui/script_parse_test.zig");
+    _ = @import("interfaces/gui/script_target_test.zig");
+    _ = @import("interfaces/gui/script_run_test.zig");
+    _ = @import("interfaces/gui/video_out_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/profile_test.zig");
     _ = @import("interfaces/cli/folded_guest_test.zig");
