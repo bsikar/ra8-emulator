@@ -17,6 +17,8 @@ const api = ra8.session.api;
 const BoardBoundary = ra8.session.board.boundary.BoardBoundary;
 const server = ra8.rpc.session.server;
 const advance = ra8.rpc.session.advance;
+const Harness = ra8.session.harness.Harness;
+const Cpu1 = ra8.session.cpu1.bringup.Cpu1;
 const proto = ra8.rpc.session.rpc;
 
 const hz: u64 = 25_000;
@@ -295,4 +297,97 @@ test "an advance on a parked core the board cannot run is refused with both budg
     try std.testing.expectEqual(5 * cycle_ns + ns_per_s, back.to_ns);
     try std.testing.expectEqual(@as(u64, 1000), rig.session.live.budget);
     try std.testing.expectEqual(@as(u64, 77), rig.session.live.other.?.budget);
+}
+
+const dual_cpu0 = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf";
+const dual_cpu1 = "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf";
+
+/// The real dual IPC corpus (concrete CPU0 and CPU1 images) behind an RPC context.
+const Dual = struct {
+    second: Cpu1 = .{},
+    harness: Harness = undefined,
+    scratch: [64]u8 = undefined,
+    context: server.Context = undefined,
+
+    fn open(self: *Dual) !void {
+        self.harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = dual_cpu0 });
+        errdefer self.harness.deinit();
+        try self.second.open(std.testing.allocator, std.testing.io, &self.harness, dual_cpu1);
+        self.harness.state.edge.idle_skip = false;
+        self.context = .{ .session = self.harness.session(), .scratch = &self.scratch };
+    }
+
+    fn close(self: *Dual) void {
+        self.second.close(std.testing.allocator);
+        self.harness.deinit();
+    }
+
+    fn retired(self: *Dual, which: api.Core) u64 {
+        return if (which == .cpu0) self.harness.primaryCpu().retired else self.second.cpu().retired;
+    }
+
+    fn pc(self: *Dual, which: api.Core) u32 {
+        return if (which == .cpu0) self.harness.primaryCpu().regs.pc else self.second.cpu().regs.pc;
+    }
+};
+
+/// Break `winner` at `at` while `asked` is the core the advance names, then
+/// check the reply against what a plain run of the same budget leaves.
+fn winnerStops(asked: api.Core, winner: api.Core, at: u32) !void {
+    var rpc: Dual = .{};
+    try rpc.open();
+    defer rpc.close();
+    var plain: Dual = .{};
+    try plain.open();
+    defer plain.close();
+    _ = try rpc.harness.session().setBreakpoint(winner, .{ .address = at });
+    _ = try plain.harness.session().setBreakpoint(winner, .{ .address = at });
+
+    const ns = ns_per_s / 100;
+    const moved = switch (advance.advance(&rpc.context, .{ .core = @fromBackingInt(@intCast(@backingInt(asked))), .ns = ns })) {
+        .ok => |reply| reply,
+        .err => return error.Refused,
+    };
+    const budget = plain.harness.session().time_base.?.cyclesUntil(ns);
+    try plain.harness.session().setRunBudget(asked, budget);
+    const ended = try plain.harness.session().run(asked, .cont);
+    try std.testing.expect(ended == .stop and ended.stop == .breakpoint);
+
+    const ended_index = rpc.harness.session().live.ended_index;
+    try std.testing.expectEqual(@backingInt(winner), ended_index);
+    try std.testing.expectEqual(plain.harness.session().live.ended_index, ended_index);
+    try std.testing.expectEqual(proto.StopReason.breakpoint, moved.reason);
+    // The stop the server publishes names the winner; the reply's own `core`
+    // is advance.zig's and still echoes the request (see the contract).
+    try std.testing.expectEqual(@backingInt(winner), @backingInt(rpc.context.pending.?.core));
+    try std.testing.expectEqual(at, rpc.context.pending.?.address);
+    try std.testing.expectEqual(at, moved.address);
+    try std.testing.expectEqual(at, rpc.pc(winner));
+    try std.testing.expect(moved.to_ns > moved.from_ns and moved.to_ns < ns);
+    try std.testing.expect(rpc.retired(winner) > 0);
+    // Nothing ran past the win: both cores and the clock stand where the plain run left them.
+    try std.testing.expectEqual(try plain.harness.session().now(), moved.to_ns);
+    for ([_]api.Core{ .cpu0, .cpu1 }) |which| {
+        try std.testing.expectEqual(plain.retired(which), rpc.retired(which));
+        try std.testing.expectEqual(plain.pc(which), rpc.pc(which));
+    }
+    std.debug.print("CHECK=winner asked={s} winner={s} reply={s} ended_index={d} to_ns={d} retired0={d} retired1={d}\n", .{ @tagName(asked), @tagName(winner), @tagName(moved.core), ended_index, moved.to_ns, rpc.retired(.cpu0), rpc.retired(.cpu1) });
+}
+
+test "an advance asked of CPU0 that CPU1 breaks reports CPU1 at its position" {
+    var probe: Dual = .{};
+    try probe.open();
+    defer probe.close();
+    try probe.harness.session().setRunBudget(.cpu0, 125_987);
+    _ = try probe.harness.session().run(.cpu0, .cont);
+    try winnerStops(.cpu0, .cpu1, probe.pc(.cpu1));
+}
+
+test "an advance asked of CPU1 that CPU0 breaks reports CPU0 at its position" {
+    var probe: Dual = .{};
+    try probe.open();
+    defer probe.close();
+    try probe.harness.session().setRunBudget(.cpu0, 50_000);
+    _ = try probe.harness.session().run(.cpu0, .cont);
+    try winnerStops(.cpu1, .cpu0, probe.pc(.cpu0));
 }
