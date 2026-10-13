@@ -21,6 +21,9 @@ test {
     _ = @import("host/history/move/probe_test.zig");
     _ = @import("host/history/move/receipt_test.zig");
     _ = @import("host/history/move/wire_test.zig");
+    _ = @import("host/history/move/deadline_test.zig");
+    _ = @import("host/history/move/window_test.zig");
+    _ = @import("host/history/move/proxy_test.zig");
     _ = @import("host/history/move/provider_test.zig");
     _ = @import("host/history/move/context_test.zig");
     _ = @import("host/history/move/intent_test.zig");

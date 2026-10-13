@@ -5,6 +5,8 @@ const wire = @import("wire.zig");
 const provider = @import("provider.zig");
 const intent = @import("intent.zig");
 const Context = @import("context.zig").Context;
+const Proxy = @import("proxy.zig").Proxy;
+const Deadline = @import("deadline.zig").Deadline;
 
 pub fn move(context: Context, from: []const u8, to: []const u8, purpose: []const u8) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
@@ -45,6 +47,8 @@ pub fn settle(context: Context, peer: ?provider.Provider, record: intent.Record)
             return error.CrossDevice;
         },
         .refused => return error.NativeMoveRefused,
+        // The peer's window closed before COMMIT reached it; nothing moved.
+        .expired => return error.NativeMoveExpired,
     }
 }
 
@@ -63,49 +67,54 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record) !w
     const base = context.source;
     const allocator = base.allocator;
     const io = base.io;
+    try peer.bounds.check();
     if (!std.mem.eql(u8, &peer.sha256, &try provider.digest(io, peer.executable))) return error.PeerDigestMismatch;
     const source = try wire.windowsPath(allocator, base.path);
     defer allocator.free(source);
     const target = try wire.windowsPath(allocator, context.target.path);
     defer allocator.free(target);
-    const request: wire.Request = .{ .nonce = record.nonce, .source = .{ .path = source, .marker = try Context.marker(base) }, .target = .{ .path = target, .marker = try Context.marker(context.target) }, .from = record.from, .to = record.to };
+    const request: wire.Request = .{ .nonce = record.nonce, .source = .{ .path = source, .marker = try Context.marker(base) }, .target = .{ .path = target, .marker = try Context.marker(context.target) }, .from = record.from, .to = record.to, .commit_ms = peer.bounds.commit, .drain_ms = peer.bounds.drain };
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = 0, .reply = .{ .nonce = record.nonce, .phase = .starting, .pid = 0, .source_inode = 0, .source_root = 0, .target_root = 0 } });
-    var child = try std.process.spawn(io, .{ .argv = &.{ peer.executable, "--internal-host-move" }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore, .inherit_files = context.authorities, .inherit_dirs = &.{ base.dir, context.target.dir } });
-    var waited = false;
-    defer if (!waited) {
-        if (child.stdin) |pipe| {
-            pipe.close(io);
-            child.stdin = null;
-        }
-        _ = child.wait(io) catch {};
-    };
-    try wire.write(allocator, io, child.stdin.?, request);
-    const ready = try wire.read(wire.Reply, allocator, io, child.stdout.?);
+    var child = try Proxy.spawn(context, peer.executable, peer.bounds.reap);
+    defer child.close();
+    try child.fits();
+    try wire.write(allocator, io, child.child.stdin.?, request);
+    const ready = wire.read(wire.Reply, allocator, io, child.child.stdout.?, .after(io, peer.bounds.ready)) catch |err| return if (err == error.DeadlineExceeded) error.NativePeerTimeout else err;
     defer ready.deinit();
+    // The peer opened its window before it wrote this reply, so both bounds
+    // here end no earlier than the peer's own.
+    const window: Deadline = .after(io, peer.bounds.commit);
+    const drained: Deadline = .after(io, peer.bounds.commit + peer.bounds.drain);
     try reply(record, ready.value, .bound);
-    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.id.?, .reply = ready.value });
+    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = ready.value });
     try context.recheck(record.from, record.source, record.source_root, record.target_root);
-    try wire.write(allocator, io, child.stdin.?, wire.Commit{ .nonce = record.nonce, .commit = true });
-    child.stdin.?.close(io);
-    child.stdin = null;
-    const done = wire.read(wire.Reply, allocator, io, child.stdout.?) catch |err| {
-        _ = try child.wait(io);
-        waited = true;
-        try context.source.checkMarked();
-        try context.target.checkMarked();
-        if (try intent.arrived(context, record)) return .success;
-        return err;
+    if (window.left(io) == null) return error.NativePeerTimeout;
+    child.commit(allocator, .{ .nonce = record.nonce, .commit = true }) catch |err| return lost(context, record, err);
+    const done = wire.read(wire.Reply, allocator, io, child.child.stdout.?, drained) catch |err| {
+        child.close();
+        return lost(context, record, err);
     };
     defer done.deinit();
     try reply(record, done.value, .done);
     if (done.value.source_inode != ready.value.source_inode or done.value.source_root != ready.value.source_root or done.value.target_root != ready.value.target_root or done.value.pid != ready.value.pid) return error.BadFrame;
-    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.id.?, .reply = done.value });
-    const term = try child.wait(io);
-    waited = true;
+    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = done.value });
+    const term = child.reap();
     try context.source.checkMarked();
     try context.target.checkMarked();
-    if (done.value.status == .success and !term.success()) return error.NativePeerFailed;
+    if (done.value.status == .success and (term == null or !term.?.success())) return error.NativePeerFailed;
     return done.value.status;
+}
+
+/// COMMIT was written and no done reply came back: the rename may have
+/// happened, or may still. Only an arrival seen now settles it. Anything
+/// else, a root the surviving peer still guards included, is the same
+/// unknown outcome and leaves the intent in place for recovery.
+fn lost(context: Context, record: intent.Record, err: anyerror) !wire.Status {
+    const unknown = if (err == error.DeadlineExceeded) error.NativeMoveUnknown else err;
+    context.source.checkMarked() catch return unknown;
+    context.target.checkMarked() catch return unknown;
+    if (intent.arrived(context, record) catch return unknown) return .success;
+    return unknown;
 }
 
 fn reply(record: intent.Record, value: wire.Reply, phase: wire.Phase) !void {
