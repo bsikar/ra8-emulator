@@ -116,7 +116,7 @@ test "the bar rasterises to the pinned golden frame" {
     defer scene.deinit();
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 7603158565226785860), scene.digest());
+    try std.testing.expectEqual(@as(u64, 13733637898402052016), scene.digest());
 }
 
 test "the bar rasterises to the pinned golden frame in the light theme" {
@@ -125,7 +125,7 @@ test "the bar rasterises to the pinned golden frame in the light theme" {
     scene.theme = light;
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 16531255294835256462), scene.digest());
+    try std.testing.expectEqual(@as(u64, 17928306916895088826), scene.digest());
 }
 
 test "the editing field rasterises to its pinned golden frame" {
@@ -136,7 +136,7 @@ test "the editing field rasterises to its pinned golden frame" {
     models.run.lit = true;
     models.field.typed("5");
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(true));
-    try std.testing.expectEqual(@as(u64, 9663047869982207366), scene.digest());
+    try std.testing.expectEqual(@as(u64, 11371028978566052426), scene.digest());
 }
 
 test "the bar with an RTC date rasterises to its pinned golden frame, wide enough for the whole line" {
@@ -145,7 +145,7 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
     var models = Models.sample();
     models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
     try scene.render(.{ .x = 0, .y = 0, .w = 800, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 7600191303540114803), scene.digest());
+    try std.testing.expectEqual(@as(u64, 634506185226783751), scene.digest());
 }
 
 test "a short bar hides incomplete controls and keeps the whole clock line" {
@@ -369,7 +369,7 @@ test "a click on step drives a served session, and run and pause light and unlig
 }
 
 test "control boundaries have only whole buttons and never actionable slivers" {
-    const controls = [_]bar.Control{ .run, .pause, .step, .field };
+    const controls = [_]bar.Control{ .run, .pause, .step, .over, .out, .field };
     var edge: i32 = bar.pad;
     for (controls) |control| {
         edge += bar.width(control);
