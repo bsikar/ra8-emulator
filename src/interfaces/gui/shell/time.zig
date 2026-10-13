@@ -59,6 +59,15 @@ pub const Time = struct {
         if (self.run.lit and !was_lit) self.readout.last = null;
     }
 
+    /// A debugger step key over a source or disassembly pane (RA8EMU-1188):
+    /// F10 over, F11 into, shift+F11 out, under the bar's one policy.
+    pub fn stepKey(self: *Time, code: u32, shift: bool, status: *Status, link: *Link) bool {
+        const control = time_bar_capture.keyControl(code, shift) orelse return false;
+        if (!time_bar_capture.enabled(control, status, &self.run)) return false;
+        self.pressCommand(control, link, status);
+        return true;
+    }
+
     /// Typing and keys for the speed field while it has the keyboard.
     /// Returns whether the event was taken.
     pub fn handle(self: *Time, event: platform.Event, link: *Link) bool {
