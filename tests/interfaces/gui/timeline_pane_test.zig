@@ -54,7 +54,9 @@ fn digest(view: timeline_model.View, w: i32, h: i32) !u64 {
     defer list.deinit();
     var frame = try raster.Framebuffer.init(allocator, @intCast(w), @intCast(h));
     defer frame.deinit(allocator);
-    try pane.draw(&list, dark, area, &model, view);
+    var target = ra8.render.widget_paint.Target{ .list = &list };
+    const paint = target.paint();
+    pane.draw(&paint, dark, area, &model, view);
     raster.draw(&frame, &list, ra8.render.font.atlas);
     return std.hash.Fnv1a_64.hash(std.mem.sliceAsBytes(frame.pixels));
 }

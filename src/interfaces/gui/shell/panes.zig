@@ -135,7 +135,7 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     if (pane.kind == .timeline) if (self.timeline) |model| {
         const window = model.recorded() orelse return;
         const room = body.w - 2 * shell_frame.pad;
-        try timeline_pane.draw(list, theme, toList(body), model, .{
+        timeline_pane.draw(table, theme, toList(body), model, .{
             .start_ns = window.from,
             .span_ns = @max(window.to - window.from, 1),
             .width_px = @intCast(@max(room, 1)),

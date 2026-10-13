@@ -9,6 +9,7 @@
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const Theme = @import("ui/colors.zig").Theme;
 pub const timeline_model = @import("timeline_model.zig");
 
@@ -86,35 +87,35 @@ fn laneName(lane: timeline_model.Lane, into: []u8) []const u8 {
 
 /// The pane's whole paint. A pane too small for the ruler, one core
 /// header and one lane row draws nothing.
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, area: Rect, model: *const Model, view: View) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, model: *const Model, view: View) void {
     if (area.w < col_w + 16 or area.h < ruler_h + header_h + row_h) return;
-    try list.fill(area, theme.face);
+    fillArea(table, area, theme.face);
     const rows = rowsRect(area);
     var y = area.y;
     for (0..timeline_model.limits.cores) |ci| {
         if (y >= area.y + rows.h) break;
-        y = try drawCore(list, theme, area, model, view, @intCast(ci), y, area.y + rows.h);
+        y = drawCore(table, theme, area, model, view, @intCast(ci), y, area.y + rows.h);
     }
-    try drawRuler(list, theme, area, view);
+    drawRuler(table, theme, area, view);
 }
 
-fn drawCore(list: *draw_list.DrawList, theme: *const Theme, area: Rect, model: *const Model, view: View, core: u1, y_top: i32, bottom: i32) !i32 {
+fn drawCore(table: *const widget.types.Paint, theme: *const Theme, area: Rect, model: *const Model, view: View, core: u1, y_top: i32, bottom: i32) i32 {
     if (y_top + header_h > bottom) return bottom;
-    try list.fill(.{ .x = area.x, .y = y_top, .w = area.w, .h = header_h }, theme.gutter);
+    fillArea(table, .{ .x = area.x, .y = y_top, .w = area.w, .h = header_h }, theme.gutter);
     var cbuf: [16]u8 = undefined;
     const cname = std.fmt.bufPrint(&cbuf, "Core {d}", .{core}) catch "Core";
-    try font.draw(list, area.x + pad, y_top + 3, cname, theme.ink);
+    drawText(table, area.x + pad, y_top + 3, cname, theme.ink, theme.gutter);
     var order_buf: [64]usize = undefined;
     var y = y_top + header_h;
     for (laneOrder(model, core, &order_buf)) |index| {
         if (y + row_h > bottom) break;
-        try drawLane(list, theme, area, model, view, index, y);
+        drawLane(table, theme, area, model, view, index, y);
         y += row_h;
     }
     return y;
 }
 
-fn drawLane(list: *draw_list.DrawList, theme: *const Theme, area: Rect, model: *const Model, view: View, index: usize, y: i32) !void {
+fn drawLane(table: *const widget.types.Paint, theme: *const Theme, area: Rect, model: *const Model, view: View, index: usize, y: i32) void {
     const lane = model.laneAt(index);
     const rows = rowsRect(area);
     var nbuf: [40]u8 = undefined;
@@ -124,19 +125,19 @@ fn drawLane(list: *draw_list.DrawList, theme: *const Theme, area: Rect, model: *
         std.fmt.bufPrint(&lbuf, "{s} {d}%", .{ name, (m + 5) / 10 }) catch name
     else
         name;
-    try font.draw(list, area.x + pad, y + 2, label, if (lane.kind == .idle) theme.muted else theme.ink);
+    drawText(table, area.x + pad, y + 2, label, if (lane.kind == .idle) theme.muted else theme.ink, theme.face);
     const color = sliceColor(theme, lane.kind);
     for (model.slicesOf(index)) |one| {
         const x0 = @max(view.nsToX(one.start_ns), 0);
         const x1 = @min(view.nsToX(one.end_ns), rows.w);
-        if (x1 > x0) try list.fill(.{ .x = rows.x + x0, .y = y, .w = x1 - x0, .h = row_h - 2 }, color);
+        if (x1 > x0) fillArea(table, .{ .x = rows.x + x0, .y = y, .w = x1 - x0, .h = row_h - 2 }, color);
     }
 }
 
-fn drawRuler(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View) !void {
+fn drawRuler(table: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) void {
     const rows = rowsRect(area);
     const line_y = area.y + rows.h + 4;
-    try list.fill(.{ .x = area.x, .y = line_y, .w = area.w, .h = 1 }, theme.control_border);
+    fillArea(table, .{ .x = area.x, .y = line_y, .w = area.w, .h = 1 }, theme.control_border);
     const step = rulerStep(view.span_ns);
     const end = view.start_ns + view.span_ns;
     var last_right: i32 = area.x + col_w - 40;
@@ -144,15 +145,51 @@ fn drawRuler(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: V
     while (t < end) : (t += step) {
         const x = rows.x + view.nsToX(t);
         if (x > area.x + area.w) break;
-        try list.fill(.{ .x = x, .y = line_y + 1, .w = 1, .h = 4 }, theme.control_border);
+        fillArea(table, .{ .x = x, .y = line_y + 1, .w = 1, .h = 4 }, theme.control_border);
         var buf: [32]u8 = undefined;
         const label = stampLabel(t, &buf);
         const w: i32 = @intCast(font.textWidth(label.len));
         if (x + w <= area.x + area.w - pad and x - @divTrunc(w, 2) > last_right) {
-            try font.draw(list, x - @divTrunc(w, 2), line_y + 7, label, theme.muted);
+            drawText(table, x - @divTrunc(w, 2), line_y + 7, label, theme.muted, theme.face);
             last_right = x + @divTrunc(w, 2);
         }
     }
+}
+
+fn fillArea(table: *const widget.types.Paint, r: Rect, color: draw_list.Color) void {
+    table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell, so pixels stay identical.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: draw_list.Color, bg: draw_list.Color) void {
+    var buffer: [64]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
 
 /// The widest 1-2-5 step holding at most 8 ticks across `span_ns`.
