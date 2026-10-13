@@ -14,7 +14,7 @@ const shell_time = gui_app.shell.time;
 const codes = gui_app.speed_field.codes;
 const Status = gui_app.status.bar.Status;
 const Time = shell_time.Time;
-const Rect = ra8.render.draw_list.Rect;
+const Rect = gui_app.geom.Rect;
 
 const image = "tests/fixtures/gpio/blink.elf";
 const slow: u64 = 1;
@@ -38,7 +38,7 @@ const Bench = struct {
 
     /// Click the middle of `control`.
     fn click(self: *Bench, control: bar.Control) bool {
-        const at = bar.Layout.of(area).rect(control);
+        const at = bar.Layout.of(gui_app.shell.frame.toList(area)).rect(control);
         return self.time.press(area, at.x + @divTrunc(at.w, 2), at.y + @divTrunc(at.h, 2), &self.status, &self.rig.link);
     }
 
@@ -108,11 +108,11 @@ test "Run does nothing before the image has halted, and Pause nothing while it i
     defer rig.deinit();
     var status: Status = .{};
     var time: Time = .{};
-    const at = bar.Layout.of(area).run;
+    const at = bar.Layout.of(gui_app.shell.frame.toList(area)).run;
     try std.testing.expect(time.press(area, at.x + 1, at.y + 1, &status, &rig.link));
     try std.testing.expect(!time.run.lit);
     try std.testing.expect(status.run == .unknown);
-    const pause = bar.Layout.of(area).pause;
+    const pause = bar.Layout.of(gui_app.shell.frame.toList(area)).pause;
     try std.testing.expect(time.press(area, pause.x + 1, pause.y + 1, &status, &rig.link));
     try std.testing.expect(!time.settle(&status));
 }

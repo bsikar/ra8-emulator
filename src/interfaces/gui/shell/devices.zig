@@ -10,6 +10,7 @@ const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
 const Theme = @import("../ui/colors.zig").Theme;
 const draw_list = @import("ra8_render").draw_list;
+const geom = @import("../geom.zig");
 const font = @import("ra8_render").font;
 const widget = @import("ra8_widget");
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -104,7 +105,7 @@ pub const Devices = struct {
         for (solved.panes.items) |placed| {
             const pane = layout.pane(placed.index) orelse continue;
             if (pane.kind != .devices) continue;
-            const row = unplugRowAt(shell_frame.bodyOf(placed.area), x, y) orelse continue;
+            const row = unplugRowAt(shell_frame.toGeom(shell_frame.bodyOf(placed.area)), x, y) orelse continue;
             return self.unplug(link, row);
         }
         return false;
@@ -126,22 +127,22 @@ pub fn split(text: []const u8) struct { name: []const u8, at: []const u8 } {
 }
 
 /// Row `row`'s unplug cell inside `body`.
-pub fn unplugCell(body: draw_list.Rect, row: usize) draw_list.Rect {
+pub fn unplugCell(body: geom.Rect, row: usize) geom.Rect {
     const w: i32 = @intCast(font.textWidth(1));
     const y = body.y + shell_frame.pad + @as(i32, @intCast(row)) * row_h;
     return .{ .x = body.x + body.w - shell_frame.pad - w, .y = y, .w = w, .h = font.glyph_h };
 }
 
 /// The row whose unplug cell holds (`x`, `y`) inside `body`, or null.
-pub fn unplugRowAt(body: draw_list.Rect, x: i32, y: i32) ?usize {
-    if (!body.contains(x, y) or y < body.y + shell_frame.pad) return null;
+pub fn unplugRowAt(body: geom.Rect, x: i32, y: i32) ?usize {
+    if (!geom.contains(body, x, y) or y < body.y + shell_frame.pad) return null;
     const row: usize = @intCast(@divTrunc(y - body.y - shell_frame.pad, row_h));
-    return if (unplugCell(body, row).contains(x, y)) row else null;
+    return if (geom.contains(unplugCell(body, row), x, y)) row else null;
 }
 
 /// Draw one row per fitted part inside `body`, as many as fit, then the
 /// unplug refusal when there was one.
-pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: draw_list.Rect, devices: *const Devices) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: geom.Rect, devices: *const Devices) !void {
     const room = body.w - 2 * shell_frame.pad;
     if (room <= 0) return;
     const x = body.x + shell_frame.pad;

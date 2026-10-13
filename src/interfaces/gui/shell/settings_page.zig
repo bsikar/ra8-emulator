@@ -14,7 +14,8 @@ const colors = @import("../ui/colors.zig");
 const shell_theme = @import("theme.zig");
 const codes = @import("../ui/hex_entry.zig").codes;
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 const Theme = colors.Theme;
 const Choice = colors.Choice;
 const Themes = shell_theme.Themes;
@@ -115,7 +116,7 @@ pub const Page = struct {
     pub fn press(self: *Page, themes: *Themes, width: i32, height: i32, x: i32, y: i32) bool {
         if (!self.open) return false;
         const panel = panelOf(width, height);
-        if (!panel.contains(x, y)) {
+        if (!geom.contains(panel, x, y)) {
             self.open = false;
             return true;
         }
@@ -174,7 +175,7 @@ pub fn rowArea(panel: Rect, index: usize) Rect {
 /// The row at (`x`, `y`), or null when the point is the title or padding.
 fn hit(panel: Rect, x: i32, y: i32) ?Choice {
     for (rows, 0..) |picked, index| {
-        if (rowArea(panel, index).contains(x, y)) return picked;
+        if (geom.contains(rowArea(panel, index), x, y)) return picked;
     }
     return null;
 }

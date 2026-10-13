@@ -102,5 +102,5 @@ pub fn fits(body: Rect) bool {
 pub fn draw(table: *const widget.types.Paint, theme: *const Theme, body: Rect, camera: *const shell_camera.Camera, file: *CameraFile) !void {
     try shell_camera.draw(table, theme, body, camera);
     if (!fits(body)) return;
-    try file.field.draw(table, theme, fieldRect(body));
+    try file.field.draw(table, theme, .{ .x = fieldRect(body).x, .y = fieldRect(body).y, .w = fieldRect(body).w, .h = fieldRect(body).h });
 }

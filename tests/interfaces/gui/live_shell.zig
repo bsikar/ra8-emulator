@@ -98,7 +98,7 @@ pub const Live = struct {
 
     /// Where `control` sits on the time bar.
     pub fn barRect(control: bar.Control) draw_list.Rect {
-        return bar.Layout.of(shell_frame.barArea(width, height)).rect(control);
+        return bar.Layout.of(shell_frame.toList(shell_frame.barArea(width, height))).rect(control);
     }
 
     /// Press or release the left button at (`x`, `y`).

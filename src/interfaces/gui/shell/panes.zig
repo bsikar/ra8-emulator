@@ -48,7 +48,8 @@ const source_pane = @import("../ui/source_pane.zig");
 const timeline_model = @import("../timeline_model.zig");
 const timeline_pane = @import("../timeline_pane.zig");
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 /// The note a leaf of `kind` shows, or null when it draws nothing.
 pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
@@ -108,18 +109,24 @@ pub fn noteAt(body: Rect) ?struct { x: i32, y: i32, room: u32 } {
     return .{ .x = body.x + shell_frame.pad, .y = body.y + @divTrunc(body.h - glyph, 2), .room = @intCast(room) };
 }
 
+/// `body` in the draw list's own type, for the leaves that still paint
+/// through the list (RA8EMU-1157 temporary).
+fn toList(r: Rect) draw_list.Rect {
+    return .{ .x = r.x, .y = r.y, .w = r.w, .h = r.h };
+}
+
 fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.types.Paint, theme: *const Theme, pane: pane_layout.Pane, body: Rect) anyerror!void {
     const self: *Panes = @ptrCast(@alignCast(context));
     if (pane.kind == .console) if (self.console) |console| {
         if (console.hasOutput()) {
-            try console_strip.draw(list, theme, body, console.saved);
-            return console_pane.draw(list, theme, console_strip.below(body), &console.log, console.scroll.back);
+            try console_strip.draw(list, theme, toList(body), console.saved);
+            return console_pane.draw(list, theme, console_strip.below(toList(body)), &console.log, console.scroll.back);
         }
     };
     if (pane.kind == .timeline) if (self.timeline) |model| {
         const window = model.recorded() orelse return;
         const room = body.w - 2 * shell_frame.pad;
-        try timeline_pane.draw(list, theme, body, model, .{
+        try timeline_pane.draw(list, theme, toList(body), model, .{
             .start_ns = window.from,
             .span_ns = @max(window.to - window.from, 1),
             .width_px = @intCast(@max(room, 1)),
@@ -137,9 +144,9 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .camera) if (self.camera) |camera| {
-        try shell_camera.drawPreview(list, theme, body, camera);
-        if (self.camera_file) |file| return shell_camera_file.draw(table, theme, body, camera, file);
-        return shell_camera.draw(table, theme, body, camera);
+        try shell_camera.drawPreview(list, theme, toList(body), camera);
+        if (self.camera_file) |file| return shell_camera_file.draw(table, theme, toList(body), camera, file);
+        return shell_camera.draw(table, theme, toList(body), camera);
     };
     if (pane.kind == .registers) if (self.registers) |pair| {
         const model = pair.of(pane.core);
@@ -163,17 +170,17 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         }
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
-        if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, body, now, 0);
+        if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, toList(body), now, 0);
     };
     if (pane.kind == .source) if (self.source) |pair| {
         const model = pair.of(pane.core);
-        if (model.now) |*now| return source_pane.draw(list, theme, body, now, &model.marks);
+        if (model.now) |*now| return source_pane.draw(list, theme, toList(body), now, &model.marks);
     };
     if (pane.kind == .board) if (self.board) |board| {
         const pressed = if (self.board_input) |pointer| pointer.press.held else null;
-        if (!board_pane.Layout.of(body, board.parts).board.empty()) return board_pane.draw(list, theme, body, board.view(pressed), board.parts);
+        if (!board_pane.Layout.of(toList(body), board.parts).board.empty()) return board_pane.draw(list, theme, toList(body), board.view(pressed), board.parts);
         // A leaf too small for the board still shows the panel by itself.
-        if (board.hasFrame()) return list.image(fit.fitIn(body, board.width, board.height), board.image());
+        if (board.hasFrame()) return list.image(fit.fitIn(toList(body), board.width, board.height), board.image());
     };
     const note = noteFor(self, pane) orelse return;
     const at = noteAt(body) orelse return;
@@ -191,7 +198,7 @@ fn drawFaults(self: *const Panes, table: *const widget.types.Paint, theme: *cons
 /// with `marks` drawing the run-to points when the shell keeps them
 /// (RA8EMU-1171).
 fn drawCode(list: *draw_list.DrawList, theme: *const Theme, body: Rect, pc: u32, read: *const shell_memory.Snapshot, marks: ?[]const u32) !void {
-    return disasm_pane.draw(list, theme, body, &codeSnapshotFrom(pc, read, body), marks orelse &.{});
+    return disasm_pane.draw(list, theme, toList(body), &codeSnapshotFrom(pc, read, body), marks orelse &.{});
 }
 
 /// The snapshot a code leaf shows (RA8EMU-1171): decoded forward from
@@ -199,7 +206,7 @@ fn drawCode(list: *draw_list.DrawList, theme: *const Theme, body: Rect, pc: u32,
 /// shares it, so a click lands on the line the pane drew.
 pub fn codeSnapshotFrom(pc: u32, read: *const shell_memory.Snapshot, body: Rect) disasm_pane.Snapshot {
     const length = read.count * memory_pane.per_row;
-    return disasm_capture.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(body));
+    return disasm_capture.decodeRead(pc, read.base, read.bytes[0..length], read.readable[0..length], disasm_pane.rows(toList(body)));
 }
 
 /// The note a leaf shows: the device list's, the registers', memory's or

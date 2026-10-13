@@ -12,7 +12,8 @@ const registers_pane = @import("../ui/registers_pane.zig");
 const registers_capture = @import("../registers_capture.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
-const draw_list = @import("ra8_render").draw_list;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 const Env = proto.Client.Env;
 const shown = registers_capture.shown;
@@ -84,7 +85,7 @@ pub const Registers = struct {
 
     /// Fold or unfold the group whose header holds (`x`, `y`) in a leaf
     /// drawn in `body`. Returns whether a header was hit.
-    pub fn toggle(self: *Registers, body: draw_list.Rect, x: i32, y: i32) bool {
+    pub fn toggle(self: *Registers, body: Rect, x: i32, y: i32) bool {
         if (self.now == null) return false;
         const which = registers_pane.headerAt(body, self.fold, self.now.?.mve, x, y) orelse return false;
         self.fold[which] = !self.fold[which];
@@ -190,7 +191,7 @@ pub const Pair = struct {
         for (solved.panes.items) |placed| {
             const pane = layout.pane(placed.index) orelse continue;
             if (pane.kind != .registers) continue;
-            if (self.cores[@backingInt(pane.core)].toggle(shell_frame.bodyOf(placed.area), x, y)) return true;
+            if (self.cores[@backingInt(pane.core)].toggle(shell_frame.toGeom(shell_frame.bodyOf(placed.area)), x, y)) return true;
         }
         return false;
     }

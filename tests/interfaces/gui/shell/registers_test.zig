@@ -263,7 +263,7 @@ test "a CPU1 batch never asks VPR, and a CPU0 batch does" {
 
 test "a press on a group header folds it, and a second unfolds it" {
     var model: Registers = .{ .core = .cpu0, .now = .{} };
-    const body = draw_list.Rect{ .x = 10, .y = 20, .w = 600, .h = 300 };
+    const body = gui_app.geom.Rect{ .x = 10, .y = 20, .w = 600, .h = 300 };
     const header = registers_pane.headerRect(body, model.fold, 1).?;
     try std.testing.expect(model.toggle(body, header.x + 1, header.y + 1));
     try std.testing.expect(model.fold[1]);
@@ -275,7 +275,7 @@ test "a press on a group header folds it, and a second unfolds it" {
 
 test "a leaf with nothing published ignores header presses" {
     var model: Registers = .{ .core = .cpu1 };
-    const body = draw_list.Rect{ .x = 0, .y = 0, .w = 600, .h = 300 };
+    const body = gui_app.geom.Rect{ .x = 0, .y = 0, .w = 600, .h = 300 };
     const header = registers_pane.headerRect(body, model.fold, 0).?;
     try std.testing.expect(!model.toggle(body, header.x + 1, header.y + 1));
     try std.testing.expect(!model.fold[0]);

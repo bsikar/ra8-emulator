@@ -15,7 +15,7 @@ const registers_capture = gui_app.registers_capture;
 const edit = gui_app.pane_edit;
 const memmap = ra8.chip.core.memmap;
 
-const Rect = draw_list.Rect;
+const Rect = gui_app.geom.Rect;
 
 const image_path = "tests/fixtures/uart/uart_irq_echo.elf";
 /// Two rows of SRAM the fixture never touches before it runs.

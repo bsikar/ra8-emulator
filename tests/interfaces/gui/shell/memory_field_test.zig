@@ -23,7 +23,7 @@ const Env = proto.Client.Env;
 const image_bytes = @embedFile("../../../fixtures/sections/fault_crashlog_hil.elf");
 const image: shell_memory_field.Image = shell_memory_field.Image.init(image_bytes) catch unreachable;
 
-const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 240 };
+const body: gui_app.geom.Rect = .{ .x = 0, .y = 0, .w = 300, .h = 240 };
 const rows = shell_memory.rows;
 
 /// A link that has finished its greeting, writing into a pipe nobody answers.

@@ -15,7 +15,8 @@ const Theme = @import("colors.zig").Theme;
 const widget = @import("ra8_widget");
 
 const Color = draw_list.Color;
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 /// The pc cell is always marked: it moves on every step, so `highlight` would say nothing.
 pub const pad: i32 = 4;
@@ -154,7 +155,7 @@ pub fn headerRect(area: Rect, fold: Fold, which: usize) ?Rect {
 pub fn headerAt(area: Rect, fold: Fold, mve: bool, x: i32, y: i32) ?usize {
     for (0..groupCount(mve)) |which| {
         const header = headerRect(area, fold, which) orelse return null;
-        if (header.contains(x, y)) return which;
+        if (geom.contains(header, x, y)) return which;
     }
     return null;
 }

@@ -24,9 +24,9 @@ const up: State = .{ .connected = .{ .version = 1, .caps = 0 } };
 
 const Count = struct {
     calls: usize = 0,
-    bodies: [8]draw_list.Rect = undefined,
+    bodies: [8]frame.Rect = undefined,
 
-    fn paint(context: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, pane: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
+    fn paint(context: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, pane: pane_layout.Pane, body: frame.Rect) anyerror!void {
         _ = list;
         _ = pane;
         const self: *Count = @ptrCast(@alignCast(context));
@@ -74,7 +74,7 @@ test "panes and pane titles name each kind and core" {
 
 test "the panes take the window under the menu strip and above the time bar and the status strip" {
     const area = frame.panesArea(width, height);
-    try std.testing.expectEqual(draw_list.Rect{ .x = 0, .y = menu_bar.height, .w = width, .h = height - menu_bar.height - strip.height - time_bar.height }, area);
+    try std.testing.expectEqual(frame.Rect{ .x = 0, .y = menu_bar.height, .w = width, .h = height - menu_bar.height - strip.height - time_bar.height }, area);
     try std.testing.expectEqual(@as(i32, 0), frame.panesArea(width, 4).h);
 }
 
@@ -104,7 +104,7 @@ test "the painter fills each leaf's body exactly once" {
     try scene.render(&status, .{ .context = &count, .paint = Count.paint });
     try std.testing.expectEqual(scene.solved.panes.items.len, count.calls);
     for (scene.solved.panes.items, 0..) |placed, i| {
-        try std.testing.expectEqual(frame.bodyOf(placed.area), count.bodies[i]);
+        try std.testing.expectEqual(frame.toGeom(frame.bodyOf(placed.area)), count.bodies[i]);
     }
 }
 
@@ -128,8 +128,8 @@ test "the perimeter border is retained when a painter fills the body" {
     defer scene.deinit();
     const status: status_bar.Status = .{};
     const Filler = struct {
-        fn paint(_: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, _: pane_layout.Pane, body: draw_list.Rect) anyerror!void {
-            try list.fill(body, dark.face);
+        fn paint(_: *anyopaque, list: *draw_list.DrawList, _: *const widget.types.Paint, _: *const gui_app.colors.Theme, _: pane_layout.Pane, body: frame.Rect) anyerror!void {
+            try list.fill(frame.toList(body), dark.face);
         }
     };
     try scene.render(&status, .{ .context = undefined, .paint = Filler.paint });

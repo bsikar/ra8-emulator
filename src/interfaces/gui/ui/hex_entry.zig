@@ -7,7 +7,8 @@ const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 
 const Color = draw_list.Color;
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 pub const max_digits: usize = 8;
 

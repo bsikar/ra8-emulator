@@ -18,7 +18,7 @@ const pane = gui_app.memory_pane;
 const capture = gui_app.memory_capture;
 
 /// Exactly one row wide and four rows deep, as in the pane's own test.
-const area = draw_list.Rect{ .x = 0, .y = 0, .w = pane.min_w, .h = 2 * pane.pad + 4 * pane.row_h };
+const area = gui_app.geom.Rect{ .x = 0, .y = 0, .w = pane.min_w, .h = 2 * pane.pad + 4 * pane.row_h };
 
 /// The pane's frame for `snapshot`, hashed.
 // TEMPORARY golden dump, never committed.

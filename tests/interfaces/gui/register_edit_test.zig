@@ -24,7 +24,7 @@ const Env = proto.Client.Env;
 
 const dark = &gui_app.colors.palettes.dark;
 const shown = gui_app.registers_capture.shown;
-const area: draw_list.Rect = .{ .x = 0, .y = 0, .w = 1200, .h = 600 };
+const area: gui_app.geom.Rect = .{ .x = 0, .y = 0, .w = 1200, .h = 600 };
 
 /// A link that has finished its greeting, writing into a pipe nobody answers.
 const Wire = struct {

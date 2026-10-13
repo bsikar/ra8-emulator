@@ -89,7 +89,7 @@ test "a line splits at its first @ into name and endpoint" {
     try std.testing.expectEqualStrings("gpio:P106", bare.at);
 }
 
-fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_list.Color) bool {
+fn holds(pixels: *const raster.Framebuffer, area: frame.Rect, color: draw_list.Color) bool {
     var y = area.y;
     while (y < area.y + area.h) : (y += 1) {
         var x = area.x;
@@ -128,18 +128,18 @@ test "the devices leaf draws a row per part in place of its note" {
         const body = frame.bodyOf(leaf.area);
         const row: draw_list.Rect = .{ .x = body.x, .y = body.y + frame.pad, .w = body.w, .h = font.glyph_h };
         const column: i32 = @intCast(font.textWidth(shell_devices.name_cells));
-        const name: draw_list.Rect = .{ .x = row.x, .y = row.y, .w = frame.pad + column, .h = row.h };
-        const at: draw_list.Rect = .{ .x = row.x + frame.pad + column, .y = row.y, .w = body.w - frame.pad - column, .h = row.h };
+        const name: frame.Rect = .{ .x = row.x, .y = row.y, .w = frame.pad + column, .h = row.h };
+        const at: frame.Rect = .{ .x = row.x + frame.pad + column, .y = row.y, .w = body.w - frame.pad - column, .h = row.h };
         try std.testing.expect(holds(&pixels, name, dark.ink));
         try std.testing.expect(holds(&pixels, at, dark.muted));
-        const below: draw_list.Rect = .{ .x = body.x, .y = row.y + shell_devices.row_h, .w = body.w, .h = body.h - frame.pad - shell_devices.row_h };
+        const below: frame.Rect = .{ .x = body.x, .y = row.y + shell_devices.row_h, .w = body.w, .h = body.h - frame.pad - shell_devices.row_h };
         try std.testing.expect(!holds(&pixels, below, dark.muted));
     }
     try std.testing.expect(leaves > 0);
 }
 
 test "the unplug cell sits at a row's right end and only it is hit" {
-    const body: draw_list.Rect = .{ .x = 10, .y = 20, .w = 200, .h = 100 };
+    const body: frame.Rect = .{ .x = 10, .y = 20, .w = 200, .h = 100 };
     const cell = shell_devices.unplugCell(body, 1);
     try std.testing.expectEqual(@as(?usize, 1), shell_devices.unplugRowAt(body, cell.x, cell.y));
     try std.testing.expectEqual(@as(?usize, null), shell_devices.unplugRowAt(body, body.x + frame.pad, cell.y));
@@ -182,7 +182,7 @@ test "a refused unplug keeps the rows and leaves a note under them" {
     try std.testing.expectEqualStrings("lsm6dso@i2c:touch@0x6b", devices.line(0).?);
     var list = draw_list.DrawList.init(gpa, 240, 120);
     defer list.deinit();
-    const body: draw_list.Rect = .{ .x = 0, .y = 0, .w = 240, .h = 120 };
+    const body: frame.Rect = .{ .x = 0, .y = 0, .w = 240, .h = 120 };
     var target = ra8.render.widget_paint.Target{ .list = &list };
     const paint = target.paint();
     try shell_devices.draw(&paint, dark, body, &devices);
@@ -190,7 +190,7 @@ test "a refused unplug keeps the rows and leaves a note under them" {
     defer pixels.deinit(gpa);
     raster.draw(&pixels, &list, font.atlas);
     try std.testing.expect(holds(&pixels, shell_devices.unplugCell(body, 0), dark.muted));
-    const under: draw_list.Rect = .{ .x = 0, .y = frame.pad + shell_devices.row_h, .w = 240, .h = font.glyph_h };
+    const under: frame.Rect = .{ .x = 0, .y = frame.pad + shell_devices.row_h, .w = 240, .h = font.glyph_h };
     try std.testing.expect(holds(&pixels, under, dark.muted));
 }
 
