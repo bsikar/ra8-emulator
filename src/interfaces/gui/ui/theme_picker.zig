@@ -11,6 +11,7 @@
 //! image carries them.
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
+const widget = @import("ra8_widget");
 const colors = @import("colors.zig");
 
 const Color = draw_list.Color;
@@ -94,57 +95,95 @@ pub fn hit(strip: Rect, open: bool, x: i32, y: i32) ?Hit {
     return null;
 }
 
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, strip: Rect, view: View) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, strip: Rect, view: View) void {
     const at = button(strip);
     if (at.empty()) return;
-    try list.fill(at, theme.well);
-    try list.fill(.{ .x = at.x, .y = at.y, .w = at.w, .h = 1 }, theme.border);
+    fillArea(table, at, theme.well);
+    fillArea(table, .{ .x = at.x, .y = at.y, .w = at.w, .h = 1 }, theme.border);
     const tab = chipOf(strip);
     // Open, the chip reaches up through the strip's top line to the popover.
     const stem: Rect = if (view.open) .{ .x = tab.x, .y = strip.y, .w = tab.w, .h = tab.y + tab.h - strip.y } else tab;
-    try list.fill(stem, theme.face);
-    try glyph(list, tab.x + 1, tab.y + 1, icon(view.choice), theme.ink);
-    if (!view.open) return frame(list, theme.control_border, tab);
+    fillArea(table, stem, theme.face);
+    glyph(table, tab.x + 1, tab.y + 1, icon(view.choice), theme.ink);
+    if (!view.open) return frame(table, theme.control_border, tab);
     const box = popover(strip);
-    try list.fill(box, theme.face);
-    for (rows, 0..) |choice, index| try drawRow(list, theme, row(strip, index), choice, choice == view.choice);
-    try outline(list, theme.control_border, box, stem);
+    fillArea(table, box, theme.face);
+    for (rows, 0..) |choice, index| drawRow(table, theme, row(strip, index), choice, choice == view.choice);
+    outline(table, theme.control_border, box, stem);
 }
 
-fn drawRow(list: *draw_list.DrawList, theme: *const Theme, area: Rect, choice: Choice, active: bool) !void {
-    if (active) try list.fill(area, theme.band);
+fn fillArea(table: *const widget.types.Paint, r: Rect, color: Color) void {
+    table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: Color, bg: Color) void {
+    var buffer: [256]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
+}
+
+/// `color` as the widget's 0x00RRGGBB colour word.
+fn word(color: draw_list.Color) u32 {
+    return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
+}
+
+fn drawRow(table: *const widget.types.Paint, theme: *const Theme, area: Rect, choice: Choice, active: bool) void {
+    if (active) fillArea(table, area, theme.band);
     const color = if (active) theme.highlight else theme.ink;
-    try glyph(list, area.x + pad, area.y + @divFloor(area.h - side, 2), icon(choice), color);
+    glyph(table, area.x + pad, area.y + @divFloor(area.h - side, 2), icon(choice), color);
     const top = area.y + @divFloor(area.h - @as(i32, font.glyph_h), 2);
-    try font.draw(list, area.x + 2 * pad + side, top, name(choice), color);
+    // The band, when the row is marked, is the fill already under the text's
+    // cell; the label paints its cell with it first.
+    drawText(table, area.x + 2 * pad + side, top, name(choice), color, if (active) theme.band else theme.face);
 }
 
 /// One pixel of `color` round the inside of `area`.
-fn frame(list: *draw_list.DrawList, color: Color, area: Rect) !void {
-    try list.fill(.{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
-    try list.fill(.{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
+fn frame(table: *const widget.types.Paint, color: Color, area: Rect) void {
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
+    fillArea(table, .{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
 }
 
 /// One line around the popover and the chip under its right end: up the
 /// popover's left, across its top, down the shared right edge to the foot of
 /// the chip, back along the chip's foot and up its left to the popover.
-fn outline(list: *draw_list.DrawList, color: Color, box: Rect, stem: Rect) !void {
+fn outline(table: *const widget.types.Paint, color: Color, box: Rect, stem: Rect) void {
     const foot = stem.y + stem.h;
-    try list.fill(.{ .x = box.x, .y = box.y, .w = box.w, .h = 1 }, color);
-    try list.fill(.{ .x = box.x, .y = box.y, .w = 1, .h = box.h + 1 }, color);
-    try list.fill(.{ .x = box.x, .y = stem.y, .w = stem.x - box.x + 1, .h = 1 }, color);
-    try list.fill(.{ .x = box.x + box.w - 1, .y = box.y, .w = 1, .h = foot - box.y }, color);
-    try list.fill(.{ .x = stem.x, .y = stem.y, .w = 1, .h = stem.h }, color);
-    try list.fill(.{ .x = stem.x, .y = foot - 1, .w = stem.w, .h = 1 }, color);
+    fillArea(table, .{ .x = box.x, .y = box.y, .w = box.w, .h = 1 }, color);
+    fillArea(table, .{ .x = box.x, .y = box.y, .w = 1, .h = box.h + 1 }, color);
+    fillArea(table, .{ .x = box.x, .y = stem.y, .w = stem.x - box.x + 1, .h = 1 }, color);
+    fillArea(table, .{ .x = box.x + box.w - 1, .y = box.y, .w = 1, .h = foot - box.y }, color);
+    fillArea(table, .{ .x = stem.x, .y = stem.y, .w = 1, .h = stem.h }, color);
+    fillArea(table, .{ .x = stem.x, .y = foot - 1, .w = stem.w, .h = 1 }, color);
 }
 
 /// An icon's rows, top to bottom; bit 15 is the leftmost pixel.
 const Icon = [side]u16;
 
 /// Adds `mask` with its top-left at (`x`, `y`), one fill per run of pixels.
-fn glyph(list: *draw_list.DrawList, x: i32, y: i32, mask: *const Icon, color: Color) !void {
+fn glyph(table: *const widget.types.Paint, x: i32, y: i32, mask: *const Icon, color: Color) void {
     for (mask, 0..) |bits, line| {
         var column: i32 = 0;
         while (column < side) {
@@ -154,7 +193,7 @@ fn glyph(list: *draw_list.DrawList, x: i32, y: i32, mask: *const Icon, color: Co
             }
             const start = column;
             while (column < side and lit(bits, column)) column += 1;
-            try list.fill(.{ .x = x + start, .y = y + @as(i32, @intCast(line)), .w = column - start, .h = 1 }, color);
+            fillArea(table, .{ .x = x + start, .y = y + @as(i32, @intCast(line)), .w = column - start, .h = 1 }, color);
         }
     }
 }
