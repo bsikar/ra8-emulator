@@ -160,7 +160,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
         }
         try drawLeaf(list, &paint, theme, pane, toGeom(placed.area), shell.painter, tabs);
     }
-    try time_bar.draw(list, theme, toList(barArea(shell.width, shell.height)), shell.bar);
+    time_bar.draw(&paint, theme, toList(barArea(shell.width, shell.height)), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {
         status_strip.draw(&paint, theme, theme_picker.rest(strip), &shell.strip);
