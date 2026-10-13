@@ -43,6 +43,8 @@ const disasm_pane = @import("../ui/disasm_pane.zig");
 const disasm_capture = @import("../disasm_capture.zig");
 const shell_stack = @import("stack.zig");
 const stack_pane = @import("../ui/stack_pane.zig");
+const shell_source = @import("source.zig");
+const source_pane = @import("../ui/source_pane.zig");
 const timeline_model = @import("../timeline_model.zig");
 const timeline_pane = @import("../timeline_pane.zig");
 
@@ -60,6 +62,7 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .memory => "waiting for memory",
         .disasm => "waiting for the code",
         .stack => "waiting for the call stack",
+        .source => "waiting for the source line",
         .timeline => "waiting for the trace",
     };
 }
@@ -87,6 +90,7 @@ pub const Panes = struct {
     /// The memory read from each core's PC, for the disassembly leaves.
     code: ?*const shell_memory.Pair = null,
     stack: ?*const shell_stack.Pair = null,
+    source: ?*shell_source.Pair = null,
     /// The timeline's RTOS record (RA8EMU-838).
     timeline: ?*timeline_model.Model = null,
 
@@ -161,6 +165,10 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
     if (pane.kind == .stack) if (self.stack) |pair| {
         if (pair.of(pane.core).now) |*now| return stack_pane.draw(list, theme, body, now, 0);
     };
+    if (pane.kind == .source) if (self.source) |pair| {
+        const model = pair.of(pane.core);
+        if (model.now) |*now| return source_pane.draw(list, theme, body, now, &model.marks);
+    };
     if (pane.kind == .board) if (self.board) |board| {
         const pressed = if (self.board_input) |pointer| pointer.press.held else null;
         if (!board_pane.Layout.of(body, board.parts).board.empty()) return board_pane.draw(list, theme, body, board.view(pressed), board.parts);
@@ -210,6 +218,9 @@ fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
         if (pair.of(pane.core).refused) return "the session would not read the code";
     };
     if (pane.kind == .stack) if (self.stack) |pair| {
+        if (pair.of(pane.core).note()) |note| return note;
+    };
+    if (pane.kind == .source) if (self.source) |pair| {
         if (pair.of(pane.core).note()) |note| return note;
     };
     return waitingFor(pane.kind);

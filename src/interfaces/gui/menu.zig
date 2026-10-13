@@ -109,7 +109,8 @@ pub const view = views: {
         items[next] = .{
             .label = shell_frame.kindName(kind),
             .action = .{ .toggle = kind },
-            .shortcut = .{ .key = '1' + next },
+            // Ctrl/Cmd+1..9 for the first nine panes; a tenth toggles unkeyed.
+            .shortcut = if (next < 9) .{ .key = '1' + next } else null,
         };
         next += 1;
     }

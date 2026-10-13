@@ -27,17 +27,26 @@ pub fn capture(session: *session_api.Session, core: session_api.Core, sections: 
 /// `place`'s line current and in the middle; `pc` is the address shown.
 /// A flame graph click (RA8EMU-837) opens a function's first line this way.
 pub fn captureAt(pc: u32, place: dwarf_line.Place, io: std.Io, dir: std.Io.Dir, row_count: usize) anyerror!source_pane.Snapshot {
-    var snapshot: source_pane.Snapshot = .{ .pc = pc };
-    var spelled: std.Io.Writer = .fixed(&snapshot.path_buf);
-    session_source.path(&spelled, place.file) catch return snapshot;
-    snapshot.path_len = spelled.buffered().len;
-    snapshot.current = place.line;
-    snapshot.state = .no_file;
+    var spelled: [source_pane.path_cap]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&spelled);
+    session_source.path(&writer, place.file) catch return .{ .pc = pc };
+    return captureRows(pc, place.line, writer.buffered(), io, dir, row_count);
+}
+
+/// Reads up to `row_count` lines of `path` from `dir` with `line` current
+/// and in the middle; `pc` is the address shown. The shell's source leaf
+/// (RA8EMU-1125) fills its snapshot this way from the session's answer,
+/// which spells the path itself.
+pub fn captureRows(pc: u32, line: u32, path: []const u8, io: std.Io, dir: std.Io.Dir, row_count: usize) anyerror!source_pane.Snapshot {
+    var snapshot: source_pane.Snapshot = .{ .pc = pc, .current = line, .state = .no_file };
+    const held = @min(path.len, source_pane.path_cap);
+    @memcpy(snapshot.path_buf[0..held], path[0..held]);
+    snapshot.path_len = held;
     const file = dir.openFile(io, snapshot.path(), .{}) catch return snapshot;
     defer file.close(io);
     const wanted = @min(row_count, source_pane.max_rows);
     const half: u32 = @intCast(wanted / 2);
-    const first = if (place.line > half) place.line - half else 1;
+    const first = if (line > half) line - half else 1;
     var staging: [4096]u8 = undefined;
     var reader = file.reader(io, &staging);
     try readRows(&snapshot, &reader.interface, first, wanted);
