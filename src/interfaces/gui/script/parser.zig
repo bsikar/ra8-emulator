@@ -122,6 +122,12 @@ fn parseClick(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     if (std.mem.eql(u8, target_tok, "bar:step")) {
         return .{ .click = .{ .named = .bar_step } };
     }
+    if (std.mem.eql(u8, target_tok, "bar:step-over")) {
+        return .{ .click = .{ .named = .bar_step_over } };
+    }
+    if (std.mem.eql(u8, target_tok, "bar:step-out")) {
+        return .{ .click = .{ .named = .bar_step_out } };
+    }
     if (std.mem.eql(u8, target_tok, "bar:speed")) {
         return .{ .click = .{ .named = .bar_speed } };
     }

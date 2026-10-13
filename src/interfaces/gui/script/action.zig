@@ -18,6 +18,8 @@ pub const NamedTarget = enum {
     bar_run,
     bar_pause,
     bar_step,
+    bar_step_over,
+    bar_step_out,
     bar_speed,
     camera_allow_once,
     camera_always,

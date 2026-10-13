@@ -37,6 +37,8 @@ pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Fiel
         .run_enabled = enabled(.run, status, run),
         .pause_enabled = enabled(.pause, status, run),
         .step_enabled = enabled(.step, status, run),
+        .over_enabled = enabled(.over, status, run),
+        .out_enabled = enabled(.out, status, run),
         .note = if (status.refused == .run) "Run refused" else if (status.load_id != null or status.pc_id != null) "Loading" else if (status.run == .unknown) "Load an image" else if (status.run_id != null or (!run.lit and run.slice_id != null)) "Waiting for stop" else null,
         .command_refused = status.refused == .run,
         .pause_lit = status.run == .halted,
@@ -70,6 +72,14 @@ pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *
             try status.go(link, proto.RunMode.step, step_budget);
             status.refused = null;
         },
+        .over => {
+            try status.go(link, proto.RunMode.next, step_budget);
+            status.refused = null;
+        },
+        .out => {
+            try status.go(link, proto.RunMode.finish, step_budget);
+            status.refused = null;
+        },
         .pause => run.pause(),
         .field => {},
     }
@@ -78,7 +88,7 @@ pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *
 /// One policy for paint, mouse commands and menu/keyboard commands.
 pub fn enabled(control: bar.Control, status: *const Status, run: *const shell_run.Run) bool {
     return switch (control) {
-        .run, .step => status.run == .halted and !run.lit and run.slice_id == null and run.settled == null and status.load_id == null and status.pc_id == null and status.run_id == null,
+        .run, .step, .over, .out => status.run == .halted and !run.lit and run.slice_id == null and run.settled == null and status.load_id == null and status.pc_id == null and status.run_id == null,
         .pause => run.lit,
         .field => true,
     };
