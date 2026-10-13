@@ -8,7 +8,6 @@
 const std = @import("std");
 const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
-const widget_paint = @import("ra8_render").widget_paint;
 const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 
@@ -118,21 +117,49 @@ pub const View = struct {
     clock_speed: ?[]const u8 = null,
 };
 
-pub fn draw(list: *draw_list.DrawList, theme: *const Theme, bar: Rect, view: View) !void {
+pub fn draw(table: *const widget.types.Paint, theme: *const Theme, bar: Rect, view: View) void {
     if (bar.empty()) return;
-    try list.pushClip(bar);
-    defer list.popClip();
-    try list.fill(bar, theme.ribbon_bg);
-    try list.fill(.{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, theme.border);
+    table.push_clip.?(table.user, bar.x, bar.y, bar.w, bar.h);
+    defer table.pop_clip.?(table.user);
+    fillArea(table, bar, theme.ribbon_bg);
+    fillArea(table, .{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, theme.border);
     const layout = Layout.of(bar);
-    var target = widget_paint.Target{ .list = list };
-    const paint = target.paint();
     for ([_]Control{ .run, .pause, .step }) |control| {
-        try button(&paint, theme, layout.rect(control), control, view);
+        button(table, theme, layout.rect(control), control, view);
     }
-    try fieldBox(list, theme, layout.field, view);
-    try clock(&paint, theme, layout.clock, view);
-    if (target.failed) return error.OutOfMemory;
+    fieldBox(table, theme, layout.field, view);
+    clock(table, theme, layout.clock, view);
+}
+
+fn fillArea(table: *const widget.types.Paint, r: Rect, color: Color) void {
+    table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
+}
+
+/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
+/// already under the text's cell.
+fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: Color, bg: Color) void {
+    var buffer: [256]u8 = undefined;
+    const n = @min(text.len, buffer.len - 1);
+    @memcpy(buffer[0..n], text[0..n]);
+    buffer[n] = 0;
+    var descriptor = widget.label.Label{
+        .paint = table,
+        .text = buffer[0..n :0].ptr,
+        .fg = word(fg),
+        .bg = word(bg),
+        .pad = 0,
+        .alignment = .left,
+        .face = .sans,
+    };
+    var w: widget.types.Widget = undefined;
+    _ = widget.label.ra8_widget_label_init(&w, &descriptor);
+    w.rect = .{
+        .x = x,
+        .y = y,
+        .w = @intCast(font.textWidth(text.len)),
+        .h = @intCast(font.cell_h),
+    };
+    w.vt.?.render.?(&w);
 }
 
 fn lights(control: Control, view: View) bool {
@@ -146,7 +173,7 @@ fn lights(control: Control, view: View) bool {
 /// The control as the firmware's push-button widget (RA8EMU-1158): the
 /// widget owns the face, border and label look; the theme only fills the
 /// descriptor, with the lit look on `face_pressed`.
-fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, control: Control, view: View) !void {
+fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, control: Control, view: View) void {
     if (area.empty()) return;
     const enabled = switch (control) {
         .run => view.run_enabled,
@@ -203,7 +230,7 @@ fn word(color: draw_list.Color) u32 {
 /// on the same row as the button labels and the speed field (RA8EMU-1168).
 /// The line is whole segments that fit (RA8EMU-941), so the bar's clip only
 /// ever keeps paint inside the bar.
-fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) !void {
+fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) void {
     const room = area.w - 2 * pad;
     if (area.empty() or room <= 0) return;
     var line: [160]u8 = undefined;
@@ -271,37 +298,38 @@ fn fitClock(view: View, room: i32, buf: []u8) []const u8 {
     return elapsed;
 }
 
-fn fieldBox(list: *draw_list.DrawList, theme: *const Theme, area: Rect, view: View) !void {
+fn fieldBox(table: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) void {
     if (area.empty()) return;
-    try list.fill(area, theme.well);
-    try outline(list, area, if (view.field_refused) theme.bad else if (view.editing) theme.accent else theme.control_border);
+    fillArea(table, area, theme.well);
+    outline(table, area, if (view.field_refused) theme.bad else if (view.editing) theme.accent else theme.control_border);
     const shown = view.field;
-    try text(list, area, shown, theme.ink);
+    label(table, area, shown, theme.ink, theme.well);
     if (!view.editing) {
-        const label = "Speed";
-        const left = area.x + area.w - pad - @as(i32, @intCast(font.textWidth(label.len)));
+        const caption = "Speed";
+        const left = area.x + area.w - pad - @as(i32, @intCast(font.textWidth(caption.len)));
         if (left >= area.x + 2 * pad + @as(i32, @intCast(font.textWidth(shown.len))))
-            try font.draw(list, left, area.y + draw_list.centre(area.h, font.glyph_h), label, theme.muted);
+            drawText(table, left, area.y + draw_list.centre(area.h, font.glyph_h), caption, theme.muted, theme.well);
         return;
     }
     const caret_x = area.x + pad + @as(i32, @intCast(font.textWidth(shown.len)));
-    try list.fill(.{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
+    fillArea(table, .{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
 }
 
-fn outline(list: *draw_list.DrawList, area: Rect, color: Color) !void {
-    try list.fill(.{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
-    try list.fill(.{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
-    try list.fill(.{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
+fn outline(table: *const widget.types.Paint, area: Rect, color: Color) void {
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y + area.h - 1, .w = area.w, .h = 1 }, color);
+    fillArea(table, .{ .x = area.x, .y = area.y, .w = 1, .h = area.h }, color);
+    fillArea(table, .{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
 }
 
-/// `line` from a pad in, centred down `area`, cut to whole cells inside it.
-fn text(list: *draw_list.DrawList, area: Rect, line: []const u8, color: Color) !void {
+/// `line` from a pad in, centred down `area`, cut to whole cells inside it;
+/// `bg` is the fill already under the text's cell.
+fn label(table: *const widget.types.Paint, area: Rect, line: []const u8, color: Color, bg: Color) void {
     const room = area.w - 2 * pad;
     if (room <= 0) return;
     const shown = font.fit(line, @intCast(room));
     const top = area.y + draw_list.centre(area.h, font.glyph_h);
-    try font.draw(list, area.x + pad, top, shown, color);
+    drawText(table, area.x + pad, top, shown, color, bg);
 }
 
 /// The control under (`x`, `y`) in `bar`, or null for the gaps and the clock.
