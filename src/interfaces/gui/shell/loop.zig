@@ -45,6 +45,7 @@ const menu_bar = @import("../menu_bar.zig");
 const menu_actions = @import("menu_actions.zig");
 const shell_recent = @import("recent_menu.zig");
 const shell_settings = @import("settings_page.zig");
+const shell_pump = @import("pump.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
@@ -258,7 +259,7 @@ pub const Shell = struct {
         return time.boardNow();
     }
     /// A pane changed the device list: the shell's rows are stale.
-    fn wants(self: *Shell) void {
+    pub fn wants(self: *Shell) void {
         if (self.devices) |devices| devices.want = true;
     }
     /// Offer a press to the session-backed panes: faults, devices, run-to points.
@@ -289,7 +290,7 @@ pub const Shell = struct {
         pointer.up(board, link, x, y, self.boardNow());
     }
     /// The wall clock, or zero for a shell that was given none.
-    fn now(self: *const Shell) u64 {
+    pub fn now(self: *const Shell) u64 {
         const clock = self.clock orelse return 0;
         return clock.now();
     }
@@ -322,7 +323,7 @@ pub const Shell = struct {
 
     /// A pause the time bar settled: the status bar shows the halt, and the
     /// core's leaves read it again.
-    fn settle(self: *Shell) void {
+    pub fn settle(self: *Shell) void {
         const time = self.time orelse return;
         if (!time.settle(&self.status)) return;
         if (self.registers) |registers| registers.refresh();
@@ -332,75 +333,6 @@ pub const Shell = struct {
     }
     /// Feed what the session sent into the status bar model and the leaves.
     pub fn pump(self: *Shell) !void {
-        const link = self.link orelse return;
-        if (self.console) |console| console.attach(link);
-        if (self.board) |board| board.attach(link);
-        if (self.devices) |devices| devices.attach(link);
-        if (self.camera_file) |file| if (self.camera) |camera| {
-            _ = file.apply(camera);
-        };
-        if (self.camera) |camera| camera.attach(link);
-        if (self.plug) |plug| _ = plug.attach(link);
-        if (self.timeline != null) timeline_feed.arm(link, &self.trace_armed);
-        if (self.startup) |startup| if (self.loaded) startup.attach(link);
-        if (self.registers) |registers| registers.attach(link);
-        if (self.memory_field) |field| _ = field.submit(self.memory);
-        if (self.memory) |memory| memory.attach(link);
-        if (self.code) |code| code.attach(link);
-        if (self.breaks) |breaks| breaks.attach(link);
-        if (self.stack) |stack| stack.attach(link);
-        if (self.source) |source| source.attach(link);
-        if (self.locals) |locals| locals.attach(link);
-        self.drained = false;
-        var taken: usize = 0;
-        while (taken < max_arrivals) : (taken += 1) {
-            const arrival = link.pump() orelse {
-                self.drained = true;
-                break;
-            };
-            if (self.timeline) |*model| try timeline_feed.take(model, arrival);
-            self.snaps.observe(arrival);
-            // A slice's end is not a stop: the run goes on.
-            if (self.time) |time| if (time.observe(arrival, self.now()) == .boundary) continue;
-            const loading = self.status.load_id;
-            self.status.observe(link, arrival);
-            const answered = loading != null and self.status.load_id == null;
-            if (answered) self.loaded = true;
-            if (answered) if (self.time) |time| time.loaded(&self.status);
-            self.observeCore(answered, arrival);
-            if (self.console) |console| try console.observe(arrival);
-            if (self.board) |board| try board.observe(arrival, self.now());
-            if (self.devices) |devices| devices.observe(arrival);
-            if (self.faults) |faults| if (faults.observe(arrival)) self.wants();
-            if (self.camera) |camera| camera.observe(arrival);
-            if (self.plug) |plug| if (plug.observe(arrival)) self.wants();
-            if (self.startup) |startup| if (startup.observe(arrival)) self.wants();
-        }
-        self.settle();
-    }
-    /// The stack, registers, memory and code leaves: start over after a
-    /// load, take the arrival, follow each core's fresh registers.
-    fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
-        if (self.stack) |stack| {
-            if (loaded) stack.reload();
-            stack.observe(arrival);
-        }
-        if (self.source) |source| {
-            if (loaded) source.reload();
-            source.observe(arrival);
-        }
-        if (self.locals) |locals| {
-            if (loaded) locals.reload();
-            locals.observe(arrival);
-        }
-        const registers = self.registers orelse return;
-        if (loaded) registers.reload();
-        registers.observe(arrival);
-        if (self.edit) |edit| _ = edit.observe(registers, arrival);
-        for ([_]?*shell_memory.Pair{ self.memory, self.code }) |leaf| if (leaf) |memory| {
-            if (loaded) memory.reload();
-            memory.observe(arrival);
-            memory.follow(registers);
-        };
+        return shell_pump.pump(self);
     }
 };
