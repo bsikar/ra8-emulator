@@ -116,6 +116,64 @@ test "a local carries its type's name and byte size" {
     try std.testing.expectEqual(@as(u32, 0), into[0].size);
 }
 
+test "a childless function cannot collect sibling locals across exact ranges" {
+    const scope_abbrev = abbrev ++ [_]u8{
+        // Childless subprogram with [low_pc, high_pc).
+        0x09, 0x2e, 0x00, 0x11, 0x01, 0x12, 0x06, 0x00, 0x00,
+        // Lexical block with children and no attributes.
+        0x0a, 0x0b, 0x01, 0x00, 0x00,
+    };
+    const scope_dies = [_]u8{
+        0x01, 'f',  0x00,
+        // Reset_Handler [0x3000, 0x3010), no children.
+        0x09, 0x00, 0x30,
+        0x00, 0x00, 0x10,
+        0x00, 0x00, 0x00,
+        // first [0x3010, 0x3020), alpha inside a lexical block.
+        0x02, 0x10, 0x30,
+        0x00, 0x00, 0x10,
+        0x00, 0x00, 0x00,
+        0x01, 0x0a, 0x04,
+        'a',  'l',  'p',
+        'h',  'a',  0x00,
+        0x01, 0x50, 0x00,
+        0x00,
+        // An empty child-bearing function [0x3020, 0x3030).
+        0x02, 0x20,
+        0x30, 0x00, 0x00,
+        0x10, 0x00, 0x00,
+        0x00, 0x01, 0x00,
+        // second [0x3030, 0x3040), beta directly under it.
+        0x02, 0x30, 0x30,
+        0x00, 0x00, 0x10,
+        0x00, 0x00, 0x00,
+        0x01, 0x04, 'b',
+        'e',  't',  'a',
+        0x00, 0x01, 0x51,
+        0x00, 0x00,
+    };
+    var list: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer list.deinit();
+    try list.writer.writeInt(u32, 7 + scope_dies.len, .little);
+    try list.writer.writeInt(u16, 4, .little);
+    try list.writer.writeInt(u32, 0, .little);
+    try list.writer.writeByte(4);
+    try list.writer.writeAll(&scope_dies);
+    const sections = locals.Sections{ .info = list.written(), .abbrev = &scope_abbrev };
+    var into: [4]locals.Local = undefined;
+    for ([_]u32{ 0x2fff, 0x3000, 0x300f, 0x3020, 0x302f, 0x3040 }) |pc| {
+        try std.testing.expectEqual(@as(usize, 0), try locals.inFunction(sections, pc, &into));
+    }
+    for ([_]u32{ 0x3010, 0x301f }) |pc| {
+        try std.testing.expectEqual(@as(usize, 1), try locals.inFunction(sections, pc, &into));
+        try expectLocal(&into, 0, "alpha", .{ .in_register = 0 });
+    }
+    for ([_]u32{ 0x3030, 0x303f }) |pc| {
+        try std.testing.expectEqual(@as(usize, 1), try locals.inFunction(sections, pc, &into));
+        try expectLocal(&into, 0, "beta", .{ .in_register = 1 });
+    }
+}
+
 /// A unit: its length, version, any v5 fields, the header length, the
 /// fixed fields, then the DIEs.
 fn unit(list: *std.Io.Writer, version: u16) !void {

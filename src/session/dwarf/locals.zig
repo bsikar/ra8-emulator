@@ -200,7 +200,7 @@ fn scan(cursor: *Cursor, table: []const u8, sections: Sections, unit: u64, addre
                 into[written.*] = local;
                 written.* += 1;
             }
-        } else if (spec.tag == dwarf_info.tag_subprogram and die.covers(address)) {
+        } else if (spec.tag == dwarf_info.tag_subprogram and spec.children and die.covers(address)) {
             collect = depth;
         }
         if (spec.children) depth += 1;
