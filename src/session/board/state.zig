@@ -229,10 +229,13 @@ pub fn complete() bool {
     const points = "Debugger points stay with the attached debugger";
     const derived = "Derived cache invalidated after restore";
     return fields.complete(Machine, unit_fields, .{
-        .{ .name = "breaks", .reason = points },     .{ .name = "watches", .reason = points },
-        .{ .name = "next_id", .reason = points },    .{ .name = "mode", .reason = transient },
-        .{ .name = "resumed", .reason = transient }, .{ .name = "halt_pending", .reason = transient },
-        .{ .name = "target", .reason = transient },  .{ .name = "watch_pending", .reason = transient },
+        .{ .name = "breaks", .reason = points },           .{ .name = "watches", .reason = points },
+        .{ .name = "next_id", .reason = points },          .{ .name = "mode", .reason = transient },
+        .{ .name = "resumed", .reason = transient },       .{ .name = "halt_pending", .reason = transient },
+        .{ .name = "target", .reason = transient },        .{ .name = "hits", .reason = transient },
+        .{ .name = "hits_len", .reason = transient },      .{ .name = "hits_overflow", .reason = transient },
+        .{ .name = "unit_held", .reason = transient },     .{ .name = "unit_taken", .reason = transient },
+        .{ .name = "monitor_extra", .reason = transient },
     }) and fields.complete(Driver, .{"cycles"}, .{
         .{ .name = "machine", .reason = "Session wiring" }, .{ .name = "last", .reason = transient },
         .{ .name = "latch", .reason = "Session wiring" },   .{ .name = "unit_dirty", .reason = derived },
@@ -277,7 +280,10 @@ pub const Units = struct {
 
     fn commit(self: Units, machine: *Machine) void {
         inline for (unit_fields) |name| @field(machine, name) = @field(self, name);
-        machine.watch_pending = null;
+        machine.hits_len = 0;
+        machine.hits_overflow = false;
+        machine.unit_held = 0;
+        machine.monitor_extra = null;
         machine.halt_pending = false;
         machine.resumed = false;
         machine.target = null;

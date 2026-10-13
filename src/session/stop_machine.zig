@@ -72,6 +72,25 @@ const Target = struct {
 /// What a unit event that did not halt would take DebugMonitor for.
 pub const Monitor = enum { breakpoint, watchpoint };
 
+/// One arrival a slot collected, in the order it happened, so a stop's
+/// hit set is never narrowed to the single cause that ended the run.
+pub const Arrival = union(enum) {
+    watch: watch_table.Hit,
+    unit_break: usize,
+    unit_watch: usize,
+    halt,
+    breakpoint: break_table.Id,
+    step,
+};
+
+/// How many arrivals one hit set keeps. A store-multiple against a full
+/// watch table can pass this; past it `hits_overflow` is set instead of
+/// an arrival silently dropped, since every count still lands in its table.
+pub const hit_capacity: usize = 64;
+
+/// The most DWT comparators one access can match: NUMCOMP is four bits.
+const dwt_capacity: usize = 16;
+
 pub const Machine = struct {
     breaks: break_table.Table = .{},
     watches: watch_table.Table = .{},
@@ -94,10 +113,22 @@ pub const Machine = struct {
     resumed: bool = false,
     halt_pending: bool = false,
     target: ?Target = null,
-    /// A watch tripped during the instruction that just ran. It is reported
-    /// before the next one, so the stop lands after the access, never
-    /// halfway through the instruction that made it.
-    watch_pending: ?watch_table.Hit = null,
+    /// The slot's collected arrivals, in the order they happened, the
+    /// watch and unit ones waiting from the last slot. Cleared when a run
+    /// starts or a stop is committed; frozen when a stop is chosen, so a
+    /// report reads the whole hit set.
+    hits: [hit_capacity]Arrival = undefined,
+    hits_len: usize = 0,
+    /// Set when a slot collected more arrivals than `hit_capacity`.
+    hits_overflow: bool = false,
+    /// How many buffered arrivals are unit events still undelivered; the
+    /// monitor takes them back out, since they belong to no report.
+    unit_held: usize = 0,
+    /// Unit arrivals the monitor consumed in the `onInstruction` running.
+    unit_taken: usize = 0,
+    /// A second monitor cause the slot also raised, handed out after the
+    /// first. Transient: a restore leaves the core halted.
+    monitor_extra: ?Monitor = null,
     /// The next id a break or a watch gets. The two share one sequence per
     /// core, as gdb numbers them, so `delete N` names exactly one of either.
     next_id: u32 = 1,
@@ -165,13 +196,17 @@ pub const Machine = struct {
     /// the instruction makes can trip anything, so a driver may skip both.
     pub fn quiet(self: *const Machine) bool {
         return self.mode == .running and !self.resumed and !self.halt_pending and
-            self.watch_pending == null and self.unit_pending == null and
+            self.hits_len == 0 and self.unit_pending == null and
             self.monitor_pending == null and self.breaks.len == 0 and
             self.watches.len == 0 and !self.fpb.enabled and !dwtArmed(&self.dwt);
     }
 
     /// Decide on the instruction about to run. A returned stop means the
     /// driver must stop the CPU now, before this instruction executes.
+    /// The stop's hit set keeps every arrival the slot collected, not just
+    /// the cause that ended the run; an arrival is collected only when the
+    /// decision reaches it, so nothing counts for an instruction a higher
+    /// stop already claimed.
     pub fn onInstruction(self: *Machine, event: Event) ?Stop {
         if (self.mode == .halted) return null;
         if (self.resumed) {
@@ -179,35 +214,64 @@ pub const Machine = struct {
             self.armFrom(event);
             return null;
         }
-        if (self.watch_pending) |tripped| return self.halt(.{ .watchpoint = tripped });
+        const mark = self.hits_len;
+        const overflow = self.hits_overflow;
+        self.unit_taken = 0;
+        if (self.halt_pending) self.record(.halt);
+        if (self.firstWatch()) |tripped| return self.halt(.{ .watchpoint = tripped });
         if (self.unit_pending) |index| {
             if (self.unitEvent(.{ .unit_watch = index })) |stop| return stop;
         }
         if (self.halt_pending) return self.halt(.halt_requested);
-        if (self.breaks.hit(event.pc)) |id| return self.halt(.{ .breakpoint = id });
+        if (self.breaks.hit(event.pc)) |id| {
+            self.record(.{ .breakpoint = id });
+            return self.halt(.{ .breakpoint = id });
+        }
         if (self.fpb.matches(event.pc)) |index| {
+            self.record(.{ .unit_break = index });
             if (self.unitEvent(.{ .unit_break = index })) |stop| return stop;
         }
         if (self.dwt.matchesPc(event.pc)) |index| {
+            self.record(.{ .unit_watch = index });
             if (self.unitEvent(.{ .unit_watch = index })) |stop| return stop;
         }
-        return switch (self.mode) {
-            .halted, .running => null,
-            .step => self.halt(.stepped),
-            .step_over, .step_out => if (self.reached(event)) self.halt(.stepped) else null,
+        const step_done = switch (self.mode) {
+            .step => true,
+            .step_over, .step_out => self.reached(event),
+            else => false,
         };
+        if (step_done) {
+            self.record(.step);
+            return self.halt(.stepped);
+        }
+        // Nothing stopped: monitor-consumed and in-call arrivals belong to
+        // no report, so the slot's record starts clean.
+        const delivered = self.unit_taken;
+        self.hits_len = @min(self.hits_len -| delivered, mark -| delivered);
+        self.hits_overflow = overflow;
+        return null;
     }
 
     /// Hand the machine a bus access made by the instruction now running,
-    /// with the value it moved when known. The stop it may cause is
-    /// reported on the next `onInstruction`.
-    pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access, value: ?u32) void {
-        if (self.mode == .halted) return;
-        if (self.dwt.access(address, width, access, value)) |index| {
+    /// with the value it moved when known. Every watch the access matches
+    /// is counted and collected, not just the first (X11), and every DWT
+    /// comparator that matches is held as a unit event. The stop any of
+    /// them may cause is reported on the next `onInstruction`. Returns how
+    /// many watch arrivals were collected, so a recorder that takes the
+    /// hit instead of stopping can hand them back.
+    pub fn onAccess(self: *Machine, address: u32, width: u8, access: watch_table.Access, value: ?u32) usize {
+        if (self.mode == .halted) return 0;
+        var matched: [dwt_capacity]usize = undefined;
+        const dwt_count = self.dwt.accessAll(address, width, access, value, &matched);
+        for (matched[0..dwt_count]) |index| {
             if (self.unit_pending == null) self.unit_pending = index;
+            self.record(.{ .unit_watch = index });
+            self.unit_held += 1;
         }
-        if (self.watch_pending != null) return;
-        self.watch_pending = self.watches.hit(address, width, access);
+        var found: [watch_table.limits.capacity]watch_table.Hit = undefined;
+        const count = self.watches.collect(address, width, access, &found);
+        for (found[0..count]) |hit| self.record(.{ .watch = hit });
+        return count;
     }
 
     /// A comparator matched on something other than an address: the Cycle
@@ -216,12 +280,52 @@ pub const Machine = struct {
     pub fn onUnitMatch(self: *Machine, index: usize) void {
         if (self.mode == .halted) return;
         if (self.unit_pending == null) self.unit_pending = index;
+        self.record(.{ .unit_watch = index });
+        self.unit_held += 1;
     }
 
-    /// The monitor event the last instruction raised, once.
+    /// The slot's collected arrivals, in the order they happened.
+    pub fn arrivals(self: *const Machine) []const Arrival {
+        return self.hits[0..self.hits_len];
+    }
+
+    /// Whether a data hit from the last slot is waiting to be reported.
+    pub fn pendingData(self: *const Machine) bool {
+        return self.unit_pending != null or self.firstWatch() != null;
+    }
+
+    /// Take the last `count` arrivals back out: a recorder that consumed
+    /// the hits keeps the run going with no stop to report.
+    pub fn dropLast(self: *Machine, count: usize) void {
+        self.hits_len -= @min(count, self.hits_len);
+    }
+
+    fn record(self: *Machine, arrival: Arrival) void {
+        if (self.hits_len == hit_capacity) {
+            self.hits_overflow = true;
+            return;
+        }
+        self.hits[self.hits_len] = arrival;
+        self.hits_len += 1;
+    }
+
+    /// The earliest unreported watch arrival, the one that ends the run.
+    fn firstWatch(self: *const Machine) ?watch_table.Hit {
+        for (self.hits[0..self.hits_len]) |arrival| switch (arrival) {
+            .watch => |hit| return hit,
+            else => {},
+        };
+        return null;
+    }
+
+    /// The monitor events the last instruction raised, one per call, in
+    /// the order they happened. A slot that raises both an FPB break and a
+    /// DWT watch hands out both, so a monitor never sees only the first.
     pub fn takeMonitor(self: *Machine) ?Monitor {
-        defer self.monitor_pending = null;
-        return self.monitor_pending;
+        const cause = self.monitor_pending orelse return null;
+        self.monitor_pending = self.monitor_extra;
+        self.monitor_extra = null;
+        return cause;
     }
 
     /// A unit event halts with halting debug on; otherwise it is held for
@@ -229,15 +333,29 @@ pub const Machine = struct {
     fn unitEvent(self: *Machine, why: Stop) ?Stop {
         if (self.halting) return self.halt(why);
         self.unit_pending = null;
-        self.monitor_pending = if (why == .unit_break) .breakpoint else .watchpoint;
+        self.unit_taken = self.unit_held;
+        self.unit_held = 0;
+        self.noteMonitor(if (why == .unit_break) .breakpoint else .watchpoint);
         return null;
+    }
+
+    /// Hold a monitor cause, keeping a second distinct one for the next
+    /// take. The same cause twice needs no second slot.
+    fn noteMonitor(self: *Machine, cause: Monitor) void {
+        if (self.monitor_pending == null) {
+            self.monitor_pending = cause;
+        } else if (self.monitor_extra == null and self.monitor_pending.? != cause) {
+            self.monitor_extra = cause;
+        }
     }
 
     fn start(self: *Machine, mode: Mode, target: ?Target) void {
         self.mode = mode;
         self.resumed = true;
         self.halt_pending = false;
-        self.watch_pending = null;
+        self.hits_len = 0;
+        self.hits_overflow = false;
+        self.unit_held = 0;
         self.unit_pending = null;
         self.target = target;
     }
@@ -261,7 +379,6 @@ pub const Machine = struct {
     fn halt(self: *Machine, why: Stop) Stop {
         self.mode = .halted;
         self.halt_pending = false;
-        self.watch_pending = null;
         self.unit_pending = null;
         self.target = null;
         return why;

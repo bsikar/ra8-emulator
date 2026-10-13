@@ -122,7 +122,7 @@ test "a watched write stops after the instruction that made it" {
     machine.proceed();
     _ = machine.onInstruction(at(0x100));
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
-    machine.onAccess(0x2000_0040, 4, .write, null);
+    _ = machine.onAccess(0x2000_0040, 4, .write, null);
     const stop = machine.onInstruction(at(0x104)).?;
     try std.testing.expectEqual(id, stop.watchpoint.id);
     try std.testing.expectEqual(ra8.session.watch.table.Access.write, stop.watchpoint.access);
@@ -131,7 +131,7 @@ test "a watched write stops after the instruction that made it" {
 test "a watched access on a halted session is ignored" {
     var machine = Machine{};
     _ = try machine.watches.add(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .access));
-    machine.onAccess(0x2000_0040, 4, .read, null);
+    _ = machine.onAccess(0x2000_0040, 4, .read, null);
     machine.step();
     _ = machine.onInstruction(at(0x100));
     try std.testing.expect(isStepped(machine.onInstruction(at(0x102))));
@@ -142,7 +142,7 @@ test "resuming clears a watch stop that was already reported" {
     _ = try machine.watches.add(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
     machine.proceed();
     _ = machine.onInstruction(at(0x100));
-    machine.onAccess(0x2000_0040, 4, .write, null);
+    _ = machine.onAccess(0x2000_0040, 4, .write, null);
     try std.testing.expect(machine.onInstruction(at(0x102)) != null);
     machine.step();
     _ = machine.onInstruction(at(0x102));
@@ -169,7 +169,7 @@ test "a halting DWT data comparator stops the run once the access retired" {
     machine.proceed();
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x100)));
     try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x102)));
-    machine.onAccess(0x2000_1000, 4, .write, null);
+    _ = machine.onAccess(0x2000_1000, 4, .write, null);
     try std.testing.expectEqual(@as(usize, 0), machine.onInstruction(at(0x104)).?.unit_watch);
 }
 
@@ -262,4 +262,106 @@ test "trace enabled with no comparator set stays quiet, a set comparator does no
     try std.testing.expect(!machine.quiet());
     machine.dwt.trcena = false;
     try std.testing.expect(machine.quiet());
+}
+
+test "one access that overlaps two watches collects both" {
+    var machine = Machine{};
+    const first = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
+    const second = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0042, 2, .write));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    try std.testing.expectEqual(@as(usize, 2), machine.onAccess(0x2000_0040, 4, .write, null));
+    const stop = machine.onInstruction(at(0x102)).?;
+    try std.testing.expectEqual(first, stop.watchpoint.id);
+    const hits = machine.arrivals();
+    try std.testing.expectEqual(@as(usize, 2), hits.len);
+    try std.testing.expectEqual(second, hits[1].watch.id);
+}
+
+test "a watch and a halting DWT comparator on one access both reach the report" {
+    var machine = Machine{};
+    const dwt = ra8.chip.periph.dwt;
+    _ = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
+    machine.dwt.trcena = true;
+    _ = machine.dwt.write(dwt.offsets.comp0, 0x2000_0040);
+    _ = machine.dwt.write(dwt.offsets.function0, dwt.match.data_write | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    _ = machine.onAccess(0x2000_0040, 4, .write, null);
+    const stop = machine.onInstruction(at(0x102)).?;
+    try std.testing.expectEqual(ra8.session.watch.table.Access.write, stop.watchpoint.access);
+    var saw_unit = false;
+    for (machine.arrivals()) |arrival| switch (arrival) {
+        .unit_watch => saw_unit = true,
+        else => {},
+    };
+    try std.testing.expect(saw_unit);
+    try std.testing.expectEqual(@as(?usize, null), machine.unit_pending);
+}
+
+test "a monitor cause delivered before a break keeps the unit arrival in the hit set" {
+    var machine = Machine{ .halting = false };
+    const dwt = ra8.chip.periph.dwt;
+    machine.dwt.trcena = true;
+    _ = machine.dwt.write(dwt.offsets.comp0, 0x2000_1000);
+    _ = machine.dwt.write(dwt.offsets.function0, dwt.match.data_write | (dwt.function_bits.action_debug << dwt.function_bits.action_shift) | (2 << dwt.function_bits.size_shift));
+    _ = try machine.addBreak(.{ .address = 0x104 });
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    _ = machine.onAccess(0x2000_1000, 4, .write, null);
+    const stop = machine.onInstruction(at(0x104)).?;
+    try std.testing.expectEqual(@as(u32, 1), stop.breakpoint);
+    var saw_unit = false;
+    for (machine.arrivals()) |arrival| switch (arrival) {
+        .unit_watch => saw_unit = true,
+        else => {},
+    };
+    try std.testing.expect(saw_unit);
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, .watchpoint), machine.takeMonitor());
+}
+
+test "an FPB break and a DWT watch at one pc hand the monitor both causes" {
+    var machine = Machine{ .halting = false };
+    const fpb = ra8.session.fpb;
+    const dwt = ra8.chip.periph.dwt;
+    _ = machine.fpb.write(fpb.offsets.comp0 + 4, 0x108 | fpb.comp_enable);
+    _ = machine.fpb.write(fpb.offsets.ctrl, fpb.ctrl_bits.enable | fpb.ctrl_bits.key);
+    machine.dwt.trcena = true;
+    _ = machine.dwt.write(dwt.offsets.comp0 + dwt.offsets.stride, 0x108);
+    _ = machine.dwt.write(dwt.offsets.function0 + dwt.offsets.stride, dwt.match.instruction | (dwt.function_bits.action_debug << dwt.function_bits.action_shift));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    _ = machine.onInstruction(at(0x108));
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, .breakpoint), machine.takeMonitor());
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, .watchpoint), machine.takeMonitor());
+    try std.testing.expectEqual(@as(?stop_machine.Monitor, null), machine.takeMonitor());
+}
+
+test "a halt request during a watched slot joins the report" {
+    var machine = Machine{};
+    _ = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    _ = machine.onAccess(0x2000_0040, 4, .write, null);
+    machine.requestHalt();
+    const stop = machine.onInstruction(at(0x102)).?;
+    try std.testing.expectEqual(@as(u32, 1), stop.watchpoint.id);
+    var saw_halt = false;
+    for (machine.arrivals()) |arrival| switch (arrival) {
+        .halt => saw_halt = true,
+        else => {},
+    };
+    try std.testing.expect(saw_halt);
+}
+
+test "an interrupt during a watched chunk still reports the watch" {
+    var machine = Machine{};
+    _ = try machine.addWatch(try ra8.session.watch.table.Watch.span(0x2000_0040, 4, .write));
+    machine.proceed();
+    _ = machine.onInstruction(at(0x100));
+    _ = machine.onAccess(0x2000_0040, 4, .write, null);
+    try std.testing.expectEqual(stop_machine.Stop.halt_requested, machine.interrupt());
+    try std.testing.expect(machine.pendingData());
+    machine.proceed();
+    try std.testing.expectEqual(@as(?stop_machine.Stop, null), machine.onInstruction(at(0x104)));
 }

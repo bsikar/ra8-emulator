@@ -239,11 +239,11 @@ test "a quiet bus listens only to the PPB, and a store there ends the stretch" {
     listening.quiet = true;
     const view = listening.view();
     try view.write(image.base + 0x100, &[_]u8{ 1, 0, 0, 0 });
-    try std.testing.expect(machine.watch_pending == null);
+    try std.testing.expectEqual(@as(usize, 0), machine.arrivals().len);
     try std.testing.expect(!listening.ppb.seen);
     try view.write(dwt.base + 4, &[_]u8{ 0, 0, 0, 0 });
     try std.testing.expect(listening.ppb.seen);
     listening.quiet = false;
     try view.write(image.base + 0x100, &[_]u8{ 2, 0, 0, 0 });
-    try std.testing.expect(machine.watch_pending != null);
+    try std.testing.expect(machine.arrivals().len > 0);
 }

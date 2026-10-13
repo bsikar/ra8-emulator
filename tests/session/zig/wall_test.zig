@@ -305,8 +305,8 @@ test "grid G6 stopped store restores its pending close without double charge" {
     try live.session().setRunBudget(.cpu0, 3);
     const ended = try live.session().run(.cpu0, .cont);
     std.debug.print("CHECK=G6 stop ended={any} cut={} phase={s} carry={d} board={d} watch={any} unit={any} mode={s}\n", .{
-        ended,                            live.state.edge.saved.cut,       @tagName(live.state.edge.saved.at.phase), live.state.edge.saved.stretch.carry, live.board().time.base.retired,
-        live.state.machine.watch_pending, live.state.machine.unit_pending, @tagName(live.state.machine.mode),
+        ended,                             live.state.edge.saved.cut,       @tagName(live.state.edge.saved.at.phase), live.state.edge.saved.stretch.carry, live.board().time.base.retired,
+        live.state.machine.arrivals().len, live.state.machine.unit_pending, @tagName(live.state.machine.mode),
     });
     try std.testing.expect(ended == .stop and ended.stop == .watchpoint);
     try std.testing.expect(live.state.edge.saved.cut);

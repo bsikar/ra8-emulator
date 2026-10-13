@@ -23,9 +23,9 @@ pub const Link = struct {
     /// with the pc and lr it was made from, and the stop it would cause is
     /// dropped, because the flag records rather than halts.
     pub fn store(self: *Link, pc: u32, lr: u32, address: u32, width: u8, value: u32) void {
-        self.machine.onAccess(address, width, .write, value);
-        if (self.machine.watch_pending == null) return;
-        self.machine.watch_pending = null;
+        const collected = self.machine.onAccess(address, width, .write, value);
+        if (collected == 0) return;
+        self.machine.dropLast(collected);
         self.watched.record(pc, lr, address, width, value);
     }
 

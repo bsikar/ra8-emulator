@@ -85,7 +85,7 @@ pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: 
             if (core.cpu.cut) |cut| if (cut.fired) return .count;
             continue;
         }
-        if (!machine.resumed and (machine.watch_pending != null or machine.unit_pending != null or machine.halt_pending)) {
+        if (!machine.resumed and (machine.pendingData() or machine.halt_pending)) {
             const stop = machine.onInstruction(event(core));
             zig_monitor.take(core, machine);
             if (stop) |why| {
