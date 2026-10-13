@@ -6,7 +6,7 @@
 //! SDRAM from the first, so neither is owned and neither is saved twice.
 //!
 //! ONLY NON-ZERO PAGES ARE WRITTEN. A fresh store is zeroed (store.zig), so
-//! a page left out reads back as the zeroes it held; SDRAM alone is 64 MiB.
+//! a page left out reads back as zero; SDRAM has the board profile's size.
 //!
 //! Layout: a region count, then per region its base, length, how many pages
 //! follow, and each page as its offset and bytes.
@@ -25,7 +25,11 @@ pub const Error = fields.Error || error{ Unbacked, SizeMismatch, LayoutMismatch,
 
 /// Writes the memory section of `store`.
 pub fn save(store: *const Store, writer: anytype) !void {
-    try file.writeSectionHeader(writer, .memory, payloadLen(store));
+    return saveAs(store, .memory, writer);
+}
+
+pub fn saveAs(store: *const Store, kind: file.Kind, writer: anytype) !void {
+    try file.writeSectionHeader(writer, kind, payloadLen(store));
     try writer.writeInt(u32, regionCount(store), .little);
     for (memmap.ram, 0..) |entry, index| {
         if (!store.owned[index]) continue;
@@ -42,45 +46,113 @@ pub fn save(store: *const Store, writer: anytype) !void {
 
 /// Fills `store`, freshly made, from a memory section's payload.
 pub fn load(store: *Store, payload: []const u8) Error!void {
-    // Validate the complete shape before changing a byte or mapping a window.
+    var staged = try prepare(store, payload);
+    defer staged.deinit();
+    staged.commit(store);
+}
+
+pub const Prepared = struct {
+    payload: []const u8,
+    extra: @TypeOf(@as(Store, .{}).extra) = .{},
+
+    pub fn deinit(self: *Prepared) void {
+        self.extra.deinit();
+    }
+
+    /// All parsing and window allocation completed before this point.
+    pub fn commit(self: *Prepared, store: *Store) void {
+        for (store.pages, store.owned) |held, mine| if (mine) {
+            if (held) |bytes| @memset(bytes, 0);
+        };
+        if (store.owns_port) @memset(store.port.?.sdram, 0);
+        store.extra.deinit();
+        store.extra = self.extra;
+        self.extra = .{};
+        apply(store, self.payload);
+    }
+};
+
+/// Keep page bytes borrowed from the file; only new window allocations are
+/// owned by the preparation. Fixed backing is never changed during parsing.
+pub fn prepare(store: *const Store, payload: []const u8) Error!Prepared {
     try validate(store, payload);
+    var staged: Prepared = .{ .payload = payload };
+    errdefer staged.deinit();
+    var scratch = store.*;
+    scratch.extra = .{};
     var at: usize = 0;
     const count = try int(payload, &at);
     for (0..count) |_| {
         const base = try int(payload, &at);
         const len = try int(payload, &at);
-        const bytes = try backing(store, base, len);
+        _ = try backing(&scratch, base, len);
+        staged.extra = scratch.extra;
         const pages = try int(payload, &at);
         for (0..pages) |_| {
             const offset = try int(payload, &at);
+            at += @min(page, len - offset);
+        }
+    }
+    return staged;
+}
+
+fn apply(store: *Store, payload: []const u8) void {
+    var at: usize = 0;
+    const count = int(payload, &at) catch unreachable;
+    for (0..count) |_| {
+        const base = int(payload, &at) catch unreachable;
+        const len = int(payload, &at) catch unreachable;
+        const bytes = backing(store, base, len) catch unreachable;
+        const pages = int(payload, &at) catch unreachable;
+        for (0..pages) |_| {
+            const offset = int(payload, &at) catch unreachable;
             const size = @min(page, len - offset);
             @memcpy(bytes[offset..][0..size], payload[at..][0..size]);
             at += size;
         }
     }
     var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
-    const state = try fields.read(?external.State, &cursor);
+    const state = fields.read(?external.State, &cursor) catch unreachable;
     if (state) |saved| external_backing.fabricOf(store).?.restore(saved);
 }
 
-fn validate(store: *const Store, payload: []const u8) Error!void {
+pub fn validate(store: *const Store, payload: []const u8) Error!void {
     var at: usize = 0;
     const count = try int(payload, &at);
-    for (0..count) |_| {
+    if (count > store.pages.len + store.extra.windows.len + 1) return Error.BadValue;
+    var bases: [memmap.ram.len + 33]u32 = undefined;
+    var fixed_seen: [memmap.ram.len]bool = @splat(false);
+    var sdram_seen = false;
+    for (0..count) |index| {
         const base = try int(payload, &at);
         const len = try int(payload, &at);
+        if (len == 0 or @as(u64, base) + len > 0x1_0000_0000) return Error.BadValue;
+        for (bases[0..index]) |previous| if (previous == base) return Error.BadValue;
+        bases[index] = base;
         if (fixedBacking(store, base)) |bytes| {
             if (bytes.len != len) return Error.SizeMismatch;
+            for (memmap.ram, 0..) |entry, slot| if (entry.base == base) {
+                if (!store.owned[slot] and !(base == memmap.sdram_base and store.owns_port)) return Error.Unbacked;
+                fixed_seen[slot] = true;
+            };
+            if (base == memmap.sdram_base) sdram_seen = true;
+        } else {
+            for (memmap.ram) |entry| if (base < entry.end() and entry.base < @as(u64, base) + len) return Error.Unbacked;
         }
         const pages = try int(payload, &at);
+        var previous: ?u32 = null;
         for (0..pages) |_| {
             const offset = try int(payload, &at);
-            if (offset >= len) return Error.Truncated;
+            if (offset >= len or offset % page != 0) return Error.BadValue;
+            if (previous) |last| if (offset <= last) return Error.BadValue;
+            previous = offset;
             const size = @min(page, len - offset);
             if (payload.len - at < size) return Error.Truncated;
             at += size;
         }
     }
+    for (store.owned, fixed_seen) |mine, seen| if (mine and !seen) return Error.Unbacked;
+    if (store.owns_port and !sdram_seen) return Error.Unbacked;
     var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
     const state = try fields.read(?external.State, &cursor);
     if ((state != null) != (external_backing.fabricOf(store) != null)) return Error.LayoutMismatch;

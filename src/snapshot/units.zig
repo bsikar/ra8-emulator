@@ -18,7 +18,7 @@ pub fn save(writer: anytype, kind: file.Kind, units: anytype) !void {
 }
 
 fn body(writer: anytype, units: anytype) !void {
-    inline for (units) |unit| try fields.writeExcept(writer, unit.*, .{"event_hook"});
+    inline for (units) |unit| try fields.writeExcept(writer, unit.*, wiring(@TypeOf(unit.*)));
 }
 
 pub fn load(bytes: []const u8, kind: file.Kind, units: anytype) Error!void {
@@ -27,10 +27,14 @@ pub fn load(bytes: []const u8, kind: file.Kind, units: anytype) Error!void {
     var copies: Copies(@TypeOf(units)) = undefined;
     inline for (units, 0..) |unit, i| {
         copies[i] = unit.*;
-        try fields.readOver(&cursor, &copies[i], .{"event_hook"});
+        try fields.readOver(&cursor, &copies[i], wiring(@TypeOf(unit.*)));
     }
     if (!cursor.done()) return Error.BadValue;
     inline for (units, 0..) |unit, i| unit.* = copies[i];
+}
+
+fn wiring(comptime T: type) []const []const u8 {
+    return if (@hasField(T, "event_hook")) &.{"event_hook"} else &.{};
 }
 
 /// A tuple of the pointees of a tuple of pointers.

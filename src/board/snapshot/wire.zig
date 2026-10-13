@@ -58,6 +58,6 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
 fn fits(wire: anytype) bool {
     const line = wire.touchline;
     const panel = wire.panel;
-    return line.staged_len <= line.staged.len and line.served <= line.staged_len and
+    return wire.expander.pointer < wire.expander.registers.len and line.staged_len <= line.staged.len and line.served <= line.staged_len and
         panel.queued_len <= panel.queued.len and panel.queued_pos <= panel.queued_len;
 }

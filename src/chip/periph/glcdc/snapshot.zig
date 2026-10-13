@@ -4,13 +4,15 @@
 //!
 //! Not saved, because it is wiring: `domain` (the power domain controller
 //! pointer), `memory` (the guest memory handle), `event_hook`, and on the
-//! output stage the host frame `capture` buffer and the `vsync` hook a
-//! frames-out run installs. A load keeps the target board's own. The mixer's
+//! output stage the host frame `capture` buffer and the vsync sink.
+//! Vsync configuration and guest phase are saved separately. A load retains
+//! the target sink. The mixer's
 //! stage and palette pointers are per-call arguments, never stored, so
 //! nothing needs re-pointing.
 const std = @import("std");
 const file = @import("ra8_snapshot").file;
 const fields = @import("ra8_snapshot").fields;
+const vsync = @import("vsync.zig");
 const clut = @import("clut.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
@@ -28,6 +30,7 @@ pub fn save(board: anytype, writer: anytype) !void {
 fn body(writer: anytype, display: anytype) !void {
     try fields.writeExcept(writer, display, wiring);
     try fields.writeExcept(writer, display.output, host);
+    try fields.write(writer, if (display.output.vsync) |live| @as(?vsync.Saved, vsync.Saved.of(live)) else @as(?vsync.Saved, null));
 }
 
 /// All or nothing: the controller changes only once the whole section read
@@ -38,6 +41,9 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     var copy = board.display;
     try fields.readOver(&cursor, &copy, wiring);
     try fields.readOver(&cursor, &copy.output, host);
+    const phase = try fields.read(?vsync.Saved, &cursor);
+    if ((phase != null) != (copy.output.vsync != null)) return Error.BadValue;
+    if (phase) |saved| try saved.install(&copy.output.vsync.?);
     if (!cursor.done() or !fits(copy.palettes)) return Error.BadValue;
     board.display = copy;
 }

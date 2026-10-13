@@ -41,7 +41,7 @@ pub const Cpu1 = struct {
         const live = opened.session();
         live.live.other = .{ .core = .{ .cpu = cpu1 }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = live.live.budget };
         opened.attachCore(.cpu1, cpu1, self.pair.guest());
-        opened.bindSecond(&self.pair.second, self.pair.guest());
+        opened.bindSecondDriver(&self.pair);
         try live.load(.cpu1, self.bytes);
         try live.switchTo(.cpu0);
     }

@@ -1,0 +1,31 @@
+//! Existing State ownership classification. Arena guest support remains refused.
+const fields = @import("ra8_board").snapshot.run.fields;
+pub fn complete(comptime State: type) bool {
+    return fields.complete(State, .{ "board", "cpu0", "machine", "driver", "cpu", "pending", "chunk", "reboot" }, .{
+        .{ .name = "allocator", .reason = "Target resource allocator" },
+        .{ .name = "bytes", .reason = "Image identity validated before restore" },
+        .{ .name = "image", .reason = "Immutable view of retained image bytes" },
+        .{ .name = "profile", .reason = "Target configuration validated by memory fabric" },
+        .{ .name = "memory", .reason = "Stable bus wiring to saved store and board" },
+        .{ .name = "check", .reason = "Stable MPU wiring to saved registers" },
+        .{ .name = "watching", .reason = "Debugger bus wiring retained" },
+        .{ .name = "decoded", .reason = "Derived cache cleared after restore" },
+        .{ .name = "formed", .reason = "Derived blocks cleared after restore" },
+        .{ .name = "quiet", .reason = "Derived wake hints invalidated after restore" },
+        .{ .name = "loading", .reason = "Target loader bindings and validated image identities" },
+        .{ .name = "session", .reason = "Saved core bookkeeping; retained embedding and debugger controls" },
+        .{ .name = "plugs_arena", .reason = "Unsupported guest allocations explicitly refused" },
+        .{ .name = "plugs", .reason = "Topology and instances explicitly refused after mutation" },
+        .{ .name = "faults", .reason = "Allocated fault wrappers explicitly refused even after clearing" },
+        .{ .name = "edge", .reason = "Stable boundary wiring; clocks saved separately" },
+        .{ .name = "files", .reason = "Stable snapshot owner bindings" },
+        .{ .name = "state_file", .reason = "Host file path and I/O handles" },
+        .{ .name = "history", .reason = "Debugger rewind history retained" },
+        .{ .name = "display", .reason = "Target renderer wiring and host buffers; guest vsync saved on board" },
+        .{ .name = "tracer", .reason = "Host trace instrumentation retained" },
+        .{ .name = "listener", .reason = "Host trace bus callback wiring" },
+        .{ .name = "publisher", .reason = "Host trace event publisher wiring" },
+        .{ .name = "module_watch", .reason = "Host module trace publication" },
+        .{ .name = "modules", .reason = "Debugger image mappings retained" },
+    });
+}

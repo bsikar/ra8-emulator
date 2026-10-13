@@ -152,6 +152,52 @@ pub const Bus = struct {
         self.cells.deinit();
     }
 
+    /// Sparse cells are ordered by address, independently of hash-map layout.
+    pub fn saveSnapshot(self: *const Bus, writer: *std.Io.Writer) !void {
+        const fields = @import("ra8_snapshot").fields;
+        const keys = try self.cells.allocator.alloc(u32, self.cells.count());
+        defer self.cells.allocator.free(keys);
+        var iter = self.cells.keyIterator();
+        var index: usize = 0;
+        while (iter.next()) |key| : (index += 1) keys[index] = key.*;
+        std.mem.sort(u32, keys, {}, std.sort.asc(u32));
+        try fields.write(writer, self.counters);
+        try fields.write(writer, self.nonsecure);
+        try fields.write(writer, self.issuer);
+        try fields.write(writer, @as(u32, @intCast(keys.len)));
+        for (keys) |key| {
+            try fields.write(writer, key);
+            try fields.write(writer, self.cells.get(key).?);
+        }
+    }
+
+    /// Allocates the replacement map before replacing any guest state.
+    pub fn loadSnapshot(self: *Bus, payload: []const u8) !void {
+        const fields = @import("ra8_snapshot").fields;
+        var cursor: fields.Cursor = .{ .bytes = payload };
+        const counters = try fields.read(Counters, &cursor);
+        const nonsecure = try fields.read(bool, &cursor);
+        const issuer = try fields.read(Issuer, &cursor);
+        const count = try fields.read(u32, &cursor);
+        if (count > (payload.len - cursor.at) / 13) return error.Truncated;
+        var cells = std.AutoHashMap(u32, Cell).init(self.cells.allocator);
+        errdefer cells.deinit();
+        var previous: ?u32 = null;
+        for (0..count) |_| {
+            const key = try fields.read(u32, &cursor);
+            if (key < base or key >= base + size) return error.BadValue;
+            if (previous) |last| if (key <= last) return error.BadValue;
+            previous = key;
+            try cells.put(key, try fields.read(Cell, &cursor));
+        }
+        if (!cursor.done()) return error.BadValue;
+        self.cells.deinit();
+        self.cells = cells;
+        self.counters = counters;
+        self.nonsecure = nonsecure;
+        self.issuer = issuer;
+    }
+
     /// Register a block. Ranges are disjoint by construction: registering an
     /// overlapping one is a programming error and is refused here rather than
     /// silently shadowing whichever block was added first.

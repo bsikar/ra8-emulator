@@ -46,7 +46,8 @@ test "a busy controller round-trips and the fresh one keeps its wiring" {
     const lock = guard();
     var domain = pdctr.Pdctr.init(&lock, .graphics);
     var other = pdctr.Pdctr.init(&lock, .graphics);
-    const board = busy(&domain);
+    var board = busy(&domain);
+    board.display.output.vsync = .{ .sink = .{ .context = &domain, .frame = onFrame } };
     var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try saved(&board, &list);
@@ -95,4 +96,95 @@ test "a missing section or a cut payload leaves the controller untouched" {
     try saved(&board, &list);
     try std.testing.expect(std.meta.isError(display.load(&fresh, list.written()[0 .. list.written().len - 1])));
     try std.testing.expectEqual(@as(u32, 9), fresh.display.latches);
+}
+
+fn scanFrame(context: *anyopaque, _: u64) void {
+    const unit: *glcdc.Glcdc = @ptrCast(@alignCast(context));
+    _ = unit.scanOut();
+}
+fn setFrame(board: *Stand, guest: ra8.chip.core.cpu.memory.guest.Guest) void {
+    board.display.memory = guest;
+    board.display.registers[glcdc.off.bg_en / 4] = 1;
+    board.display.timing.h_active = 2;
+    board.display.timing.v_active = 2;
+    board.display.timing.sized = true;
+    board.display.system.panel_clk = glcdc.sys.clock.enable;
+    board.display.system.detect = glcdc.sys.state.vpos;
+    board.display.output.vsync = .{ .sink = .{ .context = &board.display, .frame = scanFrame }, .period_ns = 100, .next_ns = 100 };
+}
+test "vsync restore continues real scan status and next boundary against reference" {
+    const lock = guard();
+    var domain = pdctr.Pdctr.init(&lock, .graphics);
+    domain.write(pdctr.Domain.graphics.base(), 1, 0);
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    const guest: ra8.chip.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var live: Stand = .{ .display = glcdc.Glcdc.init(&domain) };
+    var reference: Stand = .{ .display = glcdc.Glcdc.init(&domain) };
+    var fresh: Stand = .{ .display = glcdc.Glcdc.init(&domain) };
+    setFrame(&live, guest);
+    setFrame(&reference, guest);
+    setFrame(&fresh, guest);
+    live.display.output.vsync.?.tick(99);
+    reference.display.output.vsync.?.tick(99);
+    var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer bytes.deinit();
+    try saved(&live, &bytes);
+    live.display.output.vsync.?.tick(450);
+    fresh.display.output.vsync.?.next_ns = 900;
+    try display.load(&live, bytes.written());
+    try display.load(&fresh, bytes.written());
+    try std.testing.expect(live.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&live.display)));
+    try std.testing.expect(fresh.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&fresh.display)));
+    try std.testing.expect(fresh.display.output.vsync.?.sink.frame == scanFrame);
+    for ([_]u64{ 99, 100, 350, 399, 400 }) |now| {
+        reference.display.output.vsync.?.tick(now);
+        live.display.output.vsync.?.tick(now);
+        fresh.display.output.vsync.?.tick(now);
+        for ([_]*Stand{ &live, &fresh }) |target| {
+            try std.testing.expectEqual(reference.display.system.frames, target.display.system.frames);
+            try std.testing.expectEqual(reference.display.system.status, target.display.system.status);
+            try std.testing.expectEqual(reference.display.system.detections, target.display.system.detections);
+            try std.testing.expectEqual(reference.display.output.vsync.?.next_ns, target.display.output.vsync.?.next_ns);
+            try std.testing.expectEqual(reference.display.output.vsync.?.boundaries, target.display.output.vsync.?.boundaries);
+            try std.testing.expectEqual(reference.display.output.vsync.?.swallowed, target.display.output.vsync.?.swallowed);
+        }
+    }
+    try std.testing.expectEqual(@as(u32, 3), live.display.system.frames);
+    try std.testing.expectEqual(@as(u32, glcdc.sys.state.vpos), live.display.system.status);
+}
+test "vsync malformed configuration and phase refuse before controller install" {
+    const lock = guard();
+    var domain = pdctr.Pdctr.init(&lock, .graphics);
+    var live = busy(&domain);
+    live.display.output.vsync = .{ .sink = .{ .context = &domain, .frame = onFrame } };
+    var target = live;
+    target.display.starts = 19;
+    for (0..6) |trial| {
+        var source = live;
+        if (trial == 0) source.display.output.vsync.?.period_ns = 0;
+        if (trial == 1) source.display.output.vsync.?.period_ns += 1;
+        if (trial == 2) {
+            source.display.output.vsync.?.next_ns = 0;
+            source.display.output.vsync.?.boundaries = 1;
+        }
+        if (trial == 3) source.display.output.vsync.?.swallowed = 1;
+        if (trial == 4) source.display.output.vsync.?.boundaries = 2;
+        if (trial == 5) {
+            source.display.output.vsync.?.boundaries = 1;
+            source.display.output.vsync.?.swallowed = 1;
+        }
+        var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+        defer bytes.deinit();
+        try saved(&source, &bytes);
+        try std.testing.expectError(error.BadValue, display.load(&target, bytes.written()));
+        try std.testing.expectEqual(@as(u32, 19), target.display.starts);
+        try std.testing.expect(target.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&domain)));
+    }
+    live.display.output.vsync.?.next_ns = 0;
+    var zero = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer zero.deinit();
+    try saved(&live, &zero);
+    try display.load(&target, zero.written());
+    try std.testing.expectEqual(@as(u64, 0), target.display.output.vsync.?.next_ns);
 }
