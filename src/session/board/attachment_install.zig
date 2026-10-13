@@ -8,6 +8,7 @@ const Topology = @import("attachment_topology.zig").Topology;
 const Binding = @import("attachments.zig").Binding;
 const Plugs = @import("plug.zig").Plugs;
 const Faults = @import("faults/faults.zig").Faults;
+const ownership = @import("attachment_ownership.zig");
 
 pub fn commit(next: *graph.Graph, previous: *graph.Graph, top: *const Topology, arena: *std.heap.ArenaAllocator, board: *Board, binding: ?Binding) void {
     var moved: [512]bool = @splat(false);
@@ -23,7 +24,7 @@ pub fn commit(next: *graph.Graph, previous: *graph.Graph, top: *const Topology, 
         }
     }
     if (binding) |held| {
-        destroyStartup(previous, held.plugs, board);
+        ownership.destroyStartup(board, held.plugs);
         held.plugs.deinit();
         held.arena.deinit();
         held.arena.* = arena.*;
@@ -74,27 +75,6 @@ fn retainWiring(node: @import("attachment_nodes.zig").Node, old: ?@import("attac
             target.wire.bridge = .{};
         }
         part.pins = &board.pins;
-    }
-}
-
-fn destroyStartup(previous: *const graph.Graph, plugs: *const Plugs, board: *const Board) void {
-    const owned = board.asks.arena orelse return;
-    for (previous.nodes[0..previous.count]) |node| {
-        if (node.kind != .part) continue;
-        const state = codec.context(node.device);
-        var tracked = false;
-        for (plugs.instances[0..plugs.instance_count]) |instance| if (instance.state == state) {
-            tracked = true;
-        };
-        for (plugs.snapshot_owned[0..plugs.snapshot_owned_count]) |instance| if (instance.state == state) {
-            tracked = true;
-        };
-        var startup_owned = false;
-        for (board.asks.asked[0..board.asks.count]) |ask| {
-            if (!std.mem.eql(u8, ask.name, codec.name(node.kind.part)) or !std.meta.eql(ask.at, node.at)) continue;
-            startup_owned = true;
-        }
-        if (!tracked and startup_owned) c.catalog.Catalog.destroy(owned, .{ .model = c.parts.all.find(codec.name(node.kind.part)).?, .state = state, .device = node.device });
     }
 }
 

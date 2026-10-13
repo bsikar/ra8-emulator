@@ -130,6 +130,7 @@ test {
     _ = @import("session/board/attachment_topology_test.zig");
     _ = @import("session/board/attachment_install_test.zig");
     _ = @import("session/board/attachment_inventory_test.zig");
+    _ = @import("session/board/attachment_ownership_test.zig");
     _ = @import("tools/all_test.zig");
     const ra8 = @import("ra8");
     inline for (.{ ra8.chip.core, ra8.chip.periph, ra8.board, ra8.session, ra8.rpc, ra8.gdb, @import("cli_app") }) |module| std.testing.refAllDecls(module);
