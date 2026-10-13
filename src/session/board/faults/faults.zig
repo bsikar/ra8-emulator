@@ -31,13 +31,6 @@ pub const Faults = struct {
     spi_parts: lines.Wrappers(fault_lines.Spi, spi.Device, spi.channel_count) = .{},
     uart_parts: lines.Wrappers(fault_lines.Uart, sci_device.Device, sci.channels) = .{},
 
-    pub fn snapshotSafe(self: *const Faults) bool {
-        for (self.wrapped) |entry| if (entry != null) return false;
-        for (self.spi_parts.held) |entry| if (entry != null) return false;
-        for (self.uart_parts.held) |entry| if (entry != null) return false;
-        return true;
-    }
-
     pub fn init(board: *Board, arena: std.mem.Allocator) Faults {
         return .{ .board = board, .arena = arena };
     }

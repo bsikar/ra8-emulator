@@ -1,7 +1,7 @@
-//! Existing State ownership classification. Arena guest support remains refused.
+//! Existing State ownership classification. Typed attachments save arena guest state.
 const fields = @import("ra8_board").snapshot.run.fields;
 pub fn complete(comptime State: type) bool {
-    return fields.complete(State, .{ "board", "cpu0", "machine", "driver", "cpu", "pending", "chunk", "reboot" }, .{
+    return fields.complete(State, .{ "board", "cpu0", "machine", "driver", "cpu", "pending", "chunk", "reboot", "plugs", "faults" }, .{
         .{ .name = "allocator", .reason = "Target resource allocator" },
         .{ .name = "bytes", .reason = "Image identity validated before restore" },
         .{ .name = "image", .reason = "Immutable view of retained image bytes" },
@@ -14,9 +14,7 @@ pub fn complete(comptime State: type) bool {
         .{ .name = "quiet", .reason = "Derived wake hints invalidated after restore" },
         .{ .name = "loading", .reason = "Target loader bindings and validated image identities" },
         .{ .name = "session", .reason = "Saved core bookkeeping; retained embedding and debugger controls" },
-        .{ .name = "plugs_arena", .reason = "Unsupported guest allocations explicitly refused" },
-        .{ .name = "plugs", .reason = "Topology and instances explicitly refused after mutation" },
-        .{ .name = "faults", .reason = "Allocated fault wrappers explicitly refused even after clearing" },
+        .{ .name = "plugs_arena", .reason = "Target allocator wiring; reachable pointed-to guest objects saved by typed attachments" },
         .{ .name = "edge", .reason = "Stable boundary wiring; clocks saved separately" },
         .{ .name = "files", .reason = "Stable snapshot owner bindings" },
         .{ .name = "state_file", .reason = "Host file path and I/O handles" },
