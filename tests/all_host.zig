@@ -138,6 +138,7 @@ test {
     _ = @import("interfaces/gui/snapshot_ring_test.zig");
     _ = @import("interfaces/gui/timeline_model_test.zig");
     _ = @import("interfaces/gui/timeline_pane_test.zig");
+    _ = @import("interfaces/rpc/session/timeline_trace_test.zig");
     _ = @import("interfaces/gui/shell/breaks_test.zig");
     _ = @import("interfaces/gui/shell/menu_actions_test.zig");
     _ = @import("interfaces/gui/shell/board_pick_test.zig");

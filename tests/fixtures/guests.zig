@@ -11,6 +11,9 @@ const images = [_]struct { option: []const u8, root: []const u8, script: []const
     .{ .option = "call_tree_cpu1", .root = "tests/fixtures/profile/call_tree_cpu1.zig", .script = "tests/fixtures/profile/call_tree_cpu1.ld" },
     // RA8EMU-1149: two fake ThreadX threads for the per-thread profile.
     .{ .option = "two_threads", .root = "tests/fixtures/profile/two_threads.zig", .script = "tests/fixtures/profile/two_threads.ld" },
+    // RA8EMU-840: a both-cores ThreadX-shaped image for the timeline test.
+    .{ .option = "threadx_dual", .root = "tests/fixtures/threadx/threadx_dual.zig", .script = "tests/fixtures/profile/two_threads.ld" },
+    .{ .option = "threadx_dual_cpu1", .root = "tests/fixtures/threadx/threadx_dual_cpu1.zig", .script = "tests/fixtures/threadx/threadx_dual_cpu1.ld" },
 };
 
 /// Build every guest image and add its path to `paths`.

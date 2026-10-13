@@ -119,15 +119,20 @@ pub const Served = struct {
 
     fn traceOn(context: *anyopaque) bool {
         const self: *Served = @ptrCast(@alignCast(context));
-        return self.owner.traceIfRtos();
+        const first = self.owner.traceIfRtos();
+        const second = if (self.second) |cpu1| cpu1.traceIfRtos(&self.owner) else false;
+        return first or second;
     }
 
     /// The name of the thread whose control block is at `thread` on `core`,
-    /// read from its TX_THREAD; cpu1 has no reader here.
+    /// read from its TX_THREAD.
     fn threadName(context: *anyopaque, core: usize, thread: u32, buffer: []u8) ?[]const u8 {
-        if (core != 0 or thread == 0) return null;
+        if (thread == 0) return null;
         const self: *Served = @ptrCast(@alignCast(context));
-        const memory = rtos_hook.Memory{ .guest = self.owner.guest() };
+        const memory = if (core == 0)
+            rtos_hook.Memory{ .guest = self.owner.guest() }
+        else
+            rtos_hook.Memory{ .guest = (self.second orelse return null).guest() };
         return rtos_names.name(memory, thread, buffer[0..rtos_names.longest]);
     }
 
