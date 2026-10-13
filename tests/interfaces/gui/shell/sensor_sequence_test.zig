@@ -203,7 +203,7 @@ fn rowOf(devices: *const shell_devices.Devices) !usize {
 }
 
 /// The first devices leaf's body, laid out the way the shell lays it out.
-fn devicesBody(gpa: std.mem.Allocator) !draw_list.Rect {
+fn devicesBody(gpa: std.mem.Allocator) !frame.Rect {
     var layout = try pane_layout.twoCore(gpa);
     defer layout.deinit();
     var solved = try frame.solve(&layout, gpa, width, height);
@@ -211,13 +211,13 @@ fn devicesBody(gpa: std.mem.Allocator) !draw_list.Rect {
     for (solved.panes.items) |leaf| {
         const placed = layout.pane(leaf.index) orelse continue;
         if (placed.kind != .devices) continue;
-        return frame.bodyOf(leaf.area);
+        return frame.toGeom(frame.bodyOf(leaf.area));
     }
     return error.NoDevicesLeaf;
 }
 
 /// Type the gauge's spec into the picker field and send it.
-fn plugIn(watch: *Watch, link: *Link, body: draw_list.Rect) !void {
+fn plugIn(watch: *Watch, link: *Link, body: frame.Rect) !void {
     var list = draw_list.DrawList.init(std.testing.allocator, width, height);
     defer list.deinit();
     var target = ra8.render.widget_paint.Target{ .list = &list };
@@ -244,7 +244,7 @@ fn pressUnplug(watch: *Watch, link: *Link, row: usize) !void {
     for (solved.panes.items) |leaf| {
         const placed = layout.pane(leaf.index) orelse continue;
         if (placed.kind != .devices) continue;
-        const cell = shell_devices.unplugCell(frame.bodyOf(leaf.area), row);
+        const cell = shell_devices.unplugCell(frame.toGeom(frame.bodyOf(leaf.area)), row);
         try std.testing.expect(watch.devices.clickIn(link, &layout, &solved, cell.x + 1, cell.y + 1));
         return;
     }
@@ -260,7 +260,7 @@ fn pressFault(watch: *Watch, link: *Link, row: usize) !void {
     for (solved.panes.items) |leaf| {
         const placed = layout.pane(leaf.index) orelse continue;
         if (placed.kind != .devices) continue;
-        const cell = fault.cell(frame.bodyOf(leaf.area), row);
+        const cell = fault.cell(frame.toGeom(frame.bodyOf(leaf.area)), row);
         try std.testing.expect(watch.faults.clickIn(link, &watch.devices, &layout, &solved, cell.x + 1, cell.y + 1));
         return;
     }

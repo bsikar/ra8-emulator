@@ -33,7 +33,7 @@ test "a deck solves only its active child over the whole pane area" {
     const room = frame.panesArea(800, 500);
     try std.testing.expectEqual(@as(usize, 1), solved.panes.items.len);
     const placed = solved.panes.items[0];
-    try std.testing.expectEqual(room, placed.area);
+    try std.testing.expectEqual(room, frame.toGeom(placed.area));
     const pane = layout.pane(placed.index) orelse return error.TestUnexpectedResult;
     try std.testing.expectEqual(pane_layout.Kind.board, pane.kind);
     try std.testing.expectEqual(@as(?pane_layout.Index, layout.root), layout.deckParent(placed.index));

@@ -17,7 +17,8 @@ const shell_frame = @import("../ui/shell/frame.zig");
 const shell_field = @import("../ui/shell/field.zig");
 const shell_devices = @import("devices.zig");
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 pub const placeholder = "plug MODEL@ENDPOINT, then Enter";
 pub const refusal = "the session would not plug that part";

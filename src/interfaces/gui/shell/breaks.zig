@@ -15,7 +15,8 @@ const disasm_pane = @import("../ui/disasm_pane.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_panes = @import("panes.zig");
 
-const Rect = @import("ra8_render").draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 const Env = proto.Client.Env;
 
 /// Breakpoints one core's leaf tracks at once.
@@ -86,8 +87,8 @@ pub const Breaks = struct {
         for (solved.panes.items) |placed| {
             const pane = layout.pane(placed.index) orelse continue;
             if (pane.kind != .disasm) continue;
-            const body = shell_frame.bodyOf(placed.area);
-            if (!body.contains(x, y)) continue;
+            const body = shell_frame.toGeom(shell_frame.bodyOf(placed.area));
+            if (!geom.contains(body, x, y)) continue;
             const model = code.of(pane.core);
             const read = if (model.now) |*snap| snap else continue;
             const row = rowAt(body, x, y) orelse continue;
@@ -183,7 +184,7 @@ pub const Breaks = struct {
 
 /// The line row whose band holds (`x`, `y`) inside `body`, or null.
 pub fn rowAt(body: Rect, x: i32, y: i32) ?usize {
-    if (!body.contains(x, y)) return null;
+    if (!geom.contains(body, x, y)) return null;
     const row: usize = @intCast(@divTrunc(y - body.y - disasm_pane.pad, disasm_pane.row_h));
     return row;
 }

@@ -13,7 +13,7 @@ const raster = ra8.render.raster;
 const paint_backend = ra8.render.paint_backend;
 const pane = gui_app.memory_pane;
 
-const Rect = draw_list.Rect;
+const Rect = gui_app.geom.Rect;
 /// Exactly one row wide and four rows deep.
 const area = Rect{ .x = 0, .y = 0, .w = pane.min_w, .h = 2 * pane.pad + 4 * pane.row_h };
 

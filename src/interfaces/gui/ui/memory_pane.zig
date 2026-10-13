@@ -13,7 +13,8 @@ const Theme = @import("colors.zig").Theme;
 const widget = @import("ra8_widget");
 
 const Color = draw_list.Color;
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 pub const pad: i32 = 4;
 /// A row is one text line with a pixel of air above and below.

@@ -13,6 +13,7 @@ const light = &@import("gui_app").colors.palettes.light;
 const Theme = @import("gui_app").colors.Theme;
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
+const geom = gui_app.geom;
 
 const api = ra8.session.api;
 const draw_list = ra8.render.draw_list;
@@ -21,7 +22,7 @@ const paint_backend = ra8.render.paint_backend;
 const font = ra8.render.font;
 const pane = gui_app.registers_pane;
 
-const Rect = draw_list.Rect;
+const Rect = gui_app.geom.Rect;
 /// Eight rows down, eight columns across: room for the core, system and
 /// fpu headers and their 58 registers.
 const col_w: i32 = @intCast(font.textWidth(pane.column_len));
@@ -235,7 +236,7 @@ test "a changed register is the only text in the changed colour" {
 fn inValue(index: usize, x: usize, y: usize) bool {
     const at = pane.valueOrigin(pane.cellRect(area, pane.open, index).?);
     const span = Rect{ .x = at.x, .y = at.y, .w = @intCast(font.textWidth(8)), .h = font.glyph_h };
-    return span.contains(@intCast(x), @intCast(y));
+    return geom.contains(span, @intCast(x), @intCast(y));
 }
 
 test "no earlier snapshot marks nothing, and a pane too small draws nothing" {

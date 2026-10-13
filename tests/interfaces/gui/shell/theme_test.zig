@@ -13,6 +13,7 @@ const light = &colors.palettes.light;
 const width = 480;
 const height = 320;
 const bar = strip.area(width, height);
+const gui_bar = gui_app.shell.frame.toGeom(bar);
 
 /// The middle of the icon button.
 const icon_x = picker.button(bar).x + @divFloor(picker.width, 2);
@@ -64,9 +65,9 @@ test "a pinned palette ignores the OS" {
 
 test "the icon opens the popover and closes it again" {
     var themes: Themes = .{};
-    try std.testing.expect(themes.press(bar, icon_x, icon_y));
+    try std.testing.expect(themes.press(gui_bar, icon_x, icon_y));
     try std.testing.expect(themes.open and themes.view().open);
-    try std.testing.expect(themes.press(bar, icon_x, icon_y));
+    try std.testing.expect(themes.press(gui_bar, icon_x, icon_y));
     try std.testing.expect(!themes.open);
     try std.testing.expectEqual(dark, themes.active);
 }
@@ -74,9 +75,9 @@ test "the icon opens the popover and closes it again" {
 test "a row chooses its theme and folds the popover" {
     var themes: Themes = .{};
     for ([_]colors.Choice{ .light, .system, .dark }) |choice| {
-        try std.testing.expect(themes.press(bar, icon_x, icon_y));
+        try std.testing.expect(themes.press(gui_bar, icon_x, icon_y));
         const at = rowOf(choice);
-        try std.testing.expect(themes.press(bar, at.x, at.y));
+        try std.testing.expect(themes.press(gui_bar, at.x, at.y));
         try std.testing.expect(!themes.open);
         try std.testing.expectEqual(choice, themes.choice());
         try std.testing.expect(!themes.styled);
@@ -86,7 +87,7 @@ test "a row chooses its theme and folds the popover" {
 test "a row is nothing to press while the popover is folded" {
     var themes: Themes = .{};
     const at = rowOf(.light);
-    try std.testing.expect(!themes.press(bar, at.x, at.y));
+    try std.testing.expect(!themes.press(gui_bar, at.x, at.y));
     try std.testing.expect(!themes.open);
     try std.testing.expectEqual(colors.Choice.dark, themes.choice());
 }
@@ -94,19 +95,19 @@ test "a row is nothing to press while the popover is folded" {
 test "a press elsewhere folds the popover, is taken, and changes nothing" {
     var themes: Themes = .{};
     themes.styled = true;
-    try std.testing.expect(themes.press(bar, icon_x, icon_y));
-    try std.testing.expect(themes.press(bar, 10, 10));
+    try std.testing.expect(themes.press(gui_bar, icon_x, icon_y));
+    try std.testing.expect(themes.press(gui_bar, 10, 10));
     try std.testing.expect(!themes.open);
     try std.testing.expectEqual(dark, themes.active);
     try std.testing.expect(themes.styled and !themes.follow_os);
-    try std.testing.expect(!themes.press(bar, 10, 10));
+    try std.testing.expect(!themes.press(gui_bar, 10, 10));
 }
 
 test "Escape folds the popover and changes nothing; other keys pass" {
     const escape: gui_app.platform.Event = .{ .key = .{ .code = 0x1B, .down = true } };
     var themes: Themes = .{};
     try std.testing.expect(!themes.key(escape));
-    try std.testing.expect(themes.press(bar, icon_x, icon_y));
+    try std.testing.expect(themes.press(gui_bar, icon_x, icon_y));
     try std.testing.expect(!themes.key(.{ .key = .{ .code = 'a', .down = true } }));
     try std.testing.expect(!themes.key(.{ .key = .{ .code = 0x1B, .down = false } }));
     try std.testing.expect(!themes.key(.{ .text = gui_app.platform.Text.of("x") }));

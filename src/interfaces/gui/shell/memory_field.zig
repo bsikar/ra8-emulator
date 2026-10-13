@@ -16,7 +16,8 @@ const memory_pane = @import("../ui/memory_pane.zig");
 const symbols = @import("ra8_session").symbols;
 const Theme = @import("../ui/colors.zig").Theme;
 
-const Rect = draw_list.Rect;
+const geom = @import("../geom.zig");
+const Rect = geom.Rect;
 
 /// The image a typed symbol resolves against; the shell's own, per load.
 pub const Image = symbols.Image;

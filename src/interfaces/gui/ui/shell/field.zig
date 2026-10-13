@@ -8,6 +8,7 @@ const std = @import("std");
 const widget = @import("ra8_widget");
 const platform = @import("../../platform.zig");
 const draw_list = @import("ra8_render").draw_list;
+const geom = @import("../../geom.zig");
 const font = @import("ra8_render").font;
 const Theme = @import("../colors.zig").Theme;
 
@@ -99,7 +100,7 @@ pub const Field = struct {
     /// Paint the field into `rect` through the handed shared Paint table
     /// in `theme`'s ink on its well with a highlight caret, and remember
     /// `rect` for presses.
-    pub fn draw(self: *Field, table: *const widget.types.Paint, theme: *const Theme, rect: draw_list.Rect) !void {
+    pub fn draw(self: *Field, table: *const widget.types.Paint, theme: *const Theme, rect: geom.Rect) !void {
         self.descriptor.fg = word(theme.ink);
         self.descriptor.bg = word(theme.well);
         self.descriptor.caret = word(theme.highlight);

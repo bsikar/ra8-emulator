@@ -108,7 +108,7 @@ fn press(watch: *Watch, link: *Link, row: usize) !void {
     for (solved.panes.items) |leaf| {
         const placed = layout.pane(leaf.index) orelse continue;
         if (placed.kind != .devices) continue;
-        const cell = fault.cell(frame.bodyOf(leaf.area), row);
+        const cell = fault.cell(frame.toGeom(frame.bodyOf(leaf.area)), row);
         try std.testing.expect(watch.faults.clickIn(link, &watch.devices, &layout, &solved, cell.x + 1, cell.y + 1));
         return;
     }
@@ -157,7 +157,7 @@ test "a fault cell click walks a served part through every mode and back, each o
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
 }
 
-fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_list.Color) bool {
+fn holds(pixels: *const raster.Framebuffer, area: frame.Rect, color: draw_list.Color) bool {
     var y = area.y;
     while (y < area.y + area.h) : (y += 1) {
         var x = area.x;
@@ -168,7 +168,7 @@ fn holds(pixels: *const raster.Framebuffer, area: draw_list.Rect, color: draw_li
     return false;
 }
 
-fn regionDigest(pixels: *const raster.Framebuffer, area: draw_list.Rect) u64 {
+fn regionDigest(pixels: *const raster.Framebuffer, area: frame.Rect) u64 {
     var hash = std.hash.Fnv1a_64.init();
     var y = area.y;
     while (y < area.y + area.h) : (y += 1) {
@@ -211,7 +211,7 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
         const placed = layout.pane(leaf.index) orelse continue;
         if (placed.kind != .devices) continue;
         leaves += 1;
-        const body = frame.bodyOf(leaf.area);
+        const body = frame.toGeom(frame.bodyOf(leaf.area));
         try std.testing.expect(holds(&pixels, fault.cell(body, 0), dark.ink));
         try std.testing.expect(!holds(&pixels, fault.cell(body, 1), dark.ink));
         try std.testing.expect(holds(&pixels, fault.cell(body, 1), dark.muted));
@@ -221,10 +221,10 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
     }
     try std.testing.expect(leaves > 0);
     const bar = frame.barArea(width, height);
-    const controls = gui_app.time_bar.Layout.of(bar);
+    const controls = gui_app.time_bar.Layout.of(frame.toList(bar));
     for ([_]gui_app.time_bar.Control{ .run, .pause, .step }) |control| {
-        try std.testing.expect(holds(&pixels, controls.rect(control), dark.muted));
-        try std.testing.expect(!holds(&pixels, controls.rect(control), dark.ink));
+        try std.testing.expect(holds(&pixels, frame.toGeom(controls.rect(control)), dark.muted));
+        try std.testing.expect(!holds(&pixels, frame.toGeom(controls.rect(control)), dark.ink));
     }
     try std.testing.expectEqual(@as(u64, 2685713462396192790), regionDigest(&pixels, bar));
 }

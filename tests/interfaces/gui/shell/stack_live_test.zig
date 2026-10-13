@@ -66,7 +66,7 @@ test "a leaf switched to the stack kind draws the chain, not its note" {
     var pane = live.shell.layout.pane(placed.index).?;
     pane.kind = .stack;
     pane.core = .cpu0;
-    const body = shell_frame.bodyOf(placed.area);
+    const body = shell_frame.toGeom(shell_frame.bodyOf(placed.area));
     var shown = draw_list.DrawList.init(gpa, Live_width, Live_height);
     defer shown.deinit();
     var frame = try ra8.render.raster.Framebuffer.init(gpa, Live_width, Live_height);
@@ -76,7 +76,7 @@ test "a leaf switched to the stack kind draws the chain, not its note" {
     try painter.paint(painter.context, &shown, &backend.paint(), dark, pane, body);
     var want = draw_list.DrawList.init(gpa, Live_width, Live_height);
     defer want.deinit();
-    try stack_pane.draw(&want, dark, body, &live.stack.cores[0].now.?, 0);
+    try stack_pane.draw(&want, dark, shell_frame.toList(body), &live.stack.cores[0].now.?, 0);
     try std.testing.expect(want.commands.items.len > 1);
     try std.testing.expectEqual(want.commands.items.len, shown.commands.items.len);
 }

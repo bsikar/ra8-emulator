@@ -48,7 +48,7 @@ fn resolveNamed(
     switch (named) {
         .bar_run, .bar_pause, .bar_step, .bar_speed => {
             const bar_area = shell_frame.barArea(width, height);
-            const tb = time_bar.Layout.of(bar_area);
+            const tb = time_bar.Layout.of(shell_frame.toList(bar_area));
             const rect = switch (named) {
                 .bar_run => tb.run,
                 .bar_pause => tb.pause,
