@@ -95,17 +95,13 @@ pub const Context = struct {
     /// The event-stream queue panel refreshes are read from while any core
     /// wants lcd_dirty (RA8EMU-789).
     lcd_feed: ?usize = null,
-    /// Frames per second each core's lcd_dirty subscriber wants
-    /// (RA8EMU-822); zero is every frame.
+    /// Frames per second each core's lcd_dirty subscriber wants (RA8EMU-822); zero is every frame.
     lcd_rate: [2]u16 = .{ 0, 0 },
-    /// The dirty rectangle a rate-limited lcd_dirty subscriber holds
-    /// between sends, merged to the latest frame (RA8EMU-822).
+    /// The dirty rectangle a rate-limited lcd_dirty subscriber holds between sends (RA8EMU-822).
     lcd_pending: [2]?LcdDue = .{ null, null },
-    /// Host time of the last lcd_dirty send per core, for the rate
-    /// (RA8EMU-822).
+    /// Host time of the last lcd_dirty send per core, for the rate (RA8EMU-822).
     lcd_last_ns: [2]u64 = .{ 0, 0 },
-    /// Panel captures skipped while no lcd_dirty subscriber was due
-    /// (RA8EMU-822).
+    /// Panel captures skipped while no lcd_dirty subscriber was due (RA8EMU-822).
     lcd_holds: u32 = 0,
     /// The host clock for the lcd_dirty rate (RA8EMU-822); without one a rate sends every pass.
     host_clock: ?HostClock = null,
@@ -115,8 +111,7 @@ pub const Context = struct {
     /// The event-stream queue RTOS events are read from while any core
     /// wants the trace topic (RA8EMU-832).
     trace_feed: ?usize = null,
-    /// The in-flight chunked load between load_begin and load_end
-    /// (RA8EMU-1174); holds nothing between loads.
+    /// The in-flight chunked load between load_begin and load_end (RA8EMU-1174).
     chunks: load_chunks.Assembler = .{},
     /// Owns each captured panel frame. A server without one, or a session
     /// without a display, refuses lcd_dirty.
@@ -189,7 +184,7 @@ pub fn run(context: *Context, args: proto.Run) Ack {
     }
     const mode = std.meta.stringToEnum(api.Run, @tagName(args.mode)) orelse return .{ .err = .bad_args };
     const ended = session.run(core(args.core), mode) catch |err| return refuse(proto.Ack, err);
-    context.pending = stopped(session, args.core, ended);
+    context.pending = reported(session, args.core, ended);
     return ack;
 }
 
@@ -371,11 +366,17 @@ pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
 
 pub fn interrupt(context: *Context, args: proto.CoreOnly) rpc.Outcome(proto.Stopped) {
     const stop = context.session.interrupt(core(args.core)) catch |err| return refuse(proto.Stopped, err);
-    return .{ .ok = stopped(context.session, args.core, .{ .stop = stop }) };
+    return .{ .ok = reported(context.session, args.core, .{ .stop = stop }) };
 }
 
-/// The wire form of how a run ended, at the PC it left.
-pub fn stopped(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
+/// The wire form of how a run ended, on the core that ended it: a served
+/// round can stop the other core than the one asked.
+pub fn stopped(session: *api.Session, _: proto.Core, ended: api.Ended) proto.Stopped {
+    return reported(session, @fromBackingInt(@intCast(session.live.ended_index)), ended);
+}
+
+/// The wire form of how a run of `of` ended, at the PC it left.
+fn reported(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
     const pc = session.register(core(of), .pc) catch 0;
     return switch (ended) {
         .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },
