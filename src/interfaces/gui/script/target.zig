@@ -46,13 +46,15 @@ fn resolveNamed(
     named: NamedTarget,
 ) ?Point {
     switch (named) {
-        .bar_run, .bar_pause, .bar_step, .bar_speed => {
+        .bar_run, .bar_pause, .bar_step, .bar_step_over, .bar_step_out, .bar_speed => {
             const bar_area = shell_frame.barArea(width, height);
             const tb = time_bar.Layout.of(shell_frame.toList(bar_area));
             const rect = switch (named) {
                 .bar_run => tb.run,
                 .bar_pause => tb.pause,
                 .bar_step => tb.step,
+                .bar_step_over => tb.over,
+                .bar_step_out => tb.out,
                 .bar_speed => tb.field,
                 else => unreachable,
             };
