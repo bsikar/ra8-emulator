@@ -9,8 +9,8 @@
 
 /// One exception that could be taken right now.
 pub const Candidate = struct {
-    number: u16,
-    priority: u8,
+    number: u16 = 0,
+    priority: u8 = 0,
     /// SysTick or PendSV pended in the Non-secure copy of ICSR (RA8EMU-438).
     non_secure: bool = false,
 };

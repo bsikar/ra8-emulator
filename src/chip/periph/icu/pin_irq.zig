@@ -33,15 +33,17 @@ pub const sense = struct {
 
 /// One level change on a pin wired to an IRQ channel.
 pub const Edge = struct {
-    channel: u8,
-    port: u8,
-    pin: u4,
-    falling: bool,
+    channel: u8 = 0,
+    port: u8 = 0,
+    pin: u4 = 0,
+    falling: bool = false,
 };
 
 /// The edges waiting for the next boundary.
 pub const Queue = struct {
-    edges: [capacity]Edge = undefined,
+    /// Zeroed, not undefined: a snapshot saves the whole array verbatim
+    /// (RA8EMU-1183), so the slots past `len` must hold valid edges too.
+    edges: [capacity]Edge = @splat(.{}),
     len: usize = 0,
     dropped: u32 = 0,
 

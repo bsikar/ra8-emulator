@@ -98,7 +98,9 @@ pub const Nvic = struct {
     /// of reset and an image that never relocates its table leaves it there,
     /// so the fallback is the base the reset vector itself came from.
     vector_base: u32 = 0,
-    active: [max_nesting]Candidate = undefined,
+    /// Zeroed, not undefined: a snapshot saves the whole array verbatim
+    /// (RA8EMU-1183), so the slots past `depth` must hold valid candidates.
+    active: [max_nesting]Candidate = @splat(.{}),
     depth: usize = 0,
     /// Exceptions entered.
     taken: u64 = 0,
