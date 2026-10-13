@@ -29,7 +29,10 @@ pub fn observe(shell: *Shell, window: platform.Platform, width: i32) void {
 pub fn press(shell: *Shell, window: platform.Platform, x: i32, y: i32) bool {
     if (shell.settings.press(&shell.themes, shell.width, shell.height, x, y)) return true;
     switch (menu_bar.press(&shell.menu.bar, shell.menu, shell.width, x, y)) {
-        .fire => |action| fire(shell, window, action),
+        .fire => |action| {
+            fire(shell, window, action);
+            return true;
+        },
         .taken => return true,
         .missed => {},
     }
