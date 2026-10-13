@@ -68,6 +68,9 @@ test "the kept asks are plugged on their lines, I2C included" {
     try std.testing.expect(board.asks.attached_eink != null);
     try std.testing.expectEqual(board.spi.channels[1].device.?.context, @as(*anyopaque, @ptrCast(board.asks.attached_eink.?)));
     try std.testing.expect(board.serial.channels[4].device != null);
+    try std.testing.expectEqual(@as(usize, 3), board.asks.owned_count);
+    try std.testing.expectEqualDeep(asks[1].at, board.asks.owned[1].at);
+    try std.testing.expect(board.asks.owned[1].instance.state == board.spi.channels[1].device.?.context);
 }
 
 test "an ask that lands on a fitted Click part is refused" {

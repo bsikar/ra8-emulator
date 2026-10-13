@@ -20,7 +20,9 @@ const fault_spec = @import("ra8_components").fault.spec;
 const eink = @import("ra8_components").eink;
 const Board = @import("board.zig").Board;
 
-pub const Error = error{ ChannelTaken, NothingFitted };
+pub const Error = error{ ChannelTaken, NothingFitted, TooManyOwnedParts };
+
+pub const Owned = struct { instance: catalog.Instance, at: endpoint.Endpoint };
 
 /// The `--attach` asks, kept from before the board is wired until wiring
 /// plugs them after the fitted parts. Instances come from `arena`.
@@ -29,6 +31,9 @@ pub const Asks = struct {
     count: usize = 0,
     arena: ?std.mem.Allocator = null,
     attached_eink: ?*eink.Panel = null,
+    /// Actual factory allocations, independent of current slots and ask names.
+    owned: [request.max + profile.max_fits]Owned = undefined,
+    owned_count: usize = 0,
 
     /// `asks` is at most `request.max` long, as the command line allows.
     pub fn keep(self: *Asks, arena: std.mem.Allocator, asks: []const request.Request) void {
@@ -49,6 +54,7 @@ pub fn all(board: *Board) !void {
             };
             continue;
         }
+        if (board.asks.owned_count == board.asks.owned.len) return Error.TooManyOwnedParts;
         const made = if (std.mem.eql(u8, wanted.name, parts.c6_name)) blk: {
             if (wanted.at != .uart or wanted.at.uart.channel != 2) return catalog.Error.WrongEndpoint;
             break :blk catalog.Instance{ .model = parts.all.find(parts.c6_name).?, .device = try parts.all.bind(parts.c6_name, &board.c6, wanted.at), .state = &board.c6 };
@@ -61,6 +67,10 @@ pub fn all(board: *Board) !void {
             std.debug.print("--attach {s}: nothing put on the line ({s})\n", .{ wanted.name, @errorName(err) });
             return err;
         };
+        if (made.state != @as(*anyopaque, &board.c6)) {
+            board.asks.owned[board.asks.owned_count] = .{ .instance = made, .at = wanted.at };
+            board.asks.owned_count += 1;
+        }
         if (std.mem.eql(u8, wanted.name, parts.panel_name)) {
             const panel: *eink.Panel = @ptrCast(@alignCast(made.state));
             if (wanted.geometry) |geometry| panel.planes.resize(geometry);
