@@ -19,6 +19,7 @@ pub const display_settled = @import("display_settled.zig");
 pub const event_sink = @import("event_sink.zig");
 pub const external = @import("external/external.zig");
 pub const frame_capture = @import("frame_capture.zig");
+pub const frame_tap = @import("frame_tap.zig");
 pub const i2c = @import("i2c.zig");
 pub const net = @import("net.zig");
 pub const panels = @import("panels.zig");

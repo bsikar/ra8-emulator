@@ -12,6 +12,7 @@ const i2c = @import("i2c.zig");
 const wiring = @import("wiring.zig");
 const construct = @import("construct.zig");
 const boundary = @import("boundary.zig");
+const frame_tap = @import("frame_tap.zig");
 const part = @import("ra8_chip").core.part;
 const reboot = @import("ra8_chip").core.reboot;
 const periph = @import("ra8_chip").periph.registry;
@@ -343,6 +344,10 @@ pub const Board = struct {
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.
     event_sink: ?@import("event_sink.zig").EventSink = null,
+    /// A passive per-boundary frame consumer (the frame tap): it runs after
+    /// every boundary tick, never arms the panel's frame clock, and is
+    /// owned by whoever installed it. Null when nobody is capturing.
+    frame_tap: ?*frame_tap.Tap = null,
     /// Which part this board is. main.zig sets it from the command line
     /// before attach(); a test's board is an RA8D2 unless it says otherwise.
     part: part.Part = .ra8d2,
@@ -390,11 +395,6 @@ pub const Board = struct {
         boundary.resetForFrom(self, source, issuer);
     }
     pub fn ticker(self: *Board) Tick {
-        return .{ .context = self, .tickFn = tickThunk, .dueFn = boundary.cyclesToDue };
+        return .{ .context = self, .tickFn = boundary.tickThunk, .dueFn = boundary.cyclesToDue };
     }
 };
-
-fn tickThunk(context: *anyopaque, core: Guest, instructions: u32) anyerror!void {
-    const board: *Board = @ptrCast(@alignCast(context));
-    return board.tick(core, instructions);
-}

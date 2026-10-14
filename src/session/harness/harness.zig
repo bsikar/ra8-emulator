@@ -394,6 +394,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer state.display.deinit();
     state.display.settled.window_ns = options.settle_window_ns;
     state.display.watch.events = &state.session.event_sources;
+    state.display.watch.useIo(io);
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
     return .{ .state = state };
