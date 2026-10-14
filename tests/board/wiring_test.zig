@@ -53,3 +53,25 @@ test "CPU0's PPB windows are seeded into a store with no engine open" {
     try std.testing.expectEqual(ra8.chip.periph.mpu.geometry.type_value, try memory.readWord(memmap.mpu.type_));
     try std.testing.expectEqual(ra8.chip.periph.sau.geometry.type_value, try memory.readWord(memmap.sau.type_));
 }
+
+test "the run's panel_vsync config arms the clock after the display attaches" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    board.panel_vsync = .{ .phase_ns = 4_000_000, .period_ns = 16_666_667 };
+    try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
+    if (board.display.output.vsync) |*clock| {
+        try std.testing.expectEqual(@as(u64, 16_666_667), clock.period_ns);
+        try std.testing.expectEqual(@as(u64, 4_000_000), clock.next_ns);
+    } else return error.TestUnexpectedResult;
+}
+
+test "a board with no panel_vsync config leaves the clock unarmed" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
+    try std.testing.expect(board.display.output.vsync == null);
+}

@@ -100,6 +100,10 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try attachProtected(self);
     // The panel is scanned out of the same RAM the core paints into.
     try self.display.attach(&self.bus, &self.domains.graphics, memory.asInitiator(.glcdc));
+    // The run's panel_vsync config arms the frame clock a capture attaches
+    // to. The attach rebuilt the output stage above, so the arm waits until
+    // it is done.
+    if (self.panel_vsync) |vsync| self.display.armFrameClock(vsync.phase_ns, vsync.period_ns);
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
     self.raster.memory = memory.asInitiator(.drw);
