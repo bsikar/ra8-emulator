@@ -24,6 +24,7 @@ pub const omitted = .{
     .{ .name = "sd_line", .reason = "Stable pointer to the saved SPI SD card" },
     .{ .name = "sd_volume", .reason = "Formatting report, not mutable card contents" },
     .{ .name = "event_sink", .reason = "Embedding event callback" },
+    .{ .name = "frame_tap", .reason = "Passive frame tap wiring" },
 };
 pub fn complete(comptime Board: type) bool {
     return fields.complete(Board, saved, omitted);

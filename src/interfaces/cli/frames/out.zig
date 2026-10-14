@@ -9,6 +9,9 @@ const eink_wire = @import("ra8_components").eink.wire;
 const gif_out = @import("../gif_out.zig");
 const video_out = @import("../video_out.zig");
 const display_settled = @import("ra8_board").display_settled;
+const frame_tap = @import("ra8_board").frame_tap;
+
+pub const Run = @import("run.zig").Run;
 
 pub const Sequence = struct {
     allocator: std.mem.Allocator,
@@ -178,6 +181,9 @@ pub const Armed = struct {
     settle_only: bool = false,
     settled: display_settled.Detector,
     settle_sequence: ?Sequence = null,
+    /// The passive per-boundary capture (the frame tap), ridden when the
+    /// run's panel_vsync config has armed no frame edges to attach to.
+    tap: frame_tap.Tap = undefined,
 
     /// Null when both sequence outputs are off. Call after board.attach:
     /// attaching the GLCDC rebuilds its output stage, which would drop Vsync.
@@ -207,7 +213,15 @@ pub const Armed = struct {
         } else if (board.panel.refresh_hook == null) {
             board.panel.refresh_hook = .{ .context = self, .refreshFn = onEinkRefresh };
         }
-        board.display.output.vsync = .{ .sink = .{ .context = self, .frame = onFrame, .settle = onSettle } };
+        // The frame clock is the run's panel_vsync config; a capture
+        // attaches to it and never arms or resizes it (RA8EMU R9). Without
+        // a clock the capture rides the passive per-boundary tap instead.
+        if (board.display.output.vsync) |*clock| {
+            clock.sink = .{ .context = self, .frame = onFrame, .settle = onSettle };
+        } else {
+            self.tap = .{ .io = io, .context = self, .captureFn = onFrame };
+            board.frame_tap = &self.tap;
+        }
         return self;
     }
 
@@ -226,9 +240,14 @@ pub const Armed = struct {
 
     /// The run armed on this board, if any.
     pub fn of(board: *Board) ?*Armed {
-        const vsync = board.display.output.vsync orelse return null;
-        if (vsync.sink.frame != onFrame) return null;
-        return @ptrCast(@alignCast(vsync.sink.context));
+        if (board.display.output.vsync) |clock| {
+            if (clock.sink) |sink| {
+                if (sink.frame == onFrame) return @ptrCast(@alignCast(sink.context));
+            }
+        }
+        const tap = board.frame_tap orelse return null;
+        if (tap.captureFn != onFrame) return null;
+        return @ptrCast(@alignCast(tap.context));
     }
 
     fn onSettle(context: *anyopaque, now: u64) anyerror!void {
@@ -245,7 +264,11 @@ pub const Armed = struct {
 
     fn frameAt(self: *Armed, when: u64) !void {
         const capture = (try self.fit()) orelse return;
-        if (self.board.display.scanOut() == null) return;
+        const source = self.board.display.compositeInputs() orelse return;
+        switch (self.board.display.composite(source, self.board.display.domain.powered(), capture.pixels)) {
+            .picture => {},
+            .refused => return,
+        }
         const tracks_settle = self.settle_only or self.settle_sequence != null or self.sequence.video_writer != null;
         if (tracks_settle and try self.settled.observeFrame(capture.width, capture.height, capture.pixels, when)) {
             if (self.settle_sequence) |*sequence| try sequence.record(capture.width, capture.height, capture.pixels, when);
@@ -336,7 +359,12 @@ pub const Armed = struct {
     }
 
     pub fn deinit(self: *Armed) void {
-        self.board.display.output.vsync = null;
+        if (self.board.display.output.vsync) |*clock| {
+            if (clock.sink) |sink| if (sink.frame == onFrame and sink.context == @as(*anyopaque, @ptrCast(self))) {
+                clock.sink = null;
+            };
+        }
+        if (self.board.frame_tap == &self.tap) self.board.frame_tap = null;
         const hooked = self.eink_panel orelse &self.board.panel;
         if (hooked.refresh_hook) |hook| {
             if (hook.context == @as(*anyopaque, @ptrCast(self))) hooked.refresh_hook = null;
@@ -347,32 +375,5 @@ pub const Armed = struct {
         self.sequence.deinit();
         if (self.settle_sequence) |*sequence| sequence.deinit();
         self.allocator.destroy(self);
-    }
-};
-
-/// Report-side handle for an already armed frame sequence.
-pub const Run = struct {
-    armed: ?*Armed,
-
-    pub fn init(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8, every: usize) !Run {
-        const armed = Armed.of(board) orelse try Armed.arm(allocator, io, board, path, every) orelse return .{ .armed = null };
-        _ = try armed.fit();
-        return .{ .armed = armed };
-    }
-
-    pub fn initForCli(allocator: std.mem.Allocator, io: std.Io, board: *Board, options: frame_args.Options) !Run {
-        const armed = Armed.of(board) orelse try Armed.armForCli(allocator, io, board, options) orelse return .{ .armed = null };
-        _ = try armed.fit();
-        return .{ .armed = armed };
-    }
-
-    pub fn finish(self: *Run, board: *Board) !void {
-        _ = board;
-        if (self.armed) |armed| try armed.finish();
-    }
-
-    pub fn deinit(self: *Run, board: *Board) void {
-        _ = board;
-        if (self.armed) |armed| armed.deinit();
     }
 };

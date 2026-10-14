@@ -1,8 +1,10 @@
 //! Tests for src/session/panel/watch.zig (RA8EMU-1126): a watched GLCDC
-//! panel is scanned at its frame boundary and reports its first picture
+//! panel is captured on its frame boundary and reports its first picture
 //! whole, a picture that holds still says nothing, a changed one reports
 //! what changed, the session's frame comes from the kept picture without
-//! another scan, and the boundary comes off with the last viewer.
+//! another scan, and the capture comes off with the last viewer. A watch
+//! never scans: the capture is the pure composite, so the model counts no
+//! frame for it (RA8EMU R9).
 const std = @import("std");
 const ra8 = @import("ra8");
 const store_board = @import("../../interfaces/cli/store_board.zig");
@@ -48,6 +50,9 @@ const Bench = struct {
         self.events = try self.session.subscribe();
         self.idle = .{};
         self.host = Host.init(std.testing.allocator, board, .{ .context = &self.idle, .advanceFn = Idle.advance });
+        self.host.watch.useIo(std.testing.io);
+        // The tests drive boundaries themselves, so no host rate cap.
+        self.host.watch.tap.interval_ns = 0;
         self.host.watch.events = &self.session.event_sources;
         self.session.attachDisplay(self.host.interface());
     }
@@ -63,11 +68,18 @@ const Bench = struct {
         self.board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, argb);
     }
 
-    /// Let board time pass and hand it to the panel's frame boundary, as the
-    /// board does after each chunk.
+    /// Let board time pass and run the panel's frame boundary the way the
+    /// board does after each chunk: the clock's edge, then the passive tap.
     fn pass(self: *Bench, ns: u64) void {
         self.board.time.base.advance(ns);
-        if (self.board.display.output.vsync) |*frame| frame.tick(self.board.time.base.now());
+        const now = self.board.time.base.now();
+        if (self.board.display.output.vsync) |*frame| {
+            if (frame.tick(now)) {
+                self.board.display.frameEvent();
+                frame.notify(now);
+            }
+        }
+        if (self.board.frame_tap) |tap| tap.afterBoundary(now);
     }
 
     /// The panel events published since the last call.
@@ -83,7 +95,7 @@ const Bench = struct {
     }
 };
 
-test "a watched panel is scanned at its frame boundary and reports its first picture whole" {
+test "a watched panel is captured on the boundary and reports its first picture whole" {
     var bench: Bench = undefined;
     try bench.open();
     defer bench.deinit();
@@ -92,9 +104,10 @@ test "a watched panel is scanned at its frame boundary and reports its first pic
     try std.testing.expectEqual(@as(u32, 0), bench.board.display.system.frames);
 
     bench.session.display.?.watch(true);
-    try std.testing.expect(bench.board.display.output.vsync != null);
+    try std.testing.expect(bench.board.display.output.vsync == null);
+    try std.testing.expect(bench.board.frame_tap != null);
     bench.pass(1);
-    try std.testing.expectEqual(@as(u32, 1), bench.board.display.system.frames);
+    try std.testing.expectEqual(@as(u32, 0), bench.board.display.system.frames);
     const first = bench.frames(&seen);
     try std.testing.expectEqual(@as(usize, 1), first.len);
     try std.testing.expectEqual(api.Event.Rect{ .x = 0, .y = 0, .width = 2, .height = 1 }, first[0].payload.frame.dirty);
@@ -113,11 +126,10 @@ test "a picture that holds still is scanned and says nothing; a changed one repo
 
     bench.pass(period_ns);
     bench.pass(period_ns);
-    try std.testing.expectEqual(@as(u32, 3), bench.board.display.system.frames);
     try std.testing.expectEqual(@as(usize, 0), bench.frames(&seen).len);
-    // Short of a frame period nothing is scanned at all.
+    // Short of a frame period the boundary never fires.
     bench.pass(period_ns / 2);
-    try std.testing.expectEqual(@as(u32, 3), bench.board.display.system.frames);
+    try std.testing.expectEqual(@as(usize, 0), bench.frames(&seen).len);
 
     bench.paint(0xFF44_5566);
     bench.pass(period_ns);
@@ -145,11 +157,11 @@ test "the session's frame is the kept picture, with no scan of its own while a v
     const gray = ra8.session.display.grayscale(0xFF11_2233);
     try std.testing.expectEqualSlices(u8, &.{ gray, gray }, frame.pixels);
     try std.testing.expectEqual(scanned_at, frame.virtual_ns);
-    try std.testing.expectEqual(@as(u32, 1), bench.board.display.system.frames);
+    try std.testing.expectEqual(@as(u32, 0), bench.board.display.system.frames);
     try std.testing.expectEqual(@as(usize, 0), bench.frames(&seen).len);
 }
 
-test "the frame boundary comes off with the last viewer, and a frame is scanned on demand again" {
+test "the capture comes off with the last viewer, and a frame is delivered on demand again" {
     var bench: Bench = undefined;
     try bench.open();
     defer bench.deinit();
@@ -159,17 +171,18 @@ test "the frame boundary comes off with the last viewer, and a frame is scanned 
     display.watch(true);
     bench.pass(1);
     display.watch(false);
-    try std.testing.expect(bench.board.display.output.vsync != null);
+    try std.testing.expect(bench.board.frame_tap != null);
     display.watch(false);
-    try std.testing.expect(bench.board.display.output.vsync == null);
+    try std.testing.expect(bench.board.frame_tap == null);
     display.watch(false);
     try std.testing.expectEqual(@as(u32, 0), bench.host.watch.viewers);
 
     bench.pass(4 * period_ns);
-    try std.testing.expectEqual(@as(u32, 1), bench.board.display.system.frames);
+    try std.testing.expectEqual(@as(u32, 0), bench.board.display.system.frames);
     var frame = try bench.session.frame(gpa);
     defer frame.deinit(gpa);
-    try std.testing.expectEqual(@as(u32, 2), bench.board.display.system.frames);
+    try std.testing.expectEqual(@as(u32, 2), frame.width);
+    try std.testing.expectEqual(@as(u32, 0), bench.board.display.system.frames);
 }
 
 fn otherSink(_: *anyopaque, _: u64) void {}
@@ -181,9 +194,9 @@ test "a frame boundary another viewer armed is left as it is" {
     bench.board.display.output.vsync = .{ .sink = .{ .context = &bench, .frame = otherSink } };
     const display = bench.session.display.?;
     display.watch(true);
-    try std.testing.expect(bench.board.display.output.vsync.?.sink.frame == otherSink);
+    try std.testing.expect(bench.board.display.output.vsync.?.sink.?.frame == otherSink);
     display.watch(false);
-    try std.testing.expect(bench.board.display.output.vsync.?.sink.frame == otherSink);
+    try std.testing.expect(bench.board.display.output.vsync.?.sink.?.frame == otherSink);
 }
 
 test "a panel with no size is not scanned" {
@@ -195,9 +208,17 @@ test "a panel with no size is not scanned" {
     var idle: Idle = .{};
     var host = Host.init(std.testing.allocator, &board, .{ .context = &idle, .advanceFn = Idle.advance });
     defer host.deinit();
+    host.watch.useIo(std.testing.io);
     host.watch.set(true);
     board.time.base.advance(period_ns);
-    if (board.display.output.vsync) |*frame| frame.tick(board.time.base.now());
+    const now = board.time.base.now();
+    if (board.display.output.vsync) |*frame| {
+        if (frame.tick(now)) {
+            board.display.frameEvent();
+            frame.notify(now);
+        }
+    }
+    if (board.frame_tap) |tap| tap.afterBoundary(now);
     try std.testing.expectEqual(@as(u32, 0), board.display.system.frames);
     try std.testing.expectEqual(@as(u32, 0), host.watch.width);
 }

@@ -69,6 +69,17 @@ pub const Host = struct {
         return self.frame(allocator);
     }
 
+    /// Compose the panel into a capture's buffer, purely. True when the
+    /// panel showed something.
+    fn composeInto(self: *Host, capture: *FrameCapture) !bool {
+        const display = &self.board.display;
+        const source = display.compositeInputs() orelse return false;
+        switch (display.composite(source, display.domain.powered(), capture.pixels)) {
+            .picture => return true,
+            .refused => return false,
+        }
+    }
+
     pub fn waitSettled(self: *Host, timeout_ns: u64) !void {
         const started = try self.virtualNow();
         self.settled.resetWait();
@@ -101,7 +112,7 @@ pub const Host = struct {
         defer capture.deinit(self.board);
         while (true) {
             const now = try self.virtualNow();
-            if (self.board.display.scanOut() != null and
+            if (try self.composeInto(&capture) and
                 try self.settled.observeFrame(capture.width, capture.height, capture.pixels, now)) return;
             const elapsed = now -| started;
             if (elapsed >= timeout_ns) return Error.Timeout;
@@ -131,12 +142,13 @@ pub const Host = struct {
                 .virtual_ns = self.board.time.base.now(),
             };
         }
-        // A watched panel is scanned at its frame boundaries: hand out that
-        // picture, since a scan here would be one more frame for the firmware.
+        // A watched panel is captured at its frame edges or on the tap:
+        // hand out that picture, since a scan here would be one more frame
+        // for the firmware.
         if (try self.watch.picture(allocator)) |kept| return kept;
         var capture = (try FrameCapture.init(self.allocator, self.board)) orelse return Error.NoFrame;
         defer capture.deinit(self.board);
-        if (self.board.display.scanOut() == null) return Error.NoFrame;
+        if (!try self.composeInto(&capture)) return Error.NoFrame;
         const pixels = try allocator.alloc(u8, capture.pixels.len);
         errdefer allocator.free(pixels);
         for (capture.pixels, pixels) |argb, *gray| gray.* = session_display.grayscale(argb);

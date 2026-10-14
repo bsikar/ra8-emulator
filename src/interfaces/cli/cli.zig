@@ -13,6 +13,7 @@ const rtos_load = @import("ra8_session").rtos.load;
 const request = @import("ra8_components").request;
 pub const ctl = @import("ctl/ctl.zig");
 const rtc_start = @import("ra8_session").rtc.start;
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 pub const usage = @import("usage.zig").text;
 pub const card = @import("card/card.zig");
 pub const console_output = @import("console_output.zig");
@@ -78,6 +79,10 @@ pub const Options = struct {
     frames: @import("frames/args.zig").Options = .{},
     audio: @import("audio_out.zig").Options = .{}, // `--audio-out`, `--audio-rate`
     rtc_start: ?@import("ra8_session").rtc.start.Start = null,
+    /// The panel's frame clock, `--panel-vsync off|phase_ns,period_ns`
+    /// (RA8EMU R9): root config, applied identically to a plain run, a
+    /// session and a restored session. Null is off, the default.
+    panel_vsync: ?glcdc_vsync.Config = null,
     speed: ?u64 = null, // `--speed`/`--realtime`: thousandths of 1x; null runs flat out
     run_for: bool = false, // `--run-for`: a watchdog reset ends the run (RA8EMU-186)
     idle_skip: bool = true, // a sleeping core runs to its next edge; `--no-idle-skip` steps it

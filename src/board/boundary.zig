@@ -79,7 +79,14 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("r
     self.trace.tick();
     self.rswitch.tick();
     self.usb.tick();
-    if (self.display.output.vsync) |*frame| frame.tick(self.time.base.now());
+    if (self.display.output.vsync) |*frame| {
+        const now = self.time.base.now();
+        if (frame.tick(now)) {
+            self.display.frameEvent();
+            frame.notify(now);
+        }
+    }
+    if (self.frame_tap) |tap| tap.afterBoundary(self.time.base.now());
     core_clock.retune(self);
     try takeResetRequestsFrom(self, core, issuer);
     for (self.serial.channels) |channel| {
@@ -192,4 +199,10 @@ pub fn resetForFrom(self: *Board, source: reset.Source, issuer: @import("ra8_chi
     self.events.clearLatches();
     self.second_core.reset();
     if (self.reboot) |pending| pending.requested = true;
+}
+
+/// The board as a Tick for the core's run loop.
+pub fn tickThunk(context: *anyopaque, core: Guest, instructions: u32) anyerror!void {
+    const board: *Board = @ptrCast(@alignCast(context));
+    return board.tick(core, instructions);
 }

@@ -45,6 +45,7 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     // corpus was first recorded on is only kept for the RTC's own tests.
     board.clock.pace.mode = .virtual;
     if (options.rtc_start) |start| board.clock.seed(try rtc_start.resolve(start, io));
+    if (options.panel_vsync) |vsync| board.display.armFrameClock(vsync.phase_ns, vsync.period_ns);
     const profile_fits = try loadProfile(allocator, io, options.board_profile);
     board.external_memory = profile_fits.memory;
     try board.nor.resize(profile_fits.memory.ospi.size);

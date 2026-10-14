@@ -2,31 +2,21 @@
 //!
 //! The RA8D2 graphics LCD controller sits at 0x4034_2000 (HUM Ch 63,
 //! ra8_glcdc_regs.h). The display and e-reader examples program a graphics
-//! layer with the address of the framebuffer they drew into, the stride of a
-//! line, the number of lines and the pixel format, then set FLMRD.RENB to
-//! start fetching and BG_EN.EN to turn the output stage on. Ported from
-//! board_periph_glcdc.c on dev.
+//! layer's framebuffer address, line stride, line count and pixel format,
+//! then set FLMRD.RENB to fetch and BG_EN.EN to turn the output stage on.
+//! Ported from board_periph_glcdc.c on dev.
 //!
-//!   BG_EN     (+0x1000) EN b0: the background plane, the output stage gate
-//!   GRn_FLMRD (+0x1104 / +0x1204) RENB b0: this layer is fetching pixels
-//!   GRn_FLM2  (+0x110C / +0x120C) BASE: framebuffer address
-//!   GRn_FLM3  (+0x1110 / +0x1210) LNOFF [31:16]: line stride in bytes
-//!   GRn_FLM5  (+0x1118 / +0x1218) LNNUM [26:16]: lines - 1
-//!   GRn_FLM6  (+0x111C / +0x121C) FORMAT [30:28]: pixel format
+//! The register map and field masks live in window.zig. A VEN BIT IS A
+//! COMMAND, NOT A SETTING. BG_EN, GR1_EN and GR2_EN each carry one and the
+//! driver polls BG_EN.VEN for the vblank window; dev stored the bit, so
+//! that poll burned its budget and the background colour was never written.
+//! The bit is spent on the write here; the rule and its evidence live in
+//! latch.zig.
 //!
-//! A VEN BIT IS A COMMAND, NOT A SETTING. BG_EN, GR1_EN and GR2_EN each
-//! carry one, the driver writes all three, and ra8_glcdc_bg_color_set polls
-//! BG_EN.VEN back down to find the vblank window. dev stores the bit and so
-//! did this model, so that poll burned its whole budget, returned a timeout,
-//! and the background colour it exists to set was never written. The bit is
-//! spent on the write here. The rule and its evidence live in
-//! src/chip/periph/glcdc/latch.zig.
-//!
-//! The block is inside the switchable graphics power domain (HUM Ch 11.5.1
-//! Table 11.7 p 480), which is gated off at reset, so it asks pdctr.zig
-//! before answering with anything. That is the whole reason this slice is the
-//! first one after the power domain: a display controller programmed while
-//! its domain is dark is the shape of the C tree's issue #247.
+//! The block sits in the switchable graphics power domain (HUM Ch 11.5.1
+//! Table 11.7 p 480), dark at reset, so it asks pdctr.zig before answering:
+//! programming a dark display controller is the shape of the C tree's
+//! issue #247.
 const periph = @import("../registry.zig");
 const pdctr = @import("../pdctr.zig");
 const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
@@ -37,6 +27,7 @@ pub const scan = @import("scan.zig");
 pub const blend = @import("blend.zig");
 pub const mix = @import("mix.zig");
 pub const out = @import("out.zig");
+pub const vsync = out.vsync;
 pub const frame = @import("frame.zig");
 pub const backdrop = @import("backdrop.zig");
 pub const pure = @import("pure.zig");
@@ -229,9 +220,9 @@ pub const Glcdc = struct {
         return false;
     }
 
-    /// Scan the panel: composite the graphics layers onto the background
-    /// colour and hand back what a viewer would see. Null when there is
-    /// nothing to show, and the scanner keeps why.
+    /// Scan the panel: composite the layers onto the background colour and
+    /// hand back what a viewer would see; null when there is nothing to
+    /// show, and the scanner keeps why.
     pub fn scanOut(self: *Glcdc) ?scan.Picture {
         const shown = self.framebuffer() orelse return backdrop.show(self);
         if (!shown.enabled) return self.scanner.refuseOutputOff();
@@ -271,9 +262,8 @@ pub const Glcdc = struct {
         return self.scanner.record(picture);
     }
 
-    /// The scan wanted bytes it could not have. On silicon that is an
-    /// underflow on the layer that was fetching, which is a status bit and
-    /// an interrupt source, not a silent blank frame.
+    /// The scan wanted bytes it could not have: on silicon that is an
+    /// underflow on the layer that was fetching, not a silent blank frame.
     fn frameLost(self: *Glcdc, why: scan.Refusal, fetching: []const u8) ?scan.Picture {
         if (why == .off_ram or why == .fault or why == .too_big) {
             for (fetching) |layer| self.system.underflow(layer);
@@ -281,25 +271,48 @@ pub const Glcdc = struct {
         return self.scanner.refuseWith(why);
     }
 
-    /// The copied inputs for a pure composition of this block as it
-    /// stands (pure.zig).
+    /// The copied inputs for a pure composition of this block (pure.zig).
     pub fn compositeInputs(self: *const Glcdc) ?mix.Source {
         return pure.inputs(self);
     }
 
-    /// Pure composition: what the panel would show, without touching a
-    /// thing (D13). The caller passes the block's power state explicitly
-    /// and a buffer wide enough for the panel; the composition runs on
-    /// the inputs' own copies, so it raises no status, counts no meters
-    /// and never calls scanOut.
+    /// Pure composition (pure.zig): what the panel would show, without
+    /// touching a thing (RA8EMU-D13). The composition runs on the inputs'
+    /// own copies, so it raises no status, counts no meters and never
+    /// calls scanOut.
     pub fn composite(self: *const Glcdc, source: mix.Source, powered: bool, into: []u32) mix.Result {
         return pure.composite(self, source, powered, into);
     }
 
-    /// A layer whose AB registers were never written is taken as displayed
-    /// over the whole of its framebuffer, which is what this model did
-    /// before there was a blend stage. Once the driver programs AB1, the
-    /// register is believed instead.
+    /// The panel's frame boundary, cheap: what a driver sees at a modeled
+    /// frame edge, with no pixel pass (RA8EMU R9). The pixel clock gates
+    /// it; an unbelievable descriptor underflows here and an output stage
+    /// that is off lands nowhere.
+    pub fn frameEvent(self: *Glcdc) void {
+        if (!self.system.clocked()) return;
+        var lost = false;
+        for (1..mix.layers + 1) |layer| {
+            const at = off.layer_base + off.layer_stride * (@as(u32, @intCast(layer)) - 1) + off.flmrd;
+            if (self.registers[at / 4] & field.renb == 0) continue;
+            const found = self.decode(@intCast(layer)) orelse {
+                lost = true;
+                self.system.underflow(@intCast(layer));
+                continue;
+            };
+            if (!found.enabled) lost = true;
+        }
+        if (!lost) self.system.completeFrame();
+    }
+
+    /// Arm the frame clock from the run's `panel_vsync` config; consumers
+    /// attach to the clock afterwards and never arm or resize it.
+    pub fn armFrameClock(self: *Glcdc, phase_ns: u64, period_ns: u64) void {
+        self.output.vsync = .{ .period_ns = period_ns, .next_ns = phase_ns };
+    }
+
+    /// A layer with no AB registers written is displayed over its whole
+    /// framebuffer, as this model did before the blend stage; once AB1 is
+    /// programmed the register is believed.
     fn imply(self: *Glcdc, shown: Framebuffer) void {
         const stage = &self.blends[shown.layer - 1];
         if (self.timing.timing()) |found| blend.placeAll(&self.blends, .{ .left = found.h_back, .top = found.v_back });

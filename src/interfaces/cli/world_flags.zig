@@ -11,6 +11,7 @@ const fault_spec = @import("ra8_components").fault.spec;
 const source_spec = @import("ra8_host").camera.source_spec;
 const sci_reply = @import("ra8_chip").periph.sci.reply;
 const rtc_start = @import("ra8_session").rtc.start;
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const speed = @import("ra8_session").run.speed;
 const duration = @import("ra8_session").duration;
 const timebase = @import("ra8_chip").periph.timebase;
@@ -67,6 +68,8 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.idle_skip = flag[2] == 'i';
     } else if (std.mem.eql(u8, flag, "--rtc-start")) {
         options.rtc_start = try rtcStart(try next(argv, index));
+    } else if (std.mem.eql(u8, flag, "--panel-vsync")) {
+        options.panel_vsync = try panelVsync(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--camera-source")) {
         const allow = options.camera.allow_webcam;
         options.camera = try camera(try next(argv, index));
@@ -176,6 +179,30 @@ fn runFor(text: []const u8) !u64 {
         return err;
     };
     return ns / std.time.ns_per_ms;
+}
+
+/// One `--panel-vsync` value: `off`, or the first edge's phase and the
+/// frame period in nanoseconds, comma separated. A bad one says why before
+/// the run starts.
+fn panelVsync(text: []const u8) !?glcdc_vsync.Config {
+    if (std.mem.eql(u8, text, "off")) return null;
+    const comma = std.mem.indexOfScalar(u8, text, ',') orelse {
+        std.debug.print("--panel-vsync {s}: want off or phase_ns,period_ns\n", .{text});
+        return error.BadPanelVsync;
+    };
+    const phase = std.fmt.parseInt(u64, text[0..comma], 10) catch {
+        std.debug.print("--panel-vsync {s}: the phase is not a number\n", .{text});
+        return error.BadPanelVsync;
+    };
+    const period = std.fmt.parseInt(u64, text[comma + 1 ..], 10) catch {
+        std.debug.print("--panel-vsync {s}: the period is not a number\n", .{text});
+        return error.BadPanelVsync;
+    };
+    if (period == 0) {
+        std.debug.print("--panel-vsync {s}: the period cannot be zero\n", .{text});
+        return error.BadPanelVsync;
+    }
+    return .{ .phase_ns = phase, .period_ns = period };
 }
 
 /// One `--rtc-start` value. A bad one says why before the run starts.

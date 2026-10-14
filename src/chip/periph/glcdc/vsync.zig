@@ -29,8 +29,20 @@ pub const Sink = struct {
     settle: ?*const fn (context: *anyopaque, now_ns: u64) anyerror!void = null,
 };
 
+/// The panel's frame clock as the run's configuration asks for it
+/// (RA8EMU R9): the first edge at `phase_ns`, one each `period_ns`. Root
+/// config, applied identically to a plain run, a session and a restored
+/// session; consumers attach to an armed clock and never arm or resize it.
+pub const Config = struct {
+    phase_ns: u64,
+    period_ns: u64,
+};
+
 pub const Vsync = struct {
-    sink: Sink,
+    /// Who is told when an edge passes, or nobody. The boundary runs the
+    /// block's cheap frame event first and then notifies the sink; a sink
+    /// present or absent never changes when the edges come.
+    sink: ?Sink = null,
     period_ns: u64 = default_period_ns,
     next_ns: u64 = default_period_ns,
     /// Frame periods that ended.
@@ -52,12 +64,19 @@ pub const Vsync = struct {
 
     /// The sink's settle poll, when it has one.
     pub fn settle(self: *Vsync, now_ns: u64) !void {
-        if (self.sink.settle) |poll| try poll(self.sink.context, now_ns);
+        if (self.sink) |sink| if (sink.settle) |poll| try poll(sink.context, now_ns);
     }
 
-    /// Called by the board after each chunk.
-    pub fn tick(self: *Vsync, now_ns: u64) void {
-        if (self.due(now_ns)) self.sink.frame(self.sink.context, now_ns);
+    /// Advance the clock past `now_ns`. True when at least one frame edge
+    /// passed: the caller runs the block's cheap frame event and then
+    /// notifies the sink, in that order.
+    pub fn tick(self: *Vsync, now_ns: u64) bool {
+        return self.due(now_ns);
+    }
+
+    /// Tell the sink an edge passed, after the frame event has run.
+    pub fn notify(self: *Vsync, now_ns: u64) void {
+        if (self.sink) |sink| sink.frame(sink.context, now_ns);
     }
 };
 

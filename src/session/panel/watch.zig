@@ -18,6 +18,7 @@ const Board = @import("ra8_board").board.Board;
 const Sources = @import("../event/sources.zig").Sources;
 const session_display = @import("../display.zig");
 const panel_diff = @import("diff.zig");
+const frame_tap = @import("ra8_board").frame_tap;
 
 pub const Watch = struct {
     allocator: std.mem.Allocator,
@@ -36,10 +37,22 @@ pub const Watch = struct {
     height: u32 = 0,
     /// Board time of the scan that last changed the picture.
     changed_ns: u64 = 0,
+    /// The passive per-boundary capture (the frame tap), ridden when the
+    /// run's panel_vsync config has armed no frame edges to attach to.
+    tap: frame_tap.Tap = undefined,
+    /// True once useIo built the tap; until then the watch cannot capture.
+    tapped: bool = false,
 
     pub fn deinit(self: *Watch) void {
         self.disarm();
         self.drop();
+    }
+
+    /// Build the tap with the io it rate-caps itself against. Call once,
+    /// before the first viewer arrives.
+    pub fn useIo(self: *Watch, io: std.Io) void {
+        self.tap = .{ .io = io, .context = self, .captureFn = onFrame };
+        self.tapped = true;
     }
 
     /// One viewer more, or one fewer.
@@ -69,14 +82,23 @@ pub const Watch = struct {
     /// viewer of another kind already scans the panel.
     fn arm(self: *Watch) void {
         const stage = &self.board.display.output;
-        if (stage.vsync != null) return;
-        stage.vsync = .{ .sink = .{ .context = self, .frame = onFrame }, .next_ns = self.board.time.base.now() };
+        // The frame clock is the run's panel_vsync config; a viewer attaches
+        // to it and never arms or resizes it (RA8EMU R9).
+        if (stage.vsync) |*clock| {
+            if (clock.sink == null) clock.sink = .{ .context = self, .frame = onFrame };
+            return;
+        }
+        if (self.tapped) self.board.frame_tap = &self.tap;
     }
 
     fn disarm(self: *Watch) void {
         const stage = &self.board.display.output;
-        const armed = stage.vsync orelse return;
-        if (armed.sink.frame == onFrame and armed.sink.context == @as(*anyopaque, self)) stage.vsync = null;
+        if (stage.vsync) |*clock| {
+            if (clock.sink) |sink| if (sink.frame == onFrame and sink.context == @as(*anyopaque, self)) {
+                clock.sink = null;
+            };
+        }
+        if (self.board.frame_tap == &self.tap) self.board.frame_tap = null;
     }
 
     fn drop(self: *Watch) void {
@@ -105,14 +127,14 @@ pub const Watch = struct {
             self.scratch = &.{};
             self.scratch = try self.allocator.alloc(u32, count);
         }
-        @memset(self.scratch, 0);
-        display.output.capture = .{ .pixels = self.scratch, .width = width, .height = height };
-        defer display.output.capture = null;
-        // The model's frame hook would report this scan as the whole panel.
-        const hook = display.event_hook;
-        display.event_hook = null;
-        defer display.event_hook = hook;
-        if (display.scanOut() == null) return;
+        // The picture comes from the pure composite: the scan raises VPOS
+        // and counts frames, and a watch is never one more frame for the
+        // firmware (RA8EMU R9).
+        const source = display.compositeInputs() orelse return;
+        switch (display.composite(source, display.domain.powered(), self.scratch)) {
+            .picture => {},
+            .refused => return,
+        }
         const dirty = self.take(width, height) orelse return;
         self.changed_ns = when_ns;
         if (self.events) |events| events.panelChanged(width, height, display.system.frames, dirty);
