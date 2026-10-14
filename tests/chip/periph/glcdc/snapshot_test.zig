@@ -125,22 +125,22 @@ test "vsync restore continues real scan status and next boundary against referen
     setFrame(&live, guest);
     setFrame(&reference, guest);
     setFrame(&fresh, guest);
-    live.display.output.vsync.?.tick(99);
-    reference.display.output.vsync.?.tick(99);
+    _ = live.display.output.vsync.?.tick(99);
+    _ = reference.display.output.vsync.?.tick(99);
     var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
     try saved(&live, &bytes);
-    live.display.output.vsync.?.tick(450);
+    _ = live.display.output.vsync.?.tick(450);
     fresh.display.output.vsync.?.next_ns = 900;
     try display.load(&live, bytes.written());
     try display.load(&fresh, bytes.written());
-    try std.testing.expect(live.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&live.display)));
-    try std.testing.expect(fresh.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&fresh.display)));
+    try std.testing.expect(live.display.output.vsync.?.sink.?.context == @as(*anyopaque, @ptrCast(&live.display)));
+    try std.testing.expect(fresh.display.output.vsync.?.sink.?.context == @as(*anyopaque, @ptrCast(&fresh.display)));
     try std.testing.expect(fresh.display.output.vsync.?.sink.frame == scanFrame);
     for ([_]u64{ 99, 100, 350, 399, 400 }) |now| {
-        reference.display.output.vsync.?.tick(now);
-        live.display.output.vsync.?.tick(now);
-        fresh.display.output.vsync.?.tick(now);
+        _ = reference.display.output.vsync.?.tick(now);
+        _ = live.display.output.vsync.?.tick(now);
+        _ = fresh.display.output.vsync.?.tick(now);
         for ([_]*Stand{ &live, &fresh }) |target| {
             try std.testing.expectEqual(reference.display.system.frames, target.display.system.frames);
             try std.testing.expectEqual(reference.display.system.status, target.display.system.status);
@@ -179,7 +179,7 @@ test "vsync malformed configuration and phase refuse before controller install" 
         try saved(&source, &bytes);
         try std.testing.expectError(error.BadValue, display.load(&target, bytes.written()));
         try std.testing.expectEqual(@as(u32, 19), target.display.starts);
-        try std.testing.expect(target.display.output.vsync.?.sink.context == @as(*anyopaque, @ptrCast(&domain)));
+        try std.testing.expect(target.display.output.vsync.?.sink.?.context == @as(*anyopaque, @ptrCast(&domain)));
     }
     live.display.output.vsync.?.next_ns = 0;
     var zero = std.Io.Writer.Allocating.init(std.testing.allocator);
