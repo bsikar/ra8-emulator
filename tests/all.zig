@@ -18,6 +18,7 @@ test {
     _ = @import("board/panels_test.zig");
     _ = @import("board/external/memory_test.zig");
     _ = @import("board/external/backing_test.zig");
+    _ = @import("board/external/transfers_test.zig");
     _ = @import("chip/core/cpu/memory/external_port_test.zig");
     _ = @import("chip/core/cpu/conformance/vector_test.zig");
     _ = @import("chip/core/cpu/conformance/coverage_test.zig");
