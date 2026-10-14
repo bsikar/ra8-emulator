@@ -64,6 +64,12 @@ pub fn pressBar(shell: *Shell, x: i32, y: i32) bool {
     const link = shell.link orelse return false;
     return time.press(shell.bar, x, y, &shell.status, link);
 }
+/// Offer a press to the open speed dropdown popover.
+pub fn pressDropdown(shell: *Shell, x: i32, y: i32) bool {
+    const time = shell.time orelse return false;
+    const link = shell.link orelse return false;
+    return time.pressDropdown(shell.bar, x, y, link);
+}
 /// Board time for an input: what the time bar last knew, or zero.
 pub fn boardNow(shell: *const Shell) u64 {
     const time = shell.time orelse return 0;

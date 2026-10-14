@@ -21,9 +21,33 @@ test "the field takes the range --speed takes, and max" {
     try std.testing.expectEqual(@as(?u64, 1), speed_field.parse("0.001"));
     try std.testing.expectEqual(@as(?u64, 0), speed_field.parse("max"));
     try std.testing.expectEqual(@as(?u64, 0), speed_field.parse("MAX"));
+    try std.testing.expectEqual(@as(?u64, 2000), speed_field.parse("2x"));
+    try std.testing.expectEqual(@as(?u64, 500), speed_field.parse("0.5x"));
+    try std.testing.expectEqual(@as(?u64, 10_000), speed_field.parse("10X"));
+    try std.testing.expectEqual(@as(?u64, 1000), speed_field.parse("  1x  "));
     for ([_][]const u8{ "0", "-1", "1e9", "abc", "0.0004", "1.2.3", "", "inf", "nan" }) |bad| {
         try std.testing.expectEqual(@as(?u64, null), speed_field.parse(bad));
     }
+}
+
+test "common speed presets match the expected values" {
+    try std.testing.expectEqual(@as(usize, 8), speed_field.presets.len);
+    try std.testing.expectEqualStrings("0.1x", speed_field.presets[0].label);
+    try std.testing.expectEqual(@as(u64, 100), speed_field.presets[0].milli);
+    try std.testing.expectEqualStrings("0.25x", speed_field.presets[1].label);
+    try std.testing.expectEqual(@as(u64, 250), speed_field.presets[1].milli);
+    try std.testing.expectEqualStrings("0.5x", speed_field.presets[2].label);
+    try std.testing.expectEqual(@as(u64, 500), speed_field.presets[2].milli);
+    try std.testing.expectEqualStrings("1x", speed_field.presets[3].label);
+    try std.testing.expectEqual(@as(u64, 1000), speed_field.presets[3].milli);
+    try std.testing.expectEqualStrings("2x", speed_field.presets[4].label);
+    try std.testing.expectEqual(@as(u64, 2000), speed_field.presets[4].milli);
+    try std.testing.expectEqualStrings("5x", speed_field.presets[5].label);
+    try std.testing.expectEqual(@as(u64, 5000), speed_field.presets[5].milli);
+    try std.testing.expectEqualStrings("10x", speed_field.presets[6].label);
+    try std.testing.expectEqual(@as(u64, 10_000), speed_field.presets[6].milli);
+    try std.testing.expectEqualStrings("max", speed_field.presets[7].label);
+    try std.testing.expectEqual(@as(u64, 0), speed_field.presets[7].milli);
 }
 
 test "the field keeps digits, one dot and max, and reads the speed in use" {
@@ -39,6 +63,40 @@ test "the field keeps digits, one dot and max, and reads the speed in use" {
     try std.testing.expectEqualStrings("0.001x", try speed_field.format(1, &buf));
     try std.testing.expectEqualStrings("12.5x", try speed_field.format(12_500, &buf));
     try std.testing.expectEqualStrings("max", try speed_field.format(0, &buf));
+}
+
+test "field startEditing, fresh backspace and typing replacement" {
+    var buf: [32]u8 = undefined;
+    var field: Field = .{};
+    try std.testing.expectEqualStrings("1x", try field.shown(&buf));
+
+    field.startEditing();
+    try std.testing.expect(field.editing);
+    try std.testing.expect(field.fresh);
+    try std.testing.expectEqualStrings("1x", try field.shown(&buf));
+
+    var link: Link = undefined;
+    try std.testing.expectEqual(speed_field.Outcome.typing, try field.key(&link, speed_field.codes.backspace));
+    try std.testing.expect(!field.fresh);
+    try std.testing.expectEqual(@as(usize, 0), field.len);
+    try std.testing.expectEqualStrings("", try field.shown(&buf));
+
+    field.typed("5");
+    try std.testing.expectEqualStrings("5", try field.shown(&buf));
+    field.typed("x");
+    try std.testing.expectEqualStrings("5x", try field.shown(&buf));
+
+    try std.testing.expectEqual(speed_field.Outcome.typing, try field.key(&link, speed_field.codes.backspace));
+    try std.testing.expectEqualStrings("5", try field.shown(&buf));
+
+    try std.testing.expectEqual(speed_field.Outcome.cancel, try field.key(&link, speed_field.codes.escape));
+    try std.testing.expect(!field.editing);
+    try std.testing.expectEqualStrings("1x", try field.shown(&buf));
+
+    field.startEditing();
+    field.typed("2");
+    try std.testing.expect(!field.fresh);
+    try std.testing.expectEqualStrings("2", try field.shown(&buf));
 }
 
 fn connect(link: *Link) !void {
@@ -94,6 +152,35 @@ test "speeds typed into the field reach a local session, and bad ones never leav
     try std.testing.expectEqual(@as(?speed_field.Refusal, .invalid), field.refused);
     try std.testing.expectEqualStrings("0", try field.shown(&buf));
     try std.testing.expectEqual(speed_field.Outcome.cancel, try field.key(&link, speed_field.codes.escape));
+    try std.testing.expectEqualStrings("max", try field.shown(&buf));
+
+    local.end();
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
+}
+
+test "speed preset chosen from dropdown reaches a local session" {
+    const gpa = std.testing.allocator;
+    var local: session_link.Local = undefined;
+    try local.spawn(std.testing.io, test_paths.emulator, elf_path);
+    errdefer local.child.kill(std.testing.io);
+    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
+    defer gpa.free(rx);
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var link: Link = undefined;
+    link.open(local.transport(), rx, tx);
+    try connect(&link);
+
+    var buf: [32]u8 = undefined;
+    var field: Field = .{};
+    try std.testing.expectEqual(speed_field.Outcome.sent, try field.choose(&link, 2000));
+    try settle(&link, &field);
+    try std.testing.expectEqual(@as(u64, 2000), field.applied);
+    try std.testing.expectEqualStrings("2x", try field.shown(&buf));
+
+    try std.testing.expectEqual(speed_field.Outcome.sent, try field.choose(&link, 0));
+    try settle(&link, &field);
+    try std.testing.expectEqual(@as(u64, 0), field.applied);
     try std.testing.expectEqualStrings("max", try field.shown(&buf));
 
     local.end();

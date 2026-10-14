@@ -10,6 +10,7 @@ const draw_list = @import("ra8_render").draw_list;
 const font = @import("ra8_render").font;
 const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
+const speed_field = @import("../speed_field.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -25,6 +26,9 @@ pub const clock_min: i32 = 13 * font.cell_w + 2 * pad;
 /// The longest speed text the field shows; gui/time.bar_capture.zig pins it
 /// to the speed field's own limit.
 pub const field_chars: usize = 12;
+pub const drop_w: i32 = 14;
+pub const drop_row_h: i32 = font.glyph_h + 4;
+pub const drop_popover_h: i32 = 1 + @as(i32, @intCast(speed_field.presets.len)) * drop_row_h;
 
 pub const Control = enum {
     run,
@@ -33,6 +37,7 @@ pub const Control = enum {
     over,
     out,
     field,
+    drop,
 
     pub fn label(self: Control) []const u8 {
         return switch (self) {
@@ -41,7 +46,7 @@ pub const Control = enum {
             .step => "Step",
             .over => "Over",
             .out => "Out",
-            .field => "",
+            .field, .drop => "",
         };
     }
 };
@@ -92,19 +97,47 @@ pub const Layout = struct {
             .over => self.over,
             .out => self.out,
             .field => self.field,
+            .drop => dropBox(self.field),
         };
     }
 };
 
 /// A button fits its label with a pad each side; the field fits its longest text.
 pub fn width(control: Control) i32 {
-    const chars = if (control == .field) field_chars else control.label().len;
-    return @as(i32, @intCast(font.textWidth(chars))) + 2 * pad;
+    const chars = switch (control) {
+        .field => field_chars,
+        .drop => 0,
+        else => control.label().len,
+    };
+    return if (control == .drop) drop_w else @as(i32, @intCast(font.textWidth(chars))) + 2 * pad;
+}
+
+pub fn dropBox(field: Rect) Rect {
+    if (field.empty() or field.w < drop_w) return .{ .x = field.x, .y = field.y, .w = 0, .h = 0 };
+    return .{ .x = field.x + field.w - drop_w, .y = field.y, .w = drop_w, .h = field.h };
+}
+
+pub fn popover(field: Rect) Rect {
+    return .{ .x = field.x, .y = field.y - drop_popover_h, .w = field.w, .h = drop_popover_h };
+}
+
+pub fn popoverRow(field: Rect, index: usize) Rect {
+    const box = popover(field);
+    return .{ .x = box.x + 1, .y = box.y + 1 + @as(i32, @intCast(index)) * drop_row_h, .w = box.w - 2, .h = drop_row_h };
+}
+
+pub fn hitDropdown(field: Rect, open: bool, x: i32, y: i32) ?usize {
+    if (!open or field.empty()) return null;
+    const box = popover(field);
+    if (!box.contains(x, y)) return null;
+    for (0..speed_field.presets.len) |index| {
+        if (popoverRow(field, index).contains(x, y)) return index;
+    }
+    return null;
 }
 
 /// What the bar paints, as plain values filled from the models that own them.
 pub const View = struct {
-    /// Run lights while the core runs; Pause lights while it is halted.
     run_lit: bool = false,
     pause_lit: bool = false,
     run_enabled: bool = false,
@@ -112,19 +145,14 @@ pub const View = struct {
     step_enabled: bool = false,
     over_enabled: bool = false,
     out_enabled: bool = false,
-    /// Concise command refusal or unavailable reason, after elapsed time.
     note: ?[]const u8 = null,
     command_refused: bool = false,
-    /// What the speed field shows.
     field: []const u8 = "",
-    /// The session refused the last speed sent.
     field_refused: bool = false,
-    /// The field has the keyboard: it reads what is typed and shows a caret.
     editing: bool = false,
-    /// The clock readout's elapsed segment, "T+h:mm:ss.mmm" (RA8EMU-941).
+    open: bool = false,
+    applied: ?u64 = null,
     clock: []const u8 = "",
-    /// The readout's date and speed segments; the bar drops whole ones that
-    /// do not fit, the speed first, then the date.
     clock_date: ?[]const u8 = null,
     clock_speed: ?[]const u8 = null,
 };
@@ -132,7 +160,6 @@ pub const View = struct {
 pub fn draw(table: *const widget.types.Paint, theme: *const Theme, bar: Rect, view: View) void {
     if (bar.empty()) return;
     table.push_clip.?(table.user, bar.x, bar.y, bar.w, bar.h);
-    defer table.pop_clip.?(table.user);
     fillArea(table, bar, theme.ribbon_bg);
     fillArea(table, .{ .x = bar.x, .y = bar.y, .w = bar.w, .h = 1 }, theme.border);
     const layout = Layout.of(bar);
@@ -141,14 +168,14 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, bar: Rect, vi
     }
     fieldBox(table, theme, layout.field, view);
     clock(table, theme, layout.clock, view);
+    table.pop_clip.?(table.user);
+    if (view.open and !layout.field.empty()) dropdown(table, theme, layout.field, view);
 }
 
 fn fillArea(table: *const widget.types.Paint, r: Rect, color: Color) void {
     table.fill_rect.?(table.user, r.x, r.y, r.w, r.h, word(color));
 }
 
-/// `text` drawn at (x, y) through the shared Paint table; `bg` is the fill
-/// already under the text's cell.
 fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, fg: Color, bg: Color) void {
     var buffer: [256]u8 = undefined;
     const n = @min(text.len, buffer.len - 1);
@@ -165,12 +192,7 @@ fn drawText(table: *const widget.types.Paint, x: i32, y: i32, text: []const u8, 
     };
     var w: widget.types.Widget = undefined;
     _ = widget.label.ra8_widget_label_init(&w, &descriptor);
-    w.rect = .{
-        .x = x,
-        .y = y,
-        .w = @intCast(font.textWidth(text.len)),
-        .h = @intCast(font.cell_h),
-    };
+    w.rect = .{ .x = x, .y = y, .w = @intCast(font.textWidth(text.len)), .h = @intCast(font.cell_h) };
     w.vt.?.render.?(&w);
 }
 
@@ -178,13 +200,10 @@ fn lights(control: Control, view: View) bool {
     return switch (control) {
         .run => view.run_lit,
         .pause => view.pause_lit,
-        .step, .over, .out, .field => false,
+        .step, .over, .out, .field, .drop => false,
     };
 }
 
-/// The control as the firmware's push-button widget (RA8EMU-1158): the
-/// widget owns the face, border and label look; the theme only fills the
-/// descriptor, with the lit look on `face_pressed`.
 fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, control: Control, view: View) void {
     if (area.empty()) return;
     const enabled = switch (control) {
@@ -193,7 +212,7 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
         .step => view.step_enabled,
         .over => view.over_enabled,
         .out => view.out_enabled,
-        .field => true,
+        .field, .drop => true,
     };
     const on = lights(control, view) and (enabled or control == .run);
     var descriptor = widget.button.Button{
@@ -204,7 +223,7 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .step => "Step",
             .over => "Over",
             .out => "Out",
-            .field => "",
+            .field, .drop => "",
         },
         .on_press = null,
         .fg = word(if (on) theme.background else if (!enabled) theme.muted else theme.ink),
@@ -213,13 +232,13 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .run => theme.runLit(),
             .pause => theme.pauseLit(),
             .step, .over, .out => theme.step_active,
-            .field => theme.accent,
+            .field, .drop => theme.accent,
         }),
         .border = word(if (on) switch (control) {
             .run => theme.good,
             .pause => theme.highlight,
             .step, .over, .out => theme.step_active,
-            .field => theme.accent,
+            .field, .drop => theme.accent,
         } else theme.control_border),
         .presses = 0,
         .pad = 3,
@@ -234,18 +253,10 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
     w.vt.?.render.?(&w);
 }
 
-/// `color` as the widget's 0x00RRGGBB colour word.
 fn word(color: draw_list.Color) u32 {
     return @as(u32, color.r) << 16 | @as(u32, color.g) << 8 | color.b;
 }
 
-/// The clock readout as the firmware's label widget, one line on the bar's
-/// own background. A left-aligned label sets its text one pad in from its
-/// corner, so the label is given the centring offset as its pad and starts
-/// far enough right to keep the text a `pad` in: the readout then stands
-/// on the same row as the button labels and the speed field (RA8EMU-1168).
-/// The line is whole segments that fit (RA8EMU-941), so the bar's clip only
-/// ever keeps paint inside the bar.
 fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) void {
     const room = area.w - 2 * pad;
     if (area.empty() or room <= 0) return;
@@ -271,14 +282,10 @@ fn clock(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, view
     w.vt.?.render.?(&w);
 }
 
-/// The richest line of whole segments that fits `room` pixels (RA8EMU-941):
-/// the achieved speed and then the date are dropped whole before any part
-/// of the elapsed segment is cut, and a bar too narrow even for that cuts
-/// the elapsed segment to whole cells so the row is not empty.
 fn fitClock(view: View, room: i32, buf: []u8) []const u8 {
     const cell: i32 = @intCast(font.cell_w);
     const cells: usize = @intCast(@divFloor(room, cell));
-    const sep: usize = 3; // " | "
+    const sep: usize = 3;
     const elapsed = view.clock;
     if (elapsed.len > cells) return font.fit(elapsed, @intCast(room));
     var stream: std.Io.Writer = .fixed(buf);
@@ -319,16 +326,43 @@ fn fieldBox(table: *const widget.types.Paint, theme: *const Theme, area: Rect, v
     fillArea(table, area, theme.well);
     outline(table, area, if (view.field_refused) theme.bad else if (view.editing) theme.accent else theme.control_border);
     const shown = view.field;
-    label(table, area, shown, theme.ink, theme.well);
+    label(table, .{ .x = area.x, .y = area.y, .w = area.w - drop_w, .h = area.h }, shown, theme.ink, theme.well);
+    drawDropArrow(table, theme, dropBox(area), view.open);
     if (!view.editing) {
         const caption = "Speed";
-        const left = area.x + area.w - pad - @as(i32, @intCast(font.textWidth(caption.len)));
+        const left = area.x + area.w - drop_w - pad - @as(i32, @intCast(font.textWidth(caption.len)));
         if (left >= area.x + 2 * pad + @as(i32, @intCast(font.textWidth(shown.len))))
             drawText(table, left, area.y + draw_list.centre(area.h, font.glyph_h), caption, theme.muted, theme.well);
         return;
     }
     const caret_x = area.x + pad + @as(i32, @intCast(font.textWidth(shown.len)));
     fillArea(table, .{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
+}
+
+fn drawDropArrow(table: *const widget.types.Paint, theme: *const Theme, area: Rect, open: bool) void {
+    if (area.empty()) return;
+    const cx = area.x + @divTrunc(area.w, 2);
+    const cy = area.y + @divTrunc(area.h - 3, 2);
+    const color = if (open) theme.accent else theme.muted;
+    const dy: i32 = if (open) 2 else 0;
+    const dir: i32 = if (open) -1 else 1;
+    fillArea(table, .{ .x = cx - 2, .y = cy + dy, .w = 5, .h = 1 }, color);
+    fillArea(table, .{ .x = cx - 1, .y = cy + dy + dir, .w = 3, .h = 1 }, color);
+    fillArea(table, .{ .x = cx, .y = cy + dy + 2 * dir, .w = 1, .h = 1 }, color);
+}
+
+fn dropdown(table: *const widget.types.Paint, theme: *const Theme, field: Rect, view: View) void {
+    const box = popover(field);
+    fillArea(table, box, theme.well);
+    outline(table, box, theme.border);
+    for (speed_field.presets, 0..) |preset, index| {
+        const item = popoverRow(field, index);
+        const active = view.applied != null and view.applied.? == preset.milli;
+        if (active) fillArea(table, item, theme.band);
+        const color = if (active) theme.highlight else theme.ink;
+        const bg = if (active) theme.band else theme.well;
+        drawText(table, item.x + pad, item.y + draw_list.centre(item.h, font.glyph_h), preset.label, color, bg);
+    }
 }
 
 fn outline(table: *const widget.types.Paint, area: Rect, color: Color) void {
@@ -338,8 +372,6 @@ fn outline(table: *const widget.types.Paint, area: Rect, color: Color) void {
     fillArea(table, .{ .x = area.x + area.w - 1, .y = area.y, .w = 1, .h = area.h }, color);
 }
 
-/// `line` from a pad in, centred down `area`, cut to whole cells inside it;
-/// `bg` is the fill already under the text's cell.
 fn label(table: *const widget.types.Paint, area: Rect, line: []const u8, color: Color, bg: Color) void {
     const room = area.w - 2 * pad;
     if (room <= 0) return;
@@ -348,11 +380,14 @@ fn label(table: *const widget.types.Paint, area: Rect, line: []const u8, color: 
     drawText(table, area.x + pad, top, shown, color, bg);
 }
 
-/// The control under (`x`, `y`) in `bar`, or null for the gaps and the clock.
 pub fn hit(bar: Rect, x: i32, y: i32) ?Control {
     const layout = Layout.of(bar);
-    for ([_]Control{ .run, .pause, .step, .over, .out, .field }) |control| {
+    for ([_]Control{ .run, .pause, .step, .over, .out }) |control| {
         if (layout.rect(control).contains(x, y)) return control;
+    }
+    if (layout.field.contains(x, y)) {
+        if (dropBox(layout.field).contains(x, y)) return .drop;
+        return .field;
     }
     return null;
 }

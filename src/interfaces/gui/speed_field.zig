@@ -1,7 +1,8 @@
 //! The time bar's speed field (RA8EMU-808): type a factor (0.25, 5, 100) or
-//! `max`, and Enter applies it to the session. Anything `--speed` would
-//! refuse is refused here, in the field, and never reaches the session; the
-//! range check is session_speed's, not a copy of it.
+//! `max`, or choose from common presets in the dropdown, and apply it to
+//! the session. Anything `--speed` would refuse is refused here, in the
+//! field, and never reaches the session; the range check is session_speed's,
+//! not a copy of it.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_speed = @import("ra8_session").speed;
@@ -11,16 +12,46 @@ const Link = session_link.Link;
 const Arrival = session_link.Arrival;
 const Env = proto.Client.Env;
 
-pub const codes = hex_entry.codes;
+pub const codes = struct {
+    pub const enter: u32 = hex_entry.codes.enter;
+    pub const kp_enter: u32 = 0x40000058;
+    pub const escape: u32 = hex_entry.codes.escape;
+    pub const backspace: u32 = hex_entry.codes.backspace;
+    pub const delete: u32 = hex_entry.codes.delete;
+};
 pub const max_chars: usize = 12;
 /// Thousandths of real time on the wire; zero is `max`, the unpaced speed.
 pub const max_wire: u64 = 0;
 pub const real_time: u64 = 1000;
 
+pub const Preset = struct {
+    label: []const u8,
+    milli: u64,
+};
+
+/// Common speeds selectable from the dropdown.
+pub const presets = [_]Preset{
+    .{ .label = "0.1x", .milli = 100 },
+    .{ .label = "0.25x", .milli = 250 },
+    .{ .label = "0.5x", .milli = 500 },
+    .{ .label = "1x", .milli = 1000 },
+    .{ .label = "2x", .milli = 2000 },
+    .{ .label = "5x", .milli = 5000 },
+    .{ .label = "10x", .milli = 10_000 },
+    .{ .label = "max", .milli = max_wire },
+};
+
 /// The text as thousandths for the wire, or null when `--speed` would refuse it.
 pub fn parse(text: []const u8) ?u64 {
-    if (std.ascii.eqlIgnoreCase(text, "max")) return max_wire;
-    const factor = std.fmt.parseFloat(f64, text) catch return null;
+    const trimmed = std.mem.trim(u8, text, " \t\r\n");
+    if (trimmed.len == 0) return null;
+    if (std.ascii.eqlIgnoreCase(trimmed, "max")) return max_wire;
+    const num_str = if (trimmed.len > 1 and (trimmed[trimmed.len - 1] == 'x' or trimmed[trimmed.len - 1] == 'X'))
+        trimmed[0 .. trimmed.len - 1]
+    else
+        trimmed;
+    const factor = std.fmt.parseFloat(f64, num_str) catch return null;
+    if (!std.math.isFinite(factor) or factor <= 0) return null;
     const change = session_speed.Change.of(factor, 1) catch return null;
     return change.milli orelse max_wire;
 }
@@ -59,13 +90,39 @@ pub const Field = struct {
     asked: u64 = real_time,
     ask_id: ?u32 = null,
     refused: ?Refusal = null,
+    editing: bool = false,
+    fresh: bool = false,
 
     pub fn text(self: *const Field) []const u8 {
         return self.chars[0..self.len];
     }
 
+    /// Prepares the field for keyboard input, starting with the current factor.
+    pub fn startEditing(self: *Field) void {
+        self.refused = null;
+        var buf: [max_chars]u8 = undefined;
+        const str = format(self.applied, &buf) catch "";
+        const count = @min(str.len, max_chars);
+        @memcpy(self.chars[0..count], str[0..count]);
+        self.len = count;
+        self.editing = true;
+        self.fresh = true;
+    }
+
+    /// Cancels editing and reverts typed text.
+    pub fn cancel(self: *Field) void {
+        self.len = 0;
+        self.refused = null;
+        self.editing = false;
+        self.fresh = false;
+    }
+
     /// Keeps digits, one dot and the letters of `max`; drops everything else.
     pub fn typed(self: *Field, input: []const u8) void {
+        if (self.fresh) {
+            self.len = 0;
+            self.fresh = false;
+        }
         for (input) |byte| {
             if (self.len == max_chars) return;
             const lower = std.ascii.toLower(byte);
@@ -82,25 +139,46 @@ pub const Field = struct {
     /// drops what was typed, Backspace drops a character.
     pub fn key(self: *Field, link: *Link, code: u32) !Outcome {
         switch (code) {
-            codes.enter => {
-                if (self.len == 0) return .cancel;
+            codes.enter, codes.kp_enter => {
+                if (self.len == 0) {
+                    self.cancel();
+                    return .cancel;
+                }
                 const milli = parse(self.text()) orelse {
                     self.refused = .invalid;
+                    self.fresh = false;
                     return .refused;
                 };
                 self.ask_id = try link.send(proto.SetSpeed, .set_speed, .{ .core = self.core, .milli = milli });
                 self.asked = milli;
+                self.editing = false;
+                self.fresh = false;
                 return .sent;
             },
             codes.escape => {
-                self.len = 0;
-                self.refused = null;
+                self.cancel();
                 return .cancel;
             },
-            codes.backspace, codes.delete => self.len -|= 1,
+            codes.backspace, codes.delete => {
+                if (self.fresh) {
+                    self.len = 0;
+                    self.fresh = false;
+                } else {
+                    self.len -|= 1;
+                }
+                self.refused = null;
+            },
             else => {},
         }
         return .typing;
+    }
+
+    /// Send a preset speed directly (from the dropdown), clearing any typed text.
+    pub fn choose(self: *Field, link: *Link, milli: u64) !Outcome {
+        self.ask_id = try link.send(proto.SetSpeed, .set_speed, .{ .core = self.core, .milli = milli });
+        self.asked = milli;
+        self.cancel();
+        return .sent;
     }
 
     /// Takes the session's answer to the last speed sent.
@@ -116,12 +194,12 @@ pub const Field = struct {
             return;
         }
         self.applied = self.asked;
-        self.len = 0;
+        self.cancel();
     }
 
-    /// What the field reads: the typed text while editing, else the speed in use.
+    /// What the field reads: the typed text while editing or when refused, else the speed in use.
     pub fn shown(self: *const Field, buf: []u8) ![]const u8 {
-        if (self.len > 0) return std.fmt.bufPrint(buf, "{s}", .{self.text()});
+        if (self.editing or self.len > 0) return std.fmt.bufPrint(buf, "{s}", .{self.text()});
         return format(self.applied, buf);
     }
 };

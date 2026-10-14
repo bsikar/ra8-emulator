@@ -43,7 +43,7 @@ pub const Texts = struct {
 };
 
 /// The bar's view of `status`, `field` and `readout`, its text in `texts`.
-pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Field, readout: *const time_readout.Readout, run: *const shell_run.Run, editing: bool) bar.View {
+pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Field, readout: *const time_readout.Readout, run: *const shell_run.Run, editing: bool, open: bool) bar.View {
     const p = readout.pieces(field.applied, &texts.date, &texts.elapsed, &texts.speed) catch time_readout.Readout.Pieces{};
     return .{
         .run_lit = run.lit,
@@ -52,12 +52,25 @@ pub fn view(texts: *Texts, status: *const Status, field: *const speed_field.Fiel
         .step_enabled = enabled(.step, status, run),
         .over_enabled = enabled(.over, status, run),
         .out_enabled = enabled(.out, status, run),
-        .note = if (status.refused == .run) "Run refused" else if (status.load_id != null or status.pc_id != null) "Loading" else if (status.run == .unknown) "Load an image" else if (status.run_id != null or (!run.lit and run.slice_id != null)) "Waiting for stop" else null,
-        .command_refused = status.refused == .run,
+        .note = if (status.refused == .run)
+            "Run refused"
+        else if (field.refused) |ref|
+            ref.message()
+        else if (status.load_id != null or status.pc_id != null)
+            "Loading"
+        else if (status.run == .unknown)
+            "Load an image"
+        else if (status.run_id != null or (!run.lit and run.slice_id != null))
+            "Waiting for stop"
+        else
+            null,
+        .command_refused = status.refused == .run or field.refused != null,
         .pause_lit = status.run == .halted,
         .field = field.shown(&texts.field) catch texts.field[0..0],
         .field_refused = field.refused != null,
         .editing = editing,
+        .open = open,
+        .applied = field.applied,
         .clock = p.elapsed,
         .clock_date = p.date,
         .clock_speed = p.speed,
@@ -94,7 +107,7 @@ pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *
             status.refused = null;
         },
         .pause => run.pause(),
-        .field => {},
+        .field, .drop => {},
     }
 }
 
@@ -103,6 +116,6 @@ pub fn enabled(control: bar.Control, status: *const Status, run: *const shell_ru
     return switch (control) {
         .run, .step, .over, .out => status.run == .halted and !run.lit and run.slice_id == null and run.settled == null and status.load_id == null and status.pc_id == null and status.run_id == null,
         .pause => run.lit,
-        .field => true,
+        .field, .drop => true,
     };
 }

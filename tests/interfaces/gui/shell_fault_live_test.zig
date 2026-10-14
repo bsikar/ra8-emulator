@@ -226,5 +226,5 @@ test "a faulted row draws its mode in ink beside an unfaulted row's muted mark" 
         try std.testing.expect(holds(&pixels, frame.toGeom(controls.rect(control)), dark.muted));
         try std.testing.expect(!holds(&pixels, frame.toGeom(controls.rect(control)), dark.ink));
     }
-    try std.testing.expectEqual(@as(u64, 10720497332653396786), regionDigest(&pixels, bar));
+    try std.testing.expectEqual(@as(u64, 3154598417397220601), regionDigest(&pixels, bar));
 }
