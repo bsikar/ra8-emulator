@@ -18,6 +18,9 @@ test {
     _ = @import("zig/hitset_battery_test.zig");
     _ = @import("history/format_test.zig");
     _ = @import("history/position_test.zig");
+    _ = @import("history/record_test.zig");
+    _ = @import("history/store_test.zig");
+    _ = @import("history/log_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");
