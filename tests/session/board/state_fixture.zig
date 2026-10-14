@@ -72,7 +72,7 @@ pub const Rig = struct {
 };
 
 pub fn populated(rig: *Rig) !void {
-    @memcpy(rig.store.span(at, 2).?, &[_]u8{ 0x01, 0x20 }); // MOVS r0,#1
+    try rig.store.write(.none, at, &[_]u8{ 0x01, 0x20 }); // MOVS r0,#1
     rig.cpu.regs.pc = at;
     rig.cpu.regs.xpsr = ra8.chip.core.cpu.regs.xpsr_bits.thumb;
     rig.cpu.exclusive = at + 4;
@@ -82,8 +82,8 @@ pub fn populated(rig: *Rig) !void {
     rig.cpu.sync_entries = 4;
     rig.cpu.booted = true;
     rig.cpu.banked.current = .non_secure;
-    @memcpy(rig.pair.store.?.span(memmap.mram_base + 0x1000, 4).?, &[_]u8{ 1, 2, 3, 4 });
-    @memcpy(rig.pair.store.?.span(memmap.ppb_base + 0x100, 4).?, &[_]u8{ 5, 6, 7, 8 });
+    try rig.pair.store.?.write(.none, memmap.mram_base + 0x1000, &[_]u8{ 1, 2, 3, 4 });
+    try rig.pair.store.?.write(.none, memmap.ppb_base + 0x100, &[_]u8{ 5, 6, 7, 8 });
     rig.pair.core.cpu.regs.low[4] = 0xabcdef;
     rig.pair.core.cpu.exclusive = memmap.mram_base + 4;
     rig.pair.core.cpu.retired = 200;

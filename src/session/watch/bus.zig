@@ -30,7 +30,7 @@ pub const WatchBus = struct {
     quiet: bool = false,
 
     pub fn view(self: *WatchBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch }, .lines = self.inner.lines };
     }
 
     /// Listen to the instruction at `pc`, `size` bytes wide.

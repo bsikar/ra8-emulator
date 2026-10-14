@@ -93,14 +93,14 @@ pub const SecondZig = struct {
         const cache = try std.heap.page_allocator.create(BlockCache);
         errdefer std.heap.page_allocator.destroy(cache);
         cache.init();
-        try code_lines.watch(&cache.lines);
+        try self.memory.store.fanMut().attach(&cache.lines);
         self.formed = cache;
         self.cpu.blocks = cache;
     }
 
     pub fn dropBlocks(self: *SecondZig) void {
         const cache = self.formed orelse return;
-        code_lines.unwatch(&cache.lines);
+        self.memory.store.fanMut().detach(&cache.lines);
         self.cpu.blocks = null;
         self.formed = null;
         std.heap.page_allocator.destroy(cache);
@@ -127,7 +127,7 @@ pub const Own = struct {
 
     /// Prime CPU1's PPB windows as an M33, load `image`, and reset the core
     /// from the image's vector table.
-    pub fn open(self: *Own, lender: *const Store, wiring: Wiring, image: loaded_image.Image) !void {
+    pub fn open(self: *Own, lender: *Store, wiring: Wiring, image: loaded_image.Image) !void {
         self.* = .{ .store = try Store.init(lender) };
         errdefer self.store.deinit();
         _ = try bringUp(&self.core, .{ .store = &self.store, .initiator = .cpu1 }, wiring, .{

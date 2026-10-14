@@ -7,7 +7,7 @@ pub const CutBus = struct {
     cut: *Cut,
 
     pub fn view(self: *CutBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek }, .lines = self.inner.lines };
     }
 
     fn read(context: *anyopaque, address: u32, into: []u8) bus.Error!void {

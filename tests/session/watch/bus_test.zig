@@ -192,7 +192,9 @@ const Board = struct {
     }
 
     fn put(self: *Board, address: u32, value: u32) void {
-        std.mem.writeInt(u32, self.store.span(address, 4).?[0..4], value, .little);
+        var bytes: [4]u8 = undefined;
+        std.mem.writeInt(u32, &bytes, value, .little);
+        self.store.write(.none, address, &bytes) catch unreachable;
     }
 };
 

@@ -63,7 +63,7 @@ pub const Driver = struct {
         return self.openOwn(lender, wiring, image);
     }
 
-    fn openOwn(self: *Driver, lender: *const Store, wiring: Wiring, image: loaded_image.Image) !void {
+    fn openOwn(self: *Driver, lender: *Store, wiring: Wiring, image: loaded_image.Image) !void {
         self.second = .{};
         self.store = try Store.init(lender);
         errdefer self.dropStore();

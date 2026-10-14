@@ -61,6 +61,7 @@ pub const Prepared = struct {
 
     /// All parsing and window allocation completed before this point.
     pub fn commit(self: *Prepared, store: *Store) void {
+        store.barrier(.snapshot_load);
         for (store.pages, store.owned) |held, mine| if (mine) {
             if (held) |bytes| @memset(bytes, 0);
         };
@@ -69,6 +70,7 @@ pub const Prepared = struct {
         store.extra = self.extra;
         self.extra = .{};
         apply(store, self.payload);
+        store.notifyCodeRanges();
     }
 };
 
@@ -163,7 +165,7 @@ pub fn validate(store: *const Store, payload: []const u8) Error!void {
 }
 
 fn fixedBacking(store: *const Store, base: u32) ?[]u8 {
-    for (memmap.ram) |entry| if (entry.base == base) return store.region(base);
+    for (memmap.ram, 0..) |entry, index| if (entry.base == base) return store.pages[index];
     return null;
 }
 
@@ -183,19 +185,19 @@ fn saveRegion(base: u32, bytes: []const u8, writer: anytype) !void {
 /// The host bytes a saved region goes back into, mapping a window outside
 /// memmap the way its peripheral did at attach.
 fn backing(store: *Store, base: u32, len: u32) Error![]u8 {
-    for (memmap.ram) |entry| {
+    for (memmap.ram, 0..) |entry, index| {
         if (entry.base != base) continue;
-        const bytes = store.region(base) orelse return Error.Unbacked;
+        const bytes = store.pages[index] orelse return Error.Unbacked;
         if (bytes.len != len) return Error.SizeMismatch;
         return bytes;
     }
-    if (store.extra.span(base, len) == null) {
+    if (store.extra.locate(base, len) == null) {
         store.map(base, len) catch |err| return switch (err) {
             error.OutOfMemory => Error.OutOfMemory,
             else => Error.Unbacked,
         };
     }
-    return store.extra.span(base, len) orelse Error.Unbacked;
+    return (store.extra.locate(base, len) orelse return Error.Unbacked).bytes;
 }
 
 fn payloadLen(store: *const Store) u64 {

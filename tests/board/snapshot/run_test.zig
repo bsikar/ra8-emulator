@@ -40,7 +40,7 @@ test "a whole run loaded into a fresh one saves the same bytes" {
     var rig: Rig = undefined;
     try rig.build();
     defer rig.deinit();
-    rig.store.span(word_at, 4).?[0] = 0x7E;
+    try rig.store.write(.none, word_at, &.{0x7E});
     rig.board.c6.reply = .{0x5A};
     var zero = try fixture.boot(&ram);
     var one = try fixture.boot(&ram);

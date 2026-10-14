@@ -10,8 +10,8 @@ const scheduler = ra8.chip.core.scheduler;
 
 /// Copies bytes into the store, the way a loader would.
 fn put(store: *Store, address: u32, bytes: []const u8) !void {
-    const span = store.span(address, bytes.len) orelse return error.Unbacked;
-    @memcpy(span, bytes);
+    if (store.span(address, bytes.len) == null) return error.Unbacked;
+    try store.write(.none, address, bytes);
 }
 
 /// A vector table at the base of SRAM pointing at code right after it:

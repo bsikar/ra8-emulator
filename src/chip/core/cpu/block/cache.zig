@@ -22,7 +22,7 @@ pub const BlockCache = struct {
     decoded: decode.cache.DecodeCache,
     current: ?*block.Block,
     index: usize,
-    /// Lines the blocks cover; pass to `code_lines.watch` while running.
+    /// Lines the blocks cover; attach to the machine's fanout while running.
     lines: code_lines.CodeLines,
     /// Blocks formed, blocks found already formed, entries whose memory
     /// had changed since they were formed, and blocks a store dropped.

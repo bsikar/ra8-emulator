@@ -44,17 +44,25 @@ pub const Extra = struct {
         self.windows[slot] = .{ .base = base, .bytes = bytes };
     }
 
-    /// Host bytes for `len` bytes at `address`, or null when they are not
-    /// all inside one window.
-    pub fn span(self: *const Extra, address: u32, len: usize) ?[]u8 {
+    /// Where an access lands: the window's base, the offset inside it and
+    /// the mutable host bytes (RA8EMU-D1). The window base is the write's
+    /// storage identity.
+    pub fn locate(self: *const Extra, address: u32, len: usize) ?struct { base: u32, offset: usize, bytes: []u8 } {
         for (self.windows) |held| {
             const window = held orelse continue;
             if (address < window.base or address >= window.end()) continue;
             const offset = address - window.base;
             if (len > window.bytes.len - offset) return null;
-            return window.bytes[offset..][0..len];
+            return .{ .base = window.base, .offset = offset, .bytes = window.bytes[offset..][0..len] };
         }
         return null;
+    }
+
+    /// Host bytes for `len` bytes at `address`, or null when they are not
+    /// all inside one window.
+    pub fn span(self: *const Extra, address: u32, len: usize) ?[]const u8 {
+        const hit = self.locate(address, len) orelse return null;
+        return hit.bytes;
     }
 
     pub fn deinit(self: *Extra) void {

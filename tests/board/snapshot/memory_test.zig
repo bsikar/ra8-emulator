@@ -8,8 +8,8 @@ const memmap = ra8.chip.core.memmap;
 
 const window_base: u32 = 0x9000_0000;
 
-fn put(store: *const memory.Store, address: u32, text: []const u8) void {
-    @memcpy(store.span(address, text.len).?, text);
+fn put(store: *memory.Store, address: u32, text: []const u8) void {
+    store.write(.none, address, text) catch unreachable;
 }
 
 fn snapshot(store: *const memory.Store, list: *std.Io.Writer.Allocating) !void {

@@ -54,7 +54,7 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct, .lines = memory.lines };
     }
 
     /// Whether the whole access sits in either peripheral window.

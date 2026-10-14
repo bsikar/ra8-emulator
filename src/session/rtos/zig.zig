@@ -24,7 +24,7 @@ pub const Listener = struct {
 
     pub fn onBus(self: *Listener, inner: bus.Bus) bus.Bus {
         self.inner_bus = inner;
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch }, .lines = self.inner_bus.lines };
     }
 
     pub fn onSource(self: *Listener, inner: Source) Source {

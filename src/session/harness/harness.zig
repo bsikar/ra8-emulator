@@ -303,8 +303,8 @@ pub const Harness = struct {
         state.display.deinit();
         state.plugs.deinit();
         state.plugs_arena.deinit();
+        block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
         state.cpu0.close();
-        block_cache.drop(state.formed);
         state.board.deinit();
         state.loading.deinit();
         state.history.deinit();
@@ -354,8 +354,8 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.pending.clear_due = &state.quiet.clear_due;
     state.decoded = .{};
     state.cpu.decoded = &state.decoded;
-    state.formed = try block_cache.form();
-    errdefer block_cache.drop(state.formed);
+    state.formed = try block_cache.form(state.cpu0.own().store.fanMut());
+    errdefer block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
     state.cpu.blocks = state.formed;
     // CPACR and the FP context words reach the core's FP state (boot.zig), else NOCP (RA8EMU-950).
     state.memory.scs.fp = &state.cpu.fp;

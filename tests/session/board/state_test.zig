@@ -19,9 +19,9 @@ test "state strict dual-core live and fresh restoration have identical guest byt
     try populated(live);
     var saved = try live.save();
     defer saved.deinit();
-    live.store.span(at, 4).?[0] = 99;
-    live.store.span(at + 0x2000, 4).?[0] = 88;
-    live.pair.store.?.span(memmap.mram_base + 0x1000, 4).?[0] = 99;
+    try live.store.write(.none, at, &.{99});
+    try live.store.write(.none, at + 0x2000, &.{88});
+    try live.pair.store.?.write(.none, memmap.mram_base + 0x1000, &.{99});
     live.machines[0].fpb = .{};
     live.pair.second.state.held = false;
     live.session.live.started = false;
@@ -92,7 +92,7 @@ test "state strict missing and duplicated sections are refused with the live run
     var saved = try live.save();
     defer saved.deinit();
     live.pair.core.cpu.regs.low[3] = 0x3333;
-    live.pair.store.?.span(memmap.mram_base + 0x3000, 1).?[0] = 66;
+    try live.pair.store.?.write(.none, memmap.mram_base + 0x3000, &.{66});
     live.board.bus.write(0x4fff_ff08, 4, 0x77);
     var before = try live.save();
     defer before.deinit();
@@ -118,7 +118,7 @@ test "state strict malformed later sections and identity errors leave the live r
     var saved = try live.save();
     defer saved.deinit();
     live.cpu.regs.low[7] = 0x5555;
-    live.store.span(at + 0x2000, 1).?[0] = 77;
+    try live.store.write(.none, at + 0x2000, &.{77});
     live.machines[0].fpb.enabled = false;
     var before = try live.save();
     defer before.deinit();
@@ -180,7 +180,7 @@ test "state strict restore invalidates tracked blocks and the current walker" {
     defer std.testing.allocator.destroy(cache);
     cache.init();
     live.cpu.blocks = cache;
-    @memcpy(live.store.span(at, 2).?, &[_]u8{ 0x02, 0x20 }); // MOVS r0,#2
+    try live.store.write(.none, at, &[_]u8{ 0x02, 0x20 }); // MOVS r0,#2
     try std.testing.expect(live.cpu.step() == null);
     try std.testing.expectEqual(@as(u32, 2), live.cpu.regs.low[0]);
     try std.testing.expect(cache.formed > 0);

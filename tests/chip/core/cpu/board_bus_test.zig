@@ -7,7 +7,9 @@ const BoardBus = ra8.chip.core.cpu.board_bus.BoardBus;
 const Store = ra8.chip.core.cpu.memory.store.Store;
 
 fn put(store: *Store, address: u32, value: u32) void {
-    std.mem.writeInt(u32, store.span(address, 4).?[0..4], value, .little);
+    var bytes: [4]u8 = undefined;
+    std.mem.writeInt(u32, &bytes, value, .little);
+    store.write(.none, address, &bytes) catch unreachable;
 }
 
 fn get(store: *Store, address: u32) u32 {

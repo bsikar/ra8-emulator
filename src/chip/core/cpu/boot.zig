@@ -181,6 +181,17 @@ pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_bas
 /// it is fetched.
 const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null, peer: ?*cpu_mod.Cpu = null, core: ?*?*cpu_mod.Cpu = null };
 
+/// The run's decoded-block cache, joined to the machine's fanout; null when
+/// the run asked for none.
+fn formCache(fan: *code_lines.Fanout, blocks: bool) !?*BlockCache {
+    if (!blocks) return null;
+    const cache = try std.heap.page_allocator.create(BlockCache);
+    errdefer std.heap.page_allocator.destroy(cache);
+    cache.init();
+    try fan.attach(&cache.lines);
+    return cache;
+}
+
 fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
@@ -201,13 +212,12 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     };
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
-    const formed: ?*BlockCache = if (blocks) try std.heap.page_allocator.create(BlockCache) else null;
-    defer if (formed) |cache| std.heap.page_allocator.destroy(cache);
-    if (formed) |cache| {
-        cache.init();
-        try code_lines.watch(&cache.lines);
-    }
-    defer if (formed) |cache| code_lines.unwatch(&cache.lines);
+    var local: code_lines.Fanout = .{};
+    // The machine's fanout when the bus has a store behind it; a run-local
+    // one otherwise, so a run with blocks still invalidates itself.
+    const fan: *code_lines.Fanout = memory.lines orelse &local;
+    const formed = try formCache(fan, blocks);
+    defer if (formed) |cache| fan.detach(&cache.lines);
     cpu.blocks = formed;
     cpu.retire_listener = watch.retire;
     if (watch.core) |slot| slot.* = &cpu;

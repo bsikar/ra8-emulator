@@ -60,7 +60,7 @@ pub const Recorder = struct {
 
     pub fn onBus(self: *Recorder, under: bus.Bus) bus.Bus {
         self.inner = if (self.next) |w| w.busFn(w.context, under) else under;
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat } };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat }, .lines = self.inner.lines };
     }
 
     /// A store reached the bus: hold it when it starts in the window.
