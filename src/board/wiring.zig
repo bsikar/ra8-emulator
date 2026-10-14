@@ -75,6 +75,12 @@ fn attachCapture(self: *Board, memory: Guest) !void {
 
 /// The I2C lines with their fitted parts, then the run's `--attach` asks,
 /// so a clash with a fitted part is reported against the ask.
+/// The run's panel_vsync config arms the frame clock a capture attaches to.
+/// The attach rebuilt the output stage, so the arm waits until it is done.
+fn armPanelClock(self: *Board) void {
+    if (self.panel_vsync) |vsync| self.display.armFrameClock(vsync.phase_ns, vsync.period_ns);
+}
+
 fn attachWire(self: *Board) !void {
     try self.wire.attach(&self.bus);
     self.wire.clock(&self.time.base);
@@ -100,10 +106,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try attachProtected(self);
     // The panel is scanned out of the same RAM the core paints into.
     try self.display.attach(&self.bus, &self.domains.graphics, memory.asInitiator(.glcdc));
-    // The run's panel_vsync config arms the frame clock a capture attaches
-    // to. The attach rebuilt the output stage above, so the arm waits until
-    // it is done.
-    if (self.panel_vsync) |vsync| self.display.armFrameClock(vsync.phase_ns, vsync.period_ns);
+    armPanelClock(self);
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
     self.raster.memory = memory.asInitiator(.drw);
