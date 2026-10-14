@@ -32,6 +32,8 @@ pub const Time = struct {
     readout: time_readout.Readout = .{},
     /// The speed field has the keyboard.
     editing: bool = false,
+    /// Whether the speed preset dropdown popover is open.
+    open: bool = false,
     /// The clock is to be read though nothing runs.
     stale: bool = true,
     polled_ns: u64 = 0,
@@ -41,9 +43,60 @@ pub const Time = struct {
     /// the speed field lets the keyboard go. Returns whether the bar took it.
     pub fn press(self: *Time, bar: Rect, x: i32, y: i32, status: *Status, link: *Link) bool {
         const control = time_bar.hit(shell_frame.toList(bar), x, y);
-        self.editing = control != null and control.? == .field;
-        const found = control orelse return geom.contains(bar, x, y);
-        self.pressCommand(found, link, status);
+        if (control) |c| {
+            switch (c) {
+                .drop => {
+                    self.open = !self.open;
+                    self.editing = false;
+                    self.field.cancel();
+                    return true;
+                },
+                .field => {
+                    self.open = false;
+                    if (!self.editing) {
+                        self.editing = true;
+                        self.field.startEditing();
+                    }
+                    return true;
+                },
+                else => {
+                    self.open = false;
+                    self.editing = false;
+                    self.field.cancel();
+                    self.pressCommand(c, link, status);
+                    return true;
+                },
+            }
+        }
+        self.open = false;
+        if (self.editing) {
+            self.editing = false;
+            self.field.cancel();
+        }
+        return geom.contains(bar, x, y);
+    }
+
+    /// Check whether a press hit the open speed dropdown popover or dismissed it.
+    pub fn pressDropdown(self: *Time, bar: Rect, x: i32, y: i32, link: *Link) bool {
+        if (!self.open) return false;
+        const layout = time_bar.Layout.of(shell_frame.toList(bar));
+        if (time_bar.hitDropdown(layout.field, self.open, x, y)) |row_index| {
+            const preset = speed_field.presets[row_index];
+            _ = self.field.choose(link, preset.milli) catch {};
+            self.open = false;
+            return true;
+        }
+        if (time_bar.dropBox(layout.field).contains(x, y)) {
+            self.open = false;
+            return true;
+        }
+        if (layout.field.contains(x, y)) {
+            self.open = false;
+            self.editing = true;
+            self.field.startEditing();
+            return true;
+        }
+        self.open = false;
         return true;
     }
 
@@ -71,6 +124,15 @@ pub const Time = struct {
     /// Typing and keys for the speed field while it has the keyboard.
     /// Returns whether the event was taken.
     pub fn handle(self: *Time, event: platform.Event, link: *Link) bool {
+        if (self.open) {
+            switch (event) {
+                .key => |key| if (key.down and key.code == speed_field.codes.escape) {
+                    self.open = false;
+                    return true;
+                },
+                else => {},
+            }
+        }
         if (!self.editing) return false;
         switch (event) {
             .text => |text| self.field.typed(text.slice()),
@@ -134,7 +196,7 @@ pub const Time = struct {
 
     /// The bar's view. Its text lives in `self` until the next call.
     pub fn view(self: *Time, status: *const Status) time_bar.View {
-        return time_bar_capture.view(&self.texts, status, &self.field, &self.readout, &self.run, self.editing);
+        return time_bar_capture.view(&self.texts, status, &self.field, &self.readout, &self.run, self.editing, self.open);
     }
 };
 

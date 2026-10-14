@@ -47,7 +47,7 @@ const Models = struct {
     }
 
     fn view(self: *Models, editing: bool) bar.View {
-        return capture.view(&self.texts, &self.status, &self.field, &self.readout, &self.run, editing);
+        return capture.view(&self.texts, &self.status, &self.field, &self.readout, &self.run, editing, false);
     }
 };
 
@@ -100,7 +100,7 @@ test "the controls sit left to right and the clock takes what is left" {
 test "a click lands on the control under it, and nothing in the gaps or the clock" {
     const area: Rect = .{ .x = 20, .y = 100, .w = 480, .h = bar.height };
     const layout = bar.Layout.of(area);
-    for ([_]bar.Control{ .run, .pause, .step, .over, .out, .field }) |control| {
+    for ([_]bar.Control{ .run, .pause, .step, .over, .out, .field, .drop }) |control| {
         const at = middle(layout.rect(control));
         try std.testing.expectEqual(@as(?bar.Control, control), bar.hit(area, at[0], at[1]));
     }
@@ -116,7 +116,7 @@ test "the bar rasterises to the pinned golden frame" {
     defer scene.deinit();
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 13733637898402052016), scene.digest());
+    try std.testing.expectEqual(@as(u64, 5839892557862337880), scene.digest());
 }
 
 test "the bar rasterises to the pinned golden frame in the light theme" {
@@ -125,7 +125,7 @@ test "the bar rasterises to the pinned golden frame in the light theme" {
     scene.theme = light;
     var models = Models.sample();
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 17928306916895088826), scene.digest());
+    try std.testing.expectEqual(@as(u64, 13924312453608349826), scene.digest());
 }
 
 test "the editing field rasterises to its pinned golden frame" {
@@ -136,7 +136,7 @@ test "the editing field rasterises to its pinned golden frame" {
     models.run.lit = true;
     models.field.typed("5");
     try scene.render(.{ .x = 0, .y = 0, .w = 480, .h = bar.height }, models.view(true));
-    try std.testing.expectEqual(@as(u64, 11371028978566052426), scene.digest());
+    try std.testing.expectEqual(@as(u64, 486489464490860697), scene.digest());
 }
 
 test "the bar with an RTC date rasterises to its pinned golden frame, wide enough for the whole line" {
@@ -145,7 +145,7 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
     var models = Models.sample();
     models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
     try scene.render(.{ .x = 0, .y = 0, .w = 800, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 634506185226783751), scene.digest());
+    try std.testing.expectEqual(@as(u64, 4505735381104003527), scene.digest());
 }
 
 test "a short bar hides incomplete controls and keeps the whole clock line" {

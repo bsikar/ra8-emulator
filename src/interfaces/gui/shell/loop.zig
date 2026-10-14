@@ -195,6 +195,7 @@ pub const Shell = struct {
                 if (press.button != 1) return;
                 if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
+                if (press.down and shell_press.pressDropdown(self, press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down) return shell_press.releaseBoard(self, solved, press.x, press.y);
                 if (self.held != null) return;

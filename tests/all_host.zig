@@ -126,6 +126,7 @@ test {
     _ = @import("interfaces/gui/session_event_wire_test.zig");
     _ = @import("interfaces/gui/session_led_wire_test.zig");
     _ = @import("interfaces/gui/time_bar_test.zig");
+    _ = @import("interfaces/gui/time_bar_dropdown_test.zig");
     _ = @import("interfaces/gui/time_bar_keys_test.zig");
     _ = @import("interfaces/gui/bar_steps_test.zig");
     _ = @import("interfaces/gui/board_pane_test.zig");

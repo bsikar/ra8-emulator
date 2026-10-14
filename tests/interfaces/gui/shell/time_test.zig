@@ -162,6 +162,40 @@ test "Escape, and a press off the field, let the keyboard go" {
     try std.testing.expect(!bench.time.editing);
 }
 
+test "speed dropdown opens on drop arrow, selects presets, and dismisses on Escape or outside" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const link = &bench.rig.link;
+
+    // Clicking .drop opens the dropdown and does not start typing
+    try std.testing.expect(bench.click(.drop));
+    try std.testing.expect(bench.time.open);
+    try std.testing.expect(!bench.time.editing);
+    try std.testing.expect(bench.time.view(&bench.status).open);
+
+    // Escape closes the dropdown
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.escape, .down = true } }, link));
+    try std.testing.expect(!bench.time.open);
+
+    // Re-open and click the text field area: closes dropdown and enters editing
+    try std.testing.expect(bench.click(.drop));
+    try std.testing.expect(bench.time.open);
+    try std.testing.expect(bench.click(.field));
+    try std.testing.expect(!bench.time.open);
+    try std.testing.expect(bench.time.editing);
+
+    // Re-open and select preset 5 (5x = 5000 milli)
+    try std.testing.expect(bench.click(.drop));
+    try std.testing.expect(bench.time.open);
+    const layout = bar.Layout.of(gui_app.shell.frame.toList(area));
+    const row5 = bar.popoverRow(layout.field, 5);
+    try std.testing.expect(bench.time.pressDropdown(area, row5.x + 2, row5.y + 2, link));
+    try std.testing.expect(!bench.time.open);
+    try bench.exchange();
+    try std.testing.expectEqual(@as(u64, 5000), bench.time.field.applied);
+}
+
 test "the clock is read once while the image is halted and again every poll while it runs" {
     var bench: Bench = undefined;
     try bench.open();
