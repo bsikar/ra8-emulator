@@ -20,7 +20,10 @@
 //! `max_trip`, or a head that stops being calm
 //! ends the watch with no skip. A loop that fails waits `backoff` arrivals
 //! before it is watched again, so a counting loop costs one slow trip in
-//! that many.
+//! that many. The wait is kept with the head's block (block.zig), one for
+//! every head: code that passes one calm head after another, as any
+//! straight run of blocks does, would otherwise be watched at every one,
+//! each miss forgetting the last.
 //!
 //! A trip that only moves R0..R12 and whole RAM words is handed to
 //! counted_trip.zig instead (RA8EMU-602): a bounded poll that counts its
@@ -37,6 +40,7 @@ const Banked = @import("../banked.zig").Banked;
 const Active = @import("exception/all.zig").active.Active;
 const counted = @import("counted/trip.zig");
 const td = @import("trip_decode.zig");
+const block_cache = @import("block/cache.zig");
 
 pub const max_trip: u32 = 64;
 pub const backoff: u16 = 256;
@@ -85,8 +89,6 @@ pub const Watch = struct {
     changed: bool = false,
     inner: bus.Bus = undefined,
     before: Snapshot = undefined,
-    miss_pc: u32 = 0,
-    miss_wait: u16 = 0,
     repeated: [max_repeats]Repeat = undefined,
     repeats: usize = 0,
     rec: counted.Recorder = .{},
@@ -184,12 +186,12 @@ pub const Watch = struct {
     fn begin(self: *Watch, cpu: *Cpu) void {
         const found = park.calmHead(cpu) orelse return;
         if (park.tripLength(found) != null) return; // 450's cheaper path
-        if (found.start == self.miss_pc and self.miss_wait != 0) {
-            self.miss_wait -= 1;
+        if (found.miss_wait != 0) {
+            found.miss_wait -= 1;
             return;
         }
         // The head instruction is the trip's first.
-        self.* = .{ .on = true, .head = found.start, .steps = 1, .inner = cpu.bus, .before = Snapshot.take(cpu), .miss_pc = self.miss_pc };
+        self.* = .{ .on = true, .head = found.start, .steps = 1, .inner = cpu.bus, .before = Snapshot.take(cpu) };
         cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate, .miss = self.inner.miss, .tally = self.inner.tally };
         self.rec.start(&cpu.regs);
         self.record(cpu);
@@ -198,8 +200,9 @@ pub const Watch = struct {
     fn miss(self: *Watch, cpu: *Cpu) void {
         const head = self.head;
         self.drop(cpu);
-        self.miss_pc = head;
-        self.miss_wait = backoff;
+        const cache = cpu.blocks orelse return;
+        const formed = &cache.blocks[(head >> 1) & (block_cache.slots - 1)];
+        if (formed.len != 0 and formed.start == head) formed.miss_wait = backoff;
     }
 
     /// The interrupt poll reads the SCS for the core, not for the trip, so it

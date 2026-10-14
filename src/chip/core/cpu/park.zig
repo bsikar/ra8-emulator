@@ -45,7 +45,7 @@ pub fn trips(cpu: *Cpu, left: u64) u64 {
 /// instructions and the poll has settled, so no trip round a loop there can
 /// change what is pending before the stretch ends. Shared with
 /// fixed_trip.zig (RA8EMU-463).
-pub fn calmHead(cpu: *const Cpu) ?*const block.Block {
+pub fn calmHead(cpu: *const Cpu) ?*block.Block {
     if (cpu.retire_listener != null or cpu.waiting != null) return null;
     const quiet = cpu.quiet orelse return null;
     if (!quiet.settled and !(quiet.hushed and quiet.clear)) return null;

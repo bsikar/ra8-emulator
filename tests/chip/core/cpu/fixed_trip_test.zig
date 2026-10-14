@@ -306,3 +306,48 @@ test "a refused post-indexed load through the trip bus takes a precise BusFault"
     try std.testing.expectEqual(@as(u32, 0), rig.cpu.regs.get(2));
     try std.testing.expectEqual(bus_fault.Tally{ .raised = 1 }, tally);
 }
+
+// a: ldr r1, [r2]; b b. b: ldr r3, [r2]; b a. With R2 on the SCS neither
+// trip is one the watch can follow: a read outside flash and RAM spoils it.
+const two_heads = [_]u16{ 0x6811, 0xE7FF, 0x6813, 0xE7FB };
+// ldr r1, [r2]; b back.
+const spoiled_loop = [_]u16{ 0x6811, 0xE7FD };
+
+/// The arrivals the block formed at `head` still waits; none for no block.
+fn waitAt(cache: *const BlockCache, head: u32) u16 {
+    const formed = &cache.blocks[(head >> 1) & (ra8.chip.core.cpu.decode.block_cache.slots - 1)];
+    return if (formed.len != 0 and formed.start == head) formed.miss_wait else 0;
+}
+
+test "each head that missed waits on its own, and the run ends where stepping would" {
+    var rig: Rig = .{};
+    try rig.init(&two_heads);
+    defer rig.deinit();
+    rig.cpu.regs.set(2, fixture.scs + 0xD04);
+    // 150 trips of four instructions. The first forms the blocks, the
+    // second is watched from each head in turn and misses at both.
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(600));
+    try std.testing.expectEqual(@as(u64, 600), rig.cpu.retired);
+    try std.testing.expectEqual(fixture.code, rig.cpu.regs.pc);
+    // 148 trips later both still wait, neither having made the watch
+    // forget the other.
+    try std.testing.expectEqual(fixed_trip.backoff - 148, waitAt(rig.cache, fixture.code));
+    try std.testing.expectEqual(fixed_trip.backoff - 148, waitAt(rig.cache, fixture.code + 4));
+    try std.testing.expect(!rig.cpu.trip.on);
+}
+
+test "a head's wait runs out and it is watched again" {
+    var rig: Rig = .{};
+    try rig.init(&spoiled_loop);
+    defer rig.deinit();
+    rig.cpu.regs.set(2, fixture.scs + 0xD04);
+    // The first trip forms the block, the second is watched and misses,
+    // and the eight after it are passed by.
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(2 * 10));
+    try std.testing.expectEqual(fixed_trip.backoff - 8, waitAt(rig.cache, fixture.code));
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(2 * (@as(u64, fixed_trip.backoff) - 8)));
+    try std.testing.expectEqual(@as(u16, 0), waitAt(rig.cache, fixture.code));
+    // Out of waiting: the next trip is watched, misses, and the wait starts over.
+    try std.testing.expectEqual(Stop.count, rig.cpu.run(2 * 2));
+    try std.testing.expectEqual(fixed_trip.backoff - 1, waitAt(rig.cache, fixture.code));
+}
