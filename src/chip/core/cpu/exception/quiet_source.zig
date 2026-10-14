@@ -90,6 +90,7 @@ pub const QuietSource = struct {
             .ctx = self,
             .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek },
             .direct = self.memory.direct,
+            .lines = self.memory.lines,
         };
     }
 

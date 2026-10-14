@@ -13,12 +13,15 @@ pub const MemoryBus = struct {
 
     pub fn view(self: *MemoryBus) bus.Bus {
         self.direct = .{
-            .flash = self.store.region(memmap.mram_base),
-            .sram = self.store.region(memmap.sram_base),
+            .flash = self.store.mutRegion(memmap.mram_base),
+            .sram = self.store.mutRegion(memmap.sram_base),
             .enabled = self.fast_enabled,
             .checking = self.direct.checking,
+            .observer = self.store.trail(),
+            .initiator = self.initiator,
+            .lines = self.store.fan(),
         };
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct, .lines = self.store.fanMut() };
     }
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {

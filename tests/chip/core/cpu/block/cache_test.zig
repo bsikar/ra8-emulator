@@ -135,9 +135,11 @@ test "a store over a cached block through the bus drops it and the new code runs
     std.mem.writeInt(u16, ram.bytes[4..6], 0xE7FE, .little); // b .
     const cache = try freshCache();
     defer std.testing.allocator.destroy(cache);
-    const view = ram.view();
-    try decode.code_lines.watch(&cache.lines);
-    defer decode.code_lines.unwatch(&cache.lines);
+    var fan: decode.code_lines.Fanout = .{};
+    try fan.attach(&cache.lines);
+    defer fan.detach(&cache.lines);
+    var view = ram.view();
+    view.lines = &fan;
     _ = cache.next(view, m85, SramRam.base).?;
     var patch: [2]u8 = undefined;
     std.mem.writeInt(u16, &patch, 0x2207, .little); // movs r2,#7
@@ -154,12 +156,13 @@ test "a write that bypasses the bus drops the block once it is reported" {
     std.mem.writeInt(u16, ram.bytes[2..4], 0xE7FE, .little); // b .
     const cache = try freshCache();
     defer std.testing.allocator.destroy(cache);
-    try decode.code_lines.watch(&cache.lines);
-    defer decode.code_lines.unwatch(&cache.lines);
+    var fan: decode.code_lines.Fanout = .{};
+    try fan.attach(&cache.lines);
+    defer fan.detach(&cache.lines);
     _ = cache.next(ram.view(), m85, SramRam.base).?;
     // A DMA-style copy straight into memory, reported the way Engine.write does.
     std.mem.writeInt(u16, ram.bytes[0..2], 0x2309, .little); // movs r3,#9
-    decode.code_lines.notify(SramRam.base, 2);
+    fan.notify(SramRam.base, 2);
     const after = cache.next(ram.view(), m85, SramRam.base).?;
     try std.testing.expectEqual(@as(u64, 1), cache.dropped);
     try std.testing.expectEqual(@as(u16, 0x2309), after.instr.hw1);
@@ -168,8 +171,9 @@ test "a write that bypasses the bus drops the block once it is reported" {
 test "an unwatched cache hears nothing" {
     const cache = try freshCache();
     defer std.testing.allocator.destroy(cache);
+    var fan: decode.code_lines.Fanout = .{};
     cache.lines.mark(SramRam.base, SramRam.base + 4);
-    decode.code_lines.notify(SramRam.base, 2);
+    fan.notify(SramRam.base, 2);
     try std.testing.expect(!cache.lines.dirty);
 }
 

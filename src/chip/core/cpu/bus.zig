@@ -9,6 +9,8 @@ const Gate = @import("data_gate.zig").Gate;
 const code_lines = @import("code_lines.zig");
 const Peer = @import("exclusive_peer.zig").Peer;
 const bus_fault = @import("../../periph/bus_fault.zig");
+const observer = @import("memory/observer.zig");
+const Initiator = @import("memory/initiator.zig").Initiator;
 
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
 pub const Error = error{ Unmapped, SecurityViolation };
@@ -22,6 +24,52 @@ pub const DirectMemory = struct {
     /// The MPU check's armed flag. While it is set every access goes through
     /// the vtable, so the board bus can ask the MPU (RA8EMU-710).
     checking: ?*const bool = null,
+    /// The trail hook the core's fast writes feed (H2); null records
+    /// nothing (RA8EMU-D1).
+    observer: ?*const observer.Observer = null,
+    /// The initiator the core's own stores carry into the trail.
+    initiator: Initiator = .none,
+    /// The machine's block fanout, which a fast write invalidates.
+    lines: ?*const code_lines.Fanout = null,
+
+    /// Where an access lands: the canonical region base (the Non-secure
+    /// aliases fold onto their Secure region), the offset inside it and the
+    /// host bytes (RA8EMU-D1).
+    const Located = struct { base: u32, offset: usize, data: []u8 };
+
+    inline fn locate(self: *const DirectMemory, address: u32, len: usize) ?Located {
+        if (self.checking) |armed| if (armed.*) return null;
+        if (address >= memmap.mram_base and address < memmap.mram_end) {
+            const offset = address - memmap.mram_base;
+            if (len > memmap.mram_end - memmap.mram_base - offset) return null;
+            const bytes = self.flash orelse return null;
+            return .{ .base = memmap.mram_base, .offset = offset, .data = bytes[offset..][0..len] };
+        }
+        if (address >= memmap.ns_mram_base and address < memmap.ns_mram_end) {
+            const offset = address - memmap.ns_mram_base;
+            if (len > memmap.ns_mram_end - memmap.ns_mram_base - offset) return null;
+            const bytes = self.flash orelse return null;
+            return .{ .base = memmap.mram_base, .offset = offset, .data = bytes[offset..][0..len] };
+        }
+        if (address >= memmap.sram_base and address < memmap.sram_end) {
+            const offset = address - memmap.sram_base;
+            if (len > memmap.sram_end - memmap.sram_base - offset) return null;
+            const bytes = self.sram orelse return null;
+            return .{ .base = memmap.sram_base, .offset = offset, .data = bytes[offset..][0..len] };
+        }
+        if (address >= memmap.ns_sram_base and address < memmap.ns_sram_end) {
+            const offset = address - memmap.ns_sram_base;
+            if (len > memmap.ns_sram_end - memmap.ns_sram_base - offset) return null;
+            const bytes = self.sram orelse return null;
+            return .{ .base = memmap.sram_base, .offset = offset, .data = bytes[offset..][0..len] };
+        }
+        return null;
+    }
+
+    inline fn span(self: *const DirectMemory, address: u32, len: usize) ?[]u8 {
+        const hit = self.locate(address, len) orelse return null;
+        return hit.data;
+    }
 
     inline fn read(self: *const DirectMemory, address: u32, into: []u8) bool {
         const data = self.span(address, into.len) orelse return false;
@@ -29,39 +77,15 @@ pub const DirectMemory = struct {
         return true;
     }
 
+    /// A fast-path write (H2): the pre-image leaves through the trail
+    /// observer before the bytes move, then the block fanout hears the
+    /// range (RA8EMU-D1).
     inline fn write(self: *const DirectMemory, address: u32, bytes: []const u8) bool {
-        const data = self.span(address, bytes.len) orelse return false;
-        @memcpy(data, bytes);
+        const hit = self.locate(address, bytes.len) orelse return false;
+        if (self.observer) |o| o.bytes(.{ .base = hit.base, .offset = hit.offset, .initiator = self.initiator, .pre = hit.data });
+        @memcpy(hit.data, bytes);
+        if (self.lines) |fan| fan.notify(address, bytes.len);
         return true;
-    }
-
-    inline fn span(self: *const DirectMemory, address: u32, len: usize) ?[]u8 {
-        if (self.checking) |armed| if (armed.*) return null;
-        if (address >= memmap.mram_base and address < memmap.mram_end) {
-            const offset = address - memmap.mram_base;
-            if (len > memmap.mram_end - memmap.mram_base - offset) return null;
-            const bytes = self.flash orelse return null;
-            return bytes[offset..][0..len];
-        }
-        if (address >= memmap.ns_mram_base and address < memmap.ns_mram_end) {
-            const offset = address - memmap.ns_mram_base;
-            if (len > memmap.ns_mram_end - memmap.ns_mram_base - offset) return null;
-            const bytes = self.flash orelse return null;
-            return bytes[offset..][0..len];
-        }
-        if (address >= memmap.sram_base and address < memmap.sram_end) {
-            const offset = address - memmap.sram_base;
-            if (len > memmap.sram_end - memmap.sram_base - offset) return null;
-            const bytes = self.sram orelse return null;
-            return bytes[offset..][0..len];
-        }
-        if (address >= memmap.ns_sram_base and address < memmap.ns_sram_end) {
-            const offset = address - memmap.ns_sram_base;
-            if (len > memmap.ns_sram_end - memmap.ns_sram_base - offset) return null;
-            const bytes = self.sram orelse return null;
-            return bytes[offset..][0..len];
-        }
-        return null;
     }
 };
 
@@ -79,6 +103,9 @@ pub const Bus = struct {
     /// The other core's exclusive monitor, cleared by a store into the word
     /// it tagged; null on a single-core run (RA8EMU-134).
     peer: ?Peer = null,
+    /// The machine's block fanout, where a run's block cache joins; null on
+    /// a bus with no store behind it (RA8EMU-D1).
+    lines: ?*code_lines.Fanout = null,
 
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
@@ -120,11 +147,13 @@ pub const Bus = struct {
 
     pub inline fn write(self: Bus, address: u32, bytes: []const u8) Error!void {
         if (self.gate) |gate| if (gate.refuses(address, bytes.len)) return error.SecurityViolation;
-        code_lines.notify(address, bytes.len);
         if (self.peer) |other| other.stored(address, bytes.len);
-        if (bytes.len != 0) if (self.direct) |memory| {
-            if (memory.enabled and memory.write(address, bytes)) return;
-        };
+        if (bytes.len != 0) {
+            if (self.direct) |memory| {
+                if (memory.enabled and memory.write(address, bytes)) return;
+            }
+            if (self.lines) |fan| fan.notify(address, bytes.len);
+        }
         return self.vtable.write(self.ctx, address, bytes) catch |err| self.missed(err, address);
     }
 

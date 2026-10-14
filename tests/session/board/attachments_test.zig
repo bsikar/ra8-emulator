@@ -262,13 +262,13 @@ test "attachment strict outer Files late section leaves memory core debug and ho
     rig.gauge().write(4);
     rig.cpu.regs.low[0] = 7;
     const address = ra8.chip.core.memmap.sram_base + 0x100;
-    rig.store.span(address, 1).?[0] = 12;
+    try rig.store.write(.none, address, &.{12});
     var saved = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer saved.deinit();
     try rig.files.writeTo(&saved.writer);
     const pointer = rig.gauge().context;
     rig.cpu.regs.low[0] = 88;
-    rig.store.span(address, 1).?[0] = 99;
+    try rig.store.write(.none, address, &.{99});
     rig.machine.dwt.comps[0] = 0xabc;
     rig.board.panel.refresh_hook = .{ .context = rig, .refreshFn = repaint };
     const corrupt = try std.testing.allocator.dupe(u8, saved.written());

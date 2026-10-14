@@ -1,7 +1,6 @@
 //! A handle on the Zig core's store with the bus-initiator identity used by the
 //! shared external-memory fabric.
 const std = @import("std");
-const code_lines = @import("../../code_lines.zig");
 const Initiator = @import("../initiator.zig").Initiator;
 const Store = @import("../store.zig").Store;
 pub const bus = @import("bus.zig");
@@ -24,7 +23,7 @@ pub const Guest = struct {
     pub fn write(self: Guest, address: u32, bytes: []const u8) Error!void {
         if (bytes.len == 0) return;
         self.store.write(self.initiator, address, bytes) catch return Error.Unmapped;
-        code_lines.notify(address, bytes.len);
+        self.store.fan().notify(address, bytes.len);
     }
 
     pub fn backed(self: Guest, address: u32, len: usize) bool {

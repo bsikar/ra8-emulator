@@ -5,10 +5,18 @@ const memmap = @import("../../memmap.zig");
 const external_port = @import("external_port.zig");
 const Initiator = @import("initiator.zig").Initiator;
 const extra = @import("extra.zig");
+const observer = @import("observer.zig");
+const code_lines = @import("../code_lines.zig");
 
 pub const Error = error{OutOfMemory};
 pub const AccessError = error{Unmapped} || Error;
 pub const MapError = extra.Error;
+
+/// Where a byte write lands: the canonical backing region's base, the
+/// offset inside it, and the mutable host bytes (RA8EMU-D1). Aliases fold
+/// onto the region they view, so every write into one storage reports one
+/// identity.
+pub const Located = struct { base: u32, offset: usize, bytes: []u8 };
 
 pub const Store = struct {
     pages: [memmap.ram.len]?[]u8 = @splat(null),
@@ -16,10 +24,17 @@ pub const Store = struct {
     extra: extra.Extra = .{},
     port: ?external_port.Port = null,
     owns_port: bool = false,
+    /// The trail hook this store feeds (H1); null records nothing.
+    observer: ?*const observer.Observer = null,
+    /// This machine's block fanout, which its writes invalidate.
+    fanout: code_lines.Fanout = .{},
+    /// The store shared regions were borrowed from, when this is a second
+    /// core's store: its fanout and trail are the machine's.
+    lender: ?*Store = null,
 
     /// Back every fixed region. A second core borrows shared SRAM/SDRAM and
     /// the same external port, while retaining private MRAM, TCM and PPB.
-    pub fn init(lender: ?*const Store) Error!Store {
+    pub fn init(lender: ?*Store) Error!Store {
         var self: Store = .{};
         errdefer self.deinit();
         for (memmap.ram, 0..) |entry, index| {
@@ -36,6 +51,7 @@ pub const Store = struct {
             self.pages[index] = self.pages[indexOf(secure).?];
         }
         if (lender) |first| self.port = first.port;
+        self.lender = lender;
         return self;
     }
 
@@ -49,6 +65,7 @@ pub const Store = struct {
         self.pages[indexOf(memmap.ns_sdram_base).?] = port.sdram;
         self.port = port;
         self.owns_port = true;
+        self.barrier(.attach_external);
     }
 
     pub fn deinit(self: *Store) void {
@@ -64,29 +81,41 @@ pub const Store = struct {
         self.extra.deinit();
         self.port = null;
         self.owns_port = false;
+        self.observer = null;
+        self.lender = null;
     }
 
     /// Zero every region this store owns and drop the windows it mapped,
     /// so a live store reads as a fresh one before a snapshot fills it
     /// (RA8EMU-768). Borrowed regions are the lender's to clear.
     pub fn wipe(self: *Store) void {
+        self.barrier(.wipe);
         for (self.pages, self.owned) |held, mine| {
             if (mine) if (held) |bytes| @memset(bytes, 0);
         }
         if (self.owns_port) @memset(self.port.?.sdram, 0);
         self.extra.deinit();
+        self.notifyCodeRanges();
     }
 
-    pub fn region(self: *const Store, base: u32) ?[]u8 {
+    pub fn region(self: *const Store, base: u32) ?[]const u8 {
         return self.pages[indexOf(base) orelse return null];
     }
 
     /// A directly addressable host span. Mapped OSPI stays behind read/write
     /// so its erased inversion and NOR program semantics cannot be bypassed.
-    pub fn span(self: *const Store, address: u32, len: usize) ?[]u8 {
+    pub fn span(self: *const Store, address: u32, len: usize) ?[]const u8 {
+        const hit = self.locate(address, len) orelse return null;
+        return hit.bytes;
+    }
+
+    /// Resolve an access to the storage it mutates, with the canonical
+    /// region base the trail records (RA8EMU-D1). OSPI stays out: its
+    /// erased inversion and NOR program semantics cannot be bypassed.
+    pub fn locate(self: *const Store, address: u32, len: usize) ?Located {
         if (self.port) |*port| {
             if (port.geometry.locate(address, len)) |hit| {
-                if (hit.kind == .sdram) return port.sdram[hit.offset..][0..len];
+                if (hit.kind == .sdram) return .{ .base = memmap.sdram_base, .offset = hit.offset, .bytes = port.sdram[hit.offset..][0..len] };
                 return null;
             }
             if (port.geometry.overlaps(address, len)) return null;
@@ -96,9 +125,11 @@ pub const Store = struct {
             const offset = address - entry.base;
             const bytes = self.pages[index] orelse return null;
             if (offset > bytes.len or len > bytes.len - offset) return null;
-            return bytes[offset..][0..len];
+            const base = viewOf(entry.base) orelse entry.base;
+            return .{ .base = base, .offset = offset, .bytes = bytes[offset..][0..len] };
         }
-        return self.extra.span(address, len);
+        const hit = self.extra.locate(address, len) orelse return null;
+        return .{ .base = hit.base, .offset = hit.offset, .bytes = hit.bytes };
     }
 
     pub fn read(self: *Store, initiator: Initiator, address: u32, into: []u8) AccessError!void {
@@ -114,17 +145,51 @@ pub const Store = struct {
         @memcpy(into, self.span(address, into.len) orelse return AccessError.Unmapped);
     }
 
+    /// A byte write (H1): the pre-image leaves through the trail observer
+    /// before the bytes move, with the initiator that made the write.
+    /// OSPI writes take the Flash model's own hooks (H3) and record nothing
+    /// here; a NOR write is not a byte overwrite.
     pub fn write(self: *Store, initiator: Initiator, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
         if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
                 .ospi => if (!(try port.flash.write(hit.offset, bytes))) return AccessError.Unmapped,
-                .sdram => @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes),
+                .sdram => {
+                    self.hookBytes(initiator, memmap.sdram_base, hit.offset, port.sdram[hit.offset..][0..bytes.len]);
+                    @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
+                },
             }
             port.meter.note(initiator, hit, .write, bytes.len);
             return;
         };
-        @memcpy(self.span(address, bytes.len) orelse return AccessError.Unmapped, bytes);
+        const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;
+        self.hookBytes(initiator, target.base, target.offset, target.bytes);
+        @memcpy(target.bytes, bytes);
+    }
+
+    /// The undo trail's raw restore: `bytes` land at `address` past the
+    /// gates, the MPU, write-one-to-clear and NOR program semantics,
+    /// matching what the trail recorded (RA8EMU-D1). The restore records
+    /// nothing itself, but code the restored bytes reach must re-execute,
+    /// so the block fanout hears the range. OSPI-backed bytes are refused
+    /// until the Flash model grows a raw path (unit 08 contract).
+    pub fn rawWrite(self: *Store, address: u32, bytes: []const u8) AccessError!void {
+        if (bytes.len == 0) return;
+        if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
+            if (hit.kind != .sdram) return AccessError.Unmapped;
+            @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
+            return;
+        };
+        const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;
+        @memcpy(target.bytes, bytes);
+        self.notifyCodeRanges();
+    }
+
+    /// A structural change around byte writes (H5): the trail stamps one
+    /// barrier entry, and ranges this store zeroes drop formed blocks so
+    /// restored code executes fresh.
+    pub fn barrier(self: *Store, event: observer.Barrier) void {
+        if (self.trail()) |o| o.barrier(event);
     }
 
     pub fn backed(self: *const Store, address: u32, len: usize) bool {
@@ -135,7 +200,50 @@ pub const Store = struct {
     pub fn map(self: *Store, base: u32, size: u32) MapError!void {
         if (self.span(base, 1) != null) return MapError.Mapped;
         if (external_port.supportedOverlap(base, size)) return MapError.Mapped;
-        return self.extra.map(base, size);
+        try self.extra.map(base, size);
+        self.barrier(.{ .mapped = .{ .base = base, .size = size } });
+    }
+
+    /// The fanout this store's writes invalidate. A borrower shares the
+    /// lender's, so a write through either core's store drops both cores'
+    /// blocks (RA8EMU-D1).
+    pub fn fan(self: *const Store) *const code_lines.Fanout {
+        if (self.lender) |first| return first.fan();
+        return &self.fanout;
+    }
+
+    /// The fanout a run attaches its block cache to, through the lender
+    /// when this store borrows shared regions.
+    pub fn fanMut(self: *Store) *code_lines.Fanout {
+        if (self.lender) |first| return first.fanMut();
+        return &self.fanout;
+    }
+
+    /// The trail this store feeds. A borrower feeds the lender's, so one
+    /// machine records one trail however many cores write.
+    pub fn trail(self: *const Store) ?*const observer.Observer {
+        if (self.lender) |first| return first.trail();
+        return self.observer;
+    }
+
+    /// Tell the block fanout about every tracked code range this store
+    /// owns, after those bytes changed outside a write path.
+    pub fn notifyCodeRanges(self: *const Store) void {
+        for (memmap.ram, self.owned) |entry, mine| {
+            if (!mine) continue;
+            if (entry.base != memmap.dtcm_base and entry.base != memmap.mram_base and entry.base != memmap.sram_base) continue;
+            self.fan().notify(entry.base, @intCast(entry.end() - entry.base));
+        }
+    }
+
+    /// The mutable host bytes of one fixed region, for the core's
+    /// fast-path backing and a snapshot's apply; hook sites only (RA8EMU-D1).
+    pub fn mutRegion(self: *Store, base: u32) ?[]u8 {
+        return self.pages[indexOf(base) orelse return null];
+    }
+
+    inline fn hookBytes(self: *const Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8) void {
+        if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre });
     }
 };
 
