@@ -35,52 +35,6 @@ zig build -Dgui                 # also the windowed debugger (fetches SDL3)
 zig build gate                  # zig fmt --check, file and function length, terms
 ```
 
-Run each merge-gate command separately. Build one suite at a time, then run
-its installed binary directly so compilation and execution have separate
-command budgets:
-
-```sh
-zig build ra8_tests -j1 -Dtest-filter=chip.periph.crc_test
-zig build ra8_host_tests-exe -j1
-bash tools/test_batch.sh zig-out/bin/ra8_host_tests /tmp/ra8-host-tests.log
-zig build ra8_tests-exe -j1
-bash tools/test_batch.sh zig-out/bin/ra8_tests /tmp/ra8-core-tests.log
-zig build ra8_gui_link_tests-exe -j1
-bash tools/test_batch.sh zig-out/bin/ra8_gui_link_tests /tmp/ra8-link-tests.log
-zig build consumer-smoke -j1
-bash tests/tools/test_batch_test.sh
-```
-
-Repeat the targeted command for each changed file, using `ra8_host_tests`
-for host tests. `-Dtest-filter=TEXT` matches the qualified test name: replace
-the mirrored path's slashes with dots and omit `tests/` and `.zig`. Keep the
-existing suite roots so sibling helpers and embedded fixtures stay within
-Zig's module boundary. Unnamed import tests also run. Omit the filter from
-full-suite builds. Use the corresponding `-exe` step to separate compilation
-from execution for a larger target. `test-exe` remains available to install
-all three suites, including cross builds. Never use the combined
-`zig build test -j1` as a merge gate.
-
-Run Linux suites from a Linux filesystem, including under WSL: the socket
-fixtures need Unix filesystem semantics. The Bash runner needs GNU `timeout`
-(Linux or WSL). It caps virtual memory
-at 3,000,000 KiB and execution at 800 seconds, with five seconds to terminate
-the process. `RA8_TEST_TIMEOUT_SECONDS` can lower that timeout. Every attempt
-appends `START` and `COMPLETE`, `FAILED`, or `CUT` to its log and preserves
-the exit status. Rerun a cut suite from its start with the same log path.
-An attempt missing a terminal marker is incomplete. Earlier passes never
-stand in for the latest attempt or a changed checkout. On Windows, installed
-binaries have an `.exe` suffix and can run natively, but this Bash memory and
-timeout policy requires a Linux build under WSL.
-
-Keep the corpus golden comparisons (`tools/dualcore_corpus.sh`,
-`tools/modules_corpus.sh`, `tools/fault_corpus.sh`, and `tools/plug_corpus.sh`)
-as separate commands against the firmware images. A complete merge gate
-includes those comparisons and the public consumer smoke test, as well as
-the unit suites. Run a full batched sweep on the latest `main` at least once
-per 90-minute monitor window. A failed or incomplete sweep blocks merges
-until triaged or completed.
-
 ## Emulator
 
 ```sh
