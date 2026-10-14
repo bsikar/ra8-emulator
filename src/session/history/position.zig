@@ -15,6 +15,9 @@ pub const Gap = scheduler.position.Gap;
 
 pub const Error = error{ Impossible, OtherLine, Truncated, BadValue };
 
+/// The bytes one encoded position occupies.
+pub const encoded_len: usize = 18;
+
 /// What the round a position names actually ran, straight from the state
 /// scheduler's round record. The codec validates against these facts and
 /// nothing else; it holds no opinion of its own about rounds.
