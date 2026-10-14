@@ -214,6 +214,7 @@ test {
     _ = @import("interfaces/gui/shell/loop_test.zig");
     _ = @import("interfaces/gui/wall_clock_test.zig");
     _ = @import("interfaces/gui/shell/run_test.zig");
+    _ = @import("interfaces/gui/shell/run_queue_test.zig");
     _ = @import("interfaces/gui/shell/time_test.zig");
     _ = @import("interfaces/gui/shell/theme_test.zig");
     _ = @import("interfaces/gui/shell_run_live_test.zig");

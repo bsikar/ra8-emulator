@@ -53,20 +53,16 @@ pub const Options = struct {
     device: part.Part = .ra8p1,
     input_script: ?[]const u8 = null,
     /// The board profile's text (RA8EMU-1152); null is the shipped EK-RA8D2
-    /// default. The text stays the caller's; the labels parsed out of it
-    /// point into it and must outlive the harness.
+    /// default. Its labels point into the caller's text and outlive it.
     board_profile: ?[]const u8 = null,
-    /// Where snapshots live (RA8EMU-1175); null keeps bare names in the
-    /// working directory.
+    /// Where snapshots live (RA8EMU-1175); null keeps bare names in the working directory.
     state_dir: ?[]const u8 = null,
-    /// How many stops the rewind history keeps (RA8EMU-1170); the oldest
-    /// frame falls off past it.
+    /// How many stops the rewind history keeps (RA8EMU-1170); the oldest falls off past it.
     history_frames: u32 = 240,
     settle_window_ns: u64 = 50_000_000,
     /// Whether the boundary stretches across idle sleeps (RA8EMU-1120).
     idle_skip: bool = true,
-    /// The run's `panel_vsync` config (RA8EMU R9), stored on the session's
-    /// board the same way a plain run's fit stores it.
+    /// The run's `panel_vsync` config (RA8EMU R9), stored the way a plain run's fit stores it.
     panel_vsync: ?glcdc_vsync.Config = null,
 };
 
@@ -74,12 +70,10 @@ const LoaderState = struct {
     allocator: std.mem.Allocator,
     cpu: [2]?*cpu_mod.Cpu = .{ null, null },
     memory: [2]?Guest = .{ null, null },
-    /// An owned copy of each core's last loaded image, for the memory map
-    /// (RA8EMU-794); replaced on every load.
+    /// An owned copy of each core's last loaded image (RA8EMU-794); replaced on every load.
     loaded: [2]?[]u8 = .{ null, null },
-    /// Where a reset the firmware asks for restarts CPU0. A load moves it
-    /// to the new image's vector table (RA8EMU-959), or an image loaded
-    /// over another would reboot into the one it replaced.
+    /// Where a reset the firmware asks for restarts CPU0; a load moves it to
+    /// the new image's vector table (RA8EMU-959), or the replaced image would boot.
     reboot: ?*Reboot = null,
 
     fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
@@ -88,8 +82,7 @@ const LoaderState = struct {
         const index = @backingInt(core);
         const cpu = self.cpu[index] orelse return error.CoreNotAttached;
         const memory = self.memory[index] orelse return error.CoreNotAttached;
-        // The same map, option-window claim and write a `--cpu zig` run
-        // loads with, so option-setting segments land (RA8EMU-760).
+        // The same map and option-window claim a `--cpu zig` run loads with (RA8EMU-760).
         const loaded = try read_image.read(image);
         _ = try memory_load.image(memory, loaded.image());
         const base = image.vectorBase() orelse return error.NoVectorTable;
@@ -346,9 +339,8 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
     option_memory.apply(&state.board.heartbeat, state.cpu0.own());
     state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
-    // The MPU check, as a plain run arms it (boot.zig), before any view
-    // copies the direct path: without it a session core refused nothing, so
-    // a ThreadX module's out-of-region store landed (RA8EMU-1148).
+    // The MPU check, as a plain run arms it (boot.zig), before any view copies
+    // the direct path; without it a session core refused nothing (RA8EMU-1148).
     state.check = .{ .unit = &state.board.regions, .state = &state.cpu.banked.current };
     state.memory.armCheck(&state.check);
     state.machine = .{};
@@ -365,8 +357,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.formed = try block_cache.form();
     errdefer block_cache.drop(state.formed);
     state.cpu.blocks = state.formed;
-    // CPACR and the FP context words reach the core's FP state, as in a
-    // plain run (boot.zig); otherwise every FP instruction is NOCP (RA8EMU-950).
+    // CPACR and the FP context words reach the core's FP state (boot.zig), else NOCP (RA8EMU-950).
     state.memory.scs.fp = &state.cpu.fp;
     try state.cpu.reset(vector);
     state.loading = .{ .allocator = allocator };

@@ -1,10 +1,8 @@
 //! The board: the peripheral bus and every block that answers on it.
 //!
-//! This is the part of the machine that is not the CPU. main.zig owns the
-//! wiring of a run (read an ELF, reset, run, print), the engine owns the CPU,
-//! and everything that lives behind an address in the peripheral window is
-//! held here so neither of the other two has to know the list. The end-of-run
-//! narration that reads this state lives next door in report.zig.
+//! This is the part of the machine that is not the CPU. main.zig wires a run,
+//! the engine owns the CPU, and everything behind an address in the peripheral
+//! window lives here so neither knows the list. report.zig narrates a run.
 const std = @import("std");
 const Tick = @import("ra8_chip").core.tick.Tick;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
@@ -132,8 +130,7 @@ pub const Board = struct {
     accuracy: cac.Cac,
     comparators: acmphs.Acmphs,
     /// The parallel-camera capture engine. No sensor behind it, so the
-    /// observable is whether a frame actually landed in the buffer CDAYR
-    /// points at. Built in attach(): it writes into the engine's memory.
+    /// observable is whether a frame landed in the buffer CDAYR points at.
     capture: ceu.Ceu,
     /// The two 12-bit D/A channels. No result readback on this part, so the
     /// code stream and DACR0.DACEN are the whole observable.
@@ -372,10 +369,8 @@ pub const Board = struct {
         self.bus.deinit();
         self.panel.deinit();
     }
-    /// The chunk boundary, peripheral side. What actually happens there is
-    /// next door in boundary.zig: the order the blocks are stepped in and
-    /// where an event goes is its own subject, and this file is the list of
-    /// what the board is made of.
+    /// The chunk boundary, peripheral side. boundary.zig owns what happens
+    /// there; this file is the list of what the board is made of.
     pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
         return boundary.tick(self, core, instructions);
     }
