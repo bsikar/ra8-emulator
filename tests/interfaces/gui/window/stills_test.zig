@@ -9,6 +9,7 @@ const png = cli_app.report.png;
 const raster = ra8.render.raster;
 const Headless = gui_app.headless.Headless;
 const Color = ra8.render.draw_list.Color;
+const stub_window = @import("../stub_window.zig");
 
 fn frameOf(shade: u8) !raster.Framebuffer {
     const frame = try raster.Framebuffer.init(std.testing.allocator, 4, 3);
@@ -79,4 +80,23 @@ test "the stills directory is made when asked for and absent otherwise" {
     const dir = (try stills.openDir(std.testing.io, path)).?;
     defer dir.close(std.testing.io);
     try tmp.dir.access(std.testing.io, "shots/pane", .{});
+}
+
+test "every other window call reaches the window behind the recorder" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var stub: stub_window.Stub = .{};
+    var recorder = stills.Recorder{ .allocator = std.testing.allocator, .inner = stub.platform(), .io = std.testing.io, .dir = tmp.dir, .stem = "w" };
+    try stub_window.expectPassesThrough(recorder.platform(), &stub);
+}
+
+test "the recorder never lets the window draw a frame itself" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var stub: stub_window.Stub = .{};
+    var recorder = stills.Recorder{ .allocator = std.testing.allocator, .inner = stub.platform(), .io = std.testing.io, .dir = tmp.dir, .stem = "w" };
+    var list = ra8.render.draw_list.DrawList.init(std.testing.allocator, 4, 4);
+    defer list.deinit();
+    try std.testing.expect(!try recorder.platform().show(&list, null));
+    try std.testing.expectEqual(@as(u32, 0), stub.shows);
 }

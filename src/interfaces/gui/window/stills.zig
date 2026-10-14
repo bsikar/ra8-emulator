@@ -3,7 +3,8 @@
 //! `every`-th presented frame as a numbered PNG (window_still.zig). It
 //! works the same in front of the SDL window and the headless one, so a
 //! run on a machine with no display still leaves the camera panel's
-//! states on disk to view or diff.
+//! states on disk to view or diff. It never draws through the window's own
+//! `show`: every frame is rasterized, so every frame can be kept.
 const std = @import("std");
 const raster = @import("ra8_render").raster;
 const platform_mod = @import("../platform.zig");
@@ -31,7 +32,60 @@ pub const Recorder = struct {
     saved: u32 = 0,
 
     pub fn platform(self: *Recorder) platform_mod.Platform {
-        return .{ .ctx = self, .vtable = &.{ .poll = poll, .size = size, .scale = scale, .present = present, .focus = focus, .open_image = openImage, .open_profile = openProfile, .title = title } };
+        return .{ .ctx = self, .vtable = &.{
+            .poll = poll,
+            .size = size,
+            .scale = scale,
+            .present = present,
+            .focus = focus,
+            .open_image = openImage,
+            .open_profile = openProfile,
+            .title = title,
+            .interval = interval,
+            .set_vsync = setVsync,
+            .refresh = refresh,
+            .appearance = appearance,
+            .toggle_fullscreen = toggleFullscreen,
+            .fullscreen = fullscreen,
+            .visible = visible,
+            .position = position,
+        } };
+    }
+
+    fn from(ctx: *anyopaque) *Recorder {
+        return @ptrCast(@alignCast(ctx));
+    }
+
+    fn interval(ctx: *anyopaque) u64 {
+        return from(ctx).inner.interval();
+    }
+
+    fn setVsync(ctx: *anyopaque, on: bool) bool {
+        return from(ctx).inner.setVsync(on);
+    }
+
+    fn refresh(ctx: *anyopaque) u32 {
+        return from(ctx).inner.refresh();
+    }
+
+    fn appearance(ctx: *anyopaque) platform_mod.Appearance {
+        return from(ctx).inner.appearance();
+    }
+
+    fn toggleFullscreen(ctx: *anyopaque) void {
+        from(ctx).inner.toggleFullscreen();
+    }
+
+    fn fullscreen(ctx: *anyopaque) bool {
+        return from(ctx).inner.fullscreen();
+    }
+
+    fn visible(ctx: *anyopaque) bool {
+        return from(ctx).inner.visible();
+    }
+
+    fn position(ctx: *anyopaque) ?platform_mod.Pos {
+        return from(ctx).inner.position();
     }
 
     fn openImage(ctx: *anyopaque) void {

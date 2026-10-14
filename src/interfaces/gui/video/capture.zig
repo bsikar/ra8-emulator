@@ -1,4 +1,8 @@
 //! Platform decorator intercepting poll and present for scripting and video capture (RA8EMU-1120).
+//! Everything else it passes to the window behind it, so the shell drives
+//! the same window whether a script or a recording is on or not. A frame
+//! the window draws itself (`show`) is a frame like a presented one; while
+//! a recording is on every frame is rasterized instead, so it can be kept.
 const std = @import("std");
 const platform_mod = @import("../platform.zig");
 const raster = @import("ra8_render").raster;
@@ -63,6 +67,11 @@ pub const Capture = struct {
                 .focus = focus,
                 .open_image = openImage,
                 .open_profile = openProfile,
+                .title = title,
+                .toggle_fullscreen = toggleFullscreen,
+                .fullscreen = fullscreen,
+                .visible = visible,
+                .position = position,
             },
         };
     }
@@ -98,12 +107,15 @@ pub const Capture = struct {
         return self.inner.scale();
     }
 
+    /// One frame is on screen: the script's next frame may poll.
+    fn shown(self: *Capture) void {
+        self.frame_counter += 1;
+        self.polled_this_frame = false;
+    }
+
     fn present(ctx: *anyopaque, frame: *const Framebuffer) anyerror!void {
         const self: *Capture = @ptrCast(@alignCast(ctx));
-        defer {
-            self.frame_counter += 1;
-            self.polled_this_frame = false;
-        }
+        defer self.shown();
 
         if (self.writer) |writer| {
             const video_idx = @as(u32, @intCast(@divTrunc(@as(u64, self.frame_counter) * self.fps, 60)));
@@ -137,9 +149,39 @@ pub const Capture = struct {
         self.overlay_frame = try Framebuffer.init(self.allocator, width, height);
     }
 
+    /// A recording needs the frame's pixels, so it takes the rasterized
+    /// path through `present`; otherwise the window may draw the list itself.
     fn show(ctx: *anyopaque, list: *const draw_list.DrawList, atlas: ?raster.Atlas) anyerror!bool {
         const self: *Capture = @ptrCast(@alignCast(ctx));
-        return self.inner.show(list, atlas);
+        if (self.writer != null) return false;
+        const drew = try self.inner.show(list, atlas);
+        if (drew) self.shown();
+        return drew;
+    }
+
+    fn title(ctx: *anyopaque, text: []const u8) void {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        self.inner.title(text);
+    }
+
+    fn toggleFullscreen(ctx: *anyopaque) void {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        self.inner.toggleFullscreen();
+    }
+
+    fn fullscreen(ctx: *anyopaque) bool {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        return self.inner.fullscreen();
+    }
+
+    fn visible(ctx: *anyopaque) bool {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        return self.inner.visible();
+    }
+
+    fn position(ctx: *anyopaque) ?platform_mod.Pos {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        return self.inner.position();
     }
 
     fn interval(ctx: *anyopaque) u64 {
