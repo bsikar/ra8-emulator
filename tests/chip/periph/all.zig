@@ -79,6 +79,7 @@ test {
     _ = @import("glcdc/latch_test.zig");
     _ = @import("glcdc/peek_test.zig");
     _ = @import("glcdc/mix_test.zig");
+    _ = @import("glcdc/pure_test.zig");
     _ = @import("glcdc/out_test.zig");
     _ = @import("glcdc/pixel_test.zig");
     _ = @import("glcdc/scan_test.zig");

@@ -39,6 +39,15 @@ pub const mix = @import("mix.zig");
 pub const out = @import("out.zig");
 pub const frame = @import("frame.zig");
 pub const backdrop = @import("backdrop.zig");
+pub const pure = @import("pure.zig");
+pub const Framebuffer = window.Framebuffer;
+pub const Window = window.Window;
+pub const ram_windows = window.ram_windows;
+pub const max_dimension = window.max_dimension;
+pub const shapeOf = window.shapeOf;
+pub const windowEnd = window.windowEnd;
+pub const addressIsRam = window.addressIsRam;
+
 pub const tcon = @import("tcon.zig");
 pub const sys = @import("sys.zig");
 pub const latch = @import("latch.zig");
@@ -46,47 +55,12 @@ pub const gamma = @import("gamma.zig");
 pub const snapshot = @import("snapshot.zig");
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
-pub const win_base: u32 = 0x4034_2000;
-pub const win_span: u32 = 0x1500;
-/// Register byte offsets inside the window (ra8_glcdc_regs.h).
-pub const off = struct {
-    /// BG_EN: background-plane operation enable, the output stage.
-    pub const bg_en: u32 = 0x1000;
-    /// Where graphics layer 1 starts. Layer 2 sits one stride above it.
-    pub const layer_base: u32 = 0x1100;
-    pub const layer_stride: u32 = 0x100;
-    /// Offsets within one layer.
-    pub const flmrd: u32 = 0x04;
-    pub const flm2: u32 = 0x0C;
-    pub const flm3: u32 = 0x10;
-    pub const flm5: u32 = 0x18;
-    pub const flm6: u32 = 0x1C;
-    /// CLUTINT: which CLUT plane this layer's fetch unit reads.
-    pub const clutint: u32 = 0x50;
-    /// BG.BGC: the background colour under both graphics layers.
-    pub const bg_bgc: u32 = 0x1014;
-};
-/// Field masks this file reads. The FLM field positions the descriptor
-/// decode applies live with the decode, in frame.zig.
-pub const field = struct {
-    /// BG_EN.EN, bit 0: the output stage is running.
-    pub const bg_en: u32 = 0x1;
-    /// FLMRD.RENB, bit 0: this layer fetches from its framebuffer.
-    pub const renb: u32 = frame.field.renb;
-};
-/// FLM6.FORMAT codes, and the decode behind them. Re-exported so a caller
-/// that only knows the block still names the format through it.
-pub const Format = pixel.Format;
-
-/// The framebuffer descriptor and the RAM it may live in, re-exported so a
-/// caller that only knows the block still reaches them through it.
-pub const Framebuffer = frame.Framebuffer;
-pub const Window = frame.Window;
-pub const ram_windows = frame.ram_windows;
-pub const max_dimension = frame.max_dimension;
-pub const shapeOf = frame.shapeOf;
-pub const windowEnd = frame.windowEnd;
-pub const addressIsRam = frame.addressIsRam;
+pub const window = @import("window.zig");
+pub const win_base = window.win_base;
+pub const win_span = window.win_span;
+pub const off = window.off;
+pub const field = window.field;
+pub const Format = window.Format;
 
 const words = win_span / 4;
 
@@ -307,6 +281,21 @@ pub const Glcdc = struct {
         return self.scanner.refuseWith(why);
     }
 
+    /// The copied inputs for a pure composition of this block as it
+    /// stands (pure.zig).
+    pub fn compositeInputs(self: *const Glcdc) ?mix.Source {
+        return pure.inputs(self);
+    }
+
+    /// Pure composition: what the panel would show, without touching a
+    /// thing (D13). The caller passes the block's power state explicitly
+    /// and a buffer wide enough for the panel; the composition runs on
+    /// the inputs' own copies, so it raises no status, counts no meters
+    /// and never calls scanOut.
+    pub fn composite(self: *const Glcdc, source: mix.Source, powered: bool, into: []u32) mix.Result {
+        return pure.composite(self, source, powered, into);
+    }
+
     /// A layer whose AB registers were never written is taken as displayed
     /// over the whole of its framebuffer, which is what this model did
     /// before there was a blend stage. Once the driver programs AB1, the
@@ -323,17 +312,17 @@ pub const Glcdc = struct {
     /// layers programmed onto it reach, which is all this model had before
     /// the timing block and is still right for a unit test that only
     /// programs a layer.
-    pub fn panelWidth(self: *Glcdc) u32 {
+    pub fn panelWidth(self: *const Glcdc) u32 {
         if (self.timing.timing()) |found| return @min(found.h_active, max_dimension);
         return self.extent(true);
     }
 
-    pub fn panelHeight(self: *Glcdc) u32 {
+    pub fn panelHeight(self: *const Glcdc) u32 {
         if (self.timing.timing()) |found| return @min(found.v_active, max_dimension);
         return self.extent(false);
     }
 
-    fn extent(self: *Glcdc, horizontal: bool) u32 {
+    fn extent(self: *const Glcdc, horizontal: bool) u32 {
         var reach: u32 = 0;
         for (1..mix.layers + 1) |layer| {
             const found = self.decode(@intCast(layer)) orelse continue;
@@ -354,7 +343,7 @@ pub const Glcdc = struct {
     }
 
     /// The shadow behind the window, zero past the end of it.
-    fn word(self: *const Glcdc, offset: u32) u32 {
+    pub fn word(self: *const Glcdc, offset: u32) u32 {
         const index = offset / 4;
         if (index >= words) return 0;
         return self.registers[index];
