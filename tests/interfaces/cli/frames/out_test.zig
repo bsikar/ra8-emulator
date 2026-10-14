@@ -117,9 +117,12 @@ test "an armed run keeps one frame per period with its emulated time" {
     const gif_path = try std.fs.path.join(std.testing.allocator, &.{ root, "movie.gif" });
     defer std.testing.allocator.free(gif_path);
 
+    const period = ra8.chip.periph.glcdc.out.vsync.default_period_ns;
+    // The run arms the frame clock from its panel_vsync config; the capture
+    // attaches to the armed clock and never arms it itself.
+    board.display.armFrameClock(period, period);
     const armed = (try frames_out.Armed.armOutputs(std.testing.allocator, std.testing.io, &board, path, gif_path, 1)).?;
     defer armed.deinit();
-    const period = ra8.chip.periph.glcdc.out.vsync.default_period_ns;
     board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
     board.domains.graphics.write(pdctr.Domain.graphics.base(), 1, 0);
     board.display.write(glcdc.win_base + tcon.off.sthb1, 4, 2);
@@ -128,9 +131,15 @@ test "an armed run keeps one frame per period with its emulated time" {
     board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF11_2233);
     board.display.write(glcdc.win_base + glcdc_sys.off.panel_clk, 4, glcdc_sys.clock.enable);
 
-    board.display.output.vsync.?.tick(period);
+    if (board.display.output.vsync.?.tick(period)) {
+        board.display.frameEvent();
+        board.display.output.vsync.?.notify(period);
+    }
     board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF44_5566);
-    board.display.output.vsync.?.tick(2 * period);
+    if (board.display.output.vsync.?.tick(2 * period)) {
+        board.display.frameEvent();
+        board.display.output.vsync.?.notify(2 * period);
+    }
     try std.testing.expect(frames_out.Armed.of(&board) == armed);
 
     var report = try frames_out.Run.init(std.testing.allocator, std.testing.io, &board, path, 1);
