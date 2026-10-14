@@ -70,7 +70,7 @@ pub const Mixer = struct {
         while (at < panel.height) : (at += 1) {
             var fetched: [layers]?[]const u8 = .{ null, null };
             for (planes, 0..) |plane, index| {
-                fetched[index] = readRow(memory, plane, at, &lines[index]) catch {
+                fetched[index] = readRow(memory, plane.shape, plane.stage.rect(), at, &lines[index]) catch {
                     return .{ .refused = .fault };
                 };
             }
@@ -94,7 +94,7 @@ pub const Mixer = struct {
             var colour = blend.opaqueColour(panel.background);
             var reached: u32 = 0;
             for (planes, 0..) |plane, index| {
-                const source = sample(plane, fetched[index], column, at);
+                const source = sample(plane.shape, plane.stage.rect(), plane.palette, fetched[index], column);
                 const shown = plane.stage.contribution(source, column, at) orelse continue;
                 colour = blend.over(shown, colour);
                 reached += 1;
@@ -113,29 +113,98 @@ pub const Mixer = struct {
 /// layer's rectangle does not reach that row.
 fn readRow(
     memory: Guest,
-    plane: Plane,
+    shape: scan.Shape,
+    rect: blend.Rect,
     at: u32,
     into: []u8,
 ) !?[]const u8 {
-    const rect = plane.stage.rect();
     if (at < rect.top or at >= rect.top + rect.height) return null;
     const line = at - rect.top;
-    if (line >= plane.shape.height) return null;
-    const wanted = plane.shape.lineBytes();
+    if (line >= shape.height) return null;
+    const wanted = shape.lineBytes();
     if (wanted > into.len) return null;
-    try memory.read(plane.shape.base + line * plane.shape.stride, into[0..wanted]);
+    try memory.read(shape.base + line * shape.stride, into[0..wanted]);
     return into[0..wanted];
 }
 
 /// The colour one layer's framebuffer holds under a panel coordinate, or
 /// null where the layer has no pixel there.
-fn sample(plane: Plane, line: ?[]const u8, column: u32, at: u32) ?u32 {
-    _ = at;
+fn sample(
+    shape: scan.Shape,
+    rect: blend.Rect,
+    palette: *const clut.Palette,
+    line: ?[]const u8,
+    column: u32,
+) ?u32 {
     const bytes = line orelse return null;
-    const rect = plane.stage.rect();
     if (column < rect.left) return null;
     const local = column - rect.left;
-    if (local >= plane.shape.width) return null;
-    const raw = scan.fetch(bytes, local, plane.shape.bits);
-    return plane.shape.decode(raw, plane.palette);
+    if (local >= shape.width) return null;
+    const raw = scan.fetch(bytes, local, shape.bits);
+    return shape.decode(raw, palette);
+}
+
+/// One layer as pure composition sees it: the shape, a copy of the palette
+/// it decodes through, and a copy of the blend placement.
+pub const Input = struct {
+    shape: scan.Shape,
+    palette: clut.Palette,
+    stage: blend.Layer,
+};
+
+/// The copied inputs of a pure composition: everything composition would
+/// otherwise reach into the model for, owned by value, so composing
+/// changes nothing. The blend placements arrive exactly as a scan would
+/// imply them and the output stage as the panel is driven from it; the
+/// meters their per-pixel work bumps land on these copies and are thrown
+/// away. Composition never writes a palette either, so the copies here
+/// are honest even though nothing would break if it did.
+pub const Source = struct {
+    /// The framebuffers, read as bytes. RAM reads have no side effects.
+    memory: Guest,
+    width: u32 = 0,
+    height: u32 = 0,
+    /// BG.BGC, shown wherever no layer reaches the panel.
+    background: u32 = 0,
+    /// The output stage as a copy.
+    stage: output.Stage = .{},
+    /// The layers bottom first, graphics 1 then graphics 2.
+    planes: [layers]Input = undefined,
+    count: usize = 0,
+};
+
+/// Composite the panel purely: the same stack the scan composites, run
+/// over the source's own copies, writing every pixel into `into` row by
+/// row and folding the same hash a scan's fold would. The refusals are
+/// the ones the scan would give for the same state.
+pub fn compose(source: Source, into: []u32) Result {
+    for (source.planes[0..source.count]) |plane| {
+        if (scan.validate(plane.shape, &plane.palette)) |why| return .{ .refused = why };
+    }
+    if (into.len < @as(usize, source.width) * source.height) return .{ .refused = .too_big };
+    var scratch = source;
+    var fold = scan.Fold{};
+    var lines: [layers][scan.limits.chunk]u8 = undefined;
+    var at: u32 = 0;
+    while (at < scratch.height) : (at += 1) {
+        var fetched: [layers]?[]const u8 = .{ null, null };
+        for (scratch.planes[0..scratch.count], 0..) |*plane, index| {
+            fetched[index] = readRow(scratch.memory, plane.shape, plane.stage.rect(), at, &lines[index]) catch {
+                return .{ .refused = .fault };
+            };
+        }
+        var column: u32 = 0;
+        while (column < scratch.width) : (column += 1) {
+            var colour = blend.opaqueColour(scratch.background);
+            for (scratch.planes[0..scratch.count], 0..) |*plane, index| {
+                const fetched_colour = sample(plane.shape, plane.stage.rect(), &plane.palette, fetched[index], column);
+                const shown = plane.stage.contribution(fetched_colour, column, at) orelse continue;
+                colour = blend.over(shown, colour);
+            }
+            colour = scratch.stage.apply(colour, column, at);
+            into[@as(usize, at) * scratch.width + column] = colour;
+            fold.pixel(colour);
+        }
+    }
+    return .{ .picture = fold.picture() };
 }
