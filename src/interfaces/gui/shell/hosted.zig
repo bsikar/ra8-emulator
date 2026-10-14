@@ -21,6 +21,9 @@ pub const Hosted = struct {
     window: platform.Platform,
     tx: []u8,
     gpa: std.mem.Allocator,
+    /// A second launch asked for the window: the shell's thread raises it,
+    /// whichever thread answers the listener.
+    raise: std.atomic.Value(bool) = .init(false),
 
     /// List the one session and its gdb port in the discovery file.
     pub fn announce(self: *Hosted, elf: []const u8, live: ?*session_api.Session) void {
@@ -29,7 +32,7 @@ pub const Hosted = struct {
     }
 
     fn answer(self: *Hosted) !void {
-        if (self.listener.takeFocus()) self.window.focus();
+        if (self.listener.takeFocus()) self.raise.store(true, .release);
         self.listener.pumpGdb();
         return self.listener.answer(self.context, self.tx);
     }
@@ -55,4 +58,5 @@ pub fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, en
     const held = &hosted.*.?;
     held.announce(elf, session.setup.owner.session());
     shell.listener = .{ .context = held, .answerFn = answerHosted };
+    shell.raise = &held.raise;
 }

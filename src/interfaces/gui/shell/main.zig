@@ -11,6 +11,7 @@ const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
+const session_worker = @import("../session_worker.zig");
 const wall_clock = @import("../wall_clock.zig");
 const render_driver = @import("../render_driver.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -242,8 +243,11 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     defer if (hosted) |*h| h.deinit();
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
     const tx = try allocator.alloc(u8, Env.max_frame);
+    var host_clock = wall_clock.Host.init(io);
+    var worker: session_worker.Worker = undefined;
+    defer if (apart(args)) worker.deinit();
     var link: session_link.Link = undefined;
-    link.open(session.transport(), rx, tx);
+    link.open(if (apart(args)) worker.bind(io, allocator, &session, host_clock.clock()) else session.transport(), rx, tx);
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     if (cap) |c| c.bind(&shell);
     defer if (cap) |c| c.unbind();
@@ -260,7 +264,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var recent_store = shell_recents.Store{ .io = io, .allocator = allocator, .dir = prefs };
     var recent_list = recent_store.restore();
     shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, rx, tx, &board_store);
-    var host_clock = wall_clock.Host.init(io);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
     shell.time = &time;
@@ -270,19 +273,16 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var board = shell_board.Board.init(allocator);
     defer board.deinit();
     shell.board = &board;
-    var board_input: shell_board_input.Pointer = .{};
-    shell.board_input = &board_input;
-    var devices: shell_devices.Devices = .{};
-    shell.devices = &devices;
-    var faults: shell_fault.Faults = .{};
-    shell.faults = &faults;
+    var feeds: ShellFeeds = .{};
+    try feeds.init();
+    shell.board_input = &feeds.board_input;
+    shell.devices = &feeds.devices;
+    shell.faults = &feeds.faults;
     var camera = shell_camera.Camera.opened(io);
     camera.preview_provider = .{ .context = &session, .previewFn = getCameraPreview };
     if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
     shell.startup = startup;
-    var feeds: ShellFeeds = .{};
-    try feeds.init();
     shell.plug = &feeds.plug;
     shell.camera_file = &feeds.camera_file;
     var registers: shell_registers.Pair = .{};
@@ -308,8 +308,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.files = &files;
     var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
     shell.recent_menu = &recent_menu;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &board_input, .devices = &devices, .faults = &faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source };
     shell.painter = panes.painter();
+    if (apart(args)) try worker.serveShell(&shell);
     try driveAndSave(io, &shell, window, args.image, bytes, args.frames, &layout_store, &recent_store, recent_list, &link);
 }
 
@@ -340,9 +341,27 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
             if (shell.status.image != null) drawn += 1;
             if (drawn == wanted) return;
         }
-        const spent = clock.now() - began;
-        if (spent < frame_ns) try io.sleep(.fromNanoseconds(frame_ns - spent), .awake);
+        try rest(io, shell, clock, began + frame_ns);
     }
+}
+
+/// Leave what is left of the frame to the host. A session on a thread of
+/// its own is heard through it: each answer wakes the shell to take it and
+/// send a lit run its next slice.
+fn rest(io: std.Io, shell: *shell_loop.Shell, clock: wall_clock.Clock, until_ns: u64) !void {
+    while (true) {
+        const now = clock.now();
+        if (now >= until_ns) return;
+        const worker = shell.worker orelse return io.sleep(.fromNanoseconds(until_ns - now), .awake);
+        if (worker.wait(until_ns - now)) try shell.service();
+    }
+}
+
+/// Whether the session answers on a thread of its own: a window someone is
+/// using. A headless, scripted or frame-counted run answers on the shell's
+/// thread, where every frame sees the same answers every time.
+fn apart(args: Args) bool {
+    return !args.headless and args.frames == null and args.gui_script == null;
 }
 
 fn reloadDue(shell: *const shell_loop.Shell) bool {

@@ -22,6 +22,9 @@ test {
     _ = @import("host/profiles_test.zig");
     _ = @import("interfaces/gui/shell/main_test.zig");
     _ = @import("interfaces/gui/local_session_test.zig");
+    _ = @import("interfaces/gui/session_worker_test.zig");
+    _ = @import("interfaces/gui/shared_wire_test.zig");
+    _ = @import("interfaces/gui/preview_relay_test.zig");
     _ = @import("interfaces/gui/shell/startup_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
@@ -164,6 +167,7 @@ test {
     _ = @import("interfaces/gui/shell/time_test.zig");
     _ = @import("interfaces/gui/shell/theme_test.zig");
     _ = @import("interfaces/gui/shell_run_live_test.zig");
+    _ = @import("interfaces/gui/shell_apart_live_test.zig");
     _ = @import("interfaces/gui/shell/open_test.zig");
     _ = @import("interfaces/gui/shell_open_live_test.zig");
     _ = @import("interfaces/gui/shell/panes_test.zig");

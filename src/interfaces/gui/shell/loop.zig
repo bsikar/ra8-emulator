@@ -49,6 +49,7 @@ const menu_actions = @import("menu_actions.zig");
 const shell_recent = @import("recent_menu.zig");
 const shell_settings = @import("settings_page.zig");
 const shell_pump = @import("pump.zig");
+const session_worker = @import("../session_worker.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
@@ -104,6 +105,10 @@ pub const Shell = struct {
     server: ?Server = null,
     /// The per-user listener outside clients connect to (RA8EMU-1156).
     listener: ?Server = null,
+    /// The thread the local session answers on, when it has one of its own.
+    worker: ?*session_worker.Worker = null,
+    /// Set when a second launch asked for this window (shell/hosted.zig).
+    raise: ?*std.atomic.Value(bool) = null,
     /// The wall clock a run is paced against; none, and time stands still.
     clock: ?wall_clock.Clock = null,
     drained: bool = true,
@@ -155,8 +160,9 @@ pub const Shell = struct {
         }
         if (!self.open) return false;
         if (!self.themes.styled) self.themes.restyle(window.appearance());
+        if (self.raise) |asked| if (asked.swap(false, .acq_rel)) window.focus();
         try self.exchange();
-        try self.paySlices();
+        try self.paySlices(.fresh);
         if (self.files) |files| files.frame(window, &self.status);
         if (!window.visible()) return true;
         if (self.pick) |pick| pick.frame(window);
@@ -259,14 +265,23 @@ pub const Shell = struct {
         try self.pump();
     }
 
+    /// Between two frames: take what a session on a thread of its own has
+    /// answered and send a lit run its next slice, so the image is not left
+    /// waiting for the window's next frame.
+    pub fn service(self: *Shell) !void {
+        if (self.server) |server| try server.answer();
+        try self.pump();
+        try self.paySlices(.same);
+    }
+
     /// Pay what this frame owes a lit run (shell_run.zig), one slice at a time,
-    /// each answered before the next goes out; a session in another process
-    /// answers in its own time, one slice a frame.
-    fn paySlices(self: *Shell) !void {
+    /// each answered before the next goes out; a session on a thread of its
+    /// own, or in another process, answers in its own time.
+    fn paySlices(self: *Shell, frame: enum { fresh, same }) !void {
         const time = self.time orelse return;
         const link = self.link orelse return;
         defer self.settle();
-        time.frame(link, self.now());
+        if (frame == .fresh) time.frame(link, self.now());
         // No slice goes out behind a load: the image it would run may be gone.
         while (self.drained and self.status.load_id == null and time.run.next(link, self.now())) {
             const server = self.server orelse return;

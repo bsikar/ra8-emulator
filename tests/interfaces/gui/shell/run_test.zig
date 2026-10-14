@@ -292,3 +292,27 @@ test "a stop for a reason of its own ends the run and leaves its stop event for 
     try std.testing.expectEqual(@as(?u32, null), bench.run.halted());
     try std.testing.expectEqual(parked, bench.run.address);
 }
+
+test "a session on a thread of its own is paid all through the frame and sized by when it answered" {
+    var run: Run = .{ .lit = true };
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const link = &bench.rig.link;
+    var answered: std.atomic.Value(u64) = .init(0);
+    run.answered_at = &answered;
+    run.frame(0, gui_app.speed_field.max_wire);
+    // Long past the share a window-thread session stops at, a slice goes out.
+    const late = 2 * shell_run.share_ns;
+    try std.testing.expect(run.next(link, late));
+    // It answered a quarter share later; when the shell took it says nothing.
+    answered.store(late + shell_run.share_ns / 4, .release);
+    _ = run.observe(.{ .response = .{ .id = run.slice_id.?, .result = .{ .ok = try advanced(run.asked_ns) } } }, 100 * shell_run.share_ns);
+    try std.testing.expectEqual(2 * shell_run.first_unit_ns, run.unit_ns);
+    // An overrun is read off the wire the same way.
+    const later = 200 * shell_run.share_ns;
+    try std.testing.expect(run.next(link, later));
+    answered.store(later + 4 * shell_run.share_ns, .release);
+    _ = run.observe(.{ .response = .{ .id = run.slice_id.?, .result = .{ .ok = try advanced(run.asked_ns) } } }, later + 4 * shell_run.share_ns);
+    try std.testing.expectEqual(shell_run.first_unit_ns / 2, run.unit_ns);
+}

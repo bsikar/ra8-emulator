@@ -43,7 +43,21 @@ pub const LocalSession = struct {
 
     /// Answer every frame the shell has sent so far.
     pub fn answer(self: *LocalSession) !void {
-        while (try self.host.poll(self.setup.tx) != .idle) {}
+        _ = try self.serve();
+    }
+
+    /// As `answer`; true when there was a frame to answer.
+    pub fn serve(self: *LocalSession) !bool {
+        var worked = false;
+        while (try self.host.poll(self.setup.tx) != .idle) worked = true;
+        return worked;
+    }
+
+    /// Answer on `wire` instead of the loopback's own end: the session's
+    /// thread reaches the shell through a wire made safe for two
+    /// (session_worker.zig). Call it before the shell sends anything.
+    pub fn serveOn(self: *LocalSession, wire: rpc.Transport) void {
+        self.host = served.Host.init(wire, self.setup.rx, &self.setup.context);
     }
 
     /// Sample a preview frame from the board's camera source (RA8EMU-1180).
