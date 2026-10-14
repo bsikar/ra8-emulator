@@ -132,13 +132,13 @@ pub fn raise(self: *Board, core: Guest, event: u16) !void {
     // CPU0's, which keeps a single-core run what it was.
     if (self.events.select.coreFor(event) == .cpu1) {
         if (self.cpu1) |second| {
-            if (self.transfers1.activate(second, &self.events, event)) |moved| {
+            if (self.transfers1.activate(second.asInitiator(.dtc1), &self.events, event)) |moved| {
                 if (!moved.interrupt) return;
             }
             return self.events.raiseOn(.cpu1, second, event);
         }
     }
-    if (self.transfers.activate(core, &self.events, event)) |moved| {
+    if (self.transfers.activate(core.asInitiator(.dtc0), &self.events, event)) |moved| {
         if (!moved.interrupt) return;
     }
     try self.events.raise(core, event);

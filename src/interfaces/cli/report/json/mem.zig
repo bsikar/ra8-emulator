@@ -150,6 +150,9 @@ fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !voi
         try j.open("stall_cycles", '{');
         try j.field("cpu", counters.cpu_stall_cycles);
         try j.field("ethos_u55", counters.ethos_u55_stall_cycles);
+        inline for (.{ external.Initiator.dmac, external.Initiator.dtc0, external.Initiator.dtc1, external.Initiator.glcdc, external.Initiator.drw, external.Initiator.ceu, external.Initiator.eth }) |one| {
+            try j.field(@tagName(one), counters.stall_cycles_by_initiator[one.timedIndex().?]);
+        }
         try j.close('}');
         try j.close('}');
     }

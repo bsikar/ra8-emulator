@@ -46,6 +46,47 @@ test "untimed accesses bypass counters and pending stalls" {
     try std.testing.expectEqual(@as(u64, 0), fabric.takePending(.none));
 }
 
+test "every timed initiator meters its own stall row behind a contended bus" {
+    var config: memory.Config = .{};
+    config.sdram = .{ .size = 1024 * 1024, .width = 32, .clock_hz = 100_000_000, .latency_cycles = 1, .burst = .incrementing16 };
+    var fabric = memory.Fabric.init(try memory.Layout.init(config));
+    const service = memory.serviceCycles(config.sdram, 16);
+    fabric.note(.dmac, fabric.layout.locate(0x6800_0000, 16).?, .write, 16);
+    fabric.note(.cpu0, fabric.layout.locate(0x6800_0100, 4).?, .read, 4);
+    const counters = fabric.counters(.sdram, 0);
+    try std.testing.expectEqual(service, counters.stall_cycles_by_initiator[memory.Initiator.dmac.timedIndex().?]);
+    try std.testing.expect(counters.stall_cycles_by_initiator[memory.Initiator.cpu0.timedIndex().?] > service);
+    try std.testing.expectEqual(@as(u64, 0), counters.stall_cycles_by_initiator[memory.Initiator.ethos_u55.timedIndex().?]);
+    try std.testing.expectEqual(service, fabric.takePending(.dmac));
+    try std.testing.expectEqual(@as(u64, 16), counters.bytes_written);
+    try std.testing.expectEqual(@as(u64, 4), counters.bytes_read);
+}
+
+test "two initiators serialize in submission order on one region" {
+    var config: memory.Config = .{};
+    config.sdram = .{ .size = 1024 * 1024, .width = 32, .clock_hz = 100_000_000, .latency_cycles = 1, .burst = .incrementing16 };
+    var fabric = memory.Fabric.init(try memory.Layout.init(config));
+    fabric.note(.glcdc, fabric.layout.locate(0x6800_0000, 16).?, .read, 16);
+    fabric.note(.ceu, fabric.layout.locate(0x6800_0080, 16).?, .read, 16);
+    const counters = fabric.counters(.sdram, 0);
+    const service = memory.serviceCycles(config.sdram, 16);
+    try std.testing.expectEqual(service, counters.stall_cycles_by_initiator[memory.Initiator.glcdc.timedIndex().?]);
+    try std.testing.expectEqual(2 * service, counters.stall_cycles_by_initiator[memory.Initiator.ceu.timedIndex().?]);
+    try std.testing.expectEqual(service, fabric.takePending(.glcdc));
+    try std.testing.expectEqual(2 * service, fabric.takePending(.ceu));
+}
+
+test "the transfer controllers and ethernet meter on their own ports" {
+    var fabric = memory.Fabric.init(memory.Layout.defaults());
+    fabric.note(.dtc0, fabric.layout.locate(0x6800_0000, 4).?, .read, 4);
+    fabric.note(.eth, fabric.layout.locate(0x6800_0010, 4).?, .write, 4);
+    const counters = fabric.counters(.sdram, 0);
+    try std.testing.expect(counters.stall_cycles_by_initiator[memory.Initiator.dtc0.timedIndex().?] > 0);
+    try std.testing.expect(counters.stall_cycles_by_initiator[memory.Initiator.eth.timedIndex().?] > 0);
+    try std.testing.expectEqual(@as(u64, 0), fabric.takePending(.dtc1));
+    try std.testing.expectEqual(@as(u64, 0), counters.cpu_stall_cycles);
+}
+
 test "a report after a window boundary finalizes its peak denominator" {
     var config: memory.Config = .{};
     config.window_cycles = 100;

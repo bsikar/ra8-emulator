@@ -7,6 +7,10 @@ const port = @import("ra8_chip").core.cpu.memory.external_port;
 
 pub const Initiator = initiator_mod.Initiator;
 
+/// The timed initiators, in fabric port order.
+pub const timed = Initiator.timed;
+pub const timed_count = Initiator.timed_count;
+
 pub const wall_hz: u64 = 1_000_000_000;
 pub const default_window_cycles: u32 = 1_000_000;
 
@@ -148,6 +152,8 @@ pub const Counters = struct {
     peak_write_bytes_per_second: u64 = 0,
     cpu_stall_cycles: u64 = 0,
     ethos_u55_stall_cycles: u64 = 0,
+    /// Every timed port's own stalls on this region, indexed by `timed`.
+    stall_cycles_by_initiator: [timed_count]u64 = @splat(0),
 };
 
 pub const Window = struct {
@@ -160,27 +166,27 @@ pub const Window = struct {
 
 pub const RegionState = struct {
     available: u64 = 0,
-    ready: [3]u64 = @splat(0),
+    ready: [timed_count]u64 = @splat(0),
     latest: u64 = 0,
     read_high: u64 = 0,
     write_high: u64 = 0,
     reads: u64 = 0,
     writes: u64 = 0,
-    stalls: [3]u64 = @splat(0),
+    stalls: [timed_count]u64 = @splat(0),
     window: Window = .{},
 };
 
 pub const State = struct {
     config: Config,
     wall: u64,
-    pending: [3]u64,
+    pending: [timed_count]u64,
     regions: [2]RegionState,
 };
 
 pub const Fabric = struct {
     layout: Layout,
     wall: u64 = 0,
-    pending: [3]u64 = @splat(0),
+    pending: [timed_count]u64 = @splat(0),
     regions: [2]RegionState = .{ .{}, .{} },
 
     pub fn init(layout: Layout) Fabric {
@@ -270,6 +276,7 @@ pub const Fabric = struct {
             .peak_write_bytes_per_second = @max(region.window.peak_writes, partial_writes),
             .cpu_stall_cycles = satAdd(region.stalls[0], region.stalls[1]),
             .ethos_u55_stall_cycles = region.stalls[2],
+            .stall_cycles_by_initiator = region.stalls,
         };
     }
 };

@@ -25,7 +25,10 @@ pub const magic = "RA8SNAP\x00".*;
 /// Version 10 cannot restore multiple SysTick stores in one instruction.
 /// Version 12 saves an overwritten pre-instruction CVR and its write marker.
 /// Version 11 loses that counter when one instruction also stores CVR.
-pub const version: u32 = 12;
+/// Version 13 widens the external fabric to one timed port per bus initiator
+/// (DMAC, both DTCs, GLCDC, DRW, CEU and Ethernet) beside the CPUs and the
+/// NPU. Version 12 files carry three ports and are refused before decoding.
+pub const version: u32 = 13;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated, DuplicateSection };
 

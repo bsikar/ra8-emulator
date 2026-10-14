@@ -68,7 +68,7 @@ fn attachAdc(self: *Board, core: Guest) !void {
 /// The CEU, with the memory its frames land in and the virtual time its
 /// camera source reads at each arm (RA8EMU-540).
 fn attachCapture(self: *Board, memory: Guest) !void {
-    self.capture.memory = memory;
+    self.capture.memory = memory.asInitiator(.ceu);
     self.capture.clock = &self.time.base;
     try self.bus.add(self.capture.block());
 }
@@ -99,10 +99,10 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.protection.block());
     try attachProtected(self);
     // The panel is scanned out of the same RAM the core paints into.
-    try self.display.attach(&self.bus, &self.domains.graphics, memory);
+    try self.display.attach(&self.bus, &self.domains.graphics, memory.asInitiator(.glcdc));
     self.raster = drw.Drw.init(&self.domains.graphics);
     // Rendering uses the board's RAM.
-    self.raster.memory = memory;
+    self.raster.memory = memory.asInitiator(.drw);
     try self.bus.add(self.raster.block());
     try self.bus.add(self.link.block());
     try self.bus.add(self.receiver.block());
@@ -117,7 +117,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     self.pins.setInput(eink.hrdy.port, eink.hrdy.pin, true);
     self.serial.attachDevice(modem.line_channel, self.modem.device());
     try attachWire(self);
-    try self.rswitch.attach(&self.bus, memory, &self.domains.eswm);
+    try self.rswitch.attach(&self.bus, memory.asInitiator(.eth), &self.domains.eswm);
     try self.usb.attach(&self.bus);
     self.trace.memory = memory;
     try self.bus.add(self.flash.block());
@@ -152,7 +152,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
     self.dma = dmac.Dmac.init(&self.dma_module);
-    self.dma.memory = memory;
+    self.dma.memory = memory.asInitiator(.dmac);
     try self.bus.add(self.dma.block());
     try self.bus.add(self.monitors.statusBlock());
     try self.bus.add(self.monitors.controlBlock());
