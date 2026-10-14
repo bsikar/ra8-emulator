@@ -102,6 +102,29 @@ test "a peripheral read stirs it, an SCB read does not (RA8EMU-418)" {
     try std.testing.expect((try source.winner(memory)) != null);
 }
 
+test "SDRAM traffic leaves it settled, in the aperture and its Non-secure alias" {
+    var probe: LatchProbe = .{};
+    var fake: Fake = .{};
+    var quiet: QuietSource = .{ .inner = fake.source(), .memory = probe.view() };
+    const source = quiet.source();
+    const memory = quiet.bus();
+    _ = try source.winner(memory);
+    fake.pending = systick;
+    for ([_]u32{ 0x6800_0000, 0x6FFF_FFFC, 0x7800_0000, 0x7FFF_FFFC }) |address| {
+        try memory.write(address, &.{ 1, 2, 3, 4 });
+        _ = try memory.readWord(address);
+        try std.testing.expect((try source.winner(memory)) == null);
+    }
+    // The apertures either side still stir: peripherals below, OSPI above.
+    try memory.write(0x67FF_FFFC, &.{ 1, 2, 3, 4 });
+    try std.testing.expect((try source.winner(memory)) != null);
+    fake.pending = null;
+    _ = try source.winner(memory);
+    fake.pending = systick;
+    _ = try memory.readWord(0x8000_0000);
+    try std.testing.expect((try source.winner(memory)) != null);
+}
+
 test "the bus it hands out reaches the run's memory" {
     var ram: fixture.Ram = .{};
     var fake: Fake = .{};

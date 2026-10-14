@@ -4,7 +4,7 @@
 //! on the board that answer costs a dozen reads of the NVIC and SCB through
 //! the bus. Inside one stretch nothing can change it unless the core itself
 //! touches peripheral or system space, takes an exception or returns from
-//! one: the board's clocks and peripherals only move at a stretch boundary.
+//! one (the SDRAM aperture sits among the peripherals and is neither): the board's clocks and peripherals only move at a stretch boundary.
 //! So once the source has answered "nothing pending", that answer stands
 //! until one of those happens or the next stretch starts.
 //!
@@ -13,10 +13,26 @@
 const bus_mod = @import("../bus.zig");
 const Entry = @import("active.zig").Entry;
 const Source = @import("source.zig").Source;
+const external_port = @import("../memory/external_port.zig");
 
 /// The first address of peripheral space. Everything below it is flash and
 /// RAM, which never decides what is pending.
 pub const peripheral_base: u32 = 0x4000_0000;
+
+/// The SDRAM aperture or its Non-secure alias: RAM that sits above
+/// `peripheral_base`. A framebuffer lives there, so a paint is a store per
+/// pixel, and none of them decides what is pending either.
+pub fn offChipRam(address: u32) bool {
+    const base = external_port.Kind.sdram.base();
+    const alias = external_port.sdram_alias_base;
+    return (address >= base and address - base < external_port.sdram_max) or
+        (address >= alias and address - alias < external_port.sdram_max);
+}
+
+/// Whether an access at `address` may have moved what is pending.
+fn stirs(address: u32) bool {
+    return address >= peripheral_base and !offChipRam(address);
+}
 
 /// The first address of the PPB. Reading the SCB or NVIC never changes what
 /// is pending, so a read from here on leaves the answer standing; the poll
@@ -133,7 +149,7 @@ pub const QuietSource = struct {
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus_mod.Error!void {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
-        if (address >= peripheral_base and address < ppb_base) self.stir();
+        if (stirs(address) and address < ppb_base) self.stir();
         return self.memory.read(address, into);
     }
 
@@ -143,13 +159,13 @@ pub const QuietSource = struct {
     fn repeat(ctx: *anyopaque, address: u32, len: usize, times: u64) bool {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
         if (!self.memory.repeat(address, len, times)) return false;
-        if (times != 0 and address >= peripheral_base and address < ppb_base) self.stir();
+        if (times != 0 and stirs(address) and address < ppb_base) self.stir();
         return true;
     }
 
     fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus_mod.Error!void {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
-        if (address >= peripheral_base) self.stir();
+        if (stirs(address)) self.stir();
         if (clearRegister(address)) self.clear_due = true;
         return self.memory.write(address, bytes);
     }
