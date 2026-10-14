@@ -5,6 +5,7 @@ test {
     _ = @import("host/app_dirs_test.zig");
     _ = @import("host/stops_test.zig");
     _ = @import("host/history/root_test.zig");
+    _ = @import("host/history/subprocess_test.zig");
     _ = @import("host/history/base_test.zig");
     _ = @import("host/history/budget_test.zig");
     _ = @import("host/history/catalog_test.zig");
