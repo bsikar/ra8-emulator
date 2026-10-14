@@ -2,6 +2,7 @@
 const std = @import("std");
 const elf = @import("ra8_board").image.elf;
 const part = @import("ra8_chip").core.part;
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
 const mpu_check = @import("ra8_chip").core.cpu.board_bus.mpu_check;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
@@ -64,6 +65,9 @@ pub const Options = struct {
     settle_window_ns: u64 = 50_000_000,
     /// Whether the boundary stretches across idle sleeps (RA8EMU-1120).
     idle_skip: bool = true,
+    /// The run's `panel_vsync` config (RA8EMU R9), stored on the session's
+    /// board the same way a plain run's fit stores it.
+    panel_vsync: ?glcdc_vsync.Config = null,
 };
 
 const LoaderState = struct {
@@ -333,6 +337,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.board.external_memory = state.profile.memory;
     try state.board.nor.resize(state.profile.memory.ospi.size);
     state.board.clock.pace.mode = .virtual;
+    state.board.panel_vsync = options.panel_vsync;
     try load_input.load(allocator, io, &state.board, options.input_script);
     state.cpu0 = .{};
     state.tracer = null;

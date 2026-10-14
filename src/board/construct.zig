@@ -104,6 +104,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .chip_attribution = undefined,
         .domains = undefined,
         .display = undefined,
+        .panel_vsync = null,
         .raster = undefined,
         .serial = sci.Sci.init(),
         .spi = spi.Spi.init(),

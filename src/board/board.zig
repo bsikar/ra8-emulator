@@ -207,6 +207,11 @@ pub const Board = struct {
     /// Built in attach(), which is where the PRCR they ask already exists.
     domains: pdctr.Domains,
     display: glcdc.Glcdc,
+    /// The run's `panel_vsync` config (RA8EMU R9), stored by the plain run's
+    /// fit and a session's options. The wiring applies it once the display has
+    /// attached, so the armed clock survives the output stage the attach
+    /// builds.
+    panel_vsync: ?glcdc.vsync.Config = null,
     /// The 2D drawing engine, in the same domain and drawing into the same
     /// framebuffer the display controller scans out.
     raster: drw.Drw,
