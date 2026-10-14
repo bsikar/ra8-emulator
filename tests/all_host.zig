@@ -83,6 +83,9 @@ test {
     _ = @import("interfaces/gui/ui/registers_pane_test.zig");
     _ = @import("interfaces/gui/register_edit_test.zig");
     _ = @import("interfaces/gui/settings_page_test.zig");
+    _ = @import("interfaces/gui/display_settings_test.zig");
+    _ = @import("interfaces/gui/frame_pacer_test.zig");
+    _ = @import("interfaces/gui/shell/pace_test.zig");
     _ = @import("interfaces/gui/register_edit_live_test.zig");
     _ = @import("interfaces/gui/registers_capture_test.zig");
     _ = @import("interfaces/gui/ui/memory_pane_test.zig");

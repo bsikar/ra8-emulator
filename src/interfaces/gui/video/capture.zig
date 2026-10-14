@@ -57,6 +57,8 @@ pub const Capture = struct {
                 .present = present,
                 .show = show,
                 .interval = interval,
+                .set_vsync = setVsync,
+                .refresh = refresh,
                 .appearance = appearance,
                 .focus = focus,
                 .open_image = openImage,
@@ -143,6 +145,16 @@ pub const Capture = struct {
     fn interval(ctx: *anyopaque) u64 {
         const self: *Capture = @ptrCast(@alignCast(ctx));
         return self.inner.interval();
+    }
+
+    fn setVsync(ctx: *anyopaque, on: bool) bool {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        return self.inner.setVsync(on);
+    }
+
+    fn refresh(ctx: *anyopaque) u32 {
+        const self: *Capture = @ptrCast(@alignCast(ctx));
+        return self.inner.refresh();
     }
 
     fn appearance(ctx: *anyopaque) Appearance {

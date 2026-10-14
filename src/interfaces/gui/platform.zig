@@ -99,6 +99,12 @@ pub const Platform = struct {
         show: ?*const fn (ctx: *anyopaque, list: *const draw_list.DrawList, atlas: ?raster.Atlas) anyerror!bool = null,
         /// The least time between presents (RA8EMU-732); null is no cap.
         interval: ?*const fn (ctx: *anyopaque) u64 = null,
+        /// Makes a present wait for the display's refresh, or not, and says
+        /// whether it now does; null for a backend with no display to wait on.
+        set_vsync: ?*const fn (ctx: *anyopaque, on: bool) bool = null,
+        /// The refresh rate of the display the window is on, in thousandths
+        /// of a hertz; null, or 0 back, when it is not known.
+        refresh: ?*const fn (ctx: *anyopaque) u32 = null,
         /// The OS light or dark setting (RA8EMU-962); null is unknown.
         appearance: ?*const fn (ctx: *anyopaque) Appearance = null,
         /// Raises the window to the front (RA8EMU-1156); null on backends
@@ -163,6 +169,20 @@ pub const Platform = struct {
     /// Nanoseconds the next present must wait after the last; 0 is no cap.
     pub fn interval(self: Platform) u64 {
         const get = self.vtable.interval orelse return 0;
+        return get(self.ctx);
+    }
+
+    /// Ask that a present wait for the display's refresh, or not. Returns
+    /// whether presents wait now; false on a backend that cannot.
+    pub fn setVsync(self: Platform, on: bool) bool {
+        const set = self.vtable.set_vsync orelse return false;
+        return set(self.ctx, on);
+    }
+
+    /// The window's display refresh rate in thousandths of a hertz, or 0
+    /// when the backend does not know it.
+    pub fn refresh(self: Platform) u32 {
+        const get = self.vtable.refresh orelse return 0;
         return get(self.ctx);
     }
 

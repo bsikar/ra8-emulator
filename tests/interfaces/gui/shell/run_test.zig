@@ -316,3 +316,17 @@ test "a session on a thread of its own is paid all through the frame and sized b
     _ = run.observe(.{ .response = .{ .id = run.slice_id.?, .result = .{ .ok = try advanced(run.asked_ns) } } }, later + 4 * shell_run.share_ns);
     try std.testing.expectEqual(shell_run.first_unit_ns / 2, run.unit_ns);
 }
+
+test "a frame owes the board the period it is given, at the speed asked for" {
+    var run: Run = .{ .lit = true };
+    run.frame(0, 1000);
+    try std.testing.expectEqual(@as(?u64, frame_ns), run.owed_ns);
+    // A 240 Hz window's frame: a quarter of the board time each, four times as often.
+    run.period_ns = frame_ns / 4;
+    run.frame(0, 1000);
+    try std.testing.expectEqual(@as(?u64, frame_ns / 4), run.owed_ns);
+    run.frame(0, 2000);
+    try std.testing.expectEqual(@as(?u64, frame_ns / 4 * 2), run.owed_ns);
+    run.frame(0, gui_app.speed_field.max_wire);
+    try std.testing.expectEqual(@as(?u64, null), run.owed_ns);
+}

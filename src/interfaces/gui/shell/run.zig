@@ -83,6 +83,10 @@ pub const Run = struct {
     until_ns: u64 = 0,
     sent: u32 = 0,
     unit_ns: u64 = first_unit_ns,
+    /// The board time one frame owes at 1x: one sixtieth of a second, or
+    /// what the frame before really took when the window is paced by its
+    /// display (shell/pace.zig).
+    period_ns: u64 = frame_ns,
     /// The longest the unit may grow to. An overrun pulls it down, and it
     /// eases back to one frame while nothing overruns.
     ceiling_ns: u64 = frame_ns,
@@ -139,7 +143,7 @@ pub const Run = struct {
     /// A new window frame at wall time `now_ns`. It owes one frame of board
     /// time at `milli` thousandths of real time, and nothing from before.
     pub fn frame(self: *Run, now_ns: u64, milli: u64) void {
-        self.owed_ns = if (milli == speed_field.max_wire) null else @intCast(@as(u128, frame_ns) * milli / speed_field.real_time);
+        self.owed_ns = if (milli == speed_field.max_wire) null else @intCast(@as(u128, self.period_ns) * milli / speed_field.real_time);
         self.until_ns = if (self.answered_at == null) now_ns +| share_ns else std.math.maxInt(u64);
         self.sent = 0;
         if (self.ease != 0) {

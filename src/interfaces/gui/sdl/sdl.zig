@@ -122,6 +122,8 @@ pub const Sdl = struct {
         .present = present,
         .show = show,
         .interval = interval,
+        .set_vsync = setVsync,
+        .refresh = refresh,
         .appearance = appearance,
         .focus = focus,
         .open_image = openImage,
@@ -262,6 +264,20 @@ pub const Sdl = struct {
     fn interval(ctx: *anyopaque) u64 {
         const self: *Sdl = @ptrCast(@alignCast(ctx));
         return if (self.vsync) 0 else gui.present_gate.default_interval_ns;
+    }
+
+    fn setVsync(ctx: *anyopaque, on: bool) bool {
+        const self = from(ctx);
+        const took = c.SDL_SetRenderVSync(self.renderer, if (on) 1 else 0);
+        if (took) self.vsync = on;
+        return self.vsync;
+    }
+
+    /// The refresh rate of the display the window sits on now.
+    fn refresh(ctx: *anyopaque) u32 {
+        const mode = c.SDL_GetCurrentDisplayMode(c.SDL_GetDisplayForWindow(from(ctx).window)) orelse return 0;
+        const hz = mode.*.refresh_rate;
+        return if (hz > 0) @intFromFloat(@round(hz * 1000)) else 0;
     }
 
     fn show(ctx: *anyopaque, list: *const render.draw_list.DrawList, atlas: ?render.raster.Atlas) anyerror!bool {
