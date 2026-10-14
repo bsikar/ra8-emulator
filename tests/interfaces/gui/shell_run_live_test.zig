@@ -46,6 +46,8 @@ test "Run keeps the image going frame after frame while the window keeps present
     var live: Live = undefined;
     try live.open(image, slow);
     defer live.deinit();
+    // Leaves read the core only at stops here; live reads have their own test.
+    live.shell.settings.display.registers = .off;
     const serial = live.registers.cores[0].serial;
     try live.click(.run);
     try live.step();

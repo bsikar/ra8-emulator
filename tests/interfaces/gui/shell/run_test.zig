@@ -330,3 +330,21 @@ test "a frame owes the board the period it is given, at the speed asked for" {
     run.frame(0, gui_app.speed_field.max_wire);
     try std.testing.expectEqual(@as(?u64, null), run.owed_ns);
 }
+
+test "a full pending table holds the slice back, and the run goes on once a slot frees" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const link = &bench.rig.link;
+    // Other leaves' reads fill every slot.
+    var reads: [proto.pending_slots]u32 = undefined;
+    for (&reads) |*id| id.* = try link.send(proto.Now, .now, .{ .core = .cpu0 });
+    bench.run.frame(bench.clock.read(), slow);
+    try std.testing.expect(!bench.run.next(link, bench.clock.read()));
+    try std.testing.expect(bench.run.lit);
+    try std.testing.expect(!bench.run.refused);
+    try std.testing.expectEqual(@as(?u32, null), bench.run.halted());
+    try bench.rig.session.answer();
+    while (link.pump()) |_| {}
+    try std.testing.expect(bench.run.next(link, bench.clock.read()));
+}

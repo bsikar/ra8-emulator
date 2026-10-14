@@ -1,6 +1,7 @@
 //! What the settings page's display rows choose: whether a present waits
-//! for the display, the most frames a second the window draws, and whether
-//! the status strip counts them. The choices are kept as a few lines of
+//! for the display, the most frames a second the window draws, whether the
+//! status strip counts them, and how often the registers leaves read the
+//! cores while the image runs. The choices are kept as a few lines of
 //! text, one `name=value` each; a line this build does not know is passed
 //! over, so an older or newer save still reads.
 const std = @import("std");
@@ -36,12 +37,40 @@ pub const Limit = enum(u8) {
     }
 };
 
+/// How often a running image's registers are read again; off reads them
+/// only when the core stops.
+pub const Live = enum(u8) {
+    off,
+    hz5,
+    hz15,
+    hz30,
+
+    pub const labels = [_][]const u8{ "Off", "5 Hz", "15 Hz", "30 Hz" };
+
+    /// Nanoseconds between reads, or null for none while running.
+    pub fn interval(self: Live) ?u64 {
+        const hz: u64 = switch (self) {
+            .off => return null,
+            .hz5 => 5,
+            .hz15 => 15,
+            .hz30 => 30,
+        };
+        return std.time.ns_per_s / hz;
+    }
+
+    pub fn label(self: Live) []const u8 {
+        return labels[@backingInt(self)];
+    }
+};
+
 pub const Display = struct {
     /// A present waits for the display's refresh, so no frame tears.
     vsync: bool = true,
     limit: Limit = .none,
     /// The status strip shows the frames a second and what a frame costs.
     counter: bool = false,
+    /// The registers leaves follow a running image this often.
+    registers: Live = .hz15,
 
     /// Nanoseconds from one frame's start to the next on a display that
     /// refreshes `refresh_mhz` thousandths of a hertz (0 when it does not
@@ -55,7 +84,7 @@ pub const Display = struct {
 
     /// The choices as the saved file's text, in `buf`.
     pub fn write(self: Display, buf: []u8) []const u8 {
-        return std.fmt.bufPrint(buf, "vsync={s}\nlimit={s}\ncounter={s}\n", .{ word(self.vsync), self.limit.label(), word(self.counter) }) catch "";
+        return std.fmt.bufPrint(buf, "vsync={s}\nlimit={s}\ncounter={s}\nregisters={s}\n", .{ word(self.vsync), self.limit.label(), word(self.counter), self.registers.label() }) catch "";
     }
 
     /// A saved file's text as choices. A line that is missing, unknown or
@@ -74,6 +103,10 @@ pub const Display = struct {
             } else if (std.mem.eql(u8, name, "limit")) {
                 for (Limit.labels, 0..) |known, index| {
                     if (std.mem.eql(u8, value, known)) display.limit = @fromBackingInt(@intCast(index));
+                }
+            } else if (std.mem.eql(u8, name, "registers")) {
+                for (Live.labels, 0..) |known, index| {
+                    if (std.mem.eql(u8, value, known)) display.registers = @fromBackingInt(@intCast(index));
                 }
             }
         }

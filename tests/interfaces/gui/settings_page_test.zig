@@ -114,7 +114,11 @@ test "the display rows set vsync, the frame rate limit and the counter, and save
     try std.testing.expectEqual(@as(usize, 1), page.chosen(&themes, .vsync));
     try std.testing.expectEqual(@as(usize, 3), page.chosen(&themes, .limit));
     try std.testing.expectEqual(@as(usize, 0), page.chosen(&themes, .counter));
-    try std.testing.expectEqual(Display{ .vsync = false, .limit = .fps144, .counter = true }, store.loadDisplay());
+    const live = middle(.registers, 3);
+    try std.testing.expect(page.press(&themes, 800, 600, live.x, live.y));
+    try std.testing.expectEqual(gui_app.display_settings.Live.hz30, page.display.registers);
+    try std.testing.expectEqual(@as(usize, 3), page.chosen(&themes, .registers));
+    try std.testing.expectEqual(Display{ .vsync = false, .limit = .fps144, .counter = true, .registers = .hz30 }, store.loadDisplay());
     // The theme was never touched.
     try std.testing.expectEqual(colors.Choice.dark, themes.choice());
 }

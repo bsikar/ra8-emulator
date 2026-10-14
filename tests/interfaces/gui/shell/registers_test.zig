@@ -287,3 +287,38 @@ test "a halt with no stop event makes both cores due for a read" {
     pair.refresh();
     try std.testing.expect(pair.cores[0].want and pair.cores[1].want);
 }
+
+test "a running image's registers are asked for again every interval, counted from the run's start" {
+    var pair: gui_app.shell.registers.Pair = .{};
+    const every: u64 = 50 * std.time.ns_per_ms;
+    pair.live(true, 1000, every);
+    try std.testing.expect(!pair.cores[0].want);
+    pair.live(true, 1000 + every - 1, every);
+    try std.testing.expect(!pair.cores[0].want);
+    pair.live(true, 1000 + every, every);
+    try std.testing.expect(pair.cores[0].want and pair.cores[1].want);
+    pair.cores[0].want = false;
+    pair.cores[1].want = false;
+    // The next interval counts from that ask.
+    pair.live(true, 1000 + 2 * every - 1, every);
+    try std.testing.expect(!pair.cores[0].want);
+    pair.live(true, 1000 + 2 * every, every);
+    try std.testing.expect(pair.cores[0].want);
+}
+
+test "nothing is asked for live while halted, nor with live reads off" {
+    var pair: gui_app.shell.registers.Pair = .{};
+    const every: u64 = 50 * std.time.ns_per_ms;
+    pair.live(false, 0, every);
+    pair.live(false, 10 * every, every);
+    try std.testing.expect(!pair.cores[0].want);
+    pair.live(true, 0, null);
+    pair.live(true, 10 * every, null);
+    try std.testing.expect(!pair.cores[0].want);
+    // A run that stops and starts again counts from its new start.
+    pair.live(true, 0, every);
+    pair.live(false, every / 2, every);
+    pair.live(true, every, every);
+    pair.live(true, every + every / 2, every);
+    try std.testing.expect(!pair.cores[0].want);
+}

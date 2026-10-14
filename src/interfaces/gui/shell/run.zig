@@ -155,14 +155,16 @@ pub const Run = struct {
     }
 
     /// Send the frame's next slice. False when Run is not lit, a slice is
-    /// still out, or the frame has paid what it owes or spent its share.
+    /// still out, the frame has paid what it owes or spent its share, or
+    /// the link's pending table is full: other leaves' reads hold the slice
+    /// back until their answers free a slot, and the run goes on.
     pub fn next(self: *Run, link: *Link, now_ns: u64) bool {
         if (!self.lit or self.slice_id != null) return false;
         if (now_ns >= self.until_ns or self.sent == max_slices) return false;
         const want = if (self.owed_ns) |owed| @min(owed, self.unit_ns) else self.unit_ns;
         if (want == 0) return false;
-        self.slice_id = link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want }) catch {
-            self.refuse();
+        self.slice_id = link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want }) catch |err| {
+            if (err != error.TableFull) self.refuse();
             return false;
         };
         self.asked_ns = want;
