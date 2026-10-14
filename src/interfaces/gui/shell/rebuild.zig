@@ -56,19 +56,25 @@ pub const Rebuild = struct {
 
     /// Reopens the session with `profile`, the pick's composed text.
     pub fn apply(self: *Rebuild, profile: []const u8) !void {
+        // A session on a thread of its own is reopened with the thread
+        // stopped, and answers again once everything points at the new one.
+        const worker = self.shell.worker;
+        if (worker) |apart| apart.stop();
         self.link.close();
         self.session.deinit();
         try self.session.open(self.allocator, self.io, self.image, profile);
         self.session.setup.stageApps(self.io, self.allocator, self.apps) catch |err| {
             std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
         };
-        self.link.open(self.session.transport(), self.rx, self.tx);
-        self.shell.server = shell_server.served(self.session);
+        if (worker) |apart| apart.rebind();
+        self.link.open(if (worker) |apart| apart.transport() else self.session.transport(), self.rx, self.tx);
+        if (worker == null) self.shell.server = shell_server.served(self.session);
         if (self.shell.breaks) |breaks| breaks.reset();
         if (self.hosted.*) |*held| held.announce(self.image, self.session.setup.owner.session());
         const chosen = self.pick.chosen;
         const stem = if (chosen.board_len > 0) chosen.board() else board_profiles.default_board;
         self.shell.status.setMachine(stem, chosen.panel());
+        if (worker) |apart| try apart.start();
     }
 };
 

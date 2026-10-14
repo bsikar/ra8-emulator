@@ -28,7 +28,11 @@
 //! and its stop event goes on to the status bar and the leaves.
 //!
 //! The sizing assumes a session that answers inside the frame, as the one
-//! served in this process does.
+//! served on the window's thread does. A session on a thread of its own
+//! (session_worker.zig) takes nothing from the frame: its slices go out all
+//! through the frame, each as the last one answers, and are sized by how
+//! long the session took over them (`answered_at`), so a pause is still about
+//! one share away.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
@@ -94,6 +98,10 @@ pub const Run = struct {
     settled: ?u32 = null,
     /// The session refused the last slice.
     refused: bool = false,
+    /// When the session last put an answer on the wire, on the shell's
+    /// clock, for a session on a thread of its own; null is one that answers
+    /// on the window's thread, timed by the frame.
+    answered_at: ?*const std.atomic.Value(u64) = null,
 
     /// Light Run on a core halted at `address`.
     pub fn start(self: *Run, address: u32) void {
@@ -132,7 +140,7 @@ pub const Run = struct {
     /// time at `milli` thousandths of real time, and nothing from before.
     pub fn frame(self: *Run, now_ns: u64, milli: u64) void {
         self.owed_ns = if (milli == speed_field.max_wire) null else @intCast(@as(u128, frame_ns) * milli / speed_field.real_time);
-        self.until_ns = now_ns +| share_ns;
+        self.until_ns = if (self.answered_at == null) now_ns +| share_ns else std.math.maxInt(u64);
         self.sent = 0;
         if (self.ease != 0) {
             self.ease -= 1;
@@ -189,7 +197,8 @@ pub const Run = struct {
         if (self.owed_ns) |owed| self.owed_ns = owed -| moved;
         // Board time that stands still has nothing more to pay this frame.
         if (moved == 0) self.until_ns = 0;
-        self.resize(now_ns -| self.sent_ns);
+        const at_ns = if (self.answered_at) |when| when.load(.acquire) else now_ns;
+        self.resize(at_ns -| self.sent_ns);
         if (done.reason != .count) {
             self.lit = false;
             return;

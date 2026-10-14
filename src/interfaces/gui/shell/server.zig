@@ -1,5 +1,6 @@
-//! A session served in this process (local_session.zig), answering on the
-//! shell's own thread between frames.
+//! A session served in this process (local_session.zig): answering on the
+//! shell's own thread between frames, or on a thread of its own
+//! (session_worker.zig), where the shell's call only hears how it fares.
 const local_session = @import("../local_session.zig");
 
 /// One in-process session the shell answers each frame.
