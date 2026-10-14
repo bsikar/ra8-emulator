@@ -8,6 +8,7 @@
 //! `--sd` imports a raw host file into the sparse RAM-backed image, so its
 //! capacity is stated by the file and checked against the CSD field.
 const std = @import("std");
+const observer = @import("ra8_chip").core.cpu.memory.observer;
 
 pub const geometry = struct {
     /// The block size every SD command works in.
@@ -31,6 +32,9 @@ pub const Image = struct {
     /// How big this card is. Settable while it is blank, because a card's
     /// size is a property of the card and not of the model.
     capacity_blocks: u32 = geometry.default_capacity_blocks,
+    /// The recording run's trail observer (H6), wired by the machine that
+    /// mounts the card. Null everywhere a card is just storage.
+    obs: ?observer.Observer = null,
 
     pub fn init(allocator: std.mem.Allocator) Image {
         return .{
@@ -40,6 +44,7 @@ pub const Image = struct {
     }
 
     pub fn deinit(self: *Image) void {
+        self.obs = null;
         self.release();
         self.blocks.deinit();
     }
@@ -47,6 +52,7 @@ pub const Image = struct {
     /// Give every held block back. A power cycle leaves a real card with its
     /// contents, so this is teardown rather than reset.
     pub fn release(self: *Image) void {
+        if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .release } });
         var it = self.blocks.valueIterator();
         while (it.next()) |stored| self.allocator.destroy(stored.*);
         self.blocks.clearRetainingCapacity();
@@ -59,7 +65,9 @@ pub const Image = struct {
     pub fn resize(self: *Image, blocks: u32) bool {
         if (blocks == 0 or blocks % geometry.csize_unit != 0) return false;
         if (self.held() != 0) return false;
+        if (self.capacity_blocks == blocks) return true;
         self.capacity_blocks = blocks;
+        if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .resize } });
         return true;
     }
 
@@ -75,7 +83,11 @@ pub const Image = struct {
         }
         if (self.held() != 0) return error.CardNotBlank;
         const blocks: u32 = @intCast(bytes.len / block_bytes);
-        if (!self.resize(blocks)) return error.CardNotBlank;
+        if (blocks == 0 or blocks % geometry.csize_unit != 0) return error.BadImageSize;
+        self.capacity_blocks = blocks;
+        // H6: a whole-image load is an install barrier, and the blocks it
+        // brings in are the barrier's payload, not a trail of writes.
+        if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .install } });
         var index: u32 = 0;
         while (index < blocks) : (index += 1) {
             const start: usize = @as(usize, index) * block_bytes;
@@ -83,13 +95,25 @@ pub const Image = struct {
             if (!allZero(source)) {
                 var block: Block = undefined;
                 @memcpy(&block, source);
-                if (!self.write(index, &block)) {
+                if (!self.put(index, &block)) {
                     self.release();
                     self.capacity_blocks = geometry.default_capacity_blocks;
                     return error.OutOfMemory;
                 }
             }
         }
+    }
+
+    /// Lay one block in without a trail record: the load path's own hand.
+    fn put(self: *Image, index: u32, data: *const Block) bool {
+        if (!self.inRange(index)) return false;
+        const fresh = self.allocator.create(Block) catch return false;
+        self.blocks.put(index, fresh) catch {
+            self.allocator.destroy(fresh);
+            return false;
+        };
+        fresh.* = data.*;
+        return true;
     }
 
     /// Blocks currently holding data.
@@ -119,17 +143,45 @@ pub const Image = struct {
     /// end, or out of memory, which the card answers as a write error.
     pub fn write(self: *Image, index: u32, data: *const Block) bool {
         if (!self.inRange(index)) return false;
+        var before: Block = @splat(0);
+        var held_already = false;
+        if (self.blocks.get(index)) |stored| {
+            before = stored.*;
+            held_already = true;
+        }
+        if (!self.commit(index, data)) return false;
+        if (self.obs) |o| {
+            // A write that changes no byte invents no record, and a zero
+            // block laid over an absent one leaves the card reading the
+            // same: only real changes cross the success boundary.
+            if (held_already) {
+                if (!std.mem.eql(u8, &before, data)) {
+                    o.bytes(.{
+                        .base = 0,
+                        .offset = @as(u64, index) * geometry.block_bytes,
+                        .initiator = .none,
+                        .pre = &before,
+                    });
+                }
+            } else if (!allZero(data)) {
+                o.bytes(.{
+                    .base = 0,
+                    .offset = @as(u64, index) * geometry.block_bytes,
+                    .initiator = .none,
+                    .pre = &before,
+                });
+            }
+        }
+        return true;
+    }
+
+    /// One block in, no trail: write's recording half lives above.
+    fn commit(self: *Image, index: u32, data: *const Block) bool {
         if (self.blocks.get(index)) |stored| {
             stored.* = data.*;
             return true;
         }
-        const fresh = self.allocator.create(Block) catch return false;
-        self.blocks.put(index, fresh) catch {
-            self.allocator.destroy(fresh);
-            return false;
-        };
-        fresh.* = data.*;
-        return true;
+        return self.put(index, data);
     }
 
     /// Zero an inclusive range of blocks. A held block is given back rather
@@ -140,6 +192,12 @@ pub const Image = struct {
         var cleared: u32 = 0;
         while (index <= last and self.inRange(index)) : (index += 1) {
             if (self.blocks.fetchRemove(index)) |gone| {
+                if (self.obs) |o| o.bytes(.{
+                    .base = 0,
+                    .offset = @as(u64, index) * geometry.block_bytes,
+                    .initiator = .none,
+                    .pre = gone.value,
+                });
                 self.allocator.destroy(gone.value);
                 cleared += 1;
             }

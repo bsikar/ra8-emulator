@@ -13,7 +13,7 @@ const fields = @import("ra8_snapshot").fields;
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 
 const wiring = .{ "planes", "refresh_hook", "refresh_log_hook", "event_hook" };
-const buffers = .{ "allocator", "image", "glass" };
+const buffers = .{ "allocator", "image", "glass", "obs" };
 const max_side: u16 = 4096;
 
 pub fn save(board: anytype, writer: anytype) !void {
@@ -68,6 +68,9 @@ pub fn readPayload(panel: anytype, cursor: *fields.Cursor) Error!void {
     copy.planes.glass = try build(@TypeOf(copy.planes.glass), allocator, glass);
     panel.planes.deinit();
     panel.* = copy;
+    // The planes the load built record for whoever owns the panel now.
+    panel.planes.image.obs = panel.planes.obs;
+    panel.planes.glass.obs = panel.planes.obs;
 }
 
 fn fits(panel: anytype, image: Raw, glass: Raw) bool {

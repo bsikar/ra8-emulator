@@ -117,3 +117,83 @@ test "planes that cannot be allocated drop the write and count it" {
     try std.testing.expectEqual(@as(u32, 1), panel.planes.unplaced);
     try std.testing.expectEqual(@as(usize, 0), panel.planes.image.pixels.len);
 }
+
+const observer = ra8.chip.core.cpu.memory.observer;
+
+/// A recording observer the tests attach to a plane or the planes (H6).
+const Hook = struct {
+    writes: [16]W = undefined,
+    write_count: usize = 0,
+    barriers: usize = 0,
+
+    const W = struct { offset: u64 = 0, pre: u8 = 0 };
+
+    const vtable = observer.Observer.VTable{ .bytes = bytes, .barrier = barrier };
+
+    fn bytes(ctx: *anyopaque, write: observer.Write) void {
+        const self: *Hook = @ptrCast(@alignCast(ctx));
+        self.writes[self.write_count] = .{ .offset = write.offset, .pre = write.pre[0] };
+        self.write_count += 1;
+    }
+
+    fn barrier(ctx: *anyopaque, event: observer.Barrier) void {
+        const self: *Hook = @ptrCast(@alignCast(ctx));
+        switch (event) {
+            .component => |c| if (c.what == .resize) {
+                self.barriers += 1;
+            },
+            else => unreachable,
+        }
+    }
+
+    fn obs(self: *Hook) observer.Observer {
+        return .{ .ctx = self, .vtable = &vtable };
+    }
+};
+
+test "a set records the pixel it changes, and nothing else" {
+    var px: [16]u8 = @splat(0);
+    var buf = eink.image.Buffer{ .width = 4, .height = 4, .pixels = &px };
+    var hook = Hook{};
+    buf.obs = hook.obs();
+
+    buf.set(1, 2, 0x99);
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 2 * 4 + 1), hook.writes[0].offset);
+    try std.testing.expectEqual(@as(u8, 0), hook.writes[0].pre);
+    try std.testing.expectEqual(@as(u8, 0x99), buf.pixel(1, 2));
+
+    // Same value again, and a write outside the plane: no records.
+    buf.set(1, 2, 0x99);
+    buf.set(9, 0, 0x11);
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+}
+
+test "a refresh records the pixels the waveform leaves different" {
+    var src_px: [16]u8 = @splat(0x00);
+    var source = eink.image.Buffer{ .width = 4, .height = 4, .pixels = &src_px };
+    var glass_px: [16]u8 = @splat(0xEE);
+    var glass = eink.image.Buffer{ .width = 4, .height = 4, .pixels = &glass_px };
+    var hook = Hook{};
+    glass.obs = hook.obs();
+
+    glass.refreshFrom(&source, 0, 0, 4, 4, proto.waveform.gc16);
+    // Every driven pixel changed from 0xEE; each records its old level.
+    try std.testing.expectEqual(@as(usize, 16), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 0), hook.writes[0].offset);
+    try std.testing.expectEqual(@as(u8, 0xEE), hook.writes[0].pre);
+    try std.testing.expectEqual(@as(u8, 0x00), glass.pixel(0, 0));
+}
+
+test "a resize raises a barrier and fresh planes inherit the observer" {
+    var planes = eink.image.Planes{};
+    defer planes.deinit();
+    var hook = Hook{};
+    planes.obs = hook.obs();
+
+    planes.resize(.{ .width = 4, .height = 4 });
+    try std.testing.expectEqual(@as(usize, 1), hook.barriers);
+    try std.testing.expect(planes.ready());
+    planes.image.set(0, 0, 0x42);
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+}

@@ -12,6 +12,10 @@ pub const Mapped = struct {
         resizeFn: *const fn (*anyopaque, u32) Error!void,
         readFn: *const fn (*const anyopaque, u32, []u8) bool,
         writeFn: *const fn (*anyopaque, u32, []const u8) Error!bool,
+        /// The restore path's raw overwrite, past whatever write semantics
+        /// the part applies (NOR program logic): it records nothing and
+        /// marks the covered sectors so restored code re-executes.
+        rawWriteFn: *const fn (*anyopaque, u32, []const u8) void,
     };
 
     /// Size the array to the window before anything can touch it.
@@ -27,5 +31,10 @@ pub const Mapped = struct {
     /// False when the access runs off the array.
     pub fn write(self: Mapped, address: u32, bytes: []const u8) Error!bool {
         return self.vtable.writeFn(self.context, address, bytes);
+    }
+
+    /// The trail's restore overwrite, bypassing write semantics.
+    pub fn rawWrite(self: Mapped, address: u32, bytes: []const u8) void {
+        return self.vtable.rawWriteFn(self.context, address, bytes);
     }
 };

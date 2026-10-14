@@ -217,3 +217,138 @@ test "write back: a write that fails leaves the original image intact" {
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
 }
+
+const observer = @import("ra8").chip.core.cpu.memory.observer;
+
+/// A recording observer the tests attach to an image (H6).
+const Hook = struct {
+    writes: [4]W = undefined,
+    write_count: usize = 0,
+    barriers: [4]What = undefined,
+    barrier_count: usize = 0,
+
+    const W = struct { offset: u64 = 0, pre: [512]u8 = undefined };
+    const What = enum { install, resize, release };
+
+    const vtable = observer.Observer.VTable{ .bytes = bytes, .barrier = barrier };
+
+    fn bytes(ctx: *anyopaque, write: observer.Write) void {
+        const self: *Hook = @ptrCast(@alignCast(ctx));
+        self.writes[self.write_count] = .{
+            .offset = write.offset,
+            .pre = write.pre[0..512].*,
+        };
+        self.write_count += 1;
+    }
+
+    fn barrier(ctx: *anyopaque, event: observer.Barrier) void {
+        const self: *Hook = @ptrCast(@alignCast(ctx));
+        switch (event) {
+            .component => |c| {
+                self.barriers[self.barrier_count] = switch (c.what) {
+                    .install => .install,
+                    .resize => .resize,
+                    .release => .release,
+                    else => unreachable,
+                };
+                self.barrier_count += 1;
+            },
+            else => unreachable,
+        }
+    }
+
+    fn obs(self: *Hook) observer.Observer {
+        return .{ .ctx = self, .vtable = &vtable };
+    }
+};
+
+test "a write over a held block records the block it replaces" {
+    var img = unit();
+    defer img.deinit();
+    var hook = Hook{};
+    img.obs = hook.obs();
+
+    var first: image.Block = @splat(0x11);
+    try std.testing.expect(img.write(5, &first));
+    var second: image.Block = @splat(0x22);
+    try std.testing.expect(img.write(5, &second));
+    try std.testing.expectEqual(@as(usize, 2), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 5 * 512), hook.writes[1].offset);
+    try std.testing.expectEqual(@as(u8, 0x11), hook.writes[1].pre[0]);
+}
+
+test "a real change onto an absent block records zeros; no change invents nothing" {
+    var img = unit();
+    defer img.deinit();
+    var hook = Hook{};
+    img.obs = hook.obs();
+
+    // Data over an absent block: the zeros it replaces are the record.
+    var data: image.Block = @splat(0x33);
+    try std.testing.expect(img.write(9, &data));
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+    try std.testing.expectEqual(@as(u8, 0), hook.writes[0].pre[0]);
+
+    // A zero block over an absent one leaves the card reading the same.
+    var zeros: image.Block = @splat(0);
+    try std.testing.expect(img.write(10, &zeros));
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+
+    // Identical bytes over a held block change nothing.
+    try std.testing.expect(img.write(9, &data));
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+}
+
+test "a zero clears records what was there before it went" {
+    var img = unit();
+    defer img.deinit();
+    var hook = Hook{};
+    img.obs = hook.obs();
+
+    var data: image.Block = @splat(0x44);
+    try std.testing.expect(img.write(12, &data));
+    try std.testing.expect(img.write(13, &data));
+    hook.write_count = 0;
+
+    try std.testing.expectEqual(@as(u32, 2), img.zero(12, 13));
+    try std.testing.expectEqual(@as(usize, 2), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 12 * 512), hook.writes[0].offset);
+    try std.testing.expectEqual(@as(u64, 13 * 512), hook.writes[1].offset);
+    try std.testing.expectEqual(@as(u8, 0x44), hook.writes[0].pre[0]);
+    try std.testing.expectEqual(@as(usize, 0), img.held());
+}
+
+test "a whole-image load and a release raise their barriers" {
+    var img = unit();
+    defer img.deinit();
+    var hook = Hook{};
+    img.obs = hook.obs();
+
+    // A whole-image load is one install barrier, not a trail of writes.
+    const bytes = try patterned(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try img.loadBytes(bytes);
+    try std.testing.expectEqual(@as(usize, 1), hook.barrier_count);
+    try std.testing.expectEqual(Hook.What.install, hook.barriers[0]);
+    try std.testing.expectEqual(@as(usize, 0), hook.write_count);
+    try std.testing.expectEqual(@as(usize, 4), img.held());
+
+    img.release();
+    try std.testing.expectEqual(@as(usize, 2), hook.barrier_count);
+    try std.testing.expectEqual(Hook.What.release, hook.barriers[1]);
+    try std.testing.expectEqual(@as(usize, 0), img.held());
+}
+
+test "a resize the card takes raises a barrier" {
+    var img = unit();
+    defer img.deinit();
+    var hook = Hook{};
+    img.obs = hook.obs();
+
+    try std.testing.expect(img.resize(256 * 1024));
+    try std.testing.expectEqual(@as(usize, 1), hook.barrier_count);
+    try std.testing.expectEqual(Hook.What.resize, hook.barriers[0]);
+    // Same size again: no change, no barrier.
+    try std.testing.expect(img.resize(256 * 1024));
+    try std.testing.expectEqual(@as(usize, 1), hook.barrier_count);
+}

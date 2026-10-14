@@ -171,13 +171,16 @@ pub const Store = struct {
     /// gates, the MPU, write-one-to-clear and NOR program semantics,
     /// matching what the trail recorded (RA8EMU-D1). The restore records
     /// nothing itself, but code the restored bytes reach must re-execute,
-    /// so the block fanout hears the range. OSPI-backed bytes are refused
-    /// until the Flash model grows a raw path (unit 08 contract).
+    /// so the block fanout hears the range. OSPI-backed bytes land through
+    /// the Flash model's own raw path (H6): past NOR semantics, recording
+    /// nothing, the sectors the shadow restores re-executing as usual.
     pub fn rawWrite(self: *Store, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
         if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
-            if (hit.kind != .sdram) return AccessError.Unmapped;
-            @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
+            switch (hit.kind) {
+                .ospi => port.flash.rawWrite(hit.offset, bytes),
+                .sdram => @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes),
+            }
             return;
         };
         const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;

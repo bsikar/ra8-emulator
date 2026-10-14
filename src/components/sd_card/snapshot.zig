@@ -12,7 +12,7 @@ const blocks = @import("ra8_snapshot").blocks;
 const SpiCard = @import("card/card.zig").Card;
 const BusCard = @import("bus/card.zig").Card;
 
-const image_wiring = .{ "allocator", "blocks" };
+const image_wiring = .{ "allocator", "blocks", "obs" };
 
 /// A card read from a payload and not yet in place: the live card with the
 /// saved fields read over it, and the blocks its image is to hold.
