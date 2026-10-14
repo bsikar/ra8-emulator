@@ -186,3 +186,63 @@ test "speed preset chosen from dropdown reaches a local session" {
     local.end();
     try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try local.reap());
 }
+
+/// What the session says to request `id`, with `field` still waiting on it.
+fn answer(field: *Field, id: u32, refused: bool) void {
+    const result: Env.Result = if (refused) .{ .err = @fromBackingInt(@intCast(0x0100)) } else .{ .ok = &.{} };
+    field.observe(.{ .response = .{ .id = id, .result = result } });
+}
+
+test "an answer to an older speed leaves a newer edit and its fresh text alone" {
+    var buf: [32]u8 = undefined;
+    var field: Field = .{};
+    field.ask_id = 7;
+    field.asked = 5000;
+    field.startEditing();
+    answer(&field, 7, false);
+    try std.testing.expectEqual(@as(u64, 5000), field.applied);
+    try std.testing.expect(field.editing and field.fresh);
+    try std.testing.expectEqualStrings("5x", try field.shown(&buf));
+    field.typed("3");
+    try std.testing.expectEqualStrings("3", try field.shown(&buf));
+
+    // Typed text survives the answer, and the edit is still the field's.
+    field.ask_id = 8;
+    field.asked = 2000;
+    answer(&field, 8, false);
+    try std.testing.expectEqual(@as(u64, 2000), field.applied);
+    try std.testing.expect(field.editing and !field.fresh);
+    try std.testing.expectEqualStrings("3", field.text());
+}
+
+test "a refusal of an older speed does not mark a newer edit refused, and one with no edit does" {
+    var field: Field = .{};
+    field.ask_id = 4;
+    field.asked = 5000;
+    field.startEditing();
+    field.typed("9");
+    answer(&field, 4, true);
+    try std.testing.expectEqual(@as(u64, 1000), field.applied);
+    try std.testing.expectEqual(@as(?speed_field.Refusal, null), field.refused);
+    try std.testing.expect(field.editing);
+    try std.testing.expectEqualStrings("9", field.text());
+
+    field.cancel();
+    field.ask_id = 5;
+    answer(&field, 5, true);
+    try std.testing.expectEqual(@as(?speed_field.Refusal, .session), field.refused);
+    try std.testing.expectEqual(@as(u64, 1000), field.applied);
+}
+
+test "an answer with no newer edit clears the sent text, and a stray answer changes nothing" {
+    var buf: [32]u8 = undefined;
+    var field: Field = .{};
+    field.typed("2");
+    field.ask_id = 3;
+    field.asked = 2000;
+    answer(&field, 99, false);
+    try std.testing.expectEqual(@as(u64, 1000), field.applied);
+    answer(&field, 3, false);
+    try std.testing.expectEqualStrings("2x", try field.shown(&buf));
+    try std.testing.expectEqual(@as(usize, 0), field.len);
+}

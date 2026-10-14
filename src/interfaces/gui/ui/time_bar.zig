@@ -102,14 +102,19 @@ pub const Layout = struct {
     }
 };
 
-/// A button fits its label with a pad each side; the field fits its longest text.
+/// A button fits its label with a pad each side; the field fits its longest text and the arrow.
 pub fn width(control: Control) i32 {
     const chars = switch (control) {
         .field => field_chars,
         .drop => 0,
         else => control.label().len,
     };
-    return if (control == .drop) drop_w else @as(i32, @intCast(font.textWidth(chars))) + 2 * pad;
+    const text: i32 = @as(i32, @intCast(font.textWidth(chars))) + 2 * pad;
+    return switch (control) {
+        .drop => drop_w,
+        .field => text + drop_w,
+        else => text,
+    };
 }
 
 pub fn dropBox(field: Rect) Rect {
