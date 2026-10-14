@@ -45,6 +45,17 @@ pub const Barrier = union(enum) {
     attach_external,
     /// `Store.map`: a fresh zeroed window opened.
     mapped: struct { base: u32, size: u32 },
+    /// A component's structural change (H3/H6): the whole part was reset,
+    /// installed from a snapshot, resized, released or replaced wholesale,
+    /// so byte records taken before it no longer describe it. `owner` is
+    /// the component instance; the trail needs no more.
+    component: Component,
+};
+
+/// Which structural change a component barrier names.
+pub const Component = struct {
+    owner: *const anyopaque,
+    what: enum { reset, install, resize, release, reformat, owner_replaced },
 };
 
 pub const Observer = struct {

@@ -26,6 +26,7 @@ const window_vtable: mapped.Mapped.VTable = .{
     .resizeFn = resize,
     .readFn = read,
     .writeFn = write,
+    .rawWriteFn = rawWrite,
 };
 
 fn of(context: *anyopaque) *Flash {
@@ -55,6 +56,10 @@ fn program(context: *anyopaque, address: u32, value: u8) bool {
 
 fn erase(context: *anyopaque, address: u32) void {
     of(context).erase(address);
+}
+
+fn rawWrite(context: *anyopaque, address: u32, bytes: []const u8) void {
+    of(context).rawWrite(address, bytes);
 }
 
 fn resize(context: *anyopaque, size: u32) mapped.Error!void {

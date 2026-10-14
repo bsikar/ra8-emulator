@@ -11,7 +11,7 @@ const fields = @import("ra8_snapshot").fields;
 const stick = @import("stick.zig");
 const Target = stick.Target;
 
-const skip: []const []const u8 = &.{ "disk", "data", "sink" };
+const skip: []const []const u8 = &.{ "disk", "data", "sink", "obs" };
 
 const Where = enum(u8) { none, disk, scratch, inquiry };
 

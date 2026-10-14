@@ -163,3 +163,77 @@ test "a bus reset in the middle of a write drops the rest of it" {
     try std.testing.expectEqual(msc.Phase.command, target.phase);
     try std.testing.expect(!target.command(&(@as([8]u8, @splat(0)))));
 }
+
+const observer = @import("ra8").chip.core.cpu.memory.observer;
+
+/// A recording observer the tests attach to a stick target (H6).
+const Hook = struct {
+    writes: [4]W = undefined,
+    write_count: usize = 0,
+
+    const W = struct { offset: u64 = 0, pre: [512]u8 = undefined, len: usize = 0 };
+
+    const vtable = observer.Observer.VTable{ .bytes = bytes, .barrier = barrier };
+
+    fn bytes(ctx: *anyopaque, write: observer.Write) void {
+        const self: *Hook = @ptrCast(@alignCast(ctx));
+        const slot = &self.writes[self.write_count];
+        slot.offset = write.offset;
+        slot.len = write.pre.len;
+        const len = @min(write.pre.len, slot.pre.len);
+        @memcpy(slot.pre[0..len], write.pre[0..len]);
+        self.write_count += 1;
+    }
+
+    fn barrier(ctx: *anyopaque, event: observer.Barrier) void {
+        _ = ctx;
+        _ = event;
+    }
+
+    fn obs(self: *Hook) observer.Observer {
+        return .{ .ctx = self, .vtable = &vtable };
+    }
+};
+
+test "a WRITE(10) records the bytes its packets replace" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    var hook = Hook{};
+    target.obs = hook.obs();
+
+    try std.testing.expect(target.command(&cbw(9, 512, &.{ msc.op.write10, 0, 0, 0, 0, 1, 0, 0, 1, 0 })));
+    var data: [512]u8 = @splat(0x5A);
+    try std.testing.expect(target.command(&data));
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 512), hook.writes[0].offset);
+    try std.testing.expectEqual(@as(usize, 512), hook.writes[0].len);
+    // The pre-image is what the disk held there before the packet landed.
+    try std.testing.expectEqual(@as(u8, 0xA1), hook.writes[0].pre[0]);
+    try std.testing.expectEqual(@as(u8, 0x5A), target.disk[512]);
+}
+
+test "a packet that changes no byte invents no record" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    var hook = Hook{};
+    target.obs = hook.obs();
+
+    // The block as the test fixture laid it down, back over itself.
+    try std.testing.expect(target.command(&cbw(10, 512, &.{ msc.op.write10, 0, 0, 0, 0, 2, 0, 0, 2, 0 })));
+    try std.testing.expect(target.command(disk_bytes[1024..1536]));
+    try std.testing.expectEqual(@as(usize, 0), hook.write_count);
+}
+
+test "a short payload records only the bytes that landed" {
+    var target = msc.Target{ .disk = &disk_bytes };
+    var hook = Hook{};
+    target.obs = hook.obs();
+
+    try std.testing.expect(target.command(&cbw(11, 1024, &.{ msc.op.write10, 0, 0, 0, 0, 1, 0, 0, 2, 0 })));
+    var data: [100]u8 = @splat(0x7E);
+    try std.testing.expect(target.command(&data));
+    try std.testing.expectEqual(@as(usize, 1), hook.write_count);
+    try std.testing.expectEqual(@as(u64, 512), hook.writes[0].offset);
+    try std.testing.expectEqual(@as(usize, 100), hook.writes[0].len);
+    try std.testing.expectEqual(@as(u32, 100), target.sent);
+    // The rest of the transfer is still owed before the CSW.
+    try std.testing.expectEqual(msc.Phase.data_out, target.phase);
+}

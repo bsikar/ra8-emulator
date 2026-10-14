@@ -64,8 +64,11 @@ pub fn read(cursor: *fields.Cursor) fields.Error!Staged {
 
 /// Put `built` in `live`'s place and free what `live` held.
 pub fn install(live: *Flash, built: Flash) void {
+    if (live.obs) |o| o.barrier(.{ .component = .{ .owner = live, .what = .install } });
+    const obs = live.obs;
     live.deinit();
     live.* = built;
+    live.obs = obs;
 }
 
 fn inMaximumPart(number: u32) bool {

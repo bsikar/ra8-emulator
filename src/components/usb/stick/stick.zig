@@ -9,6 +9,7 @@
 //! way a real stick answers, rather than stalling the pipe.
 const std = @import("std");
 const usbhs_function = @import("ra8_chip").periph.usbhs.function;
+const observer = @import("ra8_chip").core.cpu.memory.observer;
 pub const disk = @import("disk.zig");
 pub const snapshot = @import("snapshot.zig");
 
@@ -55,6 +56,9 @@ pub const inquiry_data = [_]u8{ 0x00, 0x80, 0x04, 0x02, 31, 0, 0, 0 } ++
 
 pub const Target = struct {
     disk: []u8 = &.{},
+    /// The recording run's trail observer (H6), wired by the board that
+    /// hands the stick its disk. Null when the stick is just a device.
+    obs: ?observer.Observer = null,
     phase: Phase = .command,
     sense: Sense = .{},
     status: Status = .passed,
@@ -103,11 +107,34 @@ pub const Target = struct {
     /// once the last byte the CBW promised is in.
     fn take(self: *Target, packet: []const u8) bool {
         const n = @min(packet.len, self.sink.len);
-        @memcpy(self.sink[0..n], packet[0..n]);
-        self.sink = self.sink[n..];
+        self.land(packet[0..n]);
         self.sent += @intCast(n);
         if (self.sink.len == 0) self.phase = .status;
         return true;
+    }
+
+    /// Copy a data-out packet into the blocks being written, recording the
+    /// bytes each piece replaces (H6). Pieces stay at one block so the
+    /// pre-image fits the scratch without allocating; an aborted transfer
+    /// simply never lands, so only bytes that actually arrive can record.
+    fn land(self: *Target, packet: []const u8) void {
+        var rest = packet;
+        while (rest.len > 0) {
+            const n = @min(@min(rest.len, block_len), self.sink.len);
+            var before: [block_len]u8 = undefined;
+            @memcpy(before[0..n], self.sink[0..n]);
+            // The host's packet may sit in the disk's own bytes, so the
+            // landing copy tolerates overlap.
+            std.mem.copyForwards(u8, self.sink[0..n], rest[0..n]);
+            if (self.obs) |o| {
+                if (!std.mem.eql(u8, before[0..n], rest[0..n])) {
+                    const at: u64 = @intFromPtr(self.sink.ptr) - @intFromPtr(self.disk.ptr);
+                    o.bytes(.{ .base = 0, .offset = at, .initiator = .none, .pre = before[0..n] });
+                }
+            }
+            self.sink = self.sink[n..];
+            rest = rest[n..];
+        }
     }
 
     /// The next bulk IN packet, at most `buf.len` bytes: the data stage

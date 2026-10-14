@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const proto = @import("wire.zig");
+const observer = @import("ra8_chip").core.cpu.memory.observer;
 
 /// A grayscale plane at one panel geometry. Empty until sized, and a write
 /// outside it is dropped, so a load never runs past the reported panel.
@@ -9,6 +10,9 @@ pub const Buffer = struct {
     width: u16 = 0,
     height: u16 = 0,
     pixels: []u8 = &.{},
+    /// The recording run's trail observer (H6), wired by the machine that
+    /// owns the panel. Null when a plane is just a drawing surface.
+    obs: ?observer.Observer = null,
 
     pub fn alloc(allocator: std.mem.Allocator, geometry: proto.Geometry) !Buffer {
         const pixels = try allocator.alloc(u8, geometry.pixels());
@@ -28,7 +32,17 @@ pub const Buffer = struct {
 
     pub fn set(self: *Buffer, x: u32, y: u32, value: u8) void {
         if (x >= self.width or y >= self.height) return;
-        self.pixels[@as(usize, y) * self.width + x] = value;
+        const at = @as(usize, y) * self.width + x;
+        const before = self.pixels[at];
+        self.pixels[at] = value;
+        if (self.obs) |o| {
+            // A pixel left as it was invents no record; a write outside the
+            // plane was dropped above.
+            if (before != value) {
+                var old: [1]u8 = .{before};
+                o.bytes(.{ .base = 0, .offset = at, .initiator = .none, .pre = &old });
+            }
+        }
     }
 
     /// Apply the selected waveform to a rectangle copied from the image plane.
@@ -58,6 +72,9 @@ pub const Planes = struct {
     allocator: std.mem.Allocator = std.heap.page_allocator,
     image: Buffer = .{},
     glass: Buffer = .{},
+    /// The recording run's trail observer (H6): resize barriers fire here,
+    /// and fresh planes inherit it for their byte records.
+    obs: ?observer.Observer = null,
     /// Pixels or refreshes dropped because the planes could not be allocated.
     unplaced: u32 = 0,
 
@@ -69,6 +86,8 @@ pub const Planes = struct {
             self.image.free(self.allocator);
             return self.refuse();
         };
+        self.image.obs = self.obs;
+        self.glass.obs = self.obs;
         return true;
     }
 
@@ -81,6 +100,7 @@ pub const Planes = struct {
     pub fn resize(self: *Planes, geometry: proto.Geometry) void {
         self.deinit();
         self.geometry = geometry;
+        if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .resize } });
     }
 
     pub fn deinit(self: *Planes) void {
