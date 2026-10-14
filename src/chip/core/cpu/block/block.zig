@@ -22,6 +22,10 @@ pub const Block = struct {
     /// Every line it covers is tracked, so writes over it drop it and its
     /// entries are handed out without a re-check (RA8EMU-409).
     tracked: bool = false,
+    /// Arrivals at this block's head the fixed-trip watch still passes by,
+    /// after a trip watched from it ended with no skip (fixed_trip.zig).
+    /// A block formed afresh starts at none.
+    miss_wait: u16 = 0,
     entries: [cap]Entry = undefined,
 
     /// Fetch and decode forward from `start` through `cache`. The block ends
