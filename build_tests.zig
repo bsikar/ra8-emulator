@@ -14,7 +14,7 @@ pub const Imports = struct {
 };
 
 /// One unit test binary over `root`, with every module the tests import.
-pub fn compile(b: *std.Build, name: []const u8, root: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, imports: Imports, exe: *std.Build.Step.Compile, move_peer: *std.Build.Step.Compile) *std.Build.Step.Compile {
+pub fn compile(b: *std.Build, name: []const u8, root: []const u8, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, imports: Imports, exe: *std.Build.Step.Compile, move_peer: *std.Build.Step.Compile, lifecycle_peer: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const tests = b.addTest(.{ .name = name, .filters = if (imports.filter) |text| &.{text} else &.{}, .root_module = b.createModule(.{ .root_source_file = b.path(root), .target = target, .optimize = optimize, .link_libc = true }) });
     tests.root_module.addImport("ra8", imports.emu);
     tests.root_module.addImport("cli_app", imports.cli);
@@ -23,16 +23,17 @@ pub fn compile(b: *std.Build, name: []const u8, root: []const u8, target: std.Bu
     tests.root_module.addImport("gate", imports.gate);
     tests.root_module.addImport("terms", imports.terms);
     tests.root_module.addImport("example_table", imports.table);
-    testPaths(b, tests, exe, move_peer);
+    testPaths(b, tests, exe, move_peer, lifecycle_peer);
     return tests;
 }
 
 /// The serve test (RA8EMU-737) spawns the emulator this build produced;
 /// guest images built from Zig source ride along (RA8EMU-955).
-fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile, move_peer: *std.Build.Step.Compile) void {
+fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile, move_peer: *std.Build.Step.Compile, lifecycle_peer: *std.Build.Step.Compile) void {
     const paths = b.addOptions();
     paths.addOptionPath("emulator", exe.getEmittedBin());
     paths.addOptionPath("host_move_peer", move_peer.getEmittedBin());
+    paths.addOptionPath("host_lifecycle_peer", lifecycle_peer.getEmittedBin());
     if (exe.root_module.resolved_target.?.result.os.tag == .windows) {
         const fixture = b.addExecutable(.{ .name = "ssh_fixture", .root_module = b.createModule(.{
             .root_source_file = b.path("tests/interfaces/cli/ctl_host_test.zig"),
