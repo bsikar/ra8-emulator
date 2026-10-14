@@ -32,6 +32,7 @@ pub const locals = @import("locals.zig");
 pub const source = @import("source.zig");
 pub const run = @import("run.zig");
 pub const settings_page = @import("settings_page.zig");
+pub const pace = @import("pace.zig");
 pub const startup = @import("startup.zig");
 pub const theme = @import("theme.zig");
 pub const time = @import("time.zig");

@@ -51,6 +51,7 @@ const shell_recent_menu = @import("recent_menu.zig");
 const shell_board_pick = @import("board_pick.zig");
 const shell_board_profiles = @import("board_profiles.zig");
 const shell_run = @import("run.zig");
+const shell_pace = @import("pace.zig");
 const host_profiles = @import("ra8_host").profiles;
 const host_listener = @import("ra8_rpc").host_listener;
 const script_mod = @import("../script/script.zig");
@@ -64,7 +65,6 @@ pub const usage = args_mod.usage;
 
 const Env = proto.Client.Env;
 const max_image: usize = 64 * 1024 * 1024;
-const frame_ns: u64 = shell_run.frame_ns;
 
 const WindowBackend = struct {
     platform: platform.Platform,
@@ -255,7 +255,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.status.render = render_driver.status(&render_buf, render_driver.active, render_driver.gpu);
     var settings_store = shell_settings.Store{ .io = io, .allocator = allocator, .dir = prefs };
     shell.themes.choose(if (args.theme_set) args.theme else settings_store.load()); // an explicit --theme wins (RA8EMU-963)
-    shell.settings = .{ .store = &settings_store };
+    shell.settings = .{ .store = &settings_store, .display = settings_store.loadDisplay() };
     var layout_store = shell_layout.Store{ .io = io, .allocator = allocator, .dir = prefs };
     layout_store.restore(&shell.layout); // the saved layout replaces the default
     defer shell.deinit();
@@ -327,8 +327,10 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
     if (shell.memory_field) |field| field.image = shell_memory_field.Image.init(bytes) catch null;
     var pace = wall_clock.Host.init(io);
     const clock = pace.clock();
+    var pacing: shell_pace.Pace = .{};
     while (true) {
         const began = clock.now();
+        pacing.begin(shell, window, began);
         if (!try shell.step(window)) return;
         if (shell.state() == .connected and (!sent or reloadDue(shell))) {
             const link = shell.link orelse return;
@@ -341,7 +343,7 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
             if (shell.status.image != null) drawn += 1;
             if (drawn == wanted) return;
         }
-        try rest(io, shell, clock, began + frame_ns);
+        try rest(io, shell, clock, pacing.end(shell, window, began, clock.now()));
     }
 }
 

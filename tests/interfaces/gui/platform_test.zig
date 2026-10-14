@@ -92,3 +92,10 @@ test "a key carries no shortcut modifier unless the backend says one was held" {
     const plain: platform.Event = .{ .key = .{ .code = 'o', .down = true } };
     try std.testing.expect(!plain.key.primary);
 }
+
+test "a backend with no display to wait on says presents do not wait and gives no refresh rate" {
+    var window = gui_app.headless.Headless.init(std.testing.allocator, 8, 8);
+    defer window.deinit();
+    try std.testing.expect(!window.platform().setVsync(true));
+    try std.testing.expectEqual(@as(u32, 0), window.platform().refresh());
+}

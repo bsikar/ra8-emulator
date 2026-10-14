@@ -70,6 +70,8 @@ pub const Status = struct {
     run_id: ?u32 = null,
     /// The window's render segment, set once the backend opened (RA8EMU-226).
     render: ?[]const u8 = null,
+    /// The frame counter's segment, while the settings page has it on.
+    frames: ?[]const u8 = null,
     /// The board and panel in force, named by the launcher (RA8EMU-1152).
     machine_buf: [80]u8 = undefined,
     machine_len: usize = 0,
@@ -178,6 +180,7 @@ pub const Status = struct {
         }
         if (self.refused) |what| try out.print(" | {s}", .{what.message()});
         if (self.render) |what| try out.print(" | {s}", .{what});
+        if (self.frames) |what| try out.print(" | {s}", .{what});
         return stream.buffered();
     }
 };
