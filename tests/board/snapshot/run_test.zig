@@ -70,7 +70,7 @@ test "another part's file is refused before anything changes" {
     var rig: Rig = undefined;
     try rig.build();
     defer rig.deinit();
-    rig.store.span(word_at, 4).?[0] = 0x7E;
+    rig.store.locate(word_at, 4).?.bytes[0] = 0x7E;
     var zero = try fixture.boot(&ram);
     var bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer bytes.deinit();
