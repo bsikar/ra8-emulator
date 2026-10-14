@@ -15,6 +15,7 @@ test {
     _ = @import("cycle_count_test.zig");
     _ = @import("zig/core_test.zig");
     _ = @import("zig/drive_test.zig");
+    _ = @import("zig/hitset_battery_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");
