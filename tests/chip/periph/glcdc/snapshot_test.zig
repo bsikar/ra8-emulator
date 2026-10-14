@@ -100,7 +100,11 @@ test "a missing section or a cut payload leaves the controller untouched" {
 
 fn scanFrame(context: *anyopaque, _: u64) void {
     const unit: *glcdc.Glcdc = @ptrCast(@alignCast(context));
-    _ = unit.scanOut();
+    // What the boundary's sink sees (RA8EMU-D13): a pure composition of the
+    // panel, whose frame the clock's edge already landed.
+    const source = unit.compositeInputs() orelse return;
+    var pixels: [4]u32 = undefined;
+    _ = unit.composite(source, unit.domain.powered(), &pixels);
 }
 fn setFrame(board: *Stand, guest: ra8.chip.core.cpu.memory.guest.Guest) void {
     board.display.memory = guest;
@@ -136,11 +140,14 @@ test "vsync restore continues real scan status and next boundary against referen
     try display.load(&fresh, bytes.written());
     try std.testing.expect(live.display.output.vsync.?.sink.?.context == @as(*anyopaque, @ptrCast(&live.display)));
     try std.testing.expect(fresh.display.output.vsync.?.sink.?.context == @as(*anyopaque, @ptrCast(&fresh.display)));
-    try std.testing.expect(fresh.display.output.vsync.?.sink.frame == scanFrame);
+    try std.testing.expect(fresh.display.output.vsync.?.sink.?.frame == scanFrame);
     for ([_]u64{ 99, 100, 350, 399, 400 }) |now| {
-        _ = reference.display.output.vsync.?.tick(now);
-        _ = live.display.output.vsync.?.tick(now);
-        _ = fresh.display.output.vsync.?.tick(now);
+        for ([_]*Stand{ &reference, &live, &fresh }) |stand| {
+            if (stand.display.output.vsync.?.tick(now)) {
+                stand.display.frameEvent();
+                stand.display.output.vsync.?.notify(now);
+            }
+        }
         for ([_]*Stand{ &live, &fresh }) |target| {
             try std.testing.expectEqual(reference.display.system.frames, target.display.system.frames);
             try std.testing.expectEqual(reference.display.system.status, target.display.system.status);

@@ -244,14 +244,14 @@ test "a settled Pause walks both cores' locals again" {
     var locals: gui.shell.locals.Pair = .{};
     bench.shell.locals = &locals;
     try bench.fill();
-    try execution.paySlices(&bench.shell);
+    try execution.paySlices(&bench.shell, .fresh);
     // The bench loaded the image behind the shell's back, and a slice is not a stop.
     for (&locals.cores) |*model| try std.testing.expect(!touched(model));
     bench.time.pressCommand(.pause, &bench.rig.link, &bench.shell.status);
-    try execution.paySlices(&bench.shell);
+    try execution.paySlices(&bench.shell, .fresh);
     try bench.rig.session.answer();
     try execution.exchange(&bench.shell);
-    try execution.paySlices(&bench.shell);
+    try execution.paySlices(&bench.shell, .fresh);
     try std.testing.expect(!bench.time.run.lit);
     // A pause has no stop event of cpu1's: only the settled halt makes its ask due.
     for (&locals.cores) |*model| try std.testing.expect(touched(model));
