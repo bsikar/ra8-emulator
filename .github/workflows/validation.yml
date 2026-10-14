@@ -1,0 +1,42 @@
+name: validation
+
+# Runs the unfiltered test suites on GitHub's runner, so the host suite
+# (ra8_host_tests, 1539 tests) gets a complete single-run PASS that the
+# 2 vCPU coordinator box cannot finish inside its validation window.
+on:
+  workflow_dispatch:
+  push:
+    branches: [BSIKAR/time-travel]
+
+jobs:
+  suites:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.17.0
+        run: |
+          curl -fsSL -o /tmp/zig.tar.xz https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz
+          echo "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026  /tmp/zig.tar.xz" | sha256sum -c -
+          mkdir -p "$HOME/zig"
+          tar -xJf /tmp/zig.tar.xz -C "$HOME/zig"
+          echo "$HOME/zig/zig-x86_64-linux-0.17.0" >> "$GITHUB_PATH"
+
+      - name: Check formatting
+        run: zig fmt --check build.zig build_tests.zig src tests tools
+
+      - name: Chip suite
+        run: |
+          zig build ra8_tests-exe
+          ./zig-out/bin/ra8_tests
+
+      - name: Host suite
+        run: |
+          zig build ra8_host_tests-exe
+          ./zig-out/bin/ra8_host_tests
+
+      - name: GUI link suite
+        run: |
+          zig build ra8_gui_link_tests-exe
+          ./zig-out/bin/ra8_gui_link_tests
