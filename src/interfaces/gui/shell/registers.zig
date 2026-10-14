@@ -4,7 +4,9 @@
 //! of reads goes out once the image has loaded and after every stop of the
 //! leaf's core. When its last answer lands, the batch becomes the shown
 //! snapshot and the one it replaces the "before" the pane marks changes
-//! against. A load starts over, so a fresh image marks nothing.
+//! against. A load starts over, so a fresh image marks nothing. While the
+//! image runs, a batch is also due every so often (`Pair.live`), so the
+//! leaves follow it as it goes rather than only where it stops.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
@@ -162,6 +164,27 @@ pub const Registers = struct {
 /// One model per core, so each leaf shows the core it is bound to.
 pub const Pair = struct {
     cores: [2]Registers = .{ .{ .core = .cpu0 }, .{ .core = .cpu1 } },
+    /// When the running image's registers were last asked for; null while
+    /// nothing runs.
+    live_ns: ?u64 = null,
+
+    /// A frame at `now_ns`: while the image runs, ask both cores again once
+    /// `every_ns` has gone by since the last ask, counted from when the run
+    /// began; null asks only at stops, as a halt does.
+    pub fn live(self: *Pair, running: bool, now_ns: u64, every_ns: ?u64) void {
+        const every = every_ns orelse return;
+        if (!running) {
+            self.live_ns = null;
+            return;
+        }
+        const last = self.live_ns orelse {
+            self.live_ns = now_ns;
+            return;
+        };
+        if (now_ns -| last < every) return;
+        self.live_ns = now_ns;
+        self.refresh();
+    }
 
     pub fn of(self: *const Pair, core: pane_layout.Core) *const Registers {
         return &self.cores[@backingInt(core)];

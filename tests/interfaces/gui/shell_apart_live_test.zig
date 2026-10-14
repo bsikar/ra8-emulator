@@ -1,7 +1,8 @@
 //! The shell loop over a session on a thread of its own
 //! (src/interfaces/gui/session_worker.zig), on a headless window with the
 //! host's clock: the image loads, Run moves board time while every frame
-//! still presents, and Pause settles on the core's halt.
+//! still presents, the registers leaf follows the running image, and Pause
+//! settles on the core's halt.
 const std = @import("std");
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
@@ -28,6 +29,7 @@ const Apart = struct {
     shell: gui_app.shell.loop.Shell,
     window: Headless,
     time: gui_app.shell.time.Time,
+    registers: gui_app.shell.registers.Pair,
 
     /// Opens in place and runs frames until `image` has loaded and halted.
     fn open(self: *Apart) !void {
@@ -45,6 +47,8 @@ const Apart = struct {
         self.shell.link = &self.link;
         self.shell.clock = self.host_clock.clock();
         self.shell.time = &self.time;
+        self.registers = .{};
+        self.shell.registers = &self.registers;
         try self.worker.serveShell(&self.shell);
         try self.until(connected);
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, image, gpa, .limited(1 << 20));
@@ -118,4 +122,30 @@ test "Run moves board time while every frame presents, and Pause settles on the 
     const stopped_at = apart.time.run.board_ns.?;
     for (0..5) |_| try apart.frame();
     try std.testing.expectEqual(stopped_at, apart.time.run.board_ns.?);
+}
+
+fn readTwice(apart: *const Apart) bool {
+    return apart.registers.cores[0].serial >= Started.serial + 2;
+}
+
+const Started = struct {
+    var serial: u32 = 0;
+};
+
+test "the registers leaf follows a running image, and keeps still once it pauses" {
+    var apart: Apart = undefined;
+    try apart.open();
+    defer apart.deinit();
+    apart.shell.settings.display.registers = .hz30;
+    apart.time.pressCommand(.run, &apart.link, &apart.shell.status);
+    try apart.until(Apart.moved);
+    Started.serial = apart.registers.cores[0].serial;
+    // Two more batches publish while it runs, at thirty a second.
+    try apart.until(readTwice);
+    try std.testing.expect(apart.shell.status.run == .running);
+    apart.time.pressCommand(.pause, &apart.link, &apart.shell.status);
+    try apart.until(Apart.halted);
+    const pc = apart.registers.cores[0].value(.pc);
+    for (0..5) |_| try apart.frame();
+    try std.testing.expectEqual(pc, apart.registers.cores[0].value(.pc));
 }

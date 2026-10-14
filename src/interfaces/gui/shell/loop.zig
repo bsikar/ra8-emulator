@@ -162,6 +162,7 @@ pub const Shell = struct {
         if (!self.themes.styled) self.themes.restyle(window.appearance());
         if (self.raise) |asked| if (asked.swap(false, .acq_rel)) window.focus();
         try self.exchange();
+        if (self.registers) |registers| if (self.time) |time| registers.live(time.run.lit, self.now(), self.settings.display.registers.interval());
         try self.paySlices(.fresh);
         if (self.files) |files| files.frame(window, &self.status);
         if (!window.visible()) return true;

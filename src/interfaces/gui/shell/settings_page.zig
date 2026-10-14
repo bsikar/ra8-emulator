@@ -2,7 +2,8 @@
 //! from File > Settings (Cmd+, on macOS, Ctrl+, elsewhere) and closed with
 //! Escape or a press outside it. Each row is one setting with its choices
 //! side by side: the theme (RA8EMU-961, RA8EMU-962), then the display's
-//! vsync, frame rate limit and frame counter (display_settings.zig). A press
+//! vsync, frame rate limit and frame counter, and how often the registers
+//! leaves follow a running image (display_settings.zig). A press
 //! on a choice applies it at once and remembers it across launches in a
 //! small file under SDL's per-user pref path. A missing, unreadable or
 //! corrupt save reads as the defaults, so a first launch and a broken save
@@ -36,7 +37,7 @@ const inset: i32 = 6;
 pub const row_h: i32 = font.cell_h + 8;
 
 /// The page's rows, top to bottom.
-pub const Row = enum(u8) { theme, vsync, limit, counter };
+pub const Row = enum(u8) { theme, vsync, limit, counter, registers };
 
 const Spec = struct { label: []const u8, choices: []const []const u8 };
 const on_off = [_][]const u8{ "On", "Off" };
@@ -45,6 +46,7 @@ const specs = [_]Spec{
     .{ .label = "VSync", .choices = &on_off },
     .{ .label = "Frame rate limit", .choices = &display_settings.Limit.labels },
     .{ .label = "FPS counter", .choices = &on_off },
+    .{ .label = "Live registers", .choices = &display_settings.Live.labels },
 };
 const themes_in_order = [_]Choice{ .system, .light, .dark };
 
@@ -78,7 +80,7 @@ pub const Store = struct {
     }
 
     pub fn saveDisplay(self: *const Store, display: Display) void {
-        var buf: [64]u8 = undefined;
+        var buf: [128]u8 = undefined;
         self.put(display_file_name, display.write(&buf));
     }
 
@@ -175,6 +177,7 @@ pub const Page = struct {
             .vsync => self.display.vsync = index == 0,
             .limit => self.display.limit = @fromBackingInt(@intCast(index)),
             .counter => self.display.counter = index == 0,
+            .registers => self.display.registers = @fromBackingInt(@intCast(index)),
         }
         if (self.store) |store| store.saveDisplay(self.display);
     }
@@ -186,6 +189,7 @@ pub const Page = struct {
             .vsync => @intFromBool(!self.display.vsync),
             .limit => @backingInt(self.display.limit),
             .counter => @intFromBool(!self.display.counter),
+            .registers => @backingInt(self.display.registers),
         };
     }
 

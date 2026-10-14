@@ -47,7 +47,7 @@ test "every limit names its rate" {
 }
 
 test "the saved text round-trips every choice" {
-    var buf: [64]u8 = undefined;
+    var buf: [128]u8 = undefined;
     const all = [_]Display{
         .{},
         .{ .vsync = false, .limit = .fps144, .counter = true },
@@ -55,7 +55,7 @@ test "the saved text round-trips every choice" {
         .{ .vsync = false, .limit = .none, .counter = false },
     };
     for (all) |display| try std.testing.expectEqual(display, Display.parse(display.write(&buf)));
-    try std.testing.expectEqualStrings("vsync=off\nlimit=144\ncounter=on\n", all[1].write(&buf));
+    try std.testing.expectEqualStrings("vsync=off\nlimit=144\ncounter=on\nregisters=15 Hz\n", all[1].write(&buf));
 }
 
 test "a line the build does not know, or a value it does not offer, keeps the default" {
@@ -63,4 +63,15 @@ test "a line the build does not know, or a value it does not offer, keeps the de
     try std.testing.expectEqual(Display{}, Display.parse("banana\nvsync=maybe\nlimit=75\ncounter\n"));
     const some = Display.parse("scale=2\r\n counter = on \r\nlimit=120\n");
     try std.testing.expectEqual(Display{ .limit = .fps120, .counter = true }, some);
+}
+
+test "live registers default to fifteen reads a second and save with the rest" {
+    try std.testing.expectEqual(display_settings.Live.hz15, (Display{}).registers);
+    try std.testing.expectEqual(@as(?u64, ns_per_s / 15), display_settings.Live.hz15.interval());
+    try std.testing.expectEqual(@as(?u64, null), display_settings.Live.off.interval());
+    var buf: [128]u8 = undefined;
+    const off: Display = .{ .registers = .off };
+    try std.testing.expectEqual(off, Display.parse(off.write(&buf)));
+    try std.testing.expectEqual(display_settings.Live.hz30, Display.parse("registers=30 Hz\n").registers);
+    try std.testing.expectEqual(display_settings.Live.hz15, Display.parse("registers=60 Hz\n").registers);
 }
