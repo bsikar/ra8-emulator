@@ -189,12 +189,15 @@ pub const Field = struct {
         };
         if (response.id != self.ask_id) return;
         self.ask_id = null;
+        // A field reopened while the answer was in flight keeps its edit; the
+        // answer only settles what the field shows when nothing newer is typed.
         if (response.result == .err) {
-            self.refused = .session;
+            if (!self.editing) self.refused = .session;
             return;
         }
         self.applied = self.asked;
-        self.cancel();
+        if (!self.editing) return self.cancel();
+        if (self.fresh) self.startEditing();
     }
 
     /// What the field reads: the typed text while editing or when refused, else the speed in use.

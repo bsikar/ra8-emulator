@@ -196,6 +196,41 @@ test "speed dropdown opens on drop arrow, selects presets, and dismisses on Esca
     try std.testing.expectEqual(@as(u64, 5000), bench.time.field.applied);
 }
 
+test "a preset answered after the field is reopened keeps the newer edit in Field and Time" {
+    var bench: Bench = undefined;
+    try bench.open();
+    defer bench.rig.deinit();
+    const link = &bench.rig.link;
+    var buf: [32]u8 = undefined;
+    const layout = bar.Layout.of(gui_app.shell.frame.toList(area));
+    const row5 = bar.popoverRow(layout.field, 5);
+
+    try std.testing.expect(bench.click(.drop));
+    try std.testing.expect(bench.time.pressDropdown(area, row5.x + 2, row5.y + 2, link));
+    // The preset is in flight; the user reopens the field and types.
+    try std.testing.expect(bench.click(.field));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("3") }, link));
+    try bench.exchange();
+    try std.testing.expectEqual(@as(u64, 5000), bench.time.field.applied);
+    try std.testing.expect(bench.time.editing and bench.time.field.editing);
+    try std.testing.expectEqualStrings("3", try bench.time.field.shown(&buf));
+    try std.testing.expect(bench.time.view(&bench.status).editing);
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link));
+    try bench.exchange();
+    try std.testing.expectEqual(@as(u64, 3000), bench.time.field.applied);
+    try std.testing.expect(!bench.time.editing and !bench.time.field.editing);
+
+    // Reopened and untouched, the fresh text follows the answer and the first key replaces it.
+    try std.testing.expect(bench.click(.drop));
+    try std.testing.expect(bench.time.pressDropdown(area, row5.x + 2, row5.y + 2, link));
+    try std.testing.expect(bench.click(.field));
+    try bench.exchange();
+    try std.testing.expectEqualStrings("5x", try bench.time.field.shown(&buf));
+    try std.testing.expect(bench.time.field.fresh and bench.time.editing and bench.time.field.editing);
+    try std.testing.expect(bench.time.handle(.{ .text = .of("2") }, link));
+    try std.testing.expectEqualStrings("2", try bench.time.field.shown(&buf));
+}
+
 test "the clock is read once while the image is halted and again every poll while it runs" {
     var bench: Bench = undefined;
     try bench.open();
