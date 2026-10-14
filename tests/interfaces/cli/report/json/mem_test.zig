@@ -92,6 +92,7 @@ test "external region report exposes timed access counters" {
     try std.testing.expectEqual(@as(i64, 4), try int(sdram, "bytes_read"));
     try std.testing.expectEqual(@as(i64, 0x14), try int(sdram, "read_high_water_bytes"));
     try std.testing.expect(try int(sdram.object.get("stall_cycles").?, "cpu") > 0);
+    try std.testing.expectEqual(@as(i64, 0), try int(sdram.object.get("stall_cycles").?, "dmac"));
 }
 
 test "a busy DMAC channel is listed with its index, shape and counts" {

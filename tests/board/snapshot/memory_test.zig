@@ -68,6 +68,7 @@ test "external fabric counters and pending contention survive a snapshot" {
     defer external1.deinit();
     first.attachExternal(external1.port());
     external1.fabric.note(.cpu0, layout.locate(0x6800_0040, 4).?, .read, 4);
+    external1.fabric.note(.dmac, layout.locate(0x6800_0060, 4).?, .write, 4);
     var list = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer list.deinit();
     try snapshot(&first, &list);
@@ -84,6 +85,7 @@ test "external fabric counters and pending contention survive a snapshot" {
     const counters = external2.fabric.counters(.sdram, 0);
     try std.testing.expectEqual(@as(u64, 4), counters.bytes_read);
     try std.testing.expect(external2.fabric.takePending(.cpu0) != 0);
+    try std.testing.expect(external2.fabric.takePending(.dmac) != 0);
 
     var changed = config;
     changed.sdram.width = 16;
