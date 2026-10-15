@@ -10,16 +10,22 @@ const objc = webcam.av_objc;
 const delegate = webcam.av_delegate;
 const Id = objc.Id;
 
-var objects: [8]u8 = undefined;
+var objects: [10]u8 = undefined;
 var log_buf: [64][]const u8 = undefined;
 var log_len: usize = 0;
 var device_count: usize = 1;
 var refuse_output = false;
-var last_u32: u32 = 0;
+var numbers: [4]u32 = undefined;
+var number_len: usize = 0;
+var keys: [4]usize = undefined;
+var key_len: usize = 0;
+var scaling: usize = 0;
 var queue: u8 = 0;
 
 fn reset() void {
     log_len = 0;
+    number_len = 0;
+    key_len = 0;
     device_count = 1;
     refuse_output = false;
 }
@@ -36,12 +42,20 @@ fn class(_: [*:0]const u8) callconv(.c) Id {
 fn selector(name: [*:0]const u8) callconv(.c) Id {
     return @ptrCast(@constCast(name));
 }
-fn msgSend(_: Id, sel: Id, a: usize, _: usize) callconv(.c) usize {
+fn msgSend(_: Id, sel: Id, a: usize, b: usize) callconv(.c) usize {
     const name = std.mem.span(@as([*:0]const u8, @ptrCast(sel.?)));
     log_buf[log_len] = name;
     log_len += 1;
     if (std.mem.eql(u8, name, "count")) return device_count;
-    if (std.mem.eql(u8, name, "numberWithUnsignedInt:")) last_u32 = @truncate(a);
+    if (std.mem.eql(u8, name, "numberWithUnsignedInt:")) {
+        numbers[number_len] = @truncate(a);
+        number_len += 1;
+    }
+    if (std.mem.eql(u8, name, "setObject:forKey:")) {
+        keys[key_len] = b;
+        key_len += 1;
+        if (b == @intFromPtr(syms.scaling_key)) scaling = a;
+    }
     if (std.mem.eql(u8, name, "canAddOutput:")) return @intFromBool(!refuse_output);
     if (std.mem.startsWith(u8, name, "can")) return 1;
     return @intFromPtr(&objects[1]);
@@ -59,13 +73,13 @@ fn queueCreate(label: [*:0]const u8, _: Id) callconv(.c) Id {
 }
 
 const rt: objc.Runtime = .{ .class = class, .selector = selector, .msg_send = @ptrCast(&msgSend), .allocate_class = allocate, .add_method = addMethod, .register_class = noop, .dispose_class = noop };
-const syms: session.Symbols = .{ .video = &objects[3], .preset = &objects[4], .format_key = &objects[5], .queue_create = queueCreate };
+const syms: session.Symbols = .{ .video = &objects[3], .preset = &objects[4], .format_key = &objects[5], .width_key = &objects[6], .height_key = &objects[7], .scaling_key = &objects[8], .aspect_fill = &objects[9], .queue_create = queueCreate };
 
 fn sink(box: *webcam.av_frame.Mailbox) delegate.Sink {
     return .{ .media = undefined, .box = box };
 }
 
-test "open builds the session, asks for 2vuy and starts running" {
+test "open builds the session, asks for 640x480 2vuy and starts running" {
     reset();
     var box = try webcam.av_frame.Mailbox.init(std.testing.allocator, .uyvy, 2, 1);
     defer box.deinit();
@@ -73,7 +87,10 @@ test "open builds the session, asks for 2vuy and starts running" {
     var opened = try session.open(rt, syms, 0, &s);
     for ([_][]const u8{ "devicesWithMediaType:", "objectAtIndex:", "deviceInputWithDevice:error:", "retain", "setSessionPreset:", "addInput:", "setVideoSettings:", "setAlwaysDiscardsLateVideoFrames:", "setSampleBufferDelegate:queue:", "addOutput:", "startRunning" }) |sel|
         try std.testing.expectEqual(@as(usize, 1), logged(sel));
-    try std.testing.expectEqual(webcam.av_frame.cv_2vuy, last_u32);
+    // The output scales any camera to the Mailbox's size (RA8EMU-727).
+    try std.testing.expectEqualSlices(u32, &.{ webcam.av_frame.cv_2vuy, session.width, session.height }, numbers[0..number_len]);
+    try std.testing.expectEqualSlices(usize, &.{ @intFromPtr(syms.format_key), @intFromPtr(syms.width_key), @intFromPtr(syms.height_key), @intFromPtr(syms.scaling_key) }, keys[0..key_len]);
+    try std.testing.expectEqual(@intFromPtr(syms.aspect_fill), scaling);
     try std.testing.expect(opened.running);
     opened.close();
     try std.testing.expectEqual(@as(usize, 1), logged("stopRunning"));

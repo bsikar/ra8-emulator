@@ -116,7 +116,11 @@ pub fn system() ?Host {
     defer if (!keep_libraries) sys.close();
     const video = av.lookup(*const objc.Id, "AVMediaTypeVideo") orelse return null;
     const preset = av.lookup(*const objc.Id, "AVCaptureSessionPreset640x480") orelse return null;
+    const scaling_key = av.lookup(*const objc.Id, "AVVideoScalingModeKey") orelse return null;
+    const aspect_fill = av.lookup(*const objc.Id, "AVVideoScalingModeResizeAspectFill") orelse return null;
     const key = cv.lookup(*const objc.Id, "kCVPixelBufferPixelFormatTypeKey") orelse return null;
+    const width_key = cv.lookup(*const objc.Id, "kCVPixelBufferWidthKey") orelse return null;
+    const height_key = cv.lookup(*const objc.Id, "kCVPixelBufferHeightKey") orelse return null;
     const host: Host = .{
         .rt = objc.host() orelse return null,
         .media = delegate.host() orelse return null,
@@ -124,6 +128,10 @@ pub fn system() ?Host {
             .video = video.*,
             .preset = preset.*,
             .format_key = key.*,
+            .width_key = width_key.*,
+            .height_key = height_key.*,
+            .scaling_key = scaling_key.*,
+            .aspect_fill = aspect_fill.*,
             .queue_create = sys.lookup(@FieldType(session.Symbols, "queue_create"), "dispatch_queue_create") orelse return null,
         },
         .permission = permission.host(),
