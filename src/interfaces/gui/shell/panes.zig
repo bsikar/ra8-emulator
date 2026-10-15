@@ -135,15 +135,17 @@ fn drawMono(self: *Panes, list: *draw_list.DrawList, theme: *const Theme, pane: 
             const mono_paint = mono_target.paint();
             try registers_pane.draw(&mono_paint, theme, body, now, model.before, model.fold);
             if (self.edit) |edit| edit.draw(&mono_paint, theme, body, model.fold, model.core);
-            return;
+            return true;
         }
     };
     if (pane.kind == .memory) if (self.memory) |pair| {
         if (pair.of(pane.core).now) |*now| {
             var mono_target = widget_paint.Target{ .list = list, .mono = true };
             const mono_paint = mono_target.paint();
-            if (self.memory_field) |field| return shell_memory_field.draw(&mono_paint, theme, body, now, field);
-            return memory_pane.draw(&mono_paint, theme, body, now);
+            if (self.memory_field) |field| {
+                try shell_memory_field.draw(&mono_paint, theme, body, now, field);
+            } else try memory_pane.draw(&mono_paint, theme, body, now);
+            return true;
         }
     };
     return false;
