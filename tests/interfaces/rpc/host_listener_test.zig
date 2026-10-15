@@ -4,6 +4,7 @@ const std = @import("std");
 const ra8 = @import("ra8");
 const cli_app = @import("cli_app");
 const serve_peer = @import("../cli/serve_peer.zig");
+const slow_peer = @import("slow_peer.zig");
 const listener_mod = ra8.rpc.host_listener;
 const Connection = ra8.rpc.socket_transport.Connection;
 const served_setup = ra8.rpc.served_setup;
@@ -198,7 +199,7 @@ test "a gdb client breaks, continues, hits it and reads registers" {
 
     // A monitor reply to a peer that stopped reading drops the client.
     const host = bound.gdb.items[0];
-    try blockReply(host.client.?.stream, gdb.stream);
+    try slow_peer.block(host.client.?.stream);
     try gdb.send("qRcmd,");
     const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 2000;
     while (host.client != null and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) bound.pumpGdb();
@@ -247,8 +248,7 @@ const Gdb = struct {
 
     /// Fill in place: the reader holds the buffers' addresses.
     fn init(self: *Gdb, port: u16) !void {
-        const ip = try std.Io.net.IpAddress.parse("127.0.0.1", port);
-        self.stream = try ip.connect(std.testing.io, .{ .mode = .stream });
+        self.stream = try slow_peer.connect(port);
         errdefer self.stream.close(std.testing.io);
         self.wire = ra8.gdb.rsp.packet.Reader.init(&self.incoming);
     }
@@ -301,26 +301,6 @@ const Gdb = struct {
     }
 };
 
-/// Fill the real peer queue and prove even a small reply meets backpressure.
-fn blockReply(stream: std.Io.net.Stream, peer: std.Io.net.Stream) !void {
-    const io = std.testing.io;
-    if (@import("builtin").os.tag != .windows) {
-        const size: c_int = 4096;
-        try std.posix.setsockopt(stream.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.SNDBUF, std.mem.asBytes(&size));
-        try std.posix.setsockopt(peer.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVBUF, std.mem.asBytes(&size));
-    }
-    const bytes: [64 * 1024]u8 = @splat('g');
-    var chunk: []const u8 = &bytes;
-    const deadline = std.Io.Timestamp.now(io, .awake).toMilliseconds() + 2000;
-    while (std.Io.Timestamp.now(io, .awake).toMilliseconds() < deadline) {
-        ra8.host.sock.ready.sendAll(io, stream.socket.handle, chunk, 20) catch |err| {
-            try std.testing.expectEqual(error.Timeout, err);
-            if (chunk.len == 1) return;
-            chunk = "g";
-        };
-    }
-    return error.Timeout;
-}
 /// A monitor command as the wire sees it: qRcmd, plus the hex text.
 fn monitorHex(gpa: std.mem.Allocator, text: []const u8) ![]u8 {
     var out = try gpa.alloc(u8, "qRcmd,".len + text.len * 2);
