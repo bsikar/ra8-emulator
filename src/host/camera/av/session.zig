@@ -1,9 +1,9 @@
 //! Opens and closes the macOS webcam (RA8EMU-502) over the Objective-C
 //! runtime: device N of devicesWithMediaType:video, its input, a session
-//! at the 640x480 preset, and a video data output asking for 2vuy that
-//! drops late frames and hands each sample to Ra8CaptureDelegate on its
-//! own dispatch queue. The delegate feeds the sink attached here. Any step
-//! that fails releases what was made and detaches the sink.
+//! at the 640x480 preset, and a video data output asking for 640x480 2vuy
+//! cropped to fill, that drops late frames and hands each sample to Ra8CaptureDelegate on
+//! its own dispatch queue. The delegate feeds the sink attached here. Any
+//! step that fails releases what was made and detaches the sink.
 const objc = @import("objc.zig");
 const delegate = @import("delegate.zig");
 const frame = @import("frame.zig");
@@ -15,6 +15,10 @@ pub const Symbols = struct {
     video: Id, // AVMediaTypeVideo
     preset: Id, // AVCaptureSessionPreset640x480
     format_key: Id, // kCVPixelBufferPixelFormatTypeKey
+    width_key: Id, // kCVPixelBufferWidthKey
+    height_key: Id, // kCVPixelBufferHeightKey
+    scaling_key: Id, // AVVideoScalingModeKey
+    aspect_fill: Id, // AVVideoScalingModeResizeAspectFill
     queue_create: *const fn ([*:0]const u8, Id) callconv(.c) Id,
 };
 
@@ -73,8 +77,16 @@ fn input(rt: objc.Runtime, syms: Symbols, index: usize) OpenError!Id {
 fn output(self: *Session, syms: Symbols, sink: *delegate.Sink) OpenError!void {
     const rt = self.rt;
     self.output = objc.new(rt, "AVCaptureVideoDataOutput") orelse return error.NoOutput;
-    const number = objc.send1(rt, Id, rt.class("NSNumber"), "numberWithUnsignedInt:", frame.cv_2vuy) orelse return error.NoOutput;
-    const settings = objc.send2(rt, Id, rt.class("NSDictionary"), "dictionaryWithObject:forKey:", number, syms.format_key) orelse return error.NoOutput;
+    // A camera with no 640x480 preset (a 1080p FaceTime camera) still
+    // sends 640x480, cropped to 4:3 as a VGA sensor sees it: the output
+    // scales to the size it is asked for, and the Mailbox takes no other
+    // (RA8EMU-727).
+    const settings = objc.send1(rt, Id, rt.class("NSMutableDictionary"), "dictionaryWithCapacity:", @as(usize, 4)) orelse return error.NoOutput;
+    for ([_]struct { Id, u32 }{ .{ syms.format_key, frame.cv_2vuy }, .{ syms.width_key, width }, .{ syms.height_key, height } }) |entry| {
+        const number = objc.send1(rt, Id, rt.class("NSNumber"), "numberWithUnsignedInt:", entry[1]) orelse return error.NoOutput;
+        objc.send2(rt, void, settings, "setObject:forKey:", number, entry[0]);
+    }
+    objc.send2(rt, void, settings, "setObject:forKey:", syms.aspect_fill, syms.scaling_key);
     objc.send1(rt, void, self.output, "setVideoSettings:", settings);
     objc.send1(rt, void, self.output, "setAlwaysDiscardsLateVideoFrames:", @as(u8, 1));
     const cls = objc.delegateClass(rt) orelse return error.NoOutput;

@@ -54,7 +54,7 @@ fn host(answer: webcam.av_permission.Status) av_webcam.Host {
     return .{
         .rt = .{ .class = class, .selector = selector, .msg_send = @ptrCast(&msgSend), .allocate_class = allocate, .add_method = addMethod, .register_class = noop, .dispose_class = noop },
         .media = undefined,
-        .syms = .{ .video = &objects[3], .preset = &objects[3], .format_key = &objects[3], .queue_create = queueCreate },
+        .syms = .{ .video = &objects[3], .preset = &objects[3], .format_key = &objects[3], .width_key = &objects[3], .height_key = &objects[3], .scaling_key = &objects[3], .aspect_fill = &objects[3], .queue_create = queueCreate },
         .permission = answer,
     };
 }
