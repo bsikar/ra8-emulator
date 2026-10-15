@@ -90,11 +90,7 @@ pub const Writer = struct {
             },
             .mp4 => {
                 if (self.ffmpeg_sink) |sink| try sink.interface.flush();
-                if (self.ffmpeg_child) |*child| {
-                    if (child.stdin) |*stdin| stdin.close(self.io);
-                    _ = child.wait(self.io) catch {};
-                    self.ffmpeg_child = null;
-                }
+                self.endFfmpeg();
             },
         }
     }
@@ -115,12 +111,22 @@ pub const Writer = struct {
             .mp4 => {
                 if (self.ffmpeg_sink) |sink| self.allocator.destroy(sink);
                 if (self.ffmpeg_buf) |buf| self.allocator.free(buf);
-                if (self.ffmpeg_child) |*child| {
-                    if (child.stdin) |*stdin| stdin.close(self.io);
-                    _ = child.wait(self.io) catch {};
-                }
+                self.endFfmpeg();
             },
         }
+    }
+
+    /// Ends ffmpeg's input and waits for it to write the file. Child.wait
+    /// closes a stdin still set, so the one closed here is cleared first: a
+    /// second close of the same handle aborts a Debug build (RA8EMU-727).
+    fn endFfmpeg(self: *Writer) void {
+        const child = if (self.ffmpeg_child) |*child| child else return;
+        if (child.stdin) |stdin| {
+            stdin.close(self.io);
+            child.stdin = null;
+        }
+        _ = child.wait(self.io) catch {};
+        self.ffmpeg_child = null;
     }
 
     fn start(self: *Writer, width: u32, height: u32) !void {
