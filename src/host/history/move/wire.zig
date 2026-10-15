@@ -2,31 +2,54 @@
 const std = @import("std");
 const name = @import("../name.zig");
 const Deadline = @import("deadline.zig").Deadline;
-pub const version = 2;
+pub const version = 3;
 pub const max_bytes = 32768;
 /// One request frame and one COMMIT frame, the most a caller ever writes.
-pub const pipe_bytes = max_bytes + 4 + 256 + 4;
-/// Milliseconds. `ready` runs from spawn to the bound reply. `commit` is the
-/// peer's own window from that reply to an honored COMMIT, and the caller
-/// waits `commit` and `drain` together for the done reply. `reap` bounds
-/// each wait for the proxy to exit.
+pub const pipe_bytes = max_bytes + 4 + 512 + 4;
+/// Milliseconds. Every phase is a ceiling inside one admission that starts
+/// before the proxy is spawned and is never reset: `ready` to the bound
+/// reply, `commit` the peer's own window from that reply to an honored
+/// COMMIT, `drain` after it for the done reply, `reap` for the proxy to
+/// exit and `settle` for the caller's own verdict. The admission is their
+/// sum, with no grace on top.
 pub const Bounds = struct {
     ready: u32 = 10_000,
     commit: u32 = 5_000,
     drain: u32 = 5_000,
     reap: u32 = 2_000,
+    settle: u32 = 2_000,
+    /// The longest admission a caller may configure.
     pub const limit = 60_000;
 
     pub fn check(self: Bounds) !void {
-        for ([_]u32{ self.ready, self.commit, self.drain, self.reap }) |ms| if (ms == 0 or ms > limit) return error.BadBounds;
+        for ([_]u32{ self.ready, self.commit, self.drain, self.reap, self.settle }) |ms| if (ms == 0 or ms > limit) return error.BadBounds;
+        if (self.total() > limit) return error.BadBounds;
+    }
+
+    pub fn total(self: Bounds) u64 {
+        return @as(u64, self.ready) + self.commit + self.drain + self.reap + self.settle;
     }
 };
+/// Lowercase hex SHA-256 of one durable intent name's exact bytes.
+pub const Digest = [64]u8;
+/// The anchor and the note as both sides read them through their own handles.
+pub const Proof = struct { anchor: Digest, note: Digest };
 pub const Root = struct { path: []const u8, marker: []const u8 };
-pub const Request = struct { version: u32 = version, nonce: name.Id, source: Root, target: Root, from: []const u8, to: []const u8, commit_ms: u32, drain_ms: u32 };
+/// `nonce` names the durable intent and `operation` this one exchange, so a
+/// frame from an earlier exchange of the same intent is never honored.
+pub const Request = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, source: Root, target: Root, from: []const u8, to: []const u8, ready_ms: u32, commit_ms: u32, drain_ms: u32 };
 pub const Phase = enum { starting, bound, done };
 pub const Status = enum { success, collision, cross_device, refused, expired };
-pub const Reply = struct { version: u32 = version, nonce: name.Id, phase: Phase, pid: u32, source_inode: u64, source_root: u64, target_root: u64, status: Status = .success };
-pub const Commit = struct { version: u32 = version, nonce: name.Id, commit: bool };
+/// `pid` and `birth` are the peer's own report. They are compared between
+/// its two replies and shown to observers; they never authorize a signal.
+pub const Reply = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, phase: Phase, pid: u32, birth: u64, source_inode: u64, source_root: u64, target_root: u64, status: Status = .success };
+pub const Commit = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, commit: bool };
+
+pub fn digest(bytes: []const u8) Digest {
+    var raw: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &raw, .{});
+    return std.fmt.bytesToHex(raw, .lower);
+}
 
 pub fn write(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.File, value: anytype) !void {
     const bytes = try std.json.Stringify.valueAlloc(allocator, value, .{});

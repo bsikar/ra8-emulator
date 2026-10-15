@@ -3,6 +3,7 @@ const std = @import("std");
 const h = @import("../root.zig");
 const file = @import("file.zig");
 const Context = @import("context.zig").Context;
+const wire = @import("wire.zig");
 pub const note = "native-moving";
 pub const suffix = ".native-move";
 const commit_flag = "\nCOMMIT\n";
@@ -64,6 +65,39 @@ pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, path: []c
     try names(record);
     if (!(if (anchor) record.anchor else record.marker).same(try file.opened(held))) return error.IdentityConflict;
     return parsed;
+}
+
+/// Both durable names as read through directories the reader already holds.
+pub const BoundProof = struct {
+    record: std.json.Parsed(Record),
+    digest: wire.Proof,
+
+    pub fn deinit(self: BoundProof) void {
+        self.record.deinit();
+    }
+};
+
+/// The anchor in `root` and the note in the pinned `source` must share one
+/// JSON line; only the anchor may carry the COMMIT journal flag, and a
+/// cancelled intent proves nothing. Both sides of a native move compute
+/// this, and the digests bind every frame to these exact bytes.
+pub fn boundProof(allocator: std.mem.Allocator, io: std.Io, root: std.Io.Dir, source: std.Io.Dir, from: []const u8) !BoundProof {
+    var leaf_buffer: h.name.Buffer = undefined;
+    const anchor_name = try leaf(&leaf_buffer, h.name.classify(from).id);
+    var anchor_bytes: [32768 + commit_flag.len + cancel_flag.len]u8 = undefined;
+    var note_bytes: [32768]u8 = undefined;
+    const anchor_text = try h.metadata.read(io, root, anchor_name, &anchor_bytes);
+    const note_text = try h.metadata.read(io, source, note, &note_bytes);
+    const end = std.mem.indexOfScalar(u8, anchor_text, '\n') orelse anchor_text.len;
+    if (end == 0 or !std.mem.eql(u8, anchor_text[0..end], note_text)) return error.IdentityConflict;
+    const tail = anchor_text[end..];
+    if (std.mem.eql(u8, tail, commit_flag ++ cancel_flag)) return error.NativeMoveCancelled;
+    if (tail.len != 0 and !std.mem.eql(u8, tail, commit_flag)) return error.BadReceipt;
+    var parsed = std.json.parseFromSlice(Record, allocator, note_text, .{ .allocate = .alloc_always }) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
+    errdefer parsed.deinit();
+    if ((parsed.value.version != 1 and parsed.value.version != 2) or parsed.value.committed or parsed.value.cancelled or !h.name.isId(&parsed.value.nonce) or !std.mem.eql(u8, parsed.value.from, from)) return error.BadReceipt;
+    try names(parsed.value);
+    return .{ .record = parsed, .digest = .{ .anchor = wire.digest(anchor_text), .note = wire.digest(note_text) } };
 }
 
 pub fn start(allocator: std.mem.Allocator, context: Context, from: []const u8, to: []const u8, purpose: []const u8) !std.json.Parsed(Record) {

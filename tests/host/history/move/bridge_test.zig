@@ -49,7 +49,7 @@ test "nonsuccess replies with missing wrong or abnormal exits retain committed i
     try history.move.intent.commit(context, parsed.value);
     for ([_]history.move.wire.Status{ .collision, .cross_device, .refused, .expired }) |status| {
         try std.testing.expectError(error.NativeMoveUnknown, history.move.bridge.outcome(context, parsed.value, status, null));
-        for ([_]std.process.Child.Term{ .{ .exited = 0 }, .{ .exited = 1 }, .{ .exited = history.move.windows.exits.expired }, .{ .exited = history.move.windows.exits.drained }, .{ .signal = .KILL } }) |term| {
+        for ([_]std.process.Child.Term{ .{ .exited = 0 }, .{ .exited = 1 }, .{ .exited = history.move.windows.exits.expired }, .{ .exited = history.move.windows.exits.drained }, .{ .exited = history.move.windows.exits.unready }, .{ .exited = history.move.windows.exits.unsettled }, .{ .signal = .KILL } }) |term| {
             try std.testing.expectError(error.NativePeerFailed, history.move.bridge.outcome(context, parsed.value, status, term));
         }
     }
@@ -90,6 +90,35 @@ test "every matching rejection retires intent without moving its source" {
         try std.testing.expect(parsed.value.source.same(try history.move.file.state(f.cache.dir, &session.id)));
         try std.testing.expectError(error.FileNotFound, f.cache.dir.access(fixture.io, target, .{}));
     }
+}
+
+test "an ended admission publishes neither a cancellation nor an arrival" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var f = try fixture.Fixture.init();
+    defer f.deinit();
+    var session = try f.create('d');
+    defer fixture.Fixture.abandon(&session);
+    var gate = try f.cache.gate(.exclusive);
+    defer gate.release();
+    const context: history.move.context.Context = .{ .source = &f.cache, .target = &f.cache, .authorities = &.{ gate.file, session.lock } };
+    var buffer: history.name.Buffer = undefined;
+    const target = history.name.trash(&buffer, &session.id);
+    const parsed = try history.move.intent.start(fixture.allocator, context, &session.id, target, history.layout.moves.trash);
+    defer parsed.deinit();
+    try history.move.intent.commit(context, parsed.value);
+    const ended: history.move.deadline.Admission = .begin(fixture.io, 0);
+    for ([_]history.move.wire.Status{ .success, .collision, .cross_device, .refused, .expired }) |status| {
+        try std.testing.expectError(error.NativeMoveUnknown, history.move.bridge.publish(context, parsed.value, ended, status));
+    }
+    var anchor_buffer: history.name.Buffer = undefined;
+    const saved = try history.move.intent.read(fixture.allocator, fixture.io, f.cache.dir, try history.move.intent.leaf(&anchor_buffer, &session.id), true);
+    defer saved.deinit();
+    try std.testing.expect(saved.value.committed and !saved.value.cancelled);
+    try session.dir.access(fixture.io, history.move.intent.note, .{});
+    // The same verdict inside an open admission is published.
+    try std.testing.expectError(error.PathAlreadyExists, history.move.bridge.publish(context, parsed.value, .begin(fixture.io, 60_000), .collision));
+    try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
+    try std.testing.expect(parsed.value.source.same(try history.move.file.state(f.cache.dir, &session.id)));
 }
 
 test "verified arrival survives slow reap and named watchdog drain exit" {
