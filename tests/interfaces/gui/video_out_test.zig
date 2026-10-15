@@ -55,6 +55,26 @@ test "y4m writer writes valid yuv4mpeg2 header and frame markers" {
     try std.testing.expect(std.mem.startsWith(u8, bytes, "YUV4MPEG2 W32 H32 F30:1"));
 }
 
+test "mp4 writer ends ffmpeg once and leaves a file" {
+    const mp4_path = ".zig-cache/tmp/test_out.mp4";
+    var writer = try video.writer.Writer.init(std.testing.allocator, std.testing.io, mp4_path, 30);
+    defer writer.deinit();
+
+    var fb = try Framebuffer.init(std.testing.allocator, 32, 32);
+    defer fb.deinit(std.testing.allocator);
+    @memset(fb.pixels, Color{ .r = 100, .g = 150, .b = 200, .a = 255 });
+
+    writer.record(&fb, 0) catch |err| switch (err) {
+        error.FfmpegNotFound => return error.SkipZigTest,
+        else => return err,
+    };
+    try writer.record(&fb, 33_333_333);
+    try writer.finish();
+
+    const stat = try std.Io.Dir.cwd().statFile(std.testing.io, mp4_path, .{});
+    try std.testing.expect(stat.size > 0);
+}
+
 test "capture decorator intercepts poll and present" {
     var head = headless.Headless.init(std.testing.allocator, 100, 100);
     defer head.deinit();
