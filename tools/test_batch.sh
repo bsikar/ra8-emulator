@@ -17,11 +17,12 @@ if [[ ! $seconds =~ ^[1-9][0-9]{0,2}$ ]] || (( seconds > 800 )); then
     echo "RA8_TEST_TIMEOUT_SECONDS must be an integer from 1 to 800" >&2
     exit 2
 fi
-binary=$(realpath "$1")
-if [ ! -f "$binary" ] || [ ! -x "$binary" ]; then
-    echo "$binary: not an executable test binary" >&2
+# Checked before realpath: Darwin's fails on a missing file, GNU's does not.
+if [ ! -f "$1" ] || [ ! -x "$1" ]; then
+    echo "$1: not an executable test binary" >&2
     exit 2
 fi
+binary=$(realpath "$1")
 command -v timeout >/dev/null
 log=$2
 # Open once, before starting the suite, so an unwritable log cannot lose results.
@@ -40,9 +41,14 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 status=0
-# Apply the memory cap only to execution, never to Zig compilation.
+# Apply the memory cap only to execution, never to Zig compilation. Darwin
+# cannot cap address space (RA8EMU-727), so a run there says it is uncapped.
 (
-    ulimit -v 3000000
+    if [ "$(uname -s)" = Darwin ]; then
+        echo "memory cap: none on Darwin"
+    else
+        ulimit -v 3000000
+    fi
     exec timeout --signal=TERM --kill-after=5s "${seconds}s" "$binary"
 ) >&3 2>&1 || status=$?
 exit "$status"

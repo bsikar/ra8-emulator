@@ -57,7 +57,16 @@ pub fn sendAll(io: std.Io, handle: Handle, bytes: []const u8, ms: u32) !void {
     }
 }
 
+/// Darwin's send ignores MSG_DONTWAIT (RA8EMU-727), so the socket itself is
+/// nonblocking for the call and goes back to its own flags after.
 fn sendPosix(io: std.Io, handle: Handle, bytes: []const u8, timeout: std.Io.Timeout) !usize {
+    const was = std.c.fcntl(handle, std.c.F.GETFL);
+    if (was < 0) return error.Unexpected;
+    const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
+    if (was & nonblock == 0 and std.c.fcntl(handle, std.c.F.SETFL, was | nonblock) < 0) return error.Unexpected;
+    defer if (was & nonblock == 0) {
+        _ = std.c.fcntl(handle, std.c.F.SETFL, was);
+    };
     while (true) {
         const remaining = timeout.toDurationFromNow(io).?.raw.toMilliseconds();
         if (remaining <= 0) return error.Timeout;

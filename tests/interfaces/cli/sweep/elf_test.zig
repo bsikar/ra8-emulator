@@ -14,6 +14,7 @@ const profile = ra8.board.profile;
 
 const fixture = "tests/fixtures/sizing/ext_stream.elf";
 const on_windows = @import("builtin").os.tag == .windows;
+const on_darwin = @import("builtin").os.tag.isDarwin();
 const win32 = ra8.host.win32;
 
 test "sweep scratch selects native temp variables and ignores empty values" {
@@ -293,6 +294,7 @@ fn provenance(child: *std.process.Child) !i64 {
         std.debug.print("PROVENANCE pid={d} exe={s} birth={d}\n", .{ win32.GetProcessId(child.id.?), actual, times.CreationTime });
         return times.CreationTime;
     }
+    if (on_darwin) return libproc.birth(child.id.?, expected);
     const directory = try std.fmt.allocPrint(gpa, "/proc/{d}", .{child.id.?});
     defer gpa.free(directory);
     const exe = try std.fs.path.join(gpa, &.{ directory, "exe" });
@@ -314,6 +316,38 @@ fn provenance(child: *std.process.Child) !i64 {
     std.debug.print("PROVENANCE pid={d} exe={s} birth_ticks={d}\n", .{ child.id.?, actual, started });
     return started;
 }
+
+/// Darwin has no /proc: libproc names a process's executable and start
+/// time (RA8EMU-727), from <libproc.h> and <sys/proc_info.h>.
+const libproc = struct {
+    const pidtbsdinfo: c_int = 3;
+    const path_max = 4 * 1024;
+
+    /// struct proc_bsdinfo; only the start time is read.
+    const BsdInfo = extern struct {
+        ids: [12]u32,
+        comm: [16]u8,
+        name: [32]u8,
+        counts: [6]u32,
+        start_sec: u64,
+        start_usec: u64,
+    };
+
+    extern "c" fn proc_pidpath(pid: c_int, buffer: [*]u8, size: u32) c_int;
+    extern "c" fn proc_pidinfo(pid: c_int, flavor: c_int, arg: u64, buffer: *anyopaque, size: c_int) c_int;
+
+    fn birth(pid: std.posix.pid_t, expected: []const u8) !i64 {
+        var path: [path_max]u8 = undefined;
+        const len = proc_pidpath(pid, &path, path.len);
+        if (len <= 0) return error.FileNotFound;
+        try std.testing.expectEqualStrings(expected, path[0..@intCast(len)]);
+        var info: BsdInfo = undefined;
+        if (proc_pidinfo(pid, pidtbsdinfo, 0, &info, @sizeOf(BsdInfo)) != @sizeOf(BsdInfo)) return error.BadProcessStat;
+        const started: i64 = @intCast(info.start_sec * 1_000_000 + info.start_usec);
+        std.debug.print("PROVENANCE pid={d} exe={s} birth_us={d}\n", .{ pid, expected, started });
+        return started;
+    }
+};
 
 var console_seen = std.atomic.Value(bool).init(false);
 

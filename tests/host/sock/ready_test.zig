@@ -72,6 +72,17 @@ test "native send to a slow peer has one finite deadline" {
     try std.testing.expect(std.Io.Timestamp.now(io, .awake).toMilliseconds() - start < 2000);
 }
 
+test "native send leaves the socket's own blocking mode as it found it" {
+    const streams = try pair();
+    defer for (streams) |stream| stream.close(io);
+    const fd = streams[0].socket.handle;
+    if (builtin.os.tag != .windows) {
+        const before = std.c.fcntl(fd, std.c.F.GETFL);
+        try sock_ready.sendAll(io, fd, "b", 1000);
+        try std.testing.expectEqual(before, std.c.fcntl(fd, std.c.F.GETFL));
+    }
+}
+
 test "native connect to a closed loopback port is refused" {
     var listener = try (std.Io.net.IpAddress{ .ip4 = .loopback(0) }).listen(io, .{});
     const address = listener.socket.address;

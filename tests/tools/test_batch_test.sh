@@ -41,7 +41,12 @@ run_status 0 bash "$runner" "$work/suite" "$log"
 [ "$(grep -c '^COMPLETE ' "$log")" -eq 2 ]
 [ "$(grep -c '^suite-output$' "$log")" -eq 4 ]
 [ "$(grep -c '^suite-error$' "$log")" -eq 4 ]
-[ "$(grep -c '^memory=3000000$' "$log")" -eq 4 ]
+cap=3000000
+if [ "$(uname -s)" = Darwin ]; then
+    cap=unlimited
+    [ "$(grep -c '^memory cap: none on Darwin$' "$log")" -eq 4 ]
+fi
+[ "$(grep -c "^memory=$cap\$" "$log")" -eq 4 ]
 for invalid in 0 801 99999999999999999999 abc 1.5; do
     run_status 2 env RA8_TEST_TIMEOUT_SECONDS="$invalid" bash "$runner" "$work/suite" "$log"
 done
