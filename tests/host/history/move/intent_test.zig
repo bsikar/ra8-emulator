@@ -3,6 +3,65 @@ const builtin = @import("builtin");
 const history = @import("ra8").host.history;
 const fixture = @import("../root_test.zig");
 
+test "bound proof reads the pinned anchor and note and refuses missing or linked names" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var f = try fixture.Fixture.init();
+    defer f.deinit();
+    var session = try f.create('b');
+    defer fixture.Fixture.abandon(&session);
+    var gate = try f.cache.gate(.exclusive);
+    defer gate.release();
+    const context: history.move.context.Context = .{ .source = &f.cache, .target = &f.cache, .authorities = &.{ gate.file, session.lock } };
+    var target_buffer: history.name.Buffer = undefined;
+    const target = history.name.trash(&target_buffer, &session.id);
+    const started = try history.move.intent.start(fixture.allocator, context, &session.id, target, history.layout.moves.trash);
+    defer started.deinit();
+    const good = try history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id);
+    defer good.deinit();
+    try std.testing.expectEqualStrings(&started.value.nonce, &good.record.value.nonce);
+    var anchor_buffer: history.name.Buffer = undefined;
+    const anchor = try history.move.intent.leaf(&anchor_buffer, &session.id);
+    try history.move.file.link(f.cache.dir, anchor, f.cache.dir, "anchor-alias");
+    try std.testing.expectError(error.OutsideRoot, history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id));
+    try f.cache.dir.deleteFile(fixture.io, "anchor-alias");
+    try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
+    try std.testing.expectError(error.OutsideRoot, history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id));
+    try session.dir.deleteFile(fixture.io, "note-alias");
+    try std.testing.expectError(error.FileNotFound, history.move.intent.boundProof(fixture.allocator, fixture.io, f.kept.dir, session.dir, &session.id));
+    try std.testing.expectError(error.FileNotFound, history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, f.kept.dir, &session.id));
+    const held = try history.metadata.open(fixture.io, f.cache.dir, anchor, .read_write);
+    defer held.close(fixture.io);
+    try held.writePositionalAll(fixture.io, "\nCOMMIT\n\nCANCEL\n", (try held.stat(fixture.io)).size);
+    try std.testing.expectError(error.NativeMoveCancelled, history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id));
+}
+
+test "a proof taken before COMMIT is stale after it, and a forged note proves nothing" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var f = try fixture.Fixture.init();
+    defer f.deinit();
+    var session = try f.create('b');
+    defer fixture.Fixture.abandon(&session);
+    var gate = try f.cache.gate(.exclusive);
+    defer gate.release();
+    const context: history.move.context.Context = .{ .source = &f.cache, .target = &f.cache, .authorities = &.{ gate.file, session.lock } };
+    var target_buffer: history.name.Buffer = undefined;
+    const target = history.name.trash(&target_buffer, &session.id);
+    const started = try history.move.intent.start(fixture.allocator, context, &session.id, target, history.layout.moves.trash);
+    defer started.deinit();
+    const before = try history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id);
+    defer before.deinit();
+    try history.move.intent.commit(context, started.value);
+    const after = try history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id);
+    defer after.deinit();
+    try std.testing.expectEqualStrings(&before.digest.note, &after.digest.note);
+    try std.testing.expect(!std.meta.eql(before.digest, after.digest));
+    // A note rewritten to other bytes no longer matches the anchor's line.
+    const note = try history.metadata.open(fixture.io, session.dir, history.move.intent.note, .read_write);
+    defer note.close(fixture.io);
+    try note.writePositionalAll(fixture.io, "[", 0);
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.boundProof(fixture.allocator, fixture.io, f.cache.dir, session.dir, &session.id));
+}
+
 test "native intent binds nonce and roots and cleans only its two recorded markers" {
     if (builtin.os.tag != .linux) return error.SkipZigTest;
     var f = try fixture.Fixture.init();
