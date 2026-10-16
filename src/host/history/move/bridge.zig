@@ -176,7 +176,7 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
     const io = base.io;
     // The running child must be the verified peer, not merely a file that
     // was the verified peer when it was checked on disk.
-    try child.verifyExecutable(peer.sha256);
+    try child.verifyExecutable(peer.executable, peer.sha256);
     if (!std.mem.eql(u8, &peer.sha256, &try provider.digest(io, peer.executable))) return error.PeerDigestMismatch;
     const source = try wire.windowsPath(allocator, base.path);
     defer allocator.free(source);
