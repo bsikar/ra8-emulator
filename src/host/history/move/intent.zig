@@ -4,6 +4,7 @@ const h = @import("../root.zig");
 const file = @import("file.zig");
 const Context = @import("context.zig").Context;
 const wire = @import("wire.zig");
+const deadline = @import("deadline.zig");
 pub const note = "native-moving";
 pub const suffix = ".native-move";
 const commit_flag = "\nCOMMIT\n";
@@ -140,21 +141,27 @@ pub fn scope(context: Context, record: Record, from: []const u8, to: []const u8)
 /// Sync before even beginning a COMMIT write. A torn journal is unreadable
 /// and retained, so it can never be mistaken for a known cancellation.
 pub fn commit(context: Context, record: Record) !void {
-    try journal(context, record, commit_flag);
+    try journal(context, record, commit_flag, null);
 }
 
 /// Record a verified refusal before unlinking either intent marker. If the
 /// caller crashes during cleanup, providerless recovery still cannot move.
-pub fn cancel(context: Context, record: Record) !void {
+pub fn cancel(context: Context, record: Record, settle: deadline.Deadline) !void {
+    const io = context.source.io;
+    try settle.live(io);
     try scope(context, record, record.from, record.to);
     try context.validate(record.from);
+    try settle.live(io);
     try context.recheck(record.from, record.source, record.source_root, record.target_root);
-    try journal(context, record, cancel_flag);
-    try cleanup(context, record, false);
+    try settle.live(io);
+    try journal(context, record, cancel_flag, settle);
+    try settle.live(io);
+    try cleanup(context, record, false, settle);
 }
 
-fn journal(context: Context, record: Record, flag: []const u8) !void {
+fn journal(context: Context, record: Record, flag: []const u8, settle: ?deadline.Deadline) !void {
     const base = context.source;
+    try bound(settle, base.io);
     var buffer: h.name.Buffer = undefined;
     const path = try leaf(&buffer, h.name.classify(record.from).id);
     const current = try read(base.allocator, base.io, base.dir, path, true);
@@ -163,6 +170,7 @@ fn journal(context: Context, record: Record, flag: []const u8) !void {
     if (!record.source.same(current.value.source) or !record.anchor.same(current.value.anchor) or !record.marker.same(current.value.marker) or !std.mem.eql(u8, &record.nonce, &current.value.nonce)) return error.IdentityConflict;
     if (std.mem.eql(u8, flag, commit_flag) and current.value.cancelled) return error.NativeMoveCancelled;
     if (std.mem.eql(u8, flag, commit_flag) == current.value.committed) return;
+    try bound(settle, base.io);
     const held = try h.metadata.open(base.io, base.dir, path, .read_write);
     defer held.close(base.io);
     if (!record.anchor.same(try file.opened(held))) return error.IdentityConflict;
@@ -176,7 +184,7 @@ fn journal(context: Context, record: Record, flag: []const u8) !void {
     try held.sync(base.io);
 }
 
-pub fn cleanup(context: Context, record: Record, moved: bool) !void {
+pub fn cleanup(context: Context, record: Record, moved: bool, settle: ?deadline.Deadline) !void {
     const io = context.source.io;
     const root = if (moved) context.target else context.source;
     const entry = if (moved) record.to else record.from;
@@ -190,9 +198,11 @@ pub fn cleanup(context: Context, record: Record, moved: bool) !void {
     if (present(io, dir, note)) {
         const marker = try file.state(dir, note);
         if (!record.marker.same(marker) or marker.links != 1) return error.IdentityConflict;
+        try bound(settle, io);
         try dir.deleteFile(io, note);
         try file.syncDir(dir);
     }
+    try bound(settle, io);
     try context.source.dir.deleteFile(io, anchor_name);
     try file.syncDir(context.source.dir);
 }
@@ -212,6 +222,12 @@ pub fn arrived(context: Context, record: Record) !bool {
     }
     if (target) |state| if (record.source.same(state)) return true;
     return error.IdentityConflict;
+}
+
+/// A publication step may begin only inside its settle bound, so a stalled
+/// journal can never carry a verdict past the admission that owns it.
+fn bound(settle: ?deadline.Deadline, io: std.Io) !void {
+    if (settle) |held| try held.live(io);
 }
 
 fn present(io: std.Io, dir: std.Io.Dir, path: []const u8) bool {
