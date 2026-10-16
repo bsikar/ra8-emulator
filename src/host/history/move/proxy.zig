@@ -10,6 +10,7 @@ const linux = std.os.linux;
 const wire = @import("wire.zig");
 const deadline = @import("deadline.zig");
 const Collector = @import("collector.zig").Collector;
+const provider = @import("provider.zig");
 const Context = @import("context.zig").Context;
 
 pub const Stage = enum { open, committed, reaped, abandoned };
@@ -137,13 +138,7 @@ pub const Proxy = struct {
     /// there the digest degrades honestly to the disk check.
     pub fn verifyExecutable(self: *const Proxy, executable: []const u8, expected: [32]u8) !void {
         if (builtin.os.tag != .linux) return error.OperationUnsupported;
-        var magic: [2]u8 = undefined;
-        {
-            const disk = try std.Io.Dir.cwd().openFile(self.io, executable, .{ .follow_symlinks = false });
-            defer disk.close(self.io);
-            if (try disk.readPositionalAll(self.io, &magic, 0) != 2) return error.InvalidPeer;
-        }
-        if (std.mem.eql(u8, &magic, "MZ")) return;
+        if (try provider.pe(self.io, executable)) return;
         const pid = self.child.id orelse return error.ProcessHandleUnavailable;
         var path_buffer: [32]u8 = undefined;
         const path = std.fmt.bufPrint(&path_buffer, "/proc/{d}/exe", .{pid}) catch return error.ProcessHandleUnavailable;
