@@ -37,10 +37,6 @@ fn admit(io: std.Io, peer: provider.Provider) !Admission {
 fn prepare(context: Context, peer: provider.Provider, admission: Admission) !Proxy {
     const base = context.source;
     try provider.check(base.io, peer);
-    const source_path = try wire.windowsPath(base.allocator, base.path);
-    defer base.allocator.free(source_path);
-    const target_path = try wire.windowsPath(base.allocator, context.target.path);
-    defer base.allocator.free(target_path);
     const source_root = try @import("file.zig").here(base.dir);
     const target_root = try @import("file.zig").here(context.target.dir);
     if (source_root.device_major != target_root.device_major or source_root.device_minor != target_root.device_minor) return error.CrossDevice;
