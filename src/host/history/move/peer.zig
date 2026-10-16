@@ -64,7 +64,7 @@ fn run(allocator: std.mem.Allocator, io: std.Io) !u8 {
     // a peer suspended as a whole wakes with its watchdog not yet run.
     const late = opened.untilNow(io, .awake).toMilliseconds() >= request.commit_ms;
     reply.status = if (!late and window.claim()) status: {
-        const renamed = platform.rename(allocator, pins.source, pins.target_root, request.to);
+        const renamed = platform.rename(allocator, pins.source, pins.source_root, request.from, pins.target_root, request.to);
         if (!window.settle()) park(io);
         break :status try renamed;
     } else .expired;
