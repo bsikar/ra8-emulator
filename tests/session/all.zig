@@ -22,6 +22,7 @@ test {
     _ = @import("history/store_test.zig");
     _ = @import("history/log_test.zig");
     _ = @import("history/root_test.zig");
+    _ = @import("history/trail_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");

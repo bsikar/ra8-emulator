@@ -24,6 +24,7 @@ const memmap = @import("ra8_chip").core.memmap;
 const session_display = @import("../board/display.zig");
 const session_state = @import("../board/state.zig");
 const session_history = @import("../history.zig");
+const history_trail = @import("../history/trail.zig");
 const chunk_clock = @import("../chunk_clock.zig");
 pub const files = @import("files.zig");
 const debug_session = @import("../session.zig");
@@ -66,41 +67,7 @@ pub const Options = struct {
     panel_vsync: ?glcdc_vsync.Config = null,
 };
 
-const LoaderState = struct {
-    allocator: std.mem.Allocator,
-    cpu: [2]?*cpu_mod.Cpu = .{ null, null },
-    memory: [2]?Guest = .{ null, null },
-    /// An owned copy of each core's last loaded image (RA8EMU-794); replaced on every load.
-    loaded: [2]?[]u8 = .{ null, null },
-    /// Where a reset the firmware asks for restarts CPU0; a load moves it to
-    /// the new image's vector table (RA8EMU-959), or the replaced image would boot.
-    reboot: ?*Reboot = null,
-
-    fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
-        const self: *LoaderState = @ptrCast(@alignCast(context));
-        const image = try elf.Image.init(bytes);
-        const index = @backingInt(core);
-        const cpu = self.cpu[index] orelse return error.CoreNotAttached;
-        const memory = self.memory[index] orelse return error.CoreNotAttached;
-        // The same map and option-window claim a `--cpu zig` run loads with (RA8EMU-760).
-        const loaded = try read_image.read(image);
-        _ = try memory_load.image(memory, loaded.image());
-        const base = image.vectorBase() orelse return error.NoVectorTable;
-        try cpu.reset(base);
-        // CPU1 exposes its initial table through VTOR after reset clears SCS.
-        if (core == .cpu1) try cpu.bus.writeWord(memmap.scb.vtor, base);
-        if (core == .cpu0) if (self.reboot) |reboot| {
-            reboot.vector_base = base;
-        };
-        const copy = try self.allocator.dupe(u8, bytes);
-        if (self.loaded[index]) |old| self.allocator.free(old);
-        self.loaded[index] = copy;
-    }
-
-    fn deinit(self: *LoaderState) void {
-        for (self.loaded) |kept| if (kept) |bytes| self.allocator.free(bytes);
-    }
-};
+const LoaderState = @import("loader_state.zig").LoaderState;
 
 const State = struct {
     allocator: std.mem.Allocator,
@@ -135,6 +102,8 @@ const State = struct {
     files: session_state.Files,
     state_file: files.StateFile,
     history: session_history.History,
+    /// The undo trail while a run records, null until `record` starts it.
+    recording: ?history_trail.Recording = null,
     reboot: Reboot,
     display: session_display.Host,
     tracer: ?rtos_hook.Tracer,
@@ -298,12 +267,32 @@ pub const Harness = struct {
         self.state.files.pair = pair;
     }
 
+    /// Starts recording the undo trail: one tap on the machine's store,
+    /// the round facts read live (RA8EMU-D1). The store's writes and the
+    /// core's fast path feed the trail through that one hook; a borrower
+    /// store follows its lender's. Both cores and the machine store must
+    /// be attached, because the trail attributes every write by the
+    /// writing core's live slot count.
+    pub fn record(self: *Harness) !void {
+        const state = self.state;
+        const cpu0 = state.loading.cpu[0] orelse return error.CoreNotAttached;
+        const cpu1 = state.loading.cpu[1] orelse return error.CoreNotAttached;
+        if (state.cpu0.store == null) return error.StoreMissing;
+        state.recording = history_trail.Recording.init(
+            state.allocator,
+            .{ &cpu0.slots, &cpu1.slots },
+            &state.cpu0.store.?,
+        );
+        state.recording.?.arm();
+    }
+
     pub fn deinit(self: *Harness) void {
         const state = self.state;
         state.display.deinit();
         state.plugs.deinit();
         state.plugs_arena.deinit();
         block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
+        if (state.recording) |*held| held.deinit();
         state.cpu0.close();
         state.board.deinit();
         state.loading.deinit();
@@ -320,6 +309,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     const state = try allocator.create(State);
     errdefer allocator.destroy(state);
     state.allocator = allocator;
+    state.recording = null;
     state.bytes = try std.Io.Dir.cwd().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
     errdefer allocator.free(state.bytes);
     state.image = try elf.Image.init(state.bytes);
@@ -364,6 +354,14 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer state.loading.deinit();
     state.loading.cpu[0] = &state.cpu;
     state.loading.memory[0] = state.cpu0.own();
+    state.reboot = .{ .vector_base = vector };
+    try wire(state, io, options);
+    return .{ .state = state };
+}
+
+/// Assemble the session around the wired cores: hooks, history, display, and
+/// the opened image's initial load.
+fn wire(state: *State, io: std.Io, options: Options) !void {
     state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };
     state.session.attachInputScript(&state.board.input_script);
     state.session.attachLoader(.{ .context = &state.loading, .loadFn = LoaderState.load });
@@ -373,7 +371,6 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.session.attachPlugs(state.plugs.hook());
     state.faults = session_faults.Faults.init(&state.board, state.plugs_arena.allocator());
     state.session.attachFaults(&state.faults);
-    state.reboot = .{ .vector_base = vector };
     state.board.reboot = &state.reboot;
     state.loading.reboot = &state.reboot;
     state.chunk = .{ .cpu = &state.cpu, .mark = state.cpu.retired };
@@ -393,5 +390,4 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.display.watch.useIo(io);
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
-    return .{ .state = state };
 }
