@@ -215,7 +215,7 @@ test "no flag, no hook" {
 fn dual(second: *Cpu1) !Harness {
     var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
     errdefer h.deinit();
-    try second.open(std.testing.allocator, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     h.state.edge.idle_skip = false;
     return h;
 }
