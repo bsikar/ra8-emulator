@@ -70,10 +70,11 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     var pair: second_core.zig.run.Driver = undefined;
     var cpu1: ?*second_core.zig.run.Driver = null;
     var cpu1_identity: ?[16]u8 = null;
+    var second_tracers: rtos_hook.second.Tracers = .{};
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
-        cpu1_identity = openSecond(&pair, io, board, named, memory, options.blocks) orelse return 1;
+        cpu1_identity = openSecond(&pair, io, board, named, memory, options.blocks, options.state.host()) orelse return 1;
         cpu1 = &pair;
-        rtos_hook.second.armZig(&pair, io, options.rtosWanted(), named);
+        rtos_hook.second.armZig(&pair, io, options.state.host(), options.rtosWanted(), named, &second_tracers);
     }
     defer if (cpu1) |second| second.close();
     var loop: run_loop.Loop = .{};
@@ -97,12 +98,12 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer.*) |*found| found.trace.fine = ran;
-        if (options.ctl_cpu_load) return ctlLoad(out, loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1), status);
+        if (options.ctl_cpu_load) return ctlLoad(out, loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1, &second_tracers), status);
         var frames = try frames_out.Run.initForCli(std.heap.page_allocator, io, board, options.frames);
         defer frames.deinit(board);
         const modules = txm_report.list(symbols.addressOf(image, txm_modules.list_symbol), rtos_hook.Memory{ .guest = clock.memory });
         if (options.report_json) {
-            const load = loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1);
+            const load = loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1, &second_tracers);
             var sites: ?json_run.json_sites.Sites = null;
             if (ends.hits != null) sites = .{ .image = image, .hits = ends.hits };
             try json_run.document(out, board, .{ .engine = "zig", .sites = if (sites) |*found| found else null, .elapsed = ran.*, .elapsed_cycles = clock.wall_cycles, .external = clock.memory, .bus_errors = clock.bus_tally, .where = .{ .image = image, .profile = profile_table }, .dumps = &.{ .registers = .{ .zig = final }, .memory = clock.memory, .image = image, .options = &options, .io = io, .watched = watched }, .load = if (options.cpu_load) &load else null, .modules = &modules, .eink_log = if (options.frames.eink_log != null) &eink_recorder else null });
@@ -112,9 +113,9 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         try report_run.cpu1(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.
         if (!options.report_json) try textDumps(out, io, board, clock.memory, final, image, options, watched);
-        if (tracer.*) |*found| try rtos_hook.report.all(out, io, options, found, rtos_hook.Memory{ .guest = clock.memory });
+        if (tracer.*) |*found| try rtos_hook.report.all(out, io, options.state.host(), options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (!options.report_json) try txm_report.write(out, &modules);
-        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, options, second.guest());
+        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, options.state.host(), options, &second_tracers, second.guest());
         try finishFrames(out, io, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
@@ -156,8 +157,8 @@ fn finishEinkLog(out: *std.Io.Writer, io: std.Io, options: cli.Options, recorder
 
 /// Bring CPU1 up from `named`, with its block cache when asked; false once
 /// the reason it could not is printed.
-fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool) ?[16]u8 {
-    const identity = @import("ra8_session").cpu1.image.openIdentified(pair, std.heap.page_allocator, io, board_wiring.cpu1(board), named, memory) catch |err| {
+fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool, dir: std.Io.Dir) ?[16]u8 {
+    const identity = @import("ra8_session").cpu1.image.openIdentified(pair, std.heap.page_allocator, io, dir, board_wiring.cpu1(board), named, memory) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return null;
     };
@@ -199,9 +200,9 @@ fn ctlLoad(out: *std.Io.Writer, load: json_run.json_load.Load, status: u8) !u8 {
 }
 
 /// The traced cores `--cpu-load` reads under `--report json` (RA8EMU-266).
-fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig.run.Driver) json_run.json_load.Load {
+fn loadOf(memory: Guest, tracer: ?*const rtos_hook.Tracer, cpu1: ?*second_core.zig.run.Driver, second_tracers: *const rtos_hook.second.Tracers) json_run.json_load.Load {
     return .{
         .cpu0 = rtos_hook.report.sideOf(tracer, .{ .guest = memory }),
-        .cpu1 = if (cpu1) |pair| rtos_hook.second.sideOn(pair.guest()) else null,
+        .cpu1 = if (cpu1) |pair| rtos_hook.second.sideOn(second_tracers, pair.guest()) else null,
     };
 }

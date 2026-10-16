@@ -238,12 +238,12 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
         var live = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
         defer live.deinit();
         var live_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try live_second.open(std.testing.allocator, std.testing.io, &live, path);
+        if (case.cpu1) |path| try live_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, path);
         defer if (case.cpu1 != null) live_second.close(std.testing.allocator);
         var reference = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
         defer reference.deinit();
         var reference_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try reference_second.open(std.testing.allocator, std.testing.io, &reference, path);
+        if (case.cpu1) |path| try reference_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &reference, path);
         defer if (case.cpu1 != null) reference_second.close(std.testing.allocator);
         std.debug.print("fixture start {s}\n", .{case.cpu0});
         try fixture.continued(&live, 100_000);
@@ -272,7 +272,7 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
         var fresh = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
         defer fresh.deinit();
         var fresh_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try fresh_second.open(std.testing.allocator, std.testing.io, &fresh, path);
+        if (case.cpu1) |path| try fresh_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &fresh, path);
         defer if (case.cpu1 != null) fresh_second.close(std.testing.allocator);
         try fresh.state.files.readFrom(saved.written());
         var cold = try capture(&fresh);

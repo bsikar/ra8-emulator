@@ -65,7 +65,7 @@ pub const Listener = struct {
         try std.Io.Dir.cwd().createDirPath(io, dir);
         // Owner-only, so other users cannot reach the listener's sockets or
         // the discovery file through the directory (RA8EMU-1175).
-        @import("ra8_session").harness.files.harden(io, dir) catch {};
+        @import("ra8_session").harness.files.harden(io, std.Io.Dir.cwd(), dir) catch {};
 
         if (builtin.os.tag == .windows) {
             var address = std.Io.net.IpAddress.parse("127.0.0.1", 0) catch unreachable;

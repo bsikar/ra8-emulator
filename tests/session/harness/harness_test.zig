@@ -353,7 +353,7 @@ test "CPU VTOR regression: repeated Session CPU1 loads expose the loaded vector 
     var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf" });
     defer opened.deinit();
     var second: ra8.session.cpu1.bringup.Cpu1 = .{};
-    try second.open(gpa, std.testing.io, &opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(gpa, std.testing.io, std.Io.Dir.cwd(), &opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(gpa);
     const cpu = second.cpu();
     const first = second.image.?.vectorBase().?;

@@ -17,12 +17,25 @@ const pacer = @import("pacer.zig");
 pub const step_ns: u64 = std.time.ns_per_ms;
 
 pub const Pacing = struct {
-    pacer: pacer.Pacer,
-    clock: pacer.Clock,
+    pacer: pacer.Pacer = .{},
+    /// The clock a caller injected (a test's fake); read only when `host` is null.
+    clock: pacer.Clock = undefined,
+    /// The host clock a `--realtime` run paces against, owned by the Pacing
+    /// so each run carries its own anchor (RA8EMU-181). Null for injected
+    /// clocks.
+    host: ?pacer.HostClock = null,
     /// Virtual time the pacer was last consulted at.
     last_ns: u64,
 
-    /// Pace from `now_ns` on at `speed_milli` (1000 is real time).
+    /// The clock this Pacing reads: the owned host clock when it has one,
+    /// else the injected one.
+    fn clockOf(self: *Pacing) pacer.Clock {
+        if (self.host) |*held| return held.clock();
+        return self.clock;
+    }
+
+    /// Pace from `now_ns` on at `speed_milli` (1000 is real time) against a
+    /// caller-supplied clock.
     pub fn start(clock: pacer.Clock, now_ns: u64, speed_milli: u64) Pacing {
         return .{
             .pacer = pacer.Pacer.begin(clock, now_ns, speed_milli),
@@ -35,45 +48,32 @@ pub const Pacing = struct {
     pub fn after(self: *Pacing, now_ns: u64) void {
         if (now_ns -| self.last_ns < step_ns) return;
         self.last_ns = now_ns;
-        self.pacer.pace(self.clock, now_ns);
+        self.pacer.pace(self.clockOf(), now_ns);
     }
 
     pub fn setSpeed(self: *Pacing, now_ns: u64, speed_milli: u64) void {
         self.last_ns = now_ns;
-        self.pacer.setSpeed(self.clock, now_ns, speed_milli);
+        self.pacer.setSpeed(self.clockOf(), now_ns, speed_milli);
     }
 
-    pub fn report(self: *const Pacing, now_ns: u64) pacer.Report {
-        return self.pacer.report(self.clock, now_ns);
+    pub fn report(self: *Pacing, now_ns: u64) pacer.Report {
+        return self.pacer.report(self.clockOf(), now_ns);
     }
 };
 
-/// The host clock a `--realtime` run paces against. It lives as long as the
-/// process because the board's pacing points at it; a run attaches one board
-/// at most (RA8EMU-181, slice 3).
-var host: pacer.HostClock = undefined;
-var host_started = false;
-
-/// The process's host clock, started on first use with the first caller's
-/// io. A later caller gets the same one, so a pacer anchored on it never
-/// sees the clock restart.
-pub fn hostClock(io: std.Io) pacer.Clock {
-    if (!host_started) {
-        host = pacer.HostClock.init(io);
-        host_started = true;
-    }
-    return host.clock();
-}
-
 /// Pace a run against the host's monotonic clock from virtual time `now_ns`.
+/// The run owns its clock: it lives inside the Pacing and every read
+/// resolves through the Pacing it lands in, so a later machine starts its
+/// own anchor instead of sharing this process's (RA8EMU-181).
 pub fn attachHost(paced: *?Pacing, now_ns: u64, io: std.Io, speed_milli: u64) void {
-    paced.* = Pacing.start(hostClock(io), now_ns, speed_milli);
+    paced.* = Pacing{ .host = pacer.HostClock.init(io), .last_ns = now_ns };
+    paced.*.?.pacer = pacer.Pacer.begin(paced.*.?.clockOf(), now_ns, speed_milli);
 }
 
 /// The end-of-run line, only when the run was paced, so an unpaced run's
 /// report is unchanged.
 pub fn line(out: anytype, paced: ?Pacing, now_ns: u64) !void {
-    const running = paced orelse return;
+    var running = paced orelse return;
     try write(out, running.report(now_ns));
 }
 

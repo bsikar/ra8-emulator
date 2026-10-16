@@ -22,8 +22,8 @@ pub fn bareName(path: []const u8) !void {
 
 /// Create `dir_path` and make it owner-only, so other users cannot reach
 /// the state files through it (RA8EMU-1175). Skips the mode on Windows.
-pub fn harden(io: std.Io, dir_path: []const u8) !void {
-    try std.Io.Dir.cwd().createDirPath(io, dir_path);
+pub fn harden(io: std.Io, root: std.Io.Dir, dir_path: []const u8) !void {
+    try root.createDirPath(io, dir_path);
     if (builtin.os.tag != .linux) return;
     // Dir.setPermissions hits a std 0.17 BADF panic on a directory fd, so
     // the mode is set by path.
@@ -37,6 +37,15 @@ pub const StateFile = struct {
     files: *session_state.Files,
     /// Where snapshots live; null keeps bare names in the working directory.
     dir: ?[]const u8 = null,
+    /// The host directory file access resolves through (RA8EMU-968); null
+    /// falls back to the process cwd for host tests.
+    root: ?std.Io.Dir = null,
+
+    /// The directory host file access resolves through, never the process
+    /// global `cwd()` called directly at an open site.
+    pub fn host(self: *StateFile) std.Io.Dir {
+        return self.root orelse std.Io.Dir.cwd();
+    }
 
     pub fn hook(self: *StateFile) session_state.Hook {
         return .{ .context = self, .saveFn = save, .restoreFn = restore };
@@ -53,21 +62,22 @@ pub const StateFile = struct {
         try self.files.single();
         const full = try self.resolved(path);
         defer self.allocator.free(full);
-        if (self.dir) |dir| try harden(self.io, dir);
+        if (self.dir) |dir| try harden(self.io, self.host(), dir);
         // Written to a sibling temp file and renamed into place once closed,
         // so a half-written snapshot never replaces the one before it
         // (RA8EMU-1175).
         const temp = try std.mem.concat(self.allocator, u8, &.{ full, ".tmp" });
         defer self.allocator.free(temp);
         {
-            var out = try std.Io.Dir.cwd().createFile(self.io, temp, .{});
+            var out = try self.host().createFile(self.io, temp, .{});
             defer out.close(self.io);
             var buffer: [4096]u8 = undefined;
             var file_writer = out.writer(self.io, &buffer);
             try self.files.writeTo(&file_writer.interface);
             try file_writer.interface.flush();
         }
-        try std.Io.Dir.cwd().rename(temp, std.Io.Dir.cwd(), full, self.io);
+        const root = self.host();
+        try root.rename(temp, root, full, self.io);
     }
 
     fn restore(context: *anyopaque, path: []const u8) anyerror!void {
@@ -75,7 +85,7 @@ pub const StateFile = struct {
         try self.files.single();
         const full = try self.resolved(path);
         defer self.allocator.free(full);
-        const bytes = try std.Io.Dir.cwd().readFileAlloc(self.io, full, self.allocator, .limited(max_bytes));
+        const bytes = try self.host().readFileAlloc(self.io, full, self.allocator, .limited(max_bytes));
         defer self.allocator.free(bytes);
         try self.files.readFrom(bytes);
     }

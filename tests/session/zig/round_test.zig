@@ -15,7 +15,7 @@ const cases = [_]Case{
 fn open(case: Case, second: *Cpu1) !Harness {
     var harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
     errdefer harness.deinit();
-    if (case.cpu1) |path| try second.open(std.testing.allocator, std.testing.io, &harness, path);
+    if (case.cpu1) |path| try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &harness, path);
     harness.state.edge.idle_skip = false;
     return harness;
 }

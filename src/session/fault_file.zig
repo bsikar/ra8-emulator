@@ -29,11 +29,11 @@ pub const Run = struct {
     session: api.Session,
     applier: Applier,
 
-    pub fn open(self: *Run, board: *Board, io: std.Io, path: []const u8) !void {
+    pub fn open(self: *Run, board: *Board, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
         self.arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         errdefer self.arena.deinit();
         const arena = self.arena.allocator();
-        const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(max_bytes)) catch |err| {
+        const text = dir.readFileAlloc(io, path, arena, .limited(max_bytes)) catch |err| {
             std.debug.print("--faults {s}: {s}\n", .{ path, @errorName(err) });
             return err;
         };

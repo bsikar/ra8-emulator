@@ -32,7 +32,7 @@ test "plain dual wrong CPU1 ELF preserves guest provider and future continuation
     var source1: Cpu1 = .{};
     var source = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2 });
     defer source.deinit();
-    try source1.open(std.testing.allocator, std.testing.io, &source, second_path);
+    try source1.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &source, second_path);
     defer source1.close(std.testing.allocator);
     var saved = try capture(&source);
     defer saved.deinit();
@@ -48,7 +48,7 @@ test "plain dual wrong CPU1 ELF preserves guest provider and future continuation
     var wrong1: Cpu1 = .{};
     var wrong = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2 });
     defer wrong.deinit();
-    try wrong1.open(std.testing.allocator, std.testing.io, &wrong, alt_path);
+    try wrong1.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &wrong, alt_path);
     defer wrong1.close(std.testing.allocator);
     var before = try capture(&wrong);
     defer before.deinit();

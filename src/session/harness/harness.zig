@@ -65,6 +65,13 @@ pub const Options = struct {
     idle_skip: bool = true,
     /// The run's `panel_vsync` config (RA8EMU R9), stored the way a plain run's fit stores it.
     panel_vsync: ?glcdc_vsync.Config = null,
+    /// The host directory the run's file reads and writes open against
+    /// (RA8EMU-968); null falls back to the process cwd for host tests.
+    root: ?std.Io.Dir = null,
+    /// The directory host file access resolves through, never `cwd()` directly.
+    pub fn host(self: Options) std.Io.Dir {
+        return self.root orelse std.Io.Dir.cwd();
+    }
 };
 
 const LoaderState = @import("loader_state.zig").LoaderState;
@@ -310,7 +317,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer allocator.destroy(state);
     state.allocator = allocator;
     state.recording = null;
-    state.bytes = try std.Io.Dir.cwd().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
+    state.bytes = try options.host().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
     errdefer allocator.free(state.bytes);
     state.image = try elf.Image.init(state.bytes);
     state.board = Board.init(allocator);
@@ -321,7 +328,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     try state.board.nor.resize(state.profile.memory.ospi.size);
     state.board.clock.pace.mode = .virtual;
     state.board.panel_vsync = options.panel_vsync;
-    try load_input.load(allocator, io, &state.board, options.input_script);
+    try load_input.load(allocator, io, options.host(), &state.board, options.input_script);
     state.cpu0 = .{};
     state.tracer = null;
     errdefer state.cpu0.close();
@@ -355,13 +362,13 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.loading.cpu[0] = &state.cpu;
     state.loading.memory[0] = state.cpu0.own();
     state.reboot = .{ .vector_base = vector };
-    try wire(state, io, options);
+    try wire(state, allocator, io, options);
     return .{ .state = state };
 }
 
 /// Assemble the session around the wired cores: hooks, history, display, and
 /// the opened image's initial load.
-fn wire(state: *State, io: std.Io, options: Options) !void {
+fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Options) !void {
     state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };
     state.session.attachInputScript(&state.board.input_script);
     state.session.attachLoader(.{ .context = &state.loading, .loadFn = LoaderState.load });
@@ -378,7 +385,7 @@ fn wire(state: *State, io: std.Io, options: Options) !void {
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk, .idle_skip = options.idle_skip };
     state.session.live.boundary = state.edge.hook();
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
-    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir };
+    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir, .root = options.root };
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
     state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);

@@ -55,10 +55,10 @@ pub fn nameFor(path: []const u8, core: u1, buffer: []u8) ![]const u8 {
 }
 
 /// Write `trace` to the file `nameFor` gives, replacing what was there.
-pub fn save(io: std.Io, path: []const u8, core: u1, trace: *const rtos_trace.Trace) !void {
+pub fn save(io: std.Io, dir: std.Io.Dir, path: []const u8, core: u1, trace: *const rtos_trace.Trace) !void {
     var buffer: [std.fs.max_path_bytes]u8 = undefined;
     const name = try nameFor(path, core, &buffer);
-    const file = try std.Io.Dir.cwd().createFile(io, name, .{});
+    const file = try dir.createFile(io, name, .{});
     defer file.close(io);
     var staging: [4096]u8 = undefined;
     var writer = file.writer(io, &staging);

@@ -182,7 +182,7 @@ test "grid repair G5 closed turn cannot replace a genuine partial CPU1 turn" {
     var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
     defer h.deinit();
     var second: Cpu1 = .{};
-    try second.open(std.testing.allocator, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     h.state.edge.idle_skip = false;
     h.state.edge.timebase.per_chunk = 64;
@@ -266,7 +266,7 @@ fn closedBoard(comptime variant: ClosedCase) !void {
     var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
     defer h.deinit();
     var second: Cpu1 = .{};
-    try second.open(std.testing.allocator, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     h.state.edge.idle_skip = false;
     h.state.edge.timebase.per_chunk = 64;
