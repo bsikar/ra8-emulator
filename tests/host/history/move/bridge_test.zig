@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const history = @import("ra8").host.history;
 const fixture = @import("../root_test.zig");
+const test_paths = @import("test_paths");
 
 test "native bridge without a supplied peer makes no intent or destination" {
     if (builtin.os.tag != .linux) return error.SkipZigTest;
@@ -49,7 +50,7 @@ test "nonsuccess replies with missing wrong or abnormal exits retain committed i
     try history.move.intent.commit(context, parsed.value);
     for ([_]history.move.wire.Status{ .collision, .cross_device, .refused, .expired }) |status| {
         try std.testing.expectError(error.NativeMoveUnknown, history.move.bridge.outcome(context, parsed.value, status, null, history.move.deadline.Deadline.after(fixture.io, 2_000)));
-        for ([_]std.process.Child.Term{ .{ .exited = 0 }, .{ .exited = 1 }, .{ .exited = history.move.windows.exits.expired }, .{ .exited = history.move.windows.exits.drained }, .{ .exited = history.move.windows.exits.unready }, .{ .exited = history.move.windows.exits.unsettled }, .{ .signal = .KILL } }) |term| {
+        for ([_]std.process.Child.Term{ .{ .exited = 0 }, .{ .exited = 1 }, .{ .exited = history.move.peer.exits.expired }, .{ .exited = history.move.peer.exits.drained }, .{ .exited = history.move.peer.exits.unready }, .{ .exited = history.move.peer.exits.unsettled }, .{ .signal = .KILL } }) |term| {
             try std.testing.expectError(error.NativePeerFailed, history.move.bridge.outcome(context, parsed.value, status, term, history.move.deadline.Deadline.after(fixture.io, 2_000)));
         }
     }
@@ -84,7 +85,7 @@ test "every matching rejection retires intent without moving its source" {
         const parsed = try history.move.intent.start(fixture.allocator, context, &session.id, target, history.layout.moves.trash);
         defer parsed.deinit();
         try history.move.intent.commit(context, parsed.value);
-        try std.testing.expectError(case[1], history.move.bridge.outcome(context, parsed.value, case[0], .{ .exited = history.move.windows.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
+        try std.testing.expectError(case[1], history.move.bridge.outcome(context, parsed.value, case[0], .{ .exited = history.move.peer.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
         try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
         try std.testing.expectError(error.FileNotFound, session.dir.access(fixture.io, history.move.intent.note, .{}));
         try std.testing.expect(parsed.value.source.same(try history.move.file.state(f.cache.dir, &session.id)));
@@ -123,7 +124,7 @@ test "an ended admission publishes neither a cancellation nor an arrival" {
 
 test "verified arrival survives slow reap and named watchdog drain exit" {
     if (builtin.os.tag != .linux) return error.SkipZigTest;
-    for ([_]?std.process.Child.Term{ null, .{ .exited = history.move.windows.exits.success }, .{ .exited = history.move.windows.exits.drained } }) |term| {
+    for ([_]?std.process.Child.Term{ null, .{ .exited = history.move.peer.exits.success }, .{ .exited = history.move.peer.exits.drained } }) |term| {
         var f = try fixture.Fixture.init();
         defer f.deinit();
         var session = try f.create('d');
@@ -156,4 +157,29 @@ test "verified arrival survives slow reap and named watchdog drain exit" {
         defer arrived.close(fixture.io);
         try std.testing.expectError(error.FileNotFound, arrived.access(fixture.io, history.move.intent.note, .{}));
     }
+}
+
+test "the real native peer moves a session end to end" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var f = try fixture.Fixture.init();
+    defer f.deinit();
+    var session = try f.create('d');
+    defer fixture.Fixture.abandon(&session);
+    // Shared filesystems refuse RENAME_NOREPLACE with EINVAL; the end-to-end
+    // move needs a filesystem that honors the flag (CI's ext4 does).
+    if (!history.move.linux.noReplaceHonored(fixture.io, f.cache.dir)) return error.SkipZigTest;
+    var cwd_buffer: [4096]u8 = undefined;
+    const cwd = std.mem.sliceTo(std.c.getcwd(&cwd_buffer, cwd_buffer.len) orelse return error.CannotResolveCwd, 0);
+    const peer_path = try std.fmt.allocPrint(fixture.allocator, "{s}/{s}", .{ cwd, test_paths.host_move_peer });
+    defer fixture.allocator.free(peer_path);
+    const sha = try history.move.provider.digest(fixture.io, peer_path);
+    f.cache.native_provider = .{ .executable = peer_path, .sha256 = sha, .bounds = .{ .ready = 4_000, .commit = 4_000, .drain = 4_000, .reap = 4_000, .settle = 4_000 } };
+    var gate = try f.cache.gate(.exclusive);
+    defer gate.release();
+    var buffer: history.name.Buffer = undefined;
+    const target = history.name.trash(&buffer, &session.id);
+    try history.move.bridge.move(.{ .source = &f.cache, .target = &f.cache, .authorities = &.{ gate.file, session.lock } }, &session.id, target, history.layout.moves.trash);
+    try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
+    try std.testing.expectError(error.FileNotFound, f.cache.dir.access(fixture.io, &session.id, .{}));
+    try f.cache.dir.access(fixture.io, target, .{});
 }

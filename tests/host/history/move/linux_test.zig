@@ -16,21 +16,42 @@ test "linux pin and rename move a child no-replace and report a collision" {
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    try tmp.dir.makePath(io, "src/child");
-    try tmp.dir.makePath(io, "dst");
+    // Shared filesystems refuse RENAME_NOREPLACE with EINVAL; the success and
+    // collision halves need a filesystem that honors the flag.
+    if (!linux.noReplaceHonored(io, tmp.dir)) return error.SkipZigTest;
+    try tmp.dir.createDirPath(io, "src/child");
+    try tmp.dir.createDirPath(io, "dst");
     const source_root = try linux.pin(allocator, io, tmp.dir, "src", false);
     defer source_root.close(io);
     const target_root = try linux.pin(allocator, io, tmp.dir, "dst", false);
     defer target_root.close(io);
     const child = try linux.pin(allocator, io, source_root, "child", true);
     defer child.close(io);
-    try std.testing.expectEqual(wire.Status.success, try linux.rename(allocator, child, target_root, "moved"));
+    try std.testing.expectEqual(wire.Status.success, try linux.rename(allocator, child, source_root, "child", target_root, "moved"));
     var moved = try target_root.openDir(io, "moved", .{});
     defer moved.close(io);
-    try tmp.dir.makePath(io, "src/child");
+    try tmp.dir.createDirPath(io, "src/child");
     const second = try linux.pin(allocator, io, source_root, "child", true);
     defer second.close(io);
-    try std.testing.expectEqual(wire.Status.collision, try linux.rename(allocator, second, target_root, "moved"));
+    try std.testing.expectEqual(wire.Status.collision, try linux.rename(allocator, second, source_root, "child", target_root, "moved"));
+}
+
+test "linux rename reports a refusal where the filesystem refuses no-replace" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    if (linux.noReplaceHonored(io, tmp.dir)) return error.SkipZigTest;
+    try tmp.dir.createDirPath(io, "src/child");
+    try tmp.dir.createDirPath(io, "dst");
+    const source_root = try linux.pin(allocator, io, tmp.dir, "src", false);
+    defer source_root.close(io);
+    const target_root = try linux.pin(allocator, io, tmp.dir, "dst", false);
+    defer target_root.close(io);
+    const child = try linux.pin(allocator, io, source_root, "child", true);
+    defer child.close(io);
+    try std.testing.expectEqual(wire.Status.refused, try linux.rename(allocator, child, source_root, "child", target_root, "moved"));
 }
 
 test "linux birth reports a nonzero process creation time" {
