@@ -68,13 +68,17 @@ pub fn pin(allocator: std.mem.Allocator, io: std.Io, root: ?std.Io.Dir, path: []
 /// The rename the request commits: the pinned source entry into the target
 /// root under `leaf`, refused rather than replacing whatever is already
 /// there.
-pub fn rename(allocator: std.mem.Allocator, source: std.Io.Dir, target: std.Io.Dir, leaf: []const u8) !wire.Status {
+pub fn rename(allocator: std.mem.Allocator, child: std.Io.Dir, parent: std.Io.Dir, from: []const u8, target: std.Io.Dir, leaf: []const u8) !wire.Status {
+    // NT renames the object through its own handle: the pinned child is the
+    // authority, and a reopen by name inside the window would race it.
+    _ = parent;
+    _ = from;
     const utf16 = try std.unicode.wtf8ToWtf16LeAlloc(allocator, leaf);
     defer allocator.free(utf16);
     var information: w.FILE.RENAME_INFORMATION = .init(.{ .Flags = .{}, .RootDirectory = target.handle, .FileName = utf16 });
     const bytes = information.toBuffer();
     var iosb: w.IO_STATUS_BLOCK = undefined;
-    const status = w.ntdll.NtSetInformationFile(source.handle, &iosb, bytes.ptr, @intCast(bytes.len), .RenameEx);
+    const status = w.ntdll.NtSetInformationFile(child.handle, &iosb, bytes.ptr, @intCast(bytes.len), .RenameEx);
     return switch (status) {
         .SUCCESS => .success,
         .OBJECT_NAME_COLLISION, .DIRECTORY_NOT_EMPTY => .collision,

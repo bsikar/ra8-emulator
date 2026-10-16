@@ -118,7 +118,7 @@ test "a synced cancellation survives interrupted cleanup and can never recommit"
         // Keep cleanup from unlinking a multiply named note. The actual
         // cancellation decision has to be durable before this failure.
         try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
-        try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, parsed.value, .expired, .{ .exited = history.move.windows.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
+        try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, parsed.value, .expired, .{ .exited = history.move.peer.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
         var anchor_buffer: history.name.Buffer = undefined;
         const saved = try history.move.intent.read(fixture.allocator, fixture.io, f.cache.dir, try history.move.intent.leaf(&anchor_buffer, &id), true);
         defer saved.deinit();
@@ -197,7 +197,7 @@ test "version one intents remain unknown but verified rejection journals their c
     try std.testing.expect(saved.value.committed);
     try std.testing.expectError(error.NativeMoveUnknown, history.move.bridge.settle(context, null, saved.value));
     try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
-    try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, saved.value, .refused, .{ .exited = history.move.windows.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
+    try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, saved.value, .refused, .{ .exited = history.move.peer.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
     const cancelled = try history.move.intent.read(fixture.allocator, fixture.io, f.cache.dir, anchor, true);
     defer cancelled.deinit();
     try std.testing.expect(cancelled.value.cancelled and !cancelled.value.committed);
