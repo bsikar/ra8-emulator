@@ -90,22 +90,49 @@ pub const Proxy = struct {
     }
 
     /// Settle whatever is still owned. Before COMMIT the closed input means
-    /// no COMMIT can arrive, so a child that outlives the reap bound is
-    /// killed. After COMMIT it is never killed: it keeps its inherited gates
-    /// and leases for as long as its peer can still rename. It is continued
-    /// first, so a child that was only stopped can end inside the bound.
-    /// Either child still running then goes to the collector, which reaps
-    /// it whenever it ends, so neither outlives this caller as a zombie.
+    /// no COMMIT can arrive, so the child never outlives the caller: half
+    /// the reap phase to end on its own, then the kill through its pidfd
+    /// and the rest of the phase to reap it. After COMMIT it is never
+    /// killed: it keeps its inherited gates and leases for as long as its
+    /// peer can still rename. It is continued first, so a child that was
+    /// only stopped can end inside the bound. Either child still running
+    /// then goes to the collector, which reaps it whenever it ends, so
+    /// neither outlives this caller as a zombie.
     pub fn close(self: *Proxy) void {
         if (builtin.os.tag != .linux) return;
         if (self.stage == .reaped or self.stage == .abandoned) return;
-        const cancelled = self.stage == .open;
-        if (!cancelled) self.signal(.CONT);
-        if (self.reap() != null or self.stage == .abandoned) return;
-        if (cancelled) {
-            self.signal(.KILL);
+        self.shut();
+        if (self.stage != .open) {
+            self.signal(.CONT);
             if (self.reap() != null or self.stage == .abandoned) return;
+            return self.abandon();
         }
+        if (self.wait(self.reap_ms / 2)) return;
+        self.signal(.KILL);
+        if (self.wait(self.reap_ms - self.reap_ms / 2)) return;
+        self.abandon();
+    }
+
+    /// One bounded wait for the child to end, then reap it. False leaves it
+    /// owned with the bound only spent, never restarted.
+    fn wait(self: *Proxy, ms: u32) bool {
+        if (self.child.id == null) {
+            self.drop(.abandoned);
+            return true;
+        }
+        const bound = if (self.admission) |whole| whole.phase(self.io, ms) else deadline.Deadline.after(self.io, ms);
+        bound.ended(self.io, self.handle) catch return false;
+        _ = self.child.wait(self.io) catch {
+            // wait cleans up id and pipes on failure too. That identity
+            // is no longer owned and must never be polled or signalled.
+            if (self.child.id == null) self.drop(.abandoned);
+            return false;
+        };
+        self.drop(.reaped);
+        return true;
+    }
+
+    fn abandon(self: *Proxy) void {
         if (self.child.stdout) |pipe| pipe.close(self.io);
         self.child.stdout = null;
         self.child.id = null;
