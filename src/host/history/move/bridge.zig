@@ -107,7 +107,9 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record, ch
     var flagged = record.committed;
     errdefer {
         child.close();
-        if (!flagged and child.stage == .reaped and admission.open(io)) intent.cancel(context, record) catch {};
+        // Nothing was committed, so no COMMIT can arrive and nothing has
+        // moved: the intent is cancelled whatever became of the child.
+        if (!flagged and admission.open(io)) intent.cancel(context, record) catch {};
     }
     try intent.scope(context, record, record.from, record.to);
     try context.validate(record.from);

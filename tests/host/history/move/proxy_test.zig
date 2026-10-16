@@ -68,9 +68,9 @@ test "before COMMIT a child that outlives the bound is killed inside it and leav
     const pid = child.child.id.?;
     const begun = std.Io.Timestamp.now(io, .awake);
     child.close();
-    // The kill gets no second reap bound; its collector reaps it.
+    // Half the reap phase, then the kill and the rest of it to reap.
     try std.testing.expect(begun.untilNow(io, .awake).toMilliseconds() < 1000);
-    try std.testing.expectEqual(Stage.abandoned, child.stage);
+    try std.testing.expectEqual(Stage.reaped, child.stage);
     try std.testing.expect(collected(pid));
 }
 
@@ -89,7 +89,7 @@ test "before COMMIT a stopped child is killed through its handle and leaves no z
     _ = linux.kill(pid, .STOP);
     try std.testing.expect(becomes(pid, 'T'));
     child.close();
-    try std.testing.expectEqual(Stage.abandoned, child.stage);
+    try std.testing.expectEqual(Stage.reaped, child.stage);
     try std.testing.expect(collected(pid));
 }
 
