@@ -136,7 +136,7 @@ test "once the session greets, the feed subscribes the panel and the session top
     var board = Board.init(std.testing.allocator);
     defer board.deinit();
     var second: ra8.session.cpu1.bringup.Cpu1 = .{};
-    try second.open(std.testing.allocator, std.testing.io, &rig.session.setup.owner, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &rig.session.setup.owner, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     const context = &rig.session.setup.context;
     try std.testing.expect(!context.wants(.cpu0, .session));

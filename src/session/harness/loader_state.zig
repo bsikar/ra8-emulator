@@ -2,6 +2,7 @@
 //! core's memory and reboots it at the new image's vector table.
 const std = @import("std");
 const elf = @import("ra8_board").image.elf;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const read_image = @import("ra8_board").image.load;
 const memory_load = @import("ra8_chip").core.cpu.memory.load;
@@ -19,7 +20,7 @@ pub const LoaderState = struct {
     /// the new image's vector table (RA8EMU-959), or the replaced image would boot.
     reboot: ?*Reboot = null,
 
-    fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
+    pub fn load(context: *anyopaque, core: session_api.Core, bytes: []const u8) anyerror!void {
         const self: *LoaderState = @ptrCast(@alignCast(context));
         const image = try elf.Image.init(bytes);
         const index = @backingInt(core);
@@ -40,7 +41,7 @@ pub const LoaderState = struct {
         self.loaded[index] = copy;
     }
 
-    fn deinit(self: *LoaderState) void {
+    pub fn deinit(self: *LoaderState) void {
         for (self.loaded) |kept| if (kept) |bytes| self.allocator.free(bytes);
     }
 };

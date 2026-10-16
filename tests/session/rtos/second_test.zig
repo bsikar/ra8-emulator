@@ -41,7 +41,8 @@ test "a core-1 tracer in front of CPU1's Zig core records its switch as cpu1" {
     try bring(&driver, &board);
     defer driver.close();
     var tracer: rtos_hook.Tracer = .{ .address = pointer, .core = 1 };
-    rtos_hook.second.listenZig(&driver, &tracer);
+    var tracers: rtos_hook.second.Tracers = .{};
+    rtos_hook.second.listenZig(&driver, &tracer, &tracers);
     driver.round(3);
     const events = tracer.trace.list();
     try std.testing.expectEqual(@as(usize, 1), events.len);

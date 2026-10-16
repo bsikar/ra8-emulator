@@ -81,7 +81,7 @@ pub fn atomicControl() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try stop(&h, false);
     var before = try capture(&h);
@@ -164,7 +164,7 @@ pub fn stmCase(plain: bool, initial_current: u32) !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try setup(&h, true);
     try h.guest().writeWord(map.syst.cvr, initial_current);
@@ -216,7 +216,7 @@ pub fn stoppedStm() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     const before1 = second.cpu().slots;
     try stop(&h, true);
@@ -250,7 +250,7 @@ pub fn canonical() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try stop(&h, true);
     var before = try capture(&h);

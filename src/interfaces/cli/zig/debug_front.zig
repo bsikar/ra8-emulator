@@ -3,7 +3,7 @@
 //! this front adds the requested debugger mode and optional CPU1.
 const std = @import("std");
 const board_speed = @import("ra8_session").board.speed;
-const pacing = @import("ra8_session").run.pacing;
+const pacer = @import("ra8_session").run.pacer;
 const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
 const script = @import("ra8_session").script;
 const zig_script = @import("ra8_session").zig.script;
@@ -34,11 +34,13 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     var target: zig_script.ZigScript = .{ .image = opened.image(), .session = opened.session() };
     var asked: RunPolicy = .{};
     asked.attach(opened.board());
-    var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .paced = &asked.pacing, .clock = pacing.hostClock(io) };
+    // The debug run owns its host clock; the pacer it starts anchors on it.
+    var host_clock = pacer.HostClock.init(io);
+    var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .paced = &asked.pacing, .clock = host_clock.clock() };
     target.session.speed = speed.hook();
     var other: cpu1_bringup.Cpu1 = .{};
     const named = request.cpu1 orelse return serve(allocator, io, &target, request.mode, out);
-    other.open(allocator, io, &opened, named) catch |err| {
+    other.open(allocator, io, std.Io.Dir.cwd(), &opened, named) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };

@@ -39,7 +39,7 @@ pub fn hook(clock: *Clock) ?boot.Snapshot {
 fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const clock: *Clock = @ptrCast(@alignCast(context));
     const allocator = std.heap.page_allocator;
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
+    const bytes = try clock.state.host().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
     defer allocator.free(bytes);
     var bases = .{ clock.timebase.*, clock.ns_timebase };
     try systick.load(.{ &bases[0], &bases[1] }, bytes);
@@ -133,7 +133,7 @@ fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     const stores: [2]*const Store = .{ clock.memory.store, if (pair) |second| if (second.store != null) &second.store.? else return Error.SecondCoreNotSaved else clock.memory.store };
     const cores: [2]*const Cpu = .{ core, if (pair) |second| &second.core.cpu else core };
     const image_ids = try identities(clock);
-    const file = try std.Io.Dir.cwd().createFile(clock.io, path, .{});
+    const file = try clock.state.host().createFile(clock.io, path, .{});
     defer file.close(clock.io);
     var staging: [4096]u8 = undefined;
     var writer = file.writer(clock.io, &staging);

@@ -106,7 +106,7 @@ pub const Served = struct {
         const cpu1 = try self.gpa.create(cpu1_bringup.Cpu1);
         errdefer self.gpa.destroy(cpu1);
         cpu1.* = .{};
-        try cpu1.open(self.gpa, self.io, &self.owner, path);
+        try cpu1.open(self.gpa, self.io, std.Io.Dir.cwd(), &self.owner, path);
         self.second = cpu1;
     }
 

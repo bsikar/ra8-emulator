@@ -33,12 +33,12 @@ pub const Cpu1 = struct {
     listener: rtos_hook.zig.Listener = undefined,
     publisher: rtos_publish.Publisher = undefined,
 
-    /// Bring CPU1 up from the ELF at `path` beside `opened`, park it in the
-    /// session and give the session back to CPU0.
-    pub fn open(self: *Cpu1, allocator: std.mem.Allocator, io: std.Io, opened: *harness.Harness, path: []const u8) !void {
-        self.bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
+    /// Bring CPU1 up from the ELF at `path` under `dir` beside `opened`,
+    /// park it in the session and give the session back to CPU0.
+    pub fn open(self: *Cpu1, allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, opened: *harness.Harness, path: []const u8) !void {
+        self.bytes = try dir.readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
         errdefer allocator.free(self.bytes);
-        try cpu1_image.open(&self.pair, allocator, io, board_wiring.cpu1(opened.board()), path, opened.guest());
+        try cpu1_image.open(&self.pair, allocator, io, dir, board_wiring.cpu1(opened.board()), path, opened.guest());
         self.image = try elf.Image.init(self.bytes);
         const cpu1 = &self.pair.core.cpu;
         self.driver = .{ .machine = &self.machine };

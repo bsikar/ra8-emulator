@@ -5,9 +5,9 @@ const Board = @import("ra8_board").board.Board;
 const limits = @import("harness.zig").limits;
 
 /// Read `path`'s script and parse it onto the board; null keeps the board's.
-pub fn load(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: ?[]const u8) !void {
+pub fn load(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, board: *Board, path: ?[]const u8) !void {
     const named = path orelse return;
-    const text = try std.Io.Dir.cwd().readFileAlloc(io, named, allocator, .limited(limits.max_input_bytes));
+    const text = try dir.readFileAlloc(io, named, allocator, .limited(limits.max_input_bytes));
     defer allocator.free(text);
     try board.input_script.parse(text);
 }

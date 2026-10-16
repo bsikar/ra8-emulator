@@ -74,8 +74,12 @@ test "the undo stops above the nearest barrier and keeps it as the boundary" {
     try std.testing.expectEqual(@as(usize, 1), replayed);
     try std.testing.expectEqual(@as(u8, 0x11), store.span(memmap.mram_base + 4, 1).?[0]);
     const kept = run.slice();
-    try std.testing.expectEqual(@as(usize, 1), kept.len);
+    try std.testing.expectEqual(@as(usize, 2), kept.len);
     switch (kept[0]) {
+        .bytes => {},
+        .barrier => return error.TestUnexpectedResult,
+    }
+    switch (kept[1]) {
         .barrier => {},
         .bytes => return error.TestUnexpectedResult,
     }

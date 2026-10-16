@@ -53,7 +53,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var timed = zig_run.stop_sym.deadline(options.ms);
     var swept = zig_run.undefined_sites.resolve(image, options.stop_on_undefined);
     var schedule: fault_file.Run = undefined;
-    if (options.faults) |path| schedule.open(&board, io, path) catch return 2;
+    if (options.faults) |path| schedule.open(&board, io, options.state.host(), path) catch return 2;
     defer if (options.faults != null) schedule.deinit();
     if (options.count_pc_len != 0) for (options.count_pc[0..options.count_pc_len]) |at| parts.hits.want(at & ~@as(u32, 1));
     const ends: zig_run.Ends = .{
