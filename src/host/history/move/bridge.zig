@@ -170,6 +170,10 @@ fn prove(context: Context, record: intent.Record) !wire.Proof {
     return proof.digest;
 }
 
+fn rootPath(allocator: std.mem.Allocator, windows_peer: bool, path: []const u8) ![]u8 {
+    return if (windows_peer) wire.windowsPath(allocator, path) else allocator.dupe(u8, path);
+}
+
 fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: verify.Sent, child: *Proxy) !void {
     const base = context.source;
     const allocator = base.allocator;
@@ -178,9 +182,12 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
     // was the verified peer when it was checked on disk.
     try child.verifyExecutable(peer.executable, peer.sha256);
     if (!std.mem.eql(u8, &peer.sha256, &try provider.digest(io, peer.executable))) return error.PeerDigestMismatch;
-    const source = try wire.windowsPath(allocator, base.path);
+    // A PE peer runs the Windows side through WSL interop and needs drive
+    // paths; an ELF peer is this platform and takes the native paths.
+    const windows_peer = try provider.pe(io, peer.executable);
+    const source = try rootPath(allocator, windows_peer, base.path);
     defer allocator.free(source);
-    const target = try wire.windowsPath(allocator, context.target.path);
+    const target = try rootPath(allocator, windows_peer, context.target.path);
     defer allocator.free(target);
     const request: wire.Request = .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .source = .{ .path = source, .marker = try Context.marker(base) }, .target = .{ .path = target, .marker = try Context.marker(context.target) }, .from = record.from, .to = record.to, .ready_ms = peer.bounds.ready, .commit_ms = peer.bounds.commit, .drain_ms = peer.bounds.drain };
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = 0, .reply = .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .phase = .starting, .pid = 0, .birth = 0, .source_inode = 0, .source_root = 0, .target_root = 0 } });
