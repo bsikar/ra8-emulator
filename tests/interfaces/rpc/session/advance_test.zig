@@ -312,7 +312,7 @@ const Dual = struct {
     fn open(self: *Dual) !void {
         self.harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = dual_cpu0 });
         errdefer self.harness.deinit();
-        try self.second.open(std.testing.allocator, std.testing.io, &self.harness, dual_cpu1);
+        try self.second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &self.harness, dual_cpu1);
         self.harness.state.edge.idle_skip = false;
         self.context = .{ .session = self.harness.session(), .scratch = &self.scratch };
     }
