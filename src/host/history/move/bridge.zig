@@ -9,6 +9,7 @@ const name = @import("../name.zig");
 const Context = @import("context.zig").Context;
 const Proxy = @import("proxy.zig").Proxy;
 const Admission = @import("deadline.zig").Admission;
+const deadline = @import("deadline.zig");
 
 pub fn move(context: Context, from: []const u8, to: []const u8, purpose: []const u8) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
@@ -50,53 +51,59 @@ fn prepare(context: Context, peer: provider.Provider, admission: Admission) !Pro
 }
 
 pub fn settle(context: Context, peer: ?provider.Provider, record: intent.Record) !void {
+    const io = context.source.io;
+    // Recovery is an admission of its own, so every verdict published here
+    // obeys the same settle bound a first exchange obeys.
+    const bounds = if (peer) |p| p.bounds else wire.Bounds{};
+    const admission = if (peer) |p| try admit(io, p) else Admission.begin(io, bounds.total());
+    const verdict = admission.phase(io, bounds.settle);
     try intent.scope(context, record, record.from, record.to);
     if (try intent.arrived(context, record)) {
-        return finish(context, record);
+        return finish(context, record, verdict);
     }
-    if (!record.committed) return intent.cancel(context, record);
+    if (!record.committed) return intent.cancel(context, record, verdict);
     try context.validate(record.from);
     const configured = peer orelse return error.NativeMoveUnknown;
-    const admission = try admit(context.source.io, configured);
     var child = try prepare(context, configured, admission);
     defer child.close();
     try exchange(context, configured, record, &child, admission);
 }
 
-fn complete(context: Context, record: intent.Record, status: wire.Status) !void {
+fn complete(context: Context, record: intent.Record, status: wire.Status, verdict: deadline.Deadline) !void {
     switch (status) {
         .success => {
             if (!try intent.arrived(context, record)) return error.IdentityConflict;
-            try finish(context, record);
+            try finish(context, record, verdict);
         },
         .collision => {
-            try intent.cancel(context, record);
+            try intent.cancel(context, record, verdict);
             return error.PathAlreadyExists;
         },
         .cross_device => {
-            try intent.cancel(context, record);
+            try intent.cancel(context, record, verdict);
             return error.CrossDevice;
         },
         .refused => {
-            try intent.cancel(context, record);
+            try intent.cancel(context, record, verdict);
             return error.NativeMoveRefused;
         },
         // The peer's window closed before COMMIT reached it; nothing moved.
         .expired => {
-            try intent.cancel(context, record);
+            try intent.cancel(context, record, verdict);
             return error.NativeMoveExpired;
         },
     }
 }
 
-fn finish(context: Context, record: intent.Record) !void {
+fn finish(context: Context, record: intent.Record, verdict: deadline.Deadline) !void {
     try context.authorized(record.from);
     try context.source.checkMarked();
     try context.target.checkMarked();
     try Context.owned(context.target, record.to);
+    try verdict.live(context.source.io);
     try @import("file.zig").syncDir(context.target.dir);
     try @import("file.zig").syncDir(context.source.dir);
-    try intent.cleanup(context, record, true);
+    try intent.cleanup(context, record, true, verdict);
 }
 
 fn exchange(context: Context, peer: provider.Provider, record: intent.Record, child: *Proxy, admission: Admission) !void {
@@ -109,7 +116,7 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record, ch
         child.close();
         // Nothing was committed, so no COMMIT can arrive and nothing has
         // moved: the intent is cancelled whatever became of the child.
-        if (!flagged and admission.open(io)) intent.cancel(context, record) catch {};
+        if (!flagged and admission.open(io)) intent.cancel(context, record, admission.phase(io, peer.bounds.settle)) catch {};
     }
     try intent.scope(context, record, record.from, record.to);
     try context.validate(record.from);
@@ -117,29 +124,33 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record, ch
     try send(context, peer, record, sent, child);
     const ready = wire.read(wire.Reply, allocator, io, child.child.stdout.?, admission.phase(io, peer.bounds.ready)) catch |err| return if (err == error.DeadlineExceeded) error.NativePeerTimeout else err;
     defer ready.deinit();
-    // The peer opened its window before it wrote this reply, so both bounds
-    // here end no earlier than the peer's own unless the admission ends
-    // first, and then the caller only gives up sooner.
-    const window = admission.phase(io, peer.bounds.commit);
+    // The peer opened its window before it wrote this reply, so this bound
+    // ends no earlier than the peer's own unless the admission ends first,
+    // and then the caller only gives up sooner.
     const drained = admission.phase(io, @as(u64, peer.bounds.commit) + peer.bounds.drain);
     try verify.reply(sent, ready.value, .bound);
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = ready.value });
     try context.recheck(record.from, record.source, record.source_root, record.target_root);
-    if (window.left(io) == null) return error.NativePeerTimeout;
+    // COMMIT goes out only while the admission still covers the commit and
+    // drain phases both: a COMMIT written later could outlive the reply
+    // that settles it and strand the intent as unknown.
+    if (drained.left(io) == null) return error.NativePeerTimeout;
     try intent.commit(context, record);
     flagged = true;
-    child.commit(allocator, .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .commit = true }) catch |err| return publish(context, record, admission, try lost(context, record, err));
+    child.commit(allocator, .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .commit = true }) catch |err| return publish(context, record, admission, admission.phase(io, peer.bounds.settle), try lost(context, record, err));
     const done = wire.read(wire.Reply, allocator, io, child.child.stdout.?, drained) catch |err| {
         child.close();
-        return publish(context, record, admission, try lost(context, record, err));
+        return publish(context, record, admission, admission.phase(io, peer.bounds.settle), try lost(context, record, err));
     };
     defer done.deinit();
     try verify.reply(sent, done.value, .done);
     try verify.pair(ready.value, done.value);
     if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = done.value });
     const term = child.reap();
+    // The settle phase owns every verdict published after the reap.
+    const verdict = admission.phase(io, peer.bounds.settle);
     if (!admission.open(io)) return error.NativeMoveUnknown;
-    return outcome(context, record, done.value.status, term);
+    return outcome(context, record, done.value.status, term, verdict);
 }
 
 /// The caller's own reading of the intent through the directories it holds
@@ -177,7 +188,7 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
 /// Success may outlive reap: the verified arrival, checked by complete,
 /// settles that result even when the proxy is still draining. A watchdog
 /// drain exit is also allowed only for a success reply and verified arrival.
-pub fn outcome(context: Context, record: intent.Record, status: wire.Status, term: ?std.process.Child.Term) !void {
+pub fn outcome(context: Context, record: intent.Record, status: wire.Status, term: ?std.process.Child.Term, verdict: deadline.Deadline) !void {
     try context.source.checkMarked();
     try context.target.checkMarked();
     const exits = @import("windows.zig").exits;
@@ -191,15 +202,15 @@ pub fn outcome(context: Context, record: intent.Record, status: wire.Status, ter
         } else if (code != exits.rejected) return error.NativePeerFailed;
     } else if (status != .success) return error.NativeMoveUnknown;
     if (status == .success and !try intent.arrived(context, record)) return error.NativeMoveUnknown;
-    try complete(context, record, status);
+    try complete(context, record, status, verdict);
 }
 
 /// No verdict, arrival or cancellation, is published once the admission
 /// has ended. The intent stays for recovery, which is an admission of its
 /// own.
-pub fn publish(context: Context, record: intent.Record, admission: Admission, status: wire.Status) !void {
+pub fn publish(context: Context, record: intent.Record, admission: Admission, verdict: deadline.Deadline, status: wire.Status) !void {
     if (!admission.open(context.source.io)) return error.NativeMoveUnknown;
-    return complete(context, record, status);
+    return complete(context, record, status, verdict);
 }
 
 /// COMMIT was written and no done reply came back: the rename may have

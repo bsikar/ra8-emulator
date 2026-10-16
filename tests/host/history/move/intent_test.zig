@@ -89,12 +89,12 @@ test "native intent binds nonce and roots and cleans only its two recorded marke
     var buffer: history.name.Buffer = undefined;
     const anchor = try history.move.intent.leaf(&buffer, &session.id);
     try history.move.file.link(f.cache.dir, anchor, f.cache.dir, "anchor-alias");
-    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false));
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false, null));
     try f.cache.dir.deleteFile(fixture.io, "anchor-alias");
     try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
-    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false));
+    try std.testing.expectError(error.IdentityConflict, history.move.intent.cleanup(context, parsed.value, false, null));
     try session.dir.deleteFile(fixture.io, "note-alias");
-    try history.move.intent.cleanup(context, parsed.value, false);
+    try history.move.intent.cleanup(context, parsed.value, false, null);
     try std.testing.expect(!history.move.intent.pending(fixture.io, f.cache.dir, &session.id));
     var bytes: [64]u8 = undefined;
     try std.testing.expectEqualStrings("intent payload", try session.dir.readFile(fixture.io, "log/events", &bytes));
@@ -118,7 +118,7 @@ test "a synced cancellation survives interrupted cleanup and can never recommit"
         // Keep cleanup from unlinking a multiply named note. The actual
         // cancellation decision has to be durable before this failure.
         try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
-        try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, parsed.value, .expired, .{ .exited = history.move.windows.exits.rejected }));
+        try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, parsed.value, .expired, .{ .exited = history.move.windows.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
         var anchor_buffer: history.name.Buffer = undefined;
         const saved = try history.move.intent.read(fixture.allocator, fixture.io, f.cache.dir, try history.move.intent.leaf(&anchor_buffer, &id), true);
         defer saved.deinit();
@@ -197,7 +197,7 @@ test "version one intents remain unknown but verified rejection journals their c
     try std.testing.expect(saved.value.committed);
     try std.testing.expectError(error.NativeMoveUnknown, history.move.bridge.settle(context, null, saved.value));
     try history.move.file.link(session.dir, history.move.intent.note, session.dir, "note-alias");
-    try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, saved.value, .refused, .{ .exited = history.move.windows.exits.rejected }));
+    try std.testing.expectError(error.IdentityConflict, history.move.bridge.outcome(context, saved.value, .refused, .{ .exited = history.move.windows.exits.rejected }, history.move.deadline.Deadline.after(fixture.io, 2_000)));
     const cancelled = try history.move.intent.read(fixture.allocator, fixture.io, f.cache.dir, anchor, true);
     defer cancelled.deinit();
     try std.testing.expect(cancelled.value.cancelled and !cancelled.value.committed);

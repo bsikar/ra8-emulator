@@ -17,6 +17,12 @@ pub const Deadline = struct {
         return @intCast(@min(@divTrunc(ns + std.time.ns_per_ms - 1, std.time.ns_per_ms), std.math.maxInt(i32)));
     }
 
+    /// Fail once the bound has passed: a publication step may begin only
+    /// inside it.
+    pub fn live(self: Deadline, io: std.Io) !void {
+        if (self.left(io) == null) return error.DeadlineExceeded;
+    }
+
     /// The earlier of the two.
     pub fn min(self: Deadline, other: Deadline) Deadline {
         return if (self.end.durationTo(other.end).nanoseconds < 0) other else self;

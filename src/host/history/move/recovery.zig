@@ -2,6 +2,8 @@
 const std = @import("std");
 const h = @import("../root.zig");
 const intent = @import("intent.zig");
+const deadline = @import("deadline.zig");
+const wire = @import("wire.zig");
 const Context = @import("context.zig").Context;
 const Base = h.base.Base;
 
@@ -56,7 +58,9 @@ pub fn root(base: *const Base, id: []const u8) anyerror!void {
     if (!current.value.committed and !try intent.arrived(context, current.value)) {
         // Keep the source lease in its original root. A cancelled keep did
         // not arrive at the other root and must not retire source authority.
-        try intent.cancel(context, current.value);
+        // The cancellation is a settle-bounded publication of its own.
+        const settle_ms = (wire.Bounds{}).settle;
+        try intent.cancel(context, current.value, deadline.Deadline.after(base.io, settle_ms));
         if (arrived) |held| if (try empty(target, id)) {
             target_open = false;
             try h.lock.retire(base.io, target.dir, id, held);
