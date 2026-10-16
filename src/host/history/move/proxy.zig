@@ -131,9 +131,19 @@ pub const Proxy = struct {
     /// verified: /proc/<pid>/exe resolves to the inode the process actually
     /// runs from, so a swap on disk between the disk check and the spawn
     /// cannot pass for the peer. This is what makes the digest a
-    /// capability, not a claim about a path.
-    pub fn verifyExecutable(self: *const Proxy, expected: [32]u8) !void {
+    /// capability, not a claim about a path. A Windows PE binary is only
+    /// checked for what it is on disk: driven through WSL interop its
+    /// /proc entry resolves to the interop launcher, never to the exe, so
+    /// there the digest degrades honestly to the disk check.
+    pub fn verifyExecutable(self: *const Proxy, executable: []const u8, expected: [32]u8) !void {
         if (builtin.os.tag != .linux) return error.OperationUnsupported;
+        var magic: [2]u8 = undefined;
+        {
+            const disk = try std.Io.Dir.cwd().openFile(self.io, executable, .{ .follow_symlinks = false });
+            defer disk.close(self.io);
+            if (try disk.readPositionalAll(self.io, &magic, 0) != 2) return error.InvalidPeer;
+        }
+        if (std.mem.eql(u8, &magic, "MZ")) return;
         const pid = self.child.id orelse return error.ProcessHandleUnavailable;
         var path_buffer: [32]u8 = undefined;
         const path = std.fmt.bufPrint(&path_buffer, "/proc/{d}/exe", .{pid}) catch return error.ProcessHandleUnavailable;
