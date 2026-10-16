@@ -33,7 +33,7 @@ test {
     _ = @import("host/history/move/bridge_test.zig");
     _ = @import("host/history/move/recovery_test.zig");
     _ = @import("host/history/move/dispatch_test.zig");
-    _ = @import("host/history/move/windows_test.zig");
+    _ = @import("host/history/move/linux_test.zig");
     _ = @import("interfaces/cli/host/relocation_test.zig");
     _ = @import("host/history/name_test.zig");
     _ = @import("host/history/owner_test.zig");

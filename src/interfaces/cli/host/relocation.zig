@@ -5,7 +5,7 @@ const history = @import("ra8_host").history;
 pub fn peer(init: std.process.Init) !u8 {
     const argv = try init.minimal.args.toSlice(init.arena.allocator());
     if (argv.len != 2 or !std.mem.eql(u8, argv[1], "--internal-host-move")) return error.BadArguments;
-    return history.move.windows.peer(init.arena.allocator(), init.io);
+    return history.move.peer.peer(init.arena.allocator(), init.io);
 }
 
 pub fn capability(io: std.Io, executable: []const u8) !history.move.provider.Provider {

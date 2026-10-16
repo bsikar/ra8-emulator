@@ -201,7 +201,7 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
 pub fn outcome(context: Context, record: intent.Record, status: wire.Status, term: ?std.process.Child.Term, verdict: deadline.Deadline) !void {
     try context.source.checkMarked();
     try context.target.checkMarked();
-    const exits = @import("windows.zig").exits;
+    const exits = @import("peer.zig").exits;
     if (term) |ended| {
         const code = switch (ended) {
             .exited => |code| code,
