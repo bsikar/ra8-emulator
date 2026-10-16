@@ -127,6 +127,30 @@ pub const Proxy = struct {
         self.abandon();
     }
 
+    /// The child's running executable must still be the binary the caller
+    /// verified: /proc/<pid>/exe resolves to the inode the process actually
+    /// runs from, so a swap on disk between the disk check and the spawn
+    /// cannot pass for the peer. This is what makes the digest a
+    /// capability, not a claim about a path.
+    pub fn verifyExecutable(self: *const Proxy, expected: [32]u8) !void {
+        if (builtin.os.tag != .linux) return error.OperationUnsupported;
+        const pid = self.child.id orelse return error.ProcessHandleUnavailable;
+        var path_buffer: [32]u8 = undefined;
+        const path = std.fmt.bufPrint(&path_buffer, "/proc/{d}/exe", .{pid}) catch return error.ProcessHandleUnavailable;
+        const file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
+        defer file.close(self.io);
+        var hash = std.crypto.hash.sha2.Sha256.init(.{});
+        var bytes: [8192]u8 = undefined;
+        var offset: u64 = 0;
+        while (true) {
+            const count = try file.readPositionalAll(self.io, &bytes, offset);
+            if (count == 0) break;
+            hash.update(bytes[0..count]);
+            offset += count;
+        }
+        if (!std.mem.eql(u8, &hash.finalResult(), &expected)) return error.PeerDigestMismatch;
+    }
+
     /// One bounded wait for the child to end, then reap it. False leaves it
     /// owned with the bound only spent, never restarted.
     fn wait(self: *Proxy, ms: u32) bool {

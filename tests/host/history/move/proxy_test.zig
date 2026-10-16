@@ -52,6 +52,19 @@ fn becomes(pid: i32, letter: u8) bool {
     return false;
 }
 
+test "the running child's executable digest is a capability, not a path claim" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var child = try start(&.{"/bin/cat"});
+    try child.fits();
+    const expected = try move.provider.digest(io, "/bin/cat");
+    try child.verifyExecutable(expected);
+    var wrong: [32]u8 = expected;
+    wrong[0] ^= 0xff;
+    try std.testing.expectError(error.PeerDigestMismatch, child.verifyExecutable(wrong));
+    try std.testing.expect(child.reap().?.success());
+    child.close();
+}
+
 test "a child that ends with its input is reaped inside the bound unsignalled" {
     if (builtin.os.tag != .linux) return error.SkipZigTest;
     var child = try start(&.{"/bin/cat"});
