@@ -42,11 +42,25 @@ pub const Proxy = struct {
     pub fn own(io: std.Io, spawned: std.process.Child, reap_ms: u32, admission: ?deadline.Admission) !Proxy {
         if (builtin.os.tag != .linux) return error.OperationUnsupported;
         var child = spawned;
-        errdefer discard(io, &child);
         const opened = linux.pidfd_open(child.id orelse return error.ProcessHandleUnavailable, 0);
-        if (linux.errno(opened) != .SUCCESS) return error.ProcessHandleUnavailable;
+        if (linux.errno(opened) != .SUCCESS) {
+            // Without a pidfd this child can never be signalled safely, so
+            // it is reaped unsignalled once its stdin closes and the move
+            // is refused.
+            if (child.stdin) |pipe| pipe.close(io);
+            child.stdin = null;
+            _ = child.wait(io) catch {};
+            return error.ProcessHandleUnavailable;
+        }
         const handle: linux.fd_t = @intCast(opened);
-        errdefer _ = linux.close(handle);
+        errdefer {
+            // The pidfd names the process itself, so this kill cannot
+            // reach a recycled PID; an already-dead child answers ESRCH,
+            // which the reap below absorbs.
+            _ = linux.pidfd_send_signal(handle, .KILL, null, 0);
+            _ = child.wait(io) catch {};
+            _ = linux.close(handle);
+        }
         const collector = try Collector.start(io);
         return .{ .io = io, .child = child, .handle = handle, .collector = collector, .reap_ms = reap_ms, .admission = admission };
     }
@@ -165,11 +179,4 @@ pub fn reapable() !void {
     var old: linux.Sigaction = undefined;
     if (linux.errno(linux.sigaction(.CHLD, null, &old)) != .SUCCESS) return error.Unexpected;
     if (old.handler.handler == linux.SIG.IGN or old.flags & linux.SA.NOCLDWAIT != 0) return error.ChildReapingDisabled;
-}
-
-/// Only for a child that was never sent anything.
-fn discard(io: std.Io, child: *std.process.Child) void {
-    const pid = child.id orelse return;
-    _ = linux.kill(pid, .KILL);
-    _ = child.wait(io) catch {};
 }
