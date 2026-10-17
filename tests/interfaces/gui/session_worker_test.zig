@@ -55,15 +55,18 @@ const Bench = struct {
     }
 };
 
-test "the session greets the shell's link from its own thread" {
+test "the native link connects at open and answers nothing before the worker runs" {
     var bench: Bench = .{};
     try bench.open();
     defer bench.deinit();
-    // Nothing answers until the thread runs: the greeting waits on the wire.
+    // openNative reports the session connected at once, with the protocol's
+    // version and capability bits; the mailbox answers only once the
+    // worker's thread runs.
+    try std.testing.expect(bench.link.state == .connected);
+    try std.testing.expect(bench.link.caps() != 0);
     try std.testing.expect(bench.link.pump() == null);
-    try std.testing.expect(bench.link.state == .connecting);
     try bench.worker.start();
-    try bench.greeted();
+    try std.testing.expect(bench.link.pump() == null);
     try bench.worker.server().answer();
 }
 
