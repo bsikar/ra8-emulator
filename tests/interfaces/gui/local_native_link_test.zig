@@ -24,13 +24,15 @@ test "a typed request answers through the native link" {
     const gpa = std.testing.allocator;
     var setup = try opened(gpa);
     defer setup.deinit();
-    var native = local_native_link.Native.init(std.testing.io, gpa, &setup.context);
+    var host = gui_app.wall_clock.Host.init(std.testing.io);
+    const clock = host.clock();
+    var native = local_native_link.Native.init(std.testing.io, gpa, clock, &setup.context);
     defer native.deinit();
     var link: session_link.Link = undefined;
     link.openNative(&native);
 
     const id = try link.send(proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = .pc });
-    try native.serve();
+    _ = try native.serve();
     const arrival = link.pump().?;
     try std.testing.expectEqualStrings("response", @tagName(arrival));
     try std.testing.expectEqual(id, arrival.response.id);
@@ -43,7 +45,9 @@ test "a full mailbox refuses more sends until the session drains it" {
     const gpa = std.testing.allocator;
     var setup = try opened(gpa);
     defer setup.deinit();
-    var native = local_native_link.Native.init(std.testing.io, gpa, &setup.context);
+    var host = gui_app.wall_clock.Host.init(std.testing.io);
+    const clock = host.clock();
+    var native = local_native_link.Native.init(std.testing.io, gpa, clock, &setup.context);
     defer native.deinit();
     var link: session_link.Link = undefined;
     link.openNative(&native);
@@ -53,7 +57,7 @@ test "a full mailbox refuses more sends until the session drains it" {
         _ = try link.send(proto.Now, .now, .{ .core = .cpu0 });
     }
     try std.testing.expectError(error.TableFull, link.send(proto.Now, .now, .{ .core = .cpu0 }));
-    try native.serve();
+    _ = try native.serve();
     var taken: usize = 0;
     while (link.pump()) |arrival| {
         try std.testing.expectEqualStrings("response", @tagName(arrival));
@@ -68,20 +72,22 @@ test "the session's stop event reaches the window's pump" {
     const gpa = std.testing.allocator;
     var setup = try opened(gpa);
     defer setup.deinit();
-    var native = local_native_link.Native.init(std.testing.io, gpa, &setup.context);
+    var host = gui_app.wall_clock.Host.init(std.testing.io);
+    const clock = host.clock();
+    var native = local_native_link.Native.init(std.testing.io, gpa, clock, &setup.context);
     defer native.deinit();
     var link: session_link.Link = undefined;
     link.openNative(&native);
 
     _ = try link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
-    try native.serve();
+    _ = try native.serve();
     const ack = link.pump().?;
     try std.testing.expectEqualStrings("response", @tagName(ack));
 
     _ = try link.send(proto.CoreOnly, .step, .{ .core = .cpu0 });
     var stop_seen = false;
     while (!stop_seen) {
-        try native.serve();
+        _ = try native.serve();
         const arrival = link.pump() orelse break;
         if (arrival == .event and arrival.event.topic == @backingInt(proto.Topic.stop)) {
             const stopped = try proto.decode(proto.Stopped, arrival.event.payload);

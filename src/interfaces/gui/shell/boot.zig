@@ -43,7 +43,8 @@ pub const Boot = struct {
         try self.session.open(self.allocator, self.io, image.path, null);
         errdefer self.session.deinit();
         try self.session.setup.stageApps(self.io, self.allocator, self.apps);
-        self.link.open(if (self.apart) self.worker.bind(self.io, self.allocator, &self.session, self.clock) else self.session.transport(), self.rx, self.tx);
+        if (self.apart) self.worker.bind(self.io, self.allocator, &self.session, self.clock);
+        if (self.apart) self.link.openNative(&self.worker.native) else self.link.open(self.session.transport(), self.rx, self.tx);
         const shell = self.shell;
         shell_hosted.bindHosted(&self.hosted, self.allocator, self.io, self.env, self.window, image.path, &self.session, &self.link, shell);
         shell.pick = shell_rebuild.launch(self.allocator, self.io, image.path, self.apps, &self.session, shell, &self.hosted, &self.link, self.rx, self.tx, self.store);
