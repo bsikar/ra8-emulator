@@ -249,7 +249,8 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var worker: session_worker.Worker = undefined;
     defer if (apart(args)) worker.deinit();
     var link: session_link.Link = undefined;
-    link.open(if (apart(args)) worker.bind(io, allocator, &session, host_clock.clock()) else session.transport(), rx, tx);
+    if (apart(args)) worker.bind(io, allocator, &session, host_clock.clock());
+    if (apart(args)) link.openNative(&worker.native) else link.open(session.transport(), rx, tx);
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     if (cap) |c| c.bind(&shell);
     defer if (cap) |c| c.unbind();
