@@ -98,6 +98,19 @@ pub const Link = struct {
         return .{ .ok = try self.gpa.dupe(u8, bytes) };
     }
 
+    /// How many replies wait to be taken; the mailbox's dispatcher reads
+    /// it to keep the reply queue inside the pending table's cap.
+    pub fn pendingCount(self: *Link) usize {
+        return self.responses.items.len;
+    }
+
+    /// The caller moved the last taken arrival's payload onto its own
+    /// bookkeeping; the link forgets it, so the bytes are freed once, by
+    /// the caller's next pump.
+    pub fn releaseTaken(self: *Link) void {
+        self.taken = null;
+    }
+
     /// Take one arrival the session owes: a reply, or the next event the
     /// feeds queued; null once everything owed is taken. A payload slice in
     /// the arrival lives until the next pump.
