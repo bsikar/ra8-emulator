@@ -71,6 +71,7 @@ test {
     _ = @import("interfaces/gui/local_session_test.zig");
     _ = @import("interfaces/gui/session_worker_test.zig");
     _ = @import("interfaces/gui/shared_wire_test.zig");
+    _ = @import("interfaces/gui/local_native_test.zig");
     _ = @import("interfaces/gui/preview_relay_test.zig");
     _ = @import("interfaces/gui/shell/startup_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");

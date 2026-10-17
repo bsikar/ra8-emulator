@@ -39,7 +39,7 @@ pub const app_codes = handlers.app_codes;
 pub const forget = handlers.forget;
 
 const M = proto.Method;
-const routes = .{
+pub const routes = .{
     .{ @backingInt(M.load), handlers.load },
     .{ @backingInt(M.load_begin), session_chunks.loadBegin },
     .{ @backingInt(M.load_chunk), session_chunks.loadChunk },
@@ -114,11 +114,7 @@ pub const Host = struct {
     pub fn poll(self: *Host, tx: []u8) rpc.Error!rpc.Step {
         const step = try self.server.poll(tx);
         const context = self.server.context;
-        try uart_feed.pump(context, &self.server, tx);
-        try lcd_feed.pump(context, &self.server, tx);
-        try event_feed.pump(context, &self.server, tx);
-        try trace_feed.pump(context, &self.server, tx);
-        try pumpTransport(context, &self.server, tx);
+        try pumpFeeds(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;
             if (context.wants(stopped.core, .stop)) {
@@ -129,12 +125,24 @@ pub const Host = struct {
     }
 };
 
+/// Send everything the connection owes between frames: the UART bytes, the
+/// LCD dirty rectangles, the session events, the RTOS events, and one
+/// bounded pump of the transport plane's active job. `Host.poll` and the
+/// native local GUI link (slice 15) both use this order.
+pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
+    try uart_feed.pump(context, server, tx);
+    try lcd_feed.pump(context, server, tx);
+    try event_feed.pump(context, server, tx);
+    try trace_feed.pump(context, server, tx);
+    try pumpTransport(context, server, tx);
+}
+
 /// Drive the transport's active job one bounded slice and report on the
 /// transport topic (RA8EMU-1196, slice 14): a `TransportEvent` when a
 /// command changed the plane's epoch, and the completion of the advance
 /// this connection queued with `advance_async`, whether it finished or a
 /// newer command preempted it.
-fn pumpTransport(context: *Context, server: *Server, tx: []u8) !void {
+pub fn pumpTransport(context: *Context, server: anytype, tx: []u8) !void {
     const plane = context.transport orelse return;
     const wall = context.wall orelse return;
     if (plane.job == null and context.advance_ticket == null) return;
