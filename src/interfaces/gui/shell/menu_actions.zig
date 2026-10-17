@@ -72,7 +72,7 @@ pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void 
         },
         .choice => |choice| if (shell.pick) |pick| pick.choose(choice),
         .toggle => |kind| togglePane(shell, kind),
-        .recent => |at| if (shell.recent_menu) |m| if (m.recents) |list| if (list.path(at)) |path| if (shell.files) |files| if (shell.link) |link| files.picked(path, link, &shell.status),
+        .recent => |at| if (shell.recent_menu) |m| if (m.recents) |list| if (list.path(at)) |path| shell.openImage(path),
     }
 }
 

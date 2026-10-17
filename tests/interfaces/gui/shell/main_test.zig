@@ -17,28 +17,34 @@ const image = "tests/fixtures/fpu/fp_basic.elf";
 
 test "an image alone runs on the local host" {
     const args = try shell_main.parse(&.{ "ra8_gui", "app.elf" });
-    try std.testing.expectEqualStrings("app.elf", args.image);
+    try std.testing.expectEqualStrings("app.elf", args.image.?);
     try std.testing.expectEqual(@as(?[]const u8, null), args.host);
     try std.testing.expectEqual(Profile.local, try shell_main.pick(std.testing.allocator, std.testing.io, &empty_env, args));
 }
 
 test "the shell word in front changes nothing" {
     const args = try shell_main.parse(&.{ "ra8_gui", "shell", "--host", "lab", "app.elf" });
-    try std.testing.expectEqualStrings("app.elf", args.image);
+    try std.testing.expectEqualStrings("app.elf", args.image.?);
     try std.testing.expectEqualStrings("lab", args.host.?);
 }
 
 test "--host and --hosts are kept in either order around the image" {
     const args = try shell_main.parse(&.{ "ra8_gui", "--hosts", "/tmp/hosts", "app.elf", "--host", "lab" });
-    try std.testing.expectEqualStrings("app.elf", args.image);
+    try std.testing.expectEqualStrings("app.elf", args.image.?);
     try std.testing.expectEqualStrings("lab", args.host.?);
     try std.testing.expectEqualStrings("/tmp/hosts", args.hosts.?);
 }
 
-test "a missing image, a dangling flag, an unknown flag or a second image is refused" {
+test "no image opens the shell empty" {
+    try std.testing.expectEqual(@as(?[]const u8, null), (try shell_main.parse(&.{"ra8_gui"})).image);
+    try std.testing.expectEqual(@as(?[]const u8, null), (try shell_main.parse(&.{ "ra8_gui", "shell", "--theme", "light" })).image);
+}
+
+test "a run nobody watches, a dangling flag, an unknown flag or a second image is refused" {
     const bad = [_][]const []const u8{
-        &.{"ra8_gui"},
-        &.{ "ra8_gui", "shell" },
+        &.{ "ra8_gui", "--headless" },
+        &.{ "ra8_gui", "--frames", "3" },
+        &.{ "ra8_gui", "--gui-script", "run.txt" },
         &.{ "ra8_gui", "app.elf", "--host" },
         &.{ "ra8_gui", "--fast", "app.elf" },
         &.{ "ra8_gui", "a.elf", "b.elf" },
@@ -187,7 +193,7 @@ test "--frames fails once the session is gone instead of waiting for a load" {
     shell.server = shell_server.served(&session);
     var window = Headless.init(gpa, 480, 320);
     defer window.deinit();
-    try std.testing.expectError(error.ImageNotLoaded, shell_main.drive(std.testing.io, &shell, window.platform(), image, "", 4));
+    try std.testing.expectError(error.ImageNotLoaded, shell_main.drive(std.testing.io, &shell, window.platform(), &@as(?gui_app.shell.first_image.Image, .{ .path = image, .bytes = "" }), 4));
 }
 
 test "a bad command line or an unreadable image never opens the window" {
@@ -217,4 +223,15 @@ test "--headless runs without opener" {
     const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{ "ra8_gui", "--headless", "--frames", "3", image }, .{ .open = Window.none, .close = Window.close }, null);
     try std.testing.expectEqual(@as(u8, 0), code);
     try std.testing.expectEqual(@as(u32, 0), Window.opens);
+}
+
+test "ra8_gui with no image opens the shell empty and ends when the window closes" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    Window.reset(3);
+    const code = try shell_main.run(arena.allocator(), std.testing.io, &empty_env, &.{"ra8_gui"}, .{ .open = Window.open, .close = Window.close }, null);
+    try std.testing.expectEqual(@as(u8, 0), code);
+    try std.testing.expectEqual(@as(u32, 3), Window.presents);
+    try std.testing.expectEqual(@as(u32, 1), Window.opens);
+    try std.testing.expectEqual(@as(u32, 1), Window.closes);
 }

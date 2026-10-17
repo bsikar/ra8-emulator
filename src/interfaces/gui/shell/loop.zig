@@ -53,6 +53,11 @@ const session_worker = @import("../session_worker.zig");
 
 /// Most arrivals taken off the link in one frame, so a chatty session cannot starve the window.
 pub const max_arrivals: usize = 64;
+/// Starts the session on the first image opened (boot.zig).
+pub const Boot = struct {
+    context: *anyopaque,
+    startFn: *const fn (context: *anyopaque, path: []const u8) void,
+};
 pub const Shell = struct {
     allocator: std.mem.Allocator,
     layout: pane_layout.Layout,
@@ -103,6 +108,9 @@ pub const Shell = struct {
     snaps: shell_snaps.Snapshots = undefined,
     /// The session when it is served in this process; null for a remote one.
     server: ?Server = null,
+    /// Starts the session when the first image opens while none is up;
+    /// null for a shell that never starts its own.
+    boot: ?Boot = null,
     /// The per-user listener outside clients connect to (RA8EMU-1156).
     listener: ?Server = null,
     /// The thread the local session answers on, when it has one of its own.
@@ -239,12 +247,20 @@ pub const Shell = struct {
                 if (self.memory_field) |field| _ = field.handle(event);
             },
             .picked, .dropped => |path| {
-                if (self.files) |files| if (self.link) |link| files.picked(path, link, &self.status);
+                self.openImage(path);
                 if (self.map) |map| map.build(path);
             },
             .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
             else => {},
         }
+    }
+
+    /// Opens `path`: loaded on the session, or the session started on it
+    /// when none is up yet.
+    pub fn openImage(self: *Shell, path: []const u8) void {
+        if (self.link) |link| {
+            if (self.files) |files| files.picked(path, link, &self.status);
+        } else if (self.boot) |boot| boot.startFn(boot.context, path);
     }
 
     /// A pane changed the device list: the shell's rows are stale.

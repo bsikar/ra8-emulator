@@ -1,17 +1,16 @@
 //! ra8_gui: the debugger GUI (RA8EMU-202).
 //!
-//! Run with an image to debug:
+//! Run with an image to debug, or with none and open one from File > Open
+//! ELF (Cmd+O), a drop or the recents:
 //!
 //!   ra8_gui path/to/firmware.elf
+//!   ra8_gui
 //!   ra8_gui --headless --gui-script test_run.txt --gui-video-out out.mp4 firmware.elf
 //!
-//! Opens an SDL window, serves the image on a local session (local_session.zig)
+//! Opens an SDL window, serves the image on a local session (boot.zig)
 //! and draws the debugger shell (shell/loop.zig).
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
-const session_link = @import("../session_link.zig");
-const local_session = @import("../local_session.zig");
-const session_worker = @import("../session_worker.zig");
 const wall_clock = @import("../wall_clock.zig");
 const render_driver = @import("../render_driver.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
@@ -23,7 +22,6 @@ const shell_loop = @import("loop.zig");
 const shell_window = @import("window_store.zig");
 const shell_settings = @import("settings_page.zig");
 const shell_layout = @import("layout_store.zig");
-const shell_hosted = @import("hosted.zig");
 const shell_time = @import("time.zig");
 const shell_console = @import("console.zig");
 const shell_board = @import("board/board.zig");
@@ -45,7 +43,6 @@ const shell_memory_field = @import("memory_field.zig");
 const shell_breaks = @import("breaks.zig");
 const shell_open = @import("open.zig");
 const shell_panes = @import("panes.zig");
-const shell_rebuild = @import("rebuild.zig");
 const shell_recents = @import("recents.zig");
 const shell_recent_menu = @import("recent_menu.zig");
 const shell_board_pick = @import("board_pick.zig");
@@ -57,6 +54,8 @@ const host_listener = @import("ra8_rpc").host_listener;
 const script_mod = @import("../script/script.zig");
 const video_mod = @import("../video/video.zig");
 const args_mod = @import("args.zig");
+const first_image = @import("first_image.zig");
+const shell_boot = @import("boot.zig");
 
 pub const Args = args_mod.Args;
 pub const parse = args_mod.parse;
@@ -64,7 +63,6 @@ pub const pick = args_mod.pick;
 pub const usage = args_mod.usage;
 
 const Env = proto.Client.Env;
-const max_image: usize = 64 * 1024 * 1024;
 
 const WindowBackend = struct {
     platform: platform.Platform,
@@ -113,10 +111,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
         std.debug.print("ra8_gui: focused the running emulator\n", .{});
         return 0;
     } else |_| {}
-    const bytes = std.Io.Dir.cwd().readFileAlloc(io, args.image, allocator, .limited(max_image)) catch |err| {
-        std.debug.print("cannot read {s}: {s}\n", .{ args.image, @errorName(err) });
-        return 1;
-    };
+    const named: ?first_image.Image = if (args.image) |path| first_image.read(allocator, io, path) orelse return 1 else null;
     render_driver.override = args.render_driver;
 
     var window_store = shell_window.Store{ .io = io, .allocator = allocator, .dir = prefs };
@@ -151,29 +146,20 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     cap.show_cursor = args.show_cursor;
 
     var startup = args.startup;
-    local(allocator, io, env, cap.platform(), &cap, args, &startup, bytes, prefs) catch |err| switch (err) {
+    const shown = if (named) |image| image.path else "the image";
+    local(allocator, io, env, cap.platform(), &cap, args, &startup, named, prefs) catch |err| switch (err) {
         error.ImageNotLoaded => {
-            std.debug.print("ra8_gui: the session did not load {s}\n", .{args.image});
+            std.debug.print("ra8_gui: the session did not load {s}\n", .{shown});
             return 1;
         },
         error.Oversize => {
-            std.debug.print("ra8_gui: {s} is {d} bytes, and the session takes an image of at most {d}\n", .{ args.image, bytes.len, chunked.max_image });
+            std.debug.print("ra8_gui: {s} is larger than the {d} bytes a session takes\n", .{ shown, chunked.max_image });
             return 1;
         },
         else => return err,
     };
     window_store.save(shell_window.capture(backend.platform));
     return 0;
-}
-
-fn getCameraPreview(ctx: *anyopaque) ?shell_camera.PreviewFrame {
-    const session: *local_session.LocalSession = @ptrCast(@alignCast(ctx));
-    const prev = session.cameraPreview() orelse return null;
-    return .{
-        .width = prev.width,
-        .height = prev.height,
-        .pixels = prev.pixels,
-    };
 }
 
 const ShellFeeds = struct {
@@ -234,20 +220,13 @@ const ShellFeeds = struct {
     }
 };
 
-fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, cap: ?*video_mod.capture.Capture, args: Args, startup: *shell_startup.Startup, bytes: []const u8, prefs: ?[]const u8) !void {
-    var session: local_session.LocalSession = undefined;
-    try session.open(allocator, io, args.image, null);
-    defer session.deinit();
-    try session.setup.stageApps(io, allocator, args.apps[0..args.app_count]);
-    var hosted: ?shell_hosted.Hosted = null;
-    defer if (hosted) |*h| h.deinit();
+fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, window: platform.Platform, cap: ?*video_mod.capture.Capture, args: Args, startup: *shell_startup.Startup, image: ?first_image.Image, prefs: ?[]const u8) !void {
+    var host_clock = wall_clock.Host.init(io);
+    var board_store = shell_board_store.Store{ .io = io, .allocator = allocator, .dir = prefs };
     const rx = try allocator.alloc(u8, 2 * Env.max_frame);
     const tx = try allocator.alloc(u8, Env.max_frame);
-    var host_clock = wall_clock.Host.init(io);
-    var worker: session_worker.Worker = undefined;
-    defer if (apart(args)) worker.deinit();
-    var link: session_link.Link = undefined;
-    link.open(if (apart(args)) worker.bind(io, allocator, &session, host_clock.clock()) else session.transport(), rx, tx);
+    var boot: shell_boot.Boot = .{ .allocator = allocator, .io = io, .env = env, .window = window, .apps = args.apps[0..args.app_count], .apart = apart(args), .clock = host_clock.clock(), .rx = rx, .tx = tx, .store = &board_store };
+    defer boot.deinit();
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     if (cap) |c| c.bind(&shell);
     defer if (cap) |c| c.unbind();
@@ -259,11 +238,10 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var layout_store = shell_layout.Store{ .io = io, .allocator = allocator, .dir = prefs };
     layout_store.restore(&shell.layout); // the saved layout replaces the default
     defer shell.deinit();
-    shell_hosted.bindHosted(&hosted, allocator, io, env, window, args.image, &session, &link, &shell);
-    var board_store = shell_board_store.Store{ .io = io, .allocator = allocator, .dir = prefs };
+    boot.shell = &shell;
+    shell.boot = boot.hook();
     var recent_store = shell_recents.Store{ .io = io, .allocator = allocator, .dir = prefs };
     var recent_list = recent_store.restore();
-    shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, rx, tx, &board_store);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
     shell.time = &time;
@@ -279,7 +257,6 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.devices = &feeds.devices;
     shell.faults = &feeds.faults;
     var camera = shell_camera.Camera.opened(io);
-    camera.preview_provider = .{ .context = &session, .previewFn = getCameraPreview };
     if (args.camera) |spec| shell_camera.start(&camera, spec);
     shell.camera = &camera;
     shell.startup = startup;
@@ -303,28 +280,29 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var map: shell_map.State = .{ .allocator = allocator, .io = io };
     defer map.deinit();
     shell.map = &map;
-    map.build(args.image);
+    if (image) |named| map.build(named.path);
     var files: shell_open.Open = .{ .io = io, .allocator = allocator, .history = &recent_list };
     shell.files = &files;
     var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
     shell.recent_menu = &recent_menu;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &registers, .edit = &edit, .memory = &memory, .memory_field = &feeds.memory_field, .code = &code, .breaks = &breaks, .map = &map, .stack = &stack, .timeline = &shell.timeline.?, .source = &source };
     shell.painter = panes.painter();
-    if (apart(args)) try worker.serveShell(&shell);
-    try driveAndSave(io, &shell, window, args.image, bytes, args.frames, &layout_store, &recent_store, recent_list, &link);
+    if (image) |named| try boot.start(named);
+    try driveAndSave(io, &shell, window, &boot, args.frames, &layout_store, &recent_store, recent_list);
 }
 
-fn driveAndSave(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, frames: ?u32, layout_store: *const shell_layout.Store, recent_store: *const shell_recents.Store, recent_list: shell_recents.List, link: *session_link.Link) !void {
-    try drive(io, shell, window, path, bytes, frames);
+fn driveAndSave(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, boot: *const shell_boot.Boot, frames: ?u32, layout_store: *const shell_layout.Store, recent_store: *const shell_recents.Store, recent_list: shell_recents.List) !void {
+    try drive(io, shell, window, &boot.image, frames);
     layout_store.save(&shell.layout);
     recent_store.save(recent_list);
-    link.close();
 }
 
-pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, path: []const u8, bytes: []const u8, frames: ?u32) !void {
+/// Runs the shell until its window closes, loading `first` once the
+/// session greets. A shell with no session yet runs on empty until the
+/// first image opened starts one (boot.zig) and fills `first`.
+pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, first: *const ?first_image.Image, frames: ?u32) !void {
     var sent = false;
     var drawn: u32 = 0;
-    if (shell.memory_field) |field| field.image = shell_memory_field.Image.init(bytes) catch null;
     var pace = wall_clock.Host.init(io);
     const clock = pace.clock();
     var pacing: shell_pace.Pace = .{};
@@ -334,7 +312,11 @@ pub fn drive(io: std.Io, shell: *shell_loop.Shell, window: platform.Platform, pa
         if (!try shell.step(window)) return;
         if (shell.state() == .connected and (!sent or reloadDue(shell))) {
             const link = shell.link orelse return;
-            try shell.status.load(link, path, bytes);
+            const image = first.* orelse return;
+            if (!sent) if (shell.memory_field) |field| {
+                field.image = shell_memory_field.Image.init(image.bytes) catch null;
+            };
+            try shell.status.load(link, image.path, image.bytes);
             sent = true;
             if (shell.pick) |picked| picked.reload = false;
         }
