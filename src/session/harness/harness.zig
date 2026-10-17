@@ -50,30 +50,7 @@ pub const limits = struct {
     pub const max_input_bytes = 1024 * 1024;
 };
 
-pub const Options = struct {
-    elf_path: []const u8,
-    device: part.Part = .ra8p1,
-    input_script: ?[]const u8 = null,
-    /// The board profile's text (RA8EMU-1152); null is the shipped EK-RA8D2
-    /// default. Its labels point into the caller's text and outlive it.
-    board_profile: ?[]const u8 = null,
-    /// Where snapshots live (RA8EMU-1175); null keeps bare names in the working directory.
-    state_dir: ?[]const u8 = null,
-    /// How many stops the rewind history keeps (RA8EMU-1170); the oldest falls off past it.
-    history_frames: u32 = 240,
-    settle_window_ns: u64 = 50_000_000,
-    /// Whether the boundary stretches across idle sleeps (RA8EMU-1120).
-    idle_skip: bool = true,
-    /// The run's `panel_vsync` config (RA8EMU R9), stored the way a plain run's fit stores it.
-    panel_vsync: ?glcdc_vsync.Config = null,
-    /// The host directory the run's file reads and writes open against
-    /// (RA8EMU-968); null falls back to the process cwd for host tests.
-    root: ?std.Io.Dir = null,
-    /// The directory host file access resolves through, never `cwd()` directly.
-    pub fn host(self: Options) std.Io.Dir {
-        return self.root orelse std.Io.Dir.cwd();
-    }
-};
+pub const Options = @import("options.zig").Options;
 
 const LoaderState = @import("loader_state.zig").LoaderState;
 
