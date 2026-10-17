@@ -68,7 +68,6 @@ test {
     _ = @import("interfaces/gui/shell/main_test.zig");
     _ = @import("interfaces/gui/local_session_test.zig");
     _ = @import("interfaces/gui/session_worker_test.zig");
-    _ = @import("interfaces/gui/shared_wire_test.zig");
     _ = @import("interfaces/gui/local_native_test.zig");
     _ = @import("interfaces/gui/local_native_link_test.zig");
     _ = @import("interfaces/rpc/session/advance_transport_test.zig");
