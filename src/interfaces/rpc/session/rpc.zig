@@ -379,28 +379,8 @@ pub const ScheduleInput = struct {
     button: u8 = 0,
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
-/// One RTOS or exception event on the `trace` topic (RA8EMU-832): a
-/// thread switch, the idle loop, or an ISR enter or leave, in order and
-/// in board time.
-pub const TraceEvent = struct {
-    core: Core,
-    kind: EventKind,
-    /// Board time of the event, from the stream's virtual_ns.
-    virtual_ns: u64,
-    /// The control block of the switched-to thread; 0 for idle.
-    thread: u32,
-    /// The exception number entered or left; 0 for thread events.
-    exception: u16,
-    /// The thread's name from its TX_THREAD, empty when unreadable.
-    name: []const u8,
-    pub const max_len = .{ .name = 64 };
-};
-pub const Trace = struct {
-    core: Core,
-    bytes: []const u8,
-    pub const max_len = .{ .bytes = 4096 };
-};
-
+pub const TraceEvent = @import("trace_wire.zig").TraceEvent;
+pub const Trace = @import("trace_wire.zig").Trace;
 /// Calls a client can hold unanswered at once; a leaf with more reads than
 /// this sends the rest as answers free slots.
 pub const pending_slots = 32;
