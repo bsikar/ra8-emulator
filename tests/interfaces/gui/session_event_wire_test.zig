@@ -40,7 +40,7 @@ fn connect(link: *Link) !void {
 
 /// Send one request and wait for its answer, keeping session events that
 /// arrive before it.
-fn call(link: *Link, seen: *Seen, comptime Args: type, method: proto.Method, args: Args) !Env.Result {
+fn call(link: *Link, seen: *Seen, comptime Args: type, comptime method: proto.Method, args: Args) !Env.Result {
     const id = try link.send(Args, method, args);
     const deadline = clock() + 10_000;
     while (clock() < deadline) {
