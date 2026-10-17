@@ -91,6 +91,19 @@ pub const Worker = struct {
         return .{ .context = self, .answerFn = fares };
     }
 
+    /// The worker as the shell's inline server: the shell's own thread
+    /// drains the mailbox between frames, so a headless, scripted or
+    /// frame-counted run sees the same answers every frame. Only a windowed
+    /// run starts this worker's thread instead (main.zig's apart()).
+    pub fn inlineServer(self: *Worker) Server {
+        return .{ .context = self, .answerFn = drain };
+    }
+
+    fn drain(context: *anyopaque) anyerror!void {
+        const self: *Worker = @ptrCast(@alignCast(context));
+        _ = try self.native.serve();
+    }
+
     fn fares(context: *anyopaque) anyerror!void {
         const self: *Worker = @ptrCast(@alignCast(context));
         if (self.failed.load(.acquire)) return self.failure;

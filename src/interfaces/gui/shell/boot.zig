@@ -43,15 +43,21 @@ pub const Boot = struct {
         try self.session.open(self.allocator, self.io, image.path, null);
         errdefer self.session.deinit();
         try self.session.setup.stageApps(self.io, self.allocator, self.apps);
-        if (self.apart) self.worker.bind(self.io, self.allocator, &self.session, self.clock);
-        if (self.apart) self.link.openNative(&self.worker.native) else self.link.open(self.session.transport(), self.rx, self.tx);
+        // The local session rides the worker's native mailbox (RA8EMU-1196)
+        // in both modes: the thread serves it only when someone is using the
+        // window, and the shell's own thread drains it between frames
+        // otherwise.
+        self.worker.bind(self.io, self.allocator, &self.session, self.clock);
+        self.link.openNative(&self.worker.native);
         const shell = self.shell;
         shell_hosted.bindHosted(&self.hosted, self.allocator, self.io, self.env, self.window, image.path, &self.session, &self.link, shell);
         shell.pick = shell_rebuild.launch(self.allocator, self.io, image.path, self.apps, &self.session, shell, &self.hosted, &self.link, self.rx, self.tx, self.store);
         if (shell.camera) |camera| camera.preview_provider = .{ .context = &self.session, .previewFn = cameraPreview };
         if (shell.files) |files| files.keep(image.path);
         self.image = image;
-        if (self.apart) try self.worker.serveShell(shell);
+        // A headless, scripted or frame-counted run answers inline; a
+        // windowed run answers on the worker's thread (serveShell starts it).
+        if (self.apart) try self.worker.serveShell(shell) else shell.server = self.worker.inlineServer();
     }
 
     /// The shell's hook for an image opened while no session is up.
