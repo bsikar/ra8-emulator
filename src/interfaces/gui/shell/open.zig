@@ -98,6 +98,11 @@ pub const Open = struct {
             status.refused = if (err == error.Oversize) .too_large else .load;
             return;
         };
+        self.keep(path);
+    }
+
+    /// Records `path` as the image in use, for Reload and the recents.
+    pub fn keep(self: *Open, path: []const u8) void {
         if (self.history) |list| _ = list.add(path);
         self.path_len = @min(path.len, path_max);
         @memcpy(self.path_buf[0..self.path_len], path[0..self.path_len]);

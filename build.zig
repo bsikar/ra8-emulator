@@ -5,6 +5,8 @@
 //!
 //!   zig build         the emulator into zig-out/bin
 //!   zig build run     build and run it
+//!   zig build run-gui -Dgui -- IMAGE
+//!                     build and run ra8_gui on IMAGE
 //!   zig build test    the unit tests under tests/
 //!   zig build gate    zig fmt --check, then the file and function length
 //!                     checks in tools/gate.zig
@@ -93,6 +95,7 @@ pub fn build(b: *std.Build) void {
     const sdl_mod = sdlModule(b, target, optimize, apps.gui, libs.render, gui);
     const gui_exe = if (sdl_mod) |mod| guiExe(b, target, optimize, apps.gui, libs.host, mod) else null;
     guiTest(b, target, optimize, emu, gui, sdl_mod, gui_exe);
+    runGui(b, gui_exe);
 
     const imports: build_tests.Imports = .{ .filter = b.option([]const u8, "test-filter", "Compile only tests whose name contains this text"), .emu = emu, .cli = apps.cli, .gui = apps.gui, .widget = firmware.module("ra8_widget"), .gate = gate_mod, .terms = terms_mod, .table = table_mod };
     // Three roots, one after the other under -j1, so peak memory is the largest half's (RA8EMU-785).
@@ -310,6 +313,20 @@ fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
     });
     b.installArtifact(exe);
     return exe;
+}
+
+/// `zig build run-gui -Dgui -- IMAGE`: ra8_gui on the image, the GUI's
+/// counterpart to `run`. Without -Dgui there is no ra8_gui to run.
+fn runGui(b: *std.Build, gui_exe: ?*std.Build.Step.Compile) void {
+    const step = b.step("run-gui", "Run the debugger GUI: -- IMAGE (needs -Dgui)");
+    const exe = gui_exe orelse {
+        step.dependOn(&b.addFail("run-gui needs SDL3: run `zig build run-gui -Dgui -- IMAGE`").step);
+        return;
+    };
+    const run = b.addRunArtifact(exe);
+    run.step.dependOn(b.getInstallStep());
+    run.addPassthruArgs();
+    step.dependOn(&run.step);
 }
 
 /// The SDL-backed GUI tests (RA8EMU-733): the geometry presenter against

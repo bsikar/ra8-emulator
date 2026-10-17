@@ -21,6 +21,8 @@ test {
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/profiles_test.zig");
     _ = @import("interfaces/gui/shell/main_test.zig");
+    _ = @import("interfaces/gui/shell/first_image_test.zig");
+    _ = @import("interfaces/gui/shell/boot_test.zig");
     _ = @import("interfaces/gui/local_session_test.zig");
     _ = @import("interfaces/gui/session_worker_test.zig");
     _ = @import("interfaces/gui/shared_wire_test.zig");

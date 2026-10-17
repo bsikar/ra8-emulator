@@ -40,7 +40,7 @@ test "more plugs than a run may fit are refused" {
 
 test "the window's startup flags are kept around the image" {
     const args = try shell_main.parse(&.{ "ra8_gui", "shell", "--click", "--attach", "max17048@i2c:touch@0x37", "app.elf", "--camera-source", "gradient", "--window-stills", "/tmp/stills", "--window-stills-every", "3" });
-    try std.testing.expectEqualStrings("app.elf", args.image);
+    try std.testing.expectEqualStrings("app.elf", args.image.?);
     try std.testing.expectEqual(@as(usize, 3), args.startup.count);
     try std.testing.expectEqualStrings("max17048@i2c:touch@0x37", args.startup.plugs[2]);
     try std.testing.expectEqual(true, args.camera.?.kind == .gradient);
@@ -121,7 +121,7 @@ fn settle(startup: *shell_startup.Startup, devices: *shell_devices.Devices) !voi
     var headless = Headless.init(gpa, 480, 320);
     defer headless.deinit();
     var settled = Settled{ .inner = &headless, .startup = startup, .devices = devices };
-    try shell_main.drive(io, &shell, settled.window(), image, bytes, null);
+    try shell_main.drive(io, &shell, settled.window(), &@as(?gui_app.shell.first_image.Image, .{ .path = image, .bytes = bytes }), null);
     try std.testing.expect(settled.done());
 }
 

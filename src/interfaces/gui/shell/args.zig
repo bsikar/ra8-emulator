@@ -9,12 +9,14 @@ const host_profiles = @import("ra8_host").profiles;
 pub const usage = "usage: ra8_gui [--host NAME] [--hosts FILE] [--attach MODEL@ENDPOINT]... [--click]\n" ++
     "    [--app FILE.ra8app[=MODULE.elf]]... [--camera-source KIND[:ARG]] [--window-stills DIR [--window-stills-every N]]\n" ++
     "    [--frames N] [--theme dark|light|system] [--render-driver NAME]\n" ++
-    "    [--headless] [--gui-script PATH] [--gui-video-out PATH] [--gui-video-fps N] [--show-cursor] IMAGE\n";
+    "    [--headless] [--gui-script PATH] [--gui-video-out PATH] [--gui-video-fps N] [--show-cursor] [IMAGE]\n" ++
+    "With no IMAGE the shell opens empty: File > Open ELF starts the session. --headless, --frames and --gui-script need one.\n";
 
 const shell_word = "shell";
 
 pub const Args = struct {
-    image: []const u8,
+    /// Null when none was named: the shell opens empty (boot.zig).
+    image: ?[]const u8 = null,
     apps: [card_apps.max_apps][]const u8 = undefined,
     app_count: usize = 0,
     host: ?[]const u8 = null,
@@ -41,10 +43,9 @@ fn addApp(args: *Args, path: []const u8) !void {
 }
 
 pub fn parse(argv: []const []const u8) error{Usage}!Args {
-    if (argv.len < 2) return error.Usage;
-    var args: Args = .{ .image = "" };
+    var args: Args = .{};
     var image: ?[]const u8 = null;
-    var i: usize = if (std.mem.eql(u8, argv[1], shell_word)) 2 else 1;
+    var i: usize = if (argv.len > 1 and std.mem.eql(u8, argv[1], shell_word)) 2 else 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
         if (std.mem.eql(u8, arg, "--click")) {
@@ -61,7 +62,9 @@ pub fn parse(argv: []const []const u8) error{Usage}!Args {
             return error.Usage;
         } else image = arg;
     }
-    args.image = image orelse return error.Usage;
+    // A run nobody watches has nobody to pick an image.
+    if (image == null and (args.headless or args.frames != null or args.gui_script != null)) return error.Usage;
+    args.image = image;
     return args;
 }
 
