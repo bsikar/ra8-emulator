@@ -82,7 +82,7 @@ test "a request is answered without the shell's thread serving it" {
         if (!bench.worker.wait(patience_ns)) return error.NoAnswer;
     }
     // The answer was stamped on the shell's clock as it went on the wire.
-    try std.testing.expect(bench.worker.wire.answered_ns.load(.acquire) != 0);
+    try std.testing.expect(bench.worker.native.answered_ns.load(.acquire) != 0);
 }
 
 test "a wait with nothing sent times out" {
@@ -108,7 +108,7 @@ test "a stopped worker hands the session back, and starts again on it reopened" 
     bench.session.deinit();
     try bench.session.open(std.testing.allocator, std.testing.io, image, null);
     bench.worker.rebind();
-    bench.link.open(bench.worker.transport(), bench.rx, bench.tx);
+    bench.link.openNative(&bench.worker.native);
     try bench.worker.start();
     try bench.greeted();
 }
