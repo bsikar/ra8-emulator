@@ -29,7 +29,7 @@ pub fn noReplaceHonored(io: std.Io, root: std.Io.Dir) bool {
     root.createDirPath(io, "probe/src/a") catch return false;
     root.createDirPath(io, "probe/dst") catch return false;
     defer root.deleteTree(io, "probe") catch {};
-    const source = std.os.linux.openat(root.handle, "probe/src/a", .{ .PATH = true, .DIRECTORY = true }, 0);
+    const source = std.os.linux.openat(root.handle, "probe/src", .{ .PATH = true, .DIRECTORY = true }, 0);
     if (std.os.linux.errno(source) != .SUCCESS) return false;
     defer {
         _ = std.os.linux.close(@intCast(source));
