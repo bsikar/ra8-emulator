@@ -81,6 +81,7 @@ pub const Worker = struct {
 
     pub fn deinit(self: *Worker) void {
         self.stop();
+        self.native.deinit();
         self.relay.deinit();
     }
 
@@ -120,7 +121,7 @@ pub const Worker = struct {
                 return;
             };
             if (worked) continue;
-            self.wire.asked.waitTimeout(self.io, .{ .duration = .{ .raw = .fromMilliseconds(idle_wait_ms), .clock = .awake } }) catch {};
+            self.native.asked.waitTimeout(self.io, .{ .duration = .{ .raw = .fromMilliseconds(idle_wait_ms), .clock = .awake } }) catch {};
         }
     }
 

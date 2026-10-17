@@ -67,7 +67,14 @@ pub const Rebuild = struct {
             std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
         };
         if (worker) |apart| apart.rebind();
-        self.link.open(if (worker) |apart| apart.transport() else self.session.transport(), self.rx, self.tx);
+        // The apart session rides the worker's native mailbox (RA8EMU-1196):
+        // rebind rebuilt the Native in place, so the link reopens onto it;
+        // the in-process session still opens on its loopback transport.
+        if (worker) |apart| {
+            self.link.openNative(&apart.native);
+        } else {
+            self.link.open(self.session.transport(), self.rx, self.tx);
+        }
         if (worker == null) self.shell.server = shell_server.served(self.session);
         if (self.shell.breaks) |breaks| breaks.reset();
         if (self.hosted.*) |*held| held.announce(self.image, self.session.setup.owner.session());

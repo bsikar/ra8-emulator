@@ -156,7 +156,7 @@ test "a pause hands back where the last slice left the core, once" {
     try bench.open();
     defer bench.rig.deinit();
     _ = try bench.pay(slow);
-    bench.run.pause();
+    bench.run.pause(&bench.rig.link);
     try std.testing.expect(!bench.run.lit);
     const at = bench.run.halted() orelse return error.NoHalt;
     try std.testing.expectEqual(try bench.rig.pc(.cpu0), at);
@@ -172,7 +172,7 @@ test "a pause while a slice is out settles when the slice answers" {
     bench.run.frame(bench.clock.read(), slow);
     try std.testing.expect(bench.run.next(&bench.rig.link, bench.clock.read()));
     try std.testing.expect(!bench.run.next(&bench.rig.link, bench.clock.read()));
-    bench.run.pause();
+    bench.run.pause(&bench.rig.link);
     try std.testing.expectEqual(@as(?u32, null), bench.run.halted());
     var seen: Seen = .{};
     try bench.rig.session.answer();
@@ -280,7 +280,7 @@ test "a stop for a reason of its own ends the run and leaves its stop event for 
     defer bench.rig.deinit();
     // Past the blinking, into the loop the image parks in.
     for (0..4) |_| _ = try bench.pay(slow);
-    bench.run.pause();
+    bench.run.pause(&bench.rig.link);
     const parked = bench.run.halted().?;
     _ = try bench.rig.link.send(proto.Point, .set_breakpoint, .{ .core = .cpu0, .address = parked });
     bench.run.start(parked);

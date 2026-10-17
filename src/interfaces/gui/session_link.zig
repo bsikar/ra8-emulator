@@ -76,7 +76,14 @@ pub const Link = struct {
     /// for the session's thread, and its pump takes that queue's arrivals.
     /// The link reports itself connected at once; there is no greeting.
     pub fn openNative(self: *Link, native: *local_native_link.Native) void {
-        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } } };
+        // The local host always pumps the session's plane, so it carries
+        // the transport capability (bit 15, RA8EMU-1196) beside the rest.
+        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities | proto.transport_cap } } };
+    }
+
+    /// The session's capability bits, or 0 while not connected.
+    pub fn caps(self: *Link) u32 {
+        return if (self.state == .connected) self.state.connected.caps else 0;
     }
 
     /// Take at most one frame off the wire and update the state. Returns
@@ -102,8 +109,8 @@ pub const Link = struct {
             return null;
         }) orelse return null;
         switch (got) {
-            .ready => |caps| {
-                self.state = .{ .connected = .{ .version = proto.protocol_version, .caps = caps } };
+            .ready => |offered| {
+                self.state = .{ .connected = .{ .version = proto.protocol_version, .caps = offered } };
                 return null;
             },
             .response => |response| return .{ .response = .{ .id = response.id, .result = response.result } },
