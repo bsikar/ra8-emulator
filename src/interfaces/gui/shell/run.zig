@@ -33,6 +33,12 @@
 //! through the frame, each as the last one answers, and are sized by how
 //! long the session took over them (`answered_at`), so a pause is still about
 //! one share away.
+//!
+//! On a transport-capable link (RA8EMU-1196) the slices go out as
+//! `advance_async`, the queue confirmation leaves the slice out, and the
+//! transport topic's completion is both the answer and the boundary, so the
+//! run never waits on the session's turn and a pause preempts the job in
+//! flight.
 const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
@@ -102,6 +108,15 @@ pub const Run = struct {
     settled: ?u32 = null,
     /// The session refused the last slice.
     refused: bool = false,
+    /// The slice path the link's caps picked (RA8EMU-1196): on a
+    /// transport-capable link the slice goes out as `advance_async`, its
+    /// queue confirmation leaves it out, and the completion arrives on the
+    /// transport topic; on a plain link it answers on the wire as before.
+    slice_async: bool = false,
+    /// The transport topic subscription for the async path is out. The
+    /// served context keeps subscriptions, so one send covers the link's
+    /// life.
+    subscribed: bool = false,
     /// When the session last put an answer on the wire, on the shell's
     /// clock, for a session on a thread of its own; null is one that answers
     /// on the window's thread, timed by the frame.
@@ -118,11 +133,19 @@ pub const Run = struct {
     }
 
     /// No further slice goes out. With none in flight the core is already
-    /// halted where the last one left it.
-    pub fn pause(self: *Run) void {
+    /// halted where the last one left it. With a queued async slice the
+    /// pause command preempts the job (RA8EMU-1196) and its completion
+    /// hands the halt back; a sync slice answers within the frame and
+    /// settles through the answer as before. The link is null where no
+    /// session is in reach of the caller (a bare-state test).
+    pub fn pause(self: *Run, link: ?*Link) void {
         if (!self.lit) return;
         self.lit = false;
-        if (self.slice_id == null) self.settled = self.address;
+        if (self.slice_id == null or !self.slice_async) {
+            if (self.slice_id == null) self.settled = self.address;
+            return;
+        }
+        _ = link.?.send(proto.CoreOnly, .pause, .{ .core = self.core }) catch return;
     }
 
     /// The image under the run was replaced (RA8EMU-959): no further slice
@@ -157,13 +180,15 @@ pub const Run = struct {
     /// Send the frame's next slice. False when Run is not lit, a slice is
     /// still out, the frame has paid what it owes or spent its share, or
     /// the link's pending table is full: other leaves' reads hold the slice
-    /// back until their answers free a slot, and the run goes on.
+    /// back until their answers free a slot, and the run goes on. A
+    /// transport-capable link (bit 15) sends `advance_async` and completes
+    /// on the transport topic; a plain link sends `advance`.
     pub fn next(self: *Run, link: *Link, now_ns: u64) bool {
         if (!self.lit or self.slice_id != null) return false;
         if (now_ns >= self.until_ns or self.sent == max_slices) return false;
         const want = if (self.owed_ns) |owed| @min(owed, self.unit_ns) else self.unit_ns;
         if (want == 0) return false;
-        self.slice_id = link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want }) catch |err| {
+        self.slice_id = self.sendSlice(link, want) catch |err| {
             if (err != error.TableFull) self.refuse();
             return false;
         };
@@ -173,16 +198,52 @@ pub const Run = struct {
         return true;
     }
 
+    /// Send one slice. On a transport-capable link (bit 15) the transport
+    /// topic is subscribed first and the slice goes out as `advance_async`
+    /// (RA8EMU-1196); on a plain link it answers on the wire as `advance`.
+    fn sendSlice(self: *Run, link: *Link, want: u64) !u32 {
+        const async_path = link.caps() & proto.transport_cap != 0;
+        if (async_path and !self.subscribed) {
+            _ = try link.send(proto.Subscription, .subscribe, .{ .core = self.core, .topic = .transport });
+            self.subscribed = true;
+        }
+        self.slice_async = async_path;
+        if (async_path) return link.send(proto.Advance, .advance_async, .{ .core = self.core, .ns = want });
+        return link.send(proto.Advance, .advance, .{ .core = self.core, .ns = want });
+    }
+
     /// Take an arrival at wall time `now_ns`.
     pub fn observe(self: *Run, arrival: Arrival, now_ns: u64) Seen {
         switch (arrival) {
             .response => |response| {
                 if (self.slice_id == null or response.id != self.slice_id.?) return .other;
+                if (self.slice_async) {
+                    // The queue confirmation (RA8EMU-1196): the slice stays
+                    // out and completes on the transport topic.
+                    const queued: ?proto.AdvanceQueued = switch (response.result) {
+                        .ok => |bytes| proto.decode(proto.AdvanceQueued, bytes) catch null,
+                        .err => null,
+                    };
+                    if (queued == null) {
+                        self.slice_id = null;
+                        self.refuse();
+                        return .slice;
+                    }
+                    return .other;
+                }
                 self.slice_id = null;
                 self.answered(response.result, now_ns);
                 return .slice;
             },
             .event => |event| {
+                if (event.topic == @backingInt(proto.Topic.transport)) {
+                    if (!self.slice_async or self.slice_id == null) return .other;
+                    const done = proto.decode(proto.TransportEvent, event.payload) catch return .other;
+                    if (done.finished != 1) return .other;
+                    self.slice_id = null;
+                    self.arrived(done.to_ns -| done.from_ns, done.to_ns, done.address, done.reason, now_ns);
+                    return .slice;
+                }
                 if (!self.boundary_due or event.topic != @backingInt(proto.Topic.stop)) return .other;
                 const stop = proto.decode(proto.Stopped, event.payload) catch return .other;
                 if (stop.core != self.core or stop.reason != .count) return .other;
@@ -197,20 +258,38 @@ pub const Run = struct {
             .ok => |bytes| proto.decode(proto.Advanced, bytes) catch return self.refuse(),
             .err => return self.refuse(),
         };
-        const moved = done.to_ns -| done.from_ns;
-        self.address = done.address;
-        self.board_ns = done.to_ns;
+        self.arrived(done.to_ns -| done.from_ns, done.to_ns, done.address, done.reason, now_ns);
+    }
+
+    /// Take a finished slice: what it moved, where it left the core, and
+    /// how the unit fits now. One accounting for both paths (RA8EMU-1196):
+    /// a sync slice's boundary is the stop event behind its answer; an
+    /// async slice's transport completion is its own boundary, and the stop
+    /// event behind it stays with the status bar and the leaves.
+    fn arrived(self: *Run, moved: u64, to_ns: u64, address: u32, reason: proto.StopReason, now_ns: u64) void {
+        self.address = address;
+        self.board_ns = to_ns;
         if (self.owed_ns) |owed| self.owed_ns = owed -| moved;
         // Board time that stands still has nothing more to pay this frame.
         if (moved == 0) self.until_ns = 0;
         const at_ns = if (self.answered_at) |when| when.load(.acquire) else now_ns;
         self.resize(at_ns -| self.sent_ns);
-        if (done.reason != .count) {
+        if (self.slice_async and reason == .halt_requested) {
+            // The job was preempted: the pause's halt is where it got to.
+            self.lit = false;
+            self.settled = address;
+            return;
+        }
+        if (reason != .count) {
             self.lit = false;
             return;
         }
+        if (self.slice_async) {
+            if (!self.lit) self.settled = address;
+            return;
+        }
         self.boundary_due = true;
-        if (!self.lit) self.settled = done.address;
+        if (!self.lit) self.settled = self.address;
     }
 
     fn refuse(self: *Run) void {

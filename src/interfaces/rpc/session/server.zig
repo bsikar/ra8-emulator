@@ -161,7 +161,10 @@ pub fn pumpTransport(context: *Context, server: anytype, tx: []u8) !void {
             context.advance_target_ns = 0;
             if (subscriber) {
                 const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
-                context.pending = stop;
+                // A completion that ended by count is the run keeping its
+                // word: no halt happened, so the stop topic hears nothing.
+                // Only a real end parks the stop for `poll` to emit.
+                if (fin.ended != .count) context.pending = stop;
                 const to = context.session.now() catch context.advance_from_ns;
                 var event = eventOf(pumped.report, coreOf(fin.core));
                 event.finished = 1;

@@ -33,7 +33,8 @@ const Bench = struct {
         errdefer gpa.free(self.rx);
         self.tx = try gpa.alloc(u8, Env.max_frame);
         errdefer gpa.free(self.tx);
-        self.link.open(self.worker.bind(std.testing.io, gpa, &self.session, self.clock.clock()), self.rx, self.tx);
+        self.worker.bind(std.testing.io, gpa, &self.session, self.clock.clock());
+        self.link.openNative(&self.worker.native);
     }
 
     fn deinit(self: *Bench) void {

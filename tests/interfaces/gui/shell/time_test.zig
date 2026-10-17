@@ -281,7 +281,7 @@ test "button availability follows halted running unknown and pending commands" {
     status.running();
     view = time.view(&status);
     try std.testing.expect(view.pause_enabled and !view.run_enabled and !view.step_enabled);
-    time.run.pause();
+    time.run.pause(null);
     time.run.slice_id = 9;
     view = time.view(&status);
     try std.testing.expect(!view.pause_enabled and !view.run_enabled and !view.step_enabled);

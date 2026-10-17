@@ -39,7 +39,8 @@ const Apart = struct {
         self.host_clock = .init(io);
         self.rx = try gpa.alloc(u8, 2 * Env.max_frame);
         self.tx = try gpa.alloc(u8, Env.max_frame);
-        self.link.open(self.worker.bind(io, gpa, &self.session, self.host_clock.clock()), self.rx, self.tx);
+        self.worker.bind(io, gpa, &self.session, self.host_clock.clock());
+        self.link.openNative(&self.worker.native);
         self.shell = .init(gpa, try gui_app.pane_layout.twoCore(gpa));
         self.window = .init(gpa, 640, 480);
         self.time = .{};
@@ -103,7 +104,7 @@ test "the shell serves nothing itself: its session answers on the worker's threa
     defer apart.deinit();
     try std.testing.expect(apart.shell.worker == &apart.worker);
     try std.testing.expect(apart.shell.listener == null);
-    try std.testing.expect(apart.time.run.answered_at == &apart.worker.wire.answered_ns);
+    try std.testing.expect(apart.time.run.answered_at == &apart.worker.native.answered_ns);
     try std.testing.expectEqual(@as(?u64, null), apart.time.run.board_ns);
 }
 

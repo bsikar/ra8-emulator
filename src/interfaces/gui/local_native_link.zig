@@ -79,6 +79,10 @@ pub const Native = struct {
     };
 
     pub fn init(io: std.Io, gpa: std.mem.Allocator, clock: wall_clock.Clock, context: *session_server.Context) Native {
+        // There is no greeting on the native path, so the served context is
+        // told the contract here: this host's client speaks the queued
+        // advance (RA8EMU-1196), like the hosted listener's frame loop.
+        context.transport_async = true;
         return .{ .io = io, .gpa = gpa, .clock = clock, .link = local_native.Link.init(gpa, context) };
     }
 

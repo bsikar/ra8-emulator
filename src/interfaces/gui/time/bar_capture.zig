@@ -106,7 +106,7 @@ pub fn press(control: bar.Control, status: *Status, run: *shell_run.Run, link: *
             try status.go(link, proto.RunMode.finish, step_budget);
             status.refused = null;
         },
-        .pause => run.pause(),
+        .pause => run.pause(link),
         .field, .drop => {},
     }
 }
