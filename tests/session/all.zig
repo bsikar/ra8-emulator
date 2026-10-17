@@ -44,6 +44,7 @@ test {
     _ = @import("panel/diff_test.zig");
     _ = @import("panel/watch_test.zig");
     _ = @import("speed_test.zig");
+    _ = @import("transport/transport_test.zig");
     _ = @import("zig/script_test.zig");
     _ = @import("watch/bus_test.zig");
     _ = @import("unit_view_test.zig");

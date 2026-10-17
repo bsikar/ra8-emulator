@@ -119,4 +119,16 @@ pub const Stream = struct {
         if (self.queues[id]) |*queue| return queue.read(out);
         return null;
     }
+
+    /// Whether any subscriber queue holds half its capacity or more: the
+    /// owner should drain before telemetry starts losing to eviction
+    /// (RA8EMU-1179).
+    pub fn nearFull(self: *Stream) bool {
+        for (&self.queues) |*slot| if (slot.*) |*queue| {
+            while (!queue.mutex.tryLock()) std.atomic.spinLoopHint();
+            defer queue.mutex.unlock();
+            if (queue.len * 2 >= capacity) return true;
+        };
+        return false;
+    }
 };

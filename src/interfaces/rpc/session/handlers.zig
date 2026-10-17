@@ -10,41 +10,36 @@ const stop_machine = @import("ra8_session").stop_machine;
 const region_map = @import("ra8_session").region.map;
 const source_spec = @import("ra8_host").camera.source_spec;
 const session_rtc = @import("ra8_session").rtc;
+const transport_mod = @import("ra8_session").transport;
 const board_lib = @import("ra8_board");
 
 /// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
 pub const app_codes = proto.app_codes;
 
-/// Writes the fitted parts as `MODEL@ENDPOINT` lines into the buffer given.
-/// Installs a camera source for set_camera_source (RA8EMU-795).
+/// Writes the fitted parts as `MODEL@ENDPOINT` lines; sets a camera source.
 pub const Camera = struct {
     context: *anyopaque,
     setFn: *const fn (*anyopaque, source_spec.Spec) anyerror!void,
 };
 
-/// Writes the memory map of a core's last loaded image (RA8EMU-794): the
-/// core index, JSON or text, and the buffer to write into.
+/// Writes a core's memory map (RA8EMU-794): core index, JSON or text.
 pub const Mapping = struct {
     context: *anyopaque,
     mapFn: *const fn (*anyopaque, usize, bool, []u8) anyerror![]const u8,
-    /// The main stack reservation of a core's last loaded image (RA8EMU-816).
+    /// A core's last loaded image's main stack reservation (RA8EMU-816).
     stackFn: ?*const fn (*anyopaque, usize) ?region_map.Stack = null,
-    /// A core's last loaded image, for the backtrace's names and lines
-    /// (RA8EMU-1125).
+    /// A core's last loaded image, for backtrace names (RA8EMU-1125).
     imageFn: ?*const fn (*anyopaque, usize) ?@import("ra8_session").symbols.Image = null,
 };
 
-/// Writes the peripheral blocks, or one block's registers (RA8EMU-818):
-/// the core index, the block name ("" for the list), JSON or text, and
-/// the buffer to write into.
+/// Writes peripheral blocks or one block's registers (RA8EMU-818).
 pub const Peripherals = struct {
     context: *anyopaque,
     listFn: *const fn (*anyopaque, usize, []const u8, bool, []u8) anyerror![]const u8,
 };
 
-/// Folds sampled call stacks (RA8EMU-833): the core index, the thread
-/// (null for all), the window [from_ns, to_ns), and the buffer to write
-/// into. error.NothingSampled when the window and thread take no sample.
+/// Folds sampled call stacks (RA8EMU-833); error.NothingSampled on an
+/// empty window and thread.
 pub const Folding = struct {
     context: *anyopaque,
     foldFn: *const fn (*anyopaque, usize, ?u32, u64, u64, []u8) anyerror![]const u8,
@@ -55,25 +50,22 @@ pub const Listing = struct {
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
 };
 
-/// Turns RTOS tracing on for this image (RA8EMU-832); a server without
-/// one sends nothing on the trace topic.
+/// Turns RTOS tracing on (RA8EMU-832); nothing on the trace topic without
+/// it. Reads a thread's name from its TX_THREAD; empty without it.
 pub const TraceOn = struct {
     context: *anyopaque,
     onFn: *const fn (*anyopaque) bool,
 };
 
-/// Reads a thread's name from its TX_THREAD for the trace topic
-/// (RA8EMU-832); a server without one sends trace events with empty names.
 pub const ThreadNames = struct {
     context: *anyopaque,
     nameFn: *const fn (*anyopaque, usize, u32, []u8) ?[]const u8,
 };
 
-/// The dirty rectangle one core's lcd_dirty feed holds between sends
-/// (RA8EMU-822), merged across the frames since the last send.
+/// The dirty rectangle an lcd_dirty feed holds between sends (RA8EMU-822).
 pub const LcdDue = struct { rect: api.Event.Rect, virtual_ns: u64 };
 
-/// The host clock the lcd_dirty rate measures against (RA8EMU-822).
+/// The host clock for the lcd_dirty rate (RA8EMU-822).
 pub const HostClock = struct {
     context: *anyopaque,
     nowFn: *const fn (*anyopaque) u64,
@@ -85,61 +77,64 @@ pub const Context = struct {
     session: *api.Session,
     /// Holds read_memory replies; its length caps one read.
     scratch: []u8,
-    /// The stop the last run or step ended in, until Host.poll sends it.
+    /// The last run's stop, until Host.poll sends it.
     pending: ?proto.Stopped = null,
     /// Subscribed topics per core, one bit per Topic in declaration order.
     topics: [2]u8 = .{ 0, 0 },
-    /// The session event-stream queue UART bytes are read from while any
-    /// core wants the uart topic.
+    /// The event-stream queue UART bytes are read from for the uart topic.
     uart_feed: ?usize = null,
-    /// The event-stream queue panel refreshes are read from while any core
-    /// wants lcd_dirty (RA8EMU-789).
+    /// The event-stream queue panel refreshes are read from for lcd_dirty.
     lcd_feed: ?usize = null,
-    /// Frames per second each core's lcd_dirty subscriber wants (RA8EMU-822); zero is every frame.
+    /// Each core's lcd_dirty fps (RA8EMU-822); zero is every frame.
     lcd_rate: [2]u16 = .{ 0, 0 },
     /// The dirty rectangle a rate-limited lcd_dirty subscriber holds between sends (RA8EMU-822).
     lcd_pending: [2]?LcdDue = .{ null, null },
-    /// Host time of the last lcd_dirty send per core, for the rate (RA8EMU-822).
+    /// Host time of the last lcd_dirty send per core (RA8EMU-822).
     lcd_last_ns: [2]u64 = .{ 0, 0 },
-    /// Panel captures skipped while no lcd_dirty subscriber was due (RA8EMU-822).
+    /// Captures skipped while no lcd_dirty subscriber was due (RA8EMU-822).
     lcd_holds: u32 = 0,
-    /// The host clock for the lcd_dirty rate (RA8EMU-822); without one a rate sends every pass.
+    /// The host clock for the lcd_dirty rate; none means every pass.
     host_clock: ?HostClock = null,
-    /// The event-stream queue session events are read from while any core
-    /// wants the session topic (RA8EMU-942).
+    /// The event-stream queue read for the session topic (RA8EMU-942).
     session_feed: ?usize = null,
-    /// The event-stream queue RTOS events are read from while any core
-    /// wants the trace topic (RA8EMU-832).
+    /// The event-stream queue read for the trace topic (RA8EMU-832).
     trace_feed: ?usize = null,
-    /// The in-flight chunked load between load_begin and load_end (RA8EMU-1174).
+    /// The in-flight chunked load (RA8EMU-1174).
     chunks: load_chunks.Assembler = .{},
-    /// Owns each captured panel frame. A server without one, or a session
-    /// without a display, refuses lcd_dirty.
+    /// Owns captured panel frames; null, or no display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.
     state: ?@import("ra8_session").board.state.Hook = null,
-    /// Writes the fitted parts for list_parts; a server without one refuses it.
-    listing: ?Listing = null,
-    /// The parsed board profile board_parts serves (RA8EMU-1152); a server
-    /// without one serves the built-in EK-RA8D2 profile.
-    board_profile: ?*const board_lib.profile.Profile = null,
-    /// Changes the camera source; a server without one refuses it.
-    camera: ?Camera = null,
-    /// Writes the memory map for `map`; a server without one refuses it.
+    listing: ?Listing = null, // fitted parts; null refuses list_parts
+    board_profile: ?*const board_lib.profile.Profile = null, // board_parts (RA8EMU-1152)
+    camera: ?Camera = null, // camera source; null refuses set_camera_source
+    /// Writes the memory map for `map`; null refuses it.
     mapping: ?Mapping = null,
     /// Lists peripheral blocks and registers for `periph`; a server without one refuses it.
     peripherals: ?Peripherals = null,
     /// Folds sampled stacks for `folded`; a server that samples none refuses it.
     folding: ?Folding = null,
-    /// Snapshots the RTC counters for `rtc`; a server without one refuses it.
-    clock: ?session_rtc.Clock = null,
-    /// Loaded ThreadX modules' own symbols, asked before the image's
-    /// (RA8EMU-1141); null names module code from the image alone.
+    clock: ?session_rtc.Clock = null, // rtc counters; null refuses `rtc`
+    /// Loaded ThreadX modules' symbols, asked before the image's (RA8EMU-1141).
     modules: ?*@import("ra8_session").txm.debug.Table = null,
     /// Turns RTOS tracing on when a client first wants the trace topic.
     trace_on: ?TraceOn = null,
     /// Reads a thread's name for the trace topic.
     thread_names: ?ThreadNames = null,
+    /// The host's transport, when it owns one, so front ends preempt jobs.
+    transport: ?*transport_mod.Transport = null,
+    /// The wall the transport's blocking finish reads against.
+    wall: ?transport_mod.Wall = null,
+    /// True when this host pumps between frames, so advances queue (RA8EMU-1196).
+    transport_async: bool = false,
+    /// This connection's queued advance; null once ended or preempted.
+    advance_ticket: ?transport_mod.Ticket = null,
+    /// Where that advance began, for the completion's `from_ns`.
+    advance_from_ns: u64 = 0,
+    /// Where that advance aims, for the completion's `target_ns`.
+    advance_target_ns: u64 = 0,
+    advance_core: proto.Core = .cpu0,
+    transport_epoch: u64 = 0, // epoch last reported on the transport topic
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@backingInt(of)] & bit(topic) != 0;
@@ -336,6 +331,10 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
 pub fn forget(context: *Context) void {
     context.topics = .{ 0, 0 };
     context.pending = null;
+    context.advance_ticket = null;
+    context.advance_from_ns = 0;
+    context.advance_target_ns = 0;
+    context.transport_epoch = 0;
     context.lcd_rate = .{ 0, 0 };
     context.lcd_pending = .{ null, null };
     context.lcd_holds = 0;

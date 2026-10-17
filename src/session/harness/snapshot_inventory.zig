@@ -14,6 +14,7 @@ pub fn complete(comptime State: type) bool {
         .{ .name = "quiet", .reason = "Derived wake hints invalidated after restore" },
         .{ .name = "loading", .reason = "Target loader bindings and validated image identities" },
         .{ .name = "session", .reason = "Saved core bookkeeping; retained embedding and debugger controls" },
+        .{ .name = "transport", .reason = "Debugger control plane rebuilt live after restore" },
         .{ .name = "plugs_arena", .reason = "Target allocator wiring; reachable pointed-to guest objects saved by typed attachments" },
         .{ .name = "edge", .reason = "Stable boundary wiring; clocks saved separately" },
         .{ .name = "files", .reason = "Stable snapshot owner bindings" },

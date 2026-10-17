@@ -56,6 +56,10 @@ pub const Served = struct {
         const scratch = try allocator.alloc(u8, proto.max_payload);
         self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
+        // The transport rides the context so run-control methods route
+        // through it (slice 14), and the host clock bounds its pumps.
+        self.context.transport = self.owner.transport();
+        self.context.wall = .{ .context = self, .nowFn = hostClock };
         self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
         self.context.board_profile = self.owner.boardProfile();
         self.context.mapping = .{ .context = &self.owner, .mapFn = mapImage, .stackFn = stackOf, .imageFn = imageOf };

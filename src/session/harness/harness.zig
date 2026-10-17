@@ -29,6 +29,7 @@ const chunk_clock = @import("../chunk_clock.zig");
 pub const files = @import("files.zig");
 const debug_session = @import("../session.zig");
 const session_api = @import("../api.zig");
+const transport_mod = @import("../transport/transport.zig");
 const stop_machine = @import("../stop_machine.zig");
 const step_hook = @import("../step_hook.zig");
 const watch_bus = @import("../watch/bus.zig");
@@ -101,6 +102,8 @@ const State = struct {
     quiet: QuietSource,
     loading: LoaderState,
     session: session_api.Session,
+    /// The control plane the front ends drive; rebuilt live, never saved.
+    transport: transport_mod.Transport,
     plugs_arena: std.heap.ArenaAllocator,
     plugs: session_plug.Plugs,
     faults: session_faults.Faults,
@@ -147,6 +150,12 @@ pub const Harness = struct {
 
     pub fn session(self: *Harness) *session_api.Session {
         return &self.state.session;
+    }
+
+    /// The control plane front ends command and pump; the harness owns it
+    /// beside the Session (time-travel design section 3).
+    pub fn transport(self: *Harness) *transport_mod.Transport {
+        return &self.state.transport;
     }
 
     pub fn image(self: *const Harness) elf.Image {
@@ -370,6 +379,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
 /// the opened image's initial load.
 fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Options) !void {
     state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };
+    state.transport = .{ .session = &state.session };
     state.session.attachInputScript(&state.board.input_script);
     state.session.attachLoader(.{ .context = &state.loading, .loadFn = LoaderState.load });
     state.plugs_arena = std.heap.ArenaAllocator.init(allocator);
