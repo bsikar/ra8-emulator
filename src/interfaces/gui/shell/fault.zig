@@ -75,7 +75,12 @@ pub const Faults = struct {
         const mode = next(self.modeOf(at));
         var buf: [proto.PartSpec.max_len.text]u8 = undefined;
         const wanted = ask(&buf, at, mode) catch return false;
-        self.asked = link.send(proto.PartSpec, wanted.method, .{ .core = .cpu0, .text = wanted.text }) catch return false;
+        const args: proto.PartSpec = .{ .core = .cpu0, .text = wanted.text };
+        self.asked = switch (wanted.method) {
+            .clear_fault => link.send(proto.PartSpec, .clear_fault, args),
+            .set_fault => link.send(proto.PartSpec, .set_fault, args),
+            else => return false,
+        } catch return false;
         self.pending = .{ .len = at.len, .mode = mode };
         @memcpy(self.pending.at[0..at.len], at);
         self.refused = false;

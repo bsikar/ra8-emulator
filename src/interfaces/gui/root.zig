@@ -25,6 +25,7 @@ pub const fit = @import("ui/fit.zig");
 pub const shell = @import("shell/shell.zig");
 pub const local_session = @import("local_session.zig");
 pub const local_native = @import("local_native.zig");
+pub const local_native_link = @import("local_native_link.zig");
 pub const session_worker = @import("session_worker.zig");
 pub const shared_wire = @import("shared_wire.zig");
 pub const preview_relay = @import("preview_relay.zig");

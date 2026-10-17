@@ -5,6 +5,7 @@ const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("ra8_rpc").session.rpc;
 const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
+const local_native_link = @import("local_native_link.zig");
 
 pub const Env = proto.Client.Env;
 
@@ -55,10 +56,13 @@ fn classify(err: proto.Error) Failure {
 /// A client on one session. It must not move once opened: the client
 /// reaches the wire through a pointer to it.
 pub const Link = struct {
-    inner: rpc.Transport,
-    client: proto.Client,
-    tx: []u8,
+    inner: rpc.Transport = undefined,
+    client: proto.Client = undefined,
+    tx: []u8 = &.{},
     state: State = .connecting,
+    /// Set when the link is native: `send` queues into the mailbox and
+    /// `pump` takes its ring; no wire is involved.
+    native: ?*local_native_link.Native = null,
 
     /// Greet the session on `wire`. `rx` (2 * Env.max_frame bytes) and `tx`
     /// (Env.max_frame bytes) must outlive the link.
@@ -68,6 +72,13 @@ pub const Link = struct {
         self.client.greet(tx) catch |err| self.fail(err);
     }
 
+    /// Go native: the link's typed requests wait in `native`'s mailbox
+    /// for the session's thread, and its pump takes that queue's arrivals.
+    /// The link reports itself connected at once; there is no greeting.
+    pub fn openNative(self: *Link, native: *local_native_link.Native) void {
+        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } } };
+    }
+
     /// Take at most one frame off the wire and update the state. Returns
     /// the response or event it carried; a slice in it lives until the
     /// next pump.
@@ -75,6 +86,16 @@ pub const Link = struct {
         switch (self.state) {
             .failed, .closed => return null,
             else => {},
+        }
+        if (self.native) |n| {
+            const got = (n.pump() catch |err| {
+                self.fail(err);
+                return null;
+            }) orelse return null;
+            return switch (got) {
+                .response => |r| .{ .response = .{ .id = r.id, .result = r.result } },
+                .event => |e| .{ .event = e },
+            };
         }
         const got = (self.client.poll(self.tx) catch |err| {
             self.fail(err);
@@ -93,8 +114,9 @@ pub const Link = struct {
     /// Send a request and return its id; the response comes back by pump.
     /// A full pending table is back-pressure, not a broken session: the
     /// link stays up, and the caller sends again once answers free slots.
-    pub fn send(self: *Link, comptime Args: type, method: proto.Method, args: Args) !u32 {
+    pub fn send(self: *Link, comptime Args: type, comptime method: proto.Method, args: Args) !u32 {
         if (self.state != .connected) return error.NotConnected;
+        if (self.native) |n| return n.send(Args, method, args);
         return self.client.call(Args, @backingInt(method), args, 0, self.tx) catch |err| {
             if (err != error.TableFull) self.fail(err);
             return err;
