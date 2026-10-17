@@ -15,6 +15,7 @@ const debug_session = @import("ra8_session").session;
 const watch_table = @import("ra8_session").watch.table;
 const zig_drive = @import("ra8_session").zig.drive;
 const session_api = @import("ra8_session").api;
+const transport_mod = @import("ra8_session").transport;
 
 pub const Error = error{NoSpace};
 
@@ -29,6 +30,13 @@ pub const Target = struct {
     session: *session_api.Session,
     /// Asked between budgets while a continue runs; null runs one budget.
     poll: ?debug_session.Poll = null,
+    /// The harness-owned control plane (time-travel design section 3): a
+    /// front end that sets it runs `c` and `s` through command + finish and
+    /// keeps its poll. Null keeps the legacy budget loop for the no-poll
+    /// one-budget contract and the GUI's pump mode (unit 15).
+    transport: ?*transport_mod.Transport = null,
+    /// The wall `finish` paces against; the front end owns its own.
+    wall: transport_mod.Wall,
     last: ?zig_drive.Ended = null,
     /// Pump mode (RA8EMU-1156): a resume runs one budget per pump and
     /// sends no reply while it still runs, so the pump's host (the GUI
@@ -120,6 +128,7 @@ fn breakAt(target: *Target, pc: u32) bool {
 
 fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u8 {
     if (target.pump) return pumpResume(target, command, out);
+    if (target.transport) |plane| return transportResume(target, plane, command, out);
     var ended = target.session.run(target.session.currentCore(), command) catch return copy(out, request_error);
     while (command == .cont and ended == .count) {
         const poll = target.poll orelse break;
@@ -204,6 +213,35 @@ fn copy(out: []u8, text: []const u8) Error![]const u8 {
     @memcpy(out[0..text.len], text);
     return out[0..text.len];
 }
+/// The transport path: queue the run as a command and block on `finish`,
+/// polling the socket between slices (design section 3's gdb adapter). A
+/// poll hit settles as a halt request, so the reply is the same T02 the
+/// budget loop produced.
+fn transportResume(target: *Target, plane: *transport_mod.Transport, command: session_api.Run, out: []u8) Error![]const u8 {
+    const asked: transport_mod.Command = switch (command) {
+        .cont => .{ .cont = .{} },
+        .step => .{ .step = .{ .core = target.session.currentCore() } },
+        else => return copy(out, request_error),
+    };
+    const ticket = plane.command(asked) catch return copy(out, request_error);
+    const ended = plane.finish(ticket, target.wall, transportPoll(target)) catch return copy(out, request_error);
+    target.last = ended;
+    target.back = 0;
+    return stopReply(target, out);
+}
+
+/// The transport's poll, answering the same check the budget loop asked.
+fn transportPoll(target: *Target) ?transport_mod.Poll {
+    if (target.poll == null) return null;
+    return .{ .context = target, .pollFn = gdbPoll };
+}
+
+fn gdbPoll(context: *anyopaque) bool {
+    const target: *Target = @ptrCast(@alignCast(context));
+    const poll = target.poll orelse return false;
+    return poll.check(poll.context);
+}
+
 /// A pumped resume: one budget now, and the stop reply only once the run
 /// has ended. gdb waits for the stop reply, so an empty payload here means
 /// "nothing to send this frame" and the pump sends nothing.

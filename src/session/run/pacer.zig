@@ -146,6 +146,12 @@ pub const HostClock = struct {
         return .{ .ctx = self, .nowFn = nowHost, .sleepFn = sleepHost };
     }
 
+    /// The transport's wall view of this clock: host nanoseconds since init,
+    /// read-only, so a front end paces a job without sleeping against it.
+    pub fn wall(self: *HostClock) @import("../transport/command.zig").Wall {
+        return .{ .context = self, .nowFn = nowHost };
+    }
+
     fn nowHost(ctx: *anyopaque) u64 {
         const self: *HostClock = @ptrCast(@alignCast(ctx));
         const ran = self.start.untilNow(self.io, .awake).nanoseconds;

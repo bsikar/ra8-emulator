@@ -22,6 +22,9 @@ pub const Session = struct {
     /// The session the panes draw through; null lists the port without
     /// serving it yet.
     live: ?*session_api.Session = null,
+    /// The host clock the gdb target's transport wall reads, when a
+    /// transport is attached to the live session.
+    wall_clock: ?@import("ra8_session").run.pacer.HostClock = null,
     client: ?Client = null,
 
     /// One gdb connection, served a frame at a time. The buffers live in
@@ -74,7 +77,8 @@ pub const Session = struct {
         };
         const c = &(self.client.?);
         c.wire = rsp.packet.Reader.init(&c.incoming);
-        c.target = .{ .session = live, .poll = c.socket.poll(), .pump = true };
+        if (self.wall_clock == null) self.wall_clock = @import("ra8_session").run.pacer.HostClock.init(self.io);
+        c.target = .{ .session = live, .poll = c.socket.poll(), .pump = true, .wall = self.wall_clock.?.wall() };
         c.stub = .{ .zig = &c.target };
     }
 

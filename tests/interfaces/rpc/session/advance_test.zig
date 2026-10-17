@@ -107,6 +107,17 @@ const Rig = struct {
     }
 };
 
+/// A host wall clock that moves one millisecond per read.
+const FakeWall = struct {
+    ns: u64 = 0,
+
+    fn now(context: *anyopaque) u64 {
+        const wall: *FakeWall = @ptrCast(@alignCast(context));
+        wall.ns += 1_000_000;
+        return wall.ns;
+    }
+};
+
 /// Where the guest and the grid stand: what a split advance must leave
 /// exactly as an unsplit one does.
 const Seen = struct {
@@ -390,4 +401,81 @@ test "an advance asked of CPU1 that CPU0 breaks reports CPU0 at its position" {
     try probe.harness.session().setRunBudget(.cpu0, 50_000);
     _ = try probe.harness.session().run(.cpu0, .cont);
     try winnerStops(.cpu1, .cpu0, probe.pc(.cpu0));
+}
+
+test "advance through the transport answers the same reply" {
+    var legacy = Rig{};
+    try legacy.open();
+    defer legacy.close();
+    const straight = try legacy.advanceBy(period);
+
+    var through = Rig{};
+    try through.open();
+    defer through.close();
+    var plane = ra8.session.transport.Transport{ .session = &through.session };
+    through.context.transport = &plane;
+    var wall = FakeWall{};
+    through.context.wall = .{ .context = &wall, .nowFn = FakeWall.now };
+    const routed = try through.advanceBy(period);
+
+    try std.testing.expectEqual(straight.from_ns, routed.from_ns);
+    try std.testing.expectEqual(straight.to_ns, routed.to_ns);
+    try std.testing.expectEqual(straight.reason, routed.reason);
+    try std.testing.expectEqual(straight.address, routed.address);
+}
+
+test "an async advance queues and completes on the transport" {
+    var rig = Rig{};
+    try rig.open();
+    defer rig.close();
+    var plane = ra8.session.transport.Transport{ .session = &rig.session };
+    rig.context.transport = &plane;
+    var wall = FakeWall{};
+    rig.context.wall = .{ .context = &wall, .nowFn = FakeWall.now };
+    rig.context.transport_async = true;
+
+    const queued = queuedBy(&rig.context, .{ .core = .cpu0, .ns = period }) orelse return error.Refused;
+    const from = try rig.session.now();
+    try std.testing.expectEqual(from, queued.from_ns);
+    try std.testing.expectEqual(from + period, queued.target_ns);
+    const ticket = rig.context.advance_ticket orelse return error.NoTicket;
+
+    // The plane is on the job before any pump, and nothing has run yet.
+    try std.testing.expectEqual(ra8.session.transport.Phase.advancing, plane.report().phase);
+    try std.testing.expectEqual(from, try rig.session.now());
+
+    // Host.poll's bounded pumps drive it to the target and the completion
+    // is the queueing connection's ticket.
+    // One window per pump: the wall read inside `drive` consumes the first
+    // millisecond, so the deadline needs a margin over the pre-read value.
+    while (plane.job != null and wall.ns < 60_000_000_000) {
+        _ = try plane.pump(.{ .context = &wall, .nowFn = FakeWall.now }, wall.ns + 2_000_000);
+    }
+    const done = plane.done orelse return error.NoFinish;
+    try std.testing.expectEqual(ticket, done.ticket);
+    try std.testing.expectEqual(from + period, try rig.session.now());
+    try std.testing.expect(rig.context.advance_ticket != null); // still owed until poll sends it
+}
+
+test "advance_async refuses without the plane or the flag" {
+    var rig = Rig{};
+    try rig.open();
+    defer rig.close();
+    try std.testing.expect(queuedBy(&rig.context, .{ .core = .cpu0, .ns = period }) == null);
+    var plane = ra8.session.transport.Transport{ .session = &rig.session };
+    rig.context.transport = &plane;
+    var wall = FakeWall{};
+    rig.context.wall = .{ .context = &wall, .nowFn = FakeWall.now };
+    // The plane without the async flag refuses too: `serve` keeps the
+    // blocking contract.
+    try std.testing.expect(queuedBy(&rig.context, .{ .core = .cpu0, .ns = period }) == null);
+    try std.testing.expect(plane.job == null);
+}
+
+/// The queued reply, or null when the handler refused.
+fn queuedBy(context: *server.Context, args: proto.Advance) ?proto.AdvanceQueued {
+    return switch (advance.advanceQueued(context, args)) {
+        .ok => |moved| moved,
+        .err => null,
+    };
 }

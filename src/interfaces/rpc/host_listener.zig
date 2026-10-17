@@ -54,7 +54,35 @@ pub const Listener = struct {
         conn: socket_transport.Connection,
         host: served.Host,
         rx: []u8,
+        /// The client's own context: the served hooks, session and transport
+        /// are shared with the panes, the subscription state is the client's
+        /// alone (RA8EMU-1196), so a client's subscribe never clobbers the
+        /// panes' topics or feeds.
+        context: served.Context,
+        /// The context's reply scratch, freed on hangup.
+        scratch: []u8,
     };
+
+    /// A fresh per-connection context for one listener client (RA8EMU-1196):
+    /// the served hooks, session and transport are shared with the panes, the
+    /// subscription state (topics, feeds, pending stop, lcd rate, chunked
+    /// load) starts empty, and `scratch` is the client's own reply buffer.
+    fn clientContext(base: *served.Context, scratch: []u8) served.Context {
+        var context = base.*;
+        context.scratch = scratch;
+        context.pending = null;
+        context.topics = .{ 0, 0 };
+        context.uart_feed = null;
+        context.lcd_feed = null;
+        context.lcd_rate = .{ 0, 0 };
+        context.lcd_pending = .{ null, null };
+        context.lcd_last_ns = .{ 0, 0 };
+        context.lcd_holds = 0;
+        context.session_feed = null;
+        context.trace_feed = null;
+        context.chunks = .{};
+        return context;
+    }
 
     /// Bind the per-user address: a Unix socket under $HOME/.config on
     /// Linux and macOS, 127.0.0.1 with an OS-picked port on Windows.
@@ -204,8 +232,9 @@ pub const Listener = struct {
 
     /// Accept a waiting client, then answer what a connected client has
     /// sent, once per frame. `context` is the Served context the panes
-    /// already draw through, `tx` the shell's reply buffer. A second
-    /// client waits until the connected one hangs up.
+    /// already draw through: the client gets its own context over the same
+    /// hooks (RA8EMU-1196), `tx` the shell's reply buffer. A second client
+    /// waits until the connected one hangs up.
     pub fn answer(self: *Listener, context: *served.Context, tx: []u8) !void {
         if (self.client == null) try self.acceptClient(context);
         const client = &(self.client orelse return);
@@ -243,19 +272,29 @@ pub const Listener = struct {
         errdefer stream.close(self.io);
         const rx = try self.gpa.alloc(u8, rx_size);
         errdefer self.gpa.free(rx);
+        const scratch = try self.gpa.alloc(u8, proto.max_payload);
+        errdefer self.gpa.free(scratch);
         self.client = .{
             .conn = .{ .stream = stream, .io = self.io },
             .host = undefined,
             .rx = rx,
+            .context = undefined,
+            .scratch = scratch,
         };
         const client = &self.client.?;
-        client.host = served.Host.init(client.conn.transport(), rx, context);
+        client.context = clientContext(context, scratch);
+        client.host = served.Host.init(client.conn.transport(), rx, &client.context);
     }
 
     fn dropClient(self: *Listener) void {
         const c = &(self.client orelse return);
+        // Give up the client's own subscriptions and lcd state; the panes'
+        // context the hooks share is untouched (RA8EMU-1196).
+        served.forget(&c.context);
+        c.context.chunks.drop();
         c.conn.close();
         self.gpa.free(c.rx);
+        self.gpa.free(c.scratch);
         self.client = null;
     }
 };

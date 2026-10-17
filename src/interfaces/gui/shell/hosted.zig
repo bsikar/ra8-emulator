@@ -55,6 +55,10 @@ pub fn bindHosted(hosted: *?Hosted, allocator: std.mem.Allocator, io: std.Io, en
     const bound = host_listener.Listener.bind(allocator, io, env) catch return;
     const tx = allocator.alloc(u8, Env.max_frame) catch return;
     hosted.* = .{ .listener = bound, .context = &session.setup.context, .window = window, .tx = tx, .gpa = allocator };
+    // The frame loop owns the pump here, so this host's clients speak the
+    // queued advance contract: advance_async plus the transport topic
+    // (RA8EMU-1196, slice 14). `serve` keeps the blocking contract.
+    session.setup.context.transport_async = true;
     const held = &hosted.*.?;
     held.announce(elf, session.setup.owner.session());
     shell.listener = .{ .context = held, .answerFn = answerHosted };

@@ -102,6 +102,44 @@ test "a client over the socket is served on the opened session" {
     try loadAndRead(peer, &bound, &opened.context, tx);
 }
 
+test "a client's subscriptions stay off the panes' context" {
+    const gpa = std.testing.allocator;
+    const home = try tempHome(gpa);
+    defer {
+        std.Io.Dir.cwd().deleteTree(std.testing.io, home) catch {};
+        gpa.free(home);
+    }
+    var env = try envWithHome(gpa, home);
+    defer env.deinit();
+    var opened: served_setup.Served = undefined;
+    try opened.open(gpa, std.testing.io, image, null);
+    defer opened.deinit();
+    var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
+    defer bound.deinit();
+
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var connection = try connect(bound.address);
+    const peer = try serve_peer.Peer.init(gpa, connection.transport());
+    defer peer.deinit();
+    try peer.client.greet(peer.tx);
+    try bound.answer(&opened.context, tx);
+    _ = try next(peer, &bound, &opened.context, tx);
+
+    // The client subscribes to the uart topic over the wire and gets its
+    // own feed; the panes' context keeps none and no topics (RA8EMU-1196).
+    _ = try call(peer, &bound, &opened.context, tx, proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .uart });
+    try std.testing.expect(bound.client.?.context.uart_feed != null);
+    try std.testing.expectEqual(@as(?usize, null), opened.context.uart_feed);
+    try std.testing.expectEqual(@as(u8, 0), opened.context.topics[0]);
+
+    // Hanging up releases the client's feed; the panes' context is untouched.
+    connection.close();
+    try bound.answer(&opened.context, tx);
+    try std.testing.expect(bound.client == null);
+    try std.testing.expectEqual(@as(?usize, null), opened.context.uart_feed);
+}
+
 test "a hung-up client is dropped and the next one is taken" {
     const gpa = std.testing.allocator;
     const home = try tempHome(gpa);
@@ -377,4 +415,69 @@ fn connect(address: listener_mod.Address) !Connection {
         .unix => |path| Connection.unix(std.testing.io, path),
         .tcp => |ip| Connection.tcp(std.testing.io, ip),
     };
+}
+
+test "an async advance queues over the socket and completes on the transport topic" {
+    const gpa = std.testing.allocator;
+    const home = try tempHome(gpa);
+    defer {
+        std.Io.Dir.cwd().deleteTree(std.testing.io, home) catch {};
+        gpa.free(home);
+    }
+    var env = try envWithHome(gpa, home);
+    defer env.deinit();
+    var opened: served_setup.Served = undefined;
+    try opened.open(gpa, std.testing.io, image, null);
+    defer opened.deinit();
+    // The hosted shell binds the queued advance contract on (hosted.zig);
+    // the test mirrors it so the listener's client sees bit 15.
+    opened.context.transport_async = true;
+    var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
+    defer bound.deinit();
+
+    const tx = try gpa.alloc(u8, Env.max_frame);
+    defer gpa.free(tx);
+    var connection = try connect(bound.address);
+    defer connection.close();
+    const peer = try serve_peer.Peer.init(gpa, connection.transport());
+    defer peer.deinit();
+    try peer.client.greet(peer.tx);
+    try bound.answer(&opened.context, tx);
+    const ready = try next(peer, &bound, &opened.context, tx);
+    try std.testing.expect(ready.ready & proto.transport_cap != 0);
+
+    try loadAndRead(peer, &bound, &opened.context, tx);
+    _ = try call(peer, &bound, &opened.context, tx, proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .transport });
+
+    // The queued reply arrives without the connection blocking on the job,
+    // and the completion lands on the transport topic: a TransportEvent with
+    // finished = 1 carrying the queued advance's own span. The first pump
+    // can finish the job before the reply is even read, so the drain
+    // collects events from the queue call on and never swallows one.
+    _ = try peer.client.call(proto.Advance, @backingInt(proto.Method.advance_async), .{ .core = .cpu0, .ns = 50_000_000 }, 0, peer.tx);
+    var queued: ?proto.AdvanceQueued = null;
+    var finished: ?proto.TransportEvent = null;
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
+    while ((queued == null or finished == null) and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) {
+        switch (try next(peer, &bound, &opened.context, tx)) {
+            .response => |response| queued = switch (response.result) {
+                .ok => |bytes| try proto.decode(proto.AdvanceQueued, bytes),
+                .err => return error.Refused,
+            },
+            .event => |event| {
+                if (event.topic != @backingInt(proto.Topic.transport)) continue;
+                const report = try proto.decode(proto.TransportEvent, event.payload);
+                if (report.finished != 1) continue;
+                try std.testing.expectEqual(@as(u8, @backingInt(proto.Core.cpu0)), @backingInt(report.core));
+                finished = report;
+            },
+            else => {},
+        }
+    }
+    const span = queued orelse return error.NoQueuedReply;
+    try std.testing.expectEqual(@as(u64, 50_000_000), span.target_ns - span.from_ns);
+    const done = finished orelse return error.NoFinishedEvent;
+    try std.testing.expectEqual(span.from_ns, done.from_ns);
+    try std.testing.expectEqual(span.target_ns, done.target_ns);
+    try std.testing.expect(done.to_ns >= span.target_ns);
 }

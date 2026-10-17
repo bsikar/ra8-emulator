@@ -12,6 +12,7 @@ const debug_front = @import("../debug_front.zig");
 const rsp_dispatch = @import("ra8_gdb").rsp.dispatch;
 const rsp_poll = @import("ra8_gdb").rsp.poll;
 const harness = @import("ra8_session").harness;
+const transport_mod = @import("ra8_session").transport;
 const cpu1_bringup = @import("ra8_session").cpu1.bringup;
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
@@ -39,19 +40,19 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .paced = &asked.pacing, .clock = host_clock.clock() };
     target.session.speed = speed.hook();
     var other: cpu1_bringup.Cpu1 = .{};
-    const named = request.cpu1 orelse return serve(allocator, io, &target, request.mode, out);
+    const named = request.cpu1 orelse return serve(allocator, io, &target, opened.transport(), request.mode, out);
     other.open(allocator, io, std.Io.Dir.cwd(), &opened, named) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };
     defer other.close(allocator);
     target.other_image = other.image;
-    return serve(allocator, io, &target, request.mode, out);
+    return serve(allocator, io, &target, opened.transport(), request.mode, out);
 }
 
 /// gdb on the port, or the script or terminal.
-fn serve(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
-    if (mode == .gdb) return listen(io, target.session, mode.gdb);
+fn serve(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, plane: *transport_mod.Transport, mode: debug_front.Mode, out: anytype) !u8 {
+    if (mode == .gdb) return listen(io, target.session, plane, mode.gdb);
     return drive(allocator, io, target, mode, out);
 }
 
@@ -74,7 +75,10 @@ fn drive(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript
 }
 
 /// Wait for gdb on the loopback port and serve it from the Zig core.
-fn listen(io: std.Io, live: *session_api.Session, port: u16) !u8 {
+fn listen(io: std.Io, live: *session_api.Session, plane: *transport_mod.Transport, port: u16) !u8 {
+    // The gdb serve owns a host clock for the transport's wall; it lives as
+    // long as this listen does.
+    var wall_clock = pacer.HostClock.init(io);
     const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
     var server = address.listen(io, .{ .reuse_address = true }) catch |err| {
         std.debug.print("cannot listen on 127.0.0.1:{d}: {s}\n", .{ port, @errorName(err) });
@@ -86,7 +90,7 @@ fn listen(io: std.Io, live: *session_api.Session, port: u16) !u8 {
     defer stream.close(io);
     var socket = rsp_poll.Socket{ .handle = stream.socket.handle, .io = io };
     try live.setRunBudget(live.currentCore(), rsp_poll.chunk);
-    var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll() };
+    var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll(), .transport = plane, .wall = wall_clock.wall() };
     const stub = rsp_dispatch.Dispatch{ .zig = &target };
     var in: [rsp_dispatch.server.limits.chunk]u8 = undefined;
     var out: [rsp_dispatch.server.limits.framed]u8 = undefined;

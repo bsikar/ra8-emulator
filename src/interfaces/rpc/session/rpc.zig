@@ -7,7 +7,13 @@ pub const protocol_version: u16 = 1;
 /// Bit 8: input. Bit 9: backtrace. Bit 10: periph. Bit 11: folded.
 /// Bit 12: break by name. Bit 13: board parts.
 /// Bit 14: the locals_at op (RA8EMU-1187), locals at a chosen frame.
+/// Bit 15: the transport topic and advance_async (RA8EMU-1196, slice 14):
+/// a host whose frame loop owns the pump answers advance_async by queueing
+/// and reports the completion on the transport topic.
 pub const capabilities: u32 = 0x0000_7FFF;
+/// Capability bit 15, the transport topic. Hosted servers OR it into the
+/// handshake when the frame loop owns the pump; `serve` does not.
+pub const transport_cap: u32 = 0x0000_8000;
 pub const max_payload = 1_048_576;
 
 /// Refusal codes this message set adds above the library's own.
@@ -64,8 +70,9 @@ pub const Method = enum(u16) {
     source_line = 0x0128,
     locals = 0x0129,
     locals_at = 0x012A,
+    advance_async = 0x012B,
 };
-pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105 };
+pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
 pub const Register = enum(u8) { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp, r4, r5, r6, r7, r8, r9, r10, r11, msp, basepri, faultmask, control, fpscr, msplim, psplim, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, vpr };
 pub const RunMode = enum(u8) { run, cont, step, next, finish };
@@ -132,6 +139,25 @@ pub const U64 = struct { value: u64 };
 pub const U32 = struct { value: u32 };
 pub const Bool = struct { value: u8 };
 pub const Ack = struct { accepted: u8 };
+/// `advance_async` accepted a long advance: the job is queued on the
+/// transport and the completion arrives on the transport topic (slice 14).
+pub const AdvanceQueued = struct { core: Core, from_ns: u64, target_ns: u64 };
+/// One transport report on the transport topic: the plane's state, and
+/// when `finished` is 1 the advance the client asked `advance_async` for,
+/// stopped where it got to. `phase` matches the transport's Phase order.
+pub const TransportEvent = struct {
+    epoch: u64,
+    phase: u8,
+    target_ns: u64,
+    reached_ns: u64,
+    slices: u64,
+    finished: u8,
+    core: Core,
+    from_ns: u64,
+    to_ns: u64,
+    reason: StopReason,
+    address: u32,
+};
 /// Run `core` until board time has moved `ns` virtual nanoseconds.
 pub const Advance = struct { core: Core, ns: u64 };
 /// Where an advance began and ended in virtual time, and how it stopped.

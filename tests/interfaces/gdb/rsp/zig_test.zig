@@ -7,6 +7,20 @@ const Machine = ra8.session.stop_machine.Machine;
 const dispatch = ra8.gdb.rsp.dispatch;
 const zig_run = dispatch.zig_run;
 const zig_session = ra8.session.step_hook.zig.session;
+const transport = ra8.session.transport;
+
+/// A wall the legacy (no-transport) targets can carry: one millisecond per
+/// read, never actually read by the budget loop it replaces.
+var legacy_wall_ns: u64 = 0;
+fn legacyWallNow(context: *anyopaque) u64 {
+    _ = context;
+    legacy_wall_ns += 1_000_000;
+    return legacy_wall_ns;
+}
+fn legacyWall() transport.Wall {
+    return .{ .context = &legacy_wall_ns, .nowFn = legacyWallNow };
+}
+
 const session_api = ra8.session.api;
 
 /// 64 bytes of RAM at address 0, the vector table first.
@@ -54,7 +68,7 @@ test "one thread: thread queries and selecting any other thread" {
     var machine = Machine{};
     const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
     var api_session: session_api.Session = .{ .live = session };
-    var target: zig_run.Target = .{ .session = &api_session };
+    var target: zig_run.Target = .{ .session = &api_session, .wall = legacyWall() };
     try expectReply(&target, "qfThreadInfo", "m1");
     try expectReply(&target, "qsThreadInfo", "l");
     try expectReply(&target, "qC", "QC1");
@@ -77,7 +91,7 @@ test "with CPU1 attached it is thread 2, and selecting it moves g, s and ?" {
     var machine1 = Machine{};
     const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu0 }, .machine = &machine0, .budget = 100, .other = .{ .core = .{ .cpu = &cpu1 }, .machine = &machine1 } };
     var api_session: session_api.Session = .{ .live = session };
-    var target: zig_run.Target = .{ .session = &api_session };
+    var target: zig_run.Target = .{ .session = &api_session, .wall = legacyWall() };
     try expectReply(&target, "qfThreadInfo", "m1,2");
     try expectReply(&target, "T2", "OK");
     try expectReply(&target, "T3", "E00");
@@ -101,7 +115,7 @@ test "s steps one instruction, c stops on a break and then on the core's fault" 
     _ = try machine.addBreak(.{ .address = 0x0E });
     const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
     var api_session: session_api.Session = .{ .live = session };
-    var target: zig_run.Target = .{ .session = &api_session };
+    var target: zig_run.Target = .{ .session = &api_session, .wall = legacyWall() };
     try expectReply(&target, "s", "T05thread:1;");
     try std.testing.expectEqual(@as(u32, 0x0A), cpu.regs.pc);
     try expectReply(&target, "vCont;c:1", "T05thread:1;");
@@ -129,10 +143,46 @@ test "an interrupt from the poll stops a continue with SIGINT" {
     };
     var interrupt: Interrupt = .{};
     var api_session: session_api.Session = .{ .live = session };
-    var target: zig_run.Target = .{ .session = &api_session, .poll = .{ .context = &interrupt, .check = Interrupt.check } };
+    var target: zig_run.Target = .{ .session = &api_session, .poll = .{ .context = &interrupt, .check = Interrupt.check }, .wall = legacyWall() };
     try expectReply(&target, "c", "T02thread:1;");
     try std.testing.expectEqual(@as(u32, 3), interrupt.asked);
     try std.testing.expectEqual(@as(u32, 0x08), cpu.regs.pc);
+}
+
+test "a continue through the transport answers the same stop replies" {
+    var memory = ram();
+    // 0x08 e7fe b . : a loop that never stops on its own
+    memory.bytes[8] = 0xFE;
+    memory.bytes[9] = 0xE7;
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 50 };
+    const Interrupt = struct {
+        asked: u32 = 0,
+        fn check(context: *anyopaque) bool {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.asked += 1;
+            return self.asked == 3;
+        }
+    };
+    var interrupt: Interrupt = .{};
+    var api_session: session_api.Session = .{ .live = session };
+    var plane: transport.Transport = .{ .session = &api_session };
+    const Wall = struct {
+        ns: u64 = 0,
+        fn now(context: *anyopaque) u64 {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.ns += 1_000_000;
+            return self.ns;
+        }
+    };
+    var fake_wall: Wall = .{};
+    var target: zig_run.Target = .{ .session = &api_session, .poll = .{ .context = &interrupt, .check = Interrupt.check }, .transport = &plane, .wall = .{ .context = &fake_wall, .nowFn = Wall.now } };
+    try expectReply(&target, "c", "T02thread:1;");
+    try std.testing.expectEqual(@as(u32, 3), interrupt.asked);
+    try std.testing.expectEqual(@as(u32, 0x08), cpu.regs.pc);
+    try std.testing.expectEqual(transport.Phase.halted, plane.report().phase);
 }
 
 test "Dispatch with a Zig session reads the Zig core's registers and memory" {
@@ -142,7 +192,7 @@ test "Dispatch with a Zig session reads the Zig core's registers and memory" {
     var machine = Machine{};
     const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 };
     var api_session: session_api.Session = .{ .live = session };
-    var target: zig_run.Target = .{ .session = &api_session };
+    var target: zig_run.Target = .{ .session = &api_session, .wall = legacyWall() };
     const stub = dispatch.Dispatch{ .zig = &target };
     var out: [512]u8 = undefined;
     try std.testing.expectEqualStrings("08000000", try stub.answer("pf", &out));
@@ -159,7 +209,7 @@ test "the reverse packets walk the recorded window (RA8EMU-1170)" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
     defer opened.deinit();
     const session = opened.session();
-    var target: zig_run.Target = .{ .session = session };
+    var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };
 
     var pcs: [4]u32 = undefined;
     for (0..4) |i| {
@@ -187,7 +237,7 @@ test "reverse-continue stops at a breakpoint in the recorded window (RA8EMU-1170
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
     defer opened.deinit();
     const session = opened.session();
-    var target: zig_run.Target = .{ .session = session };
+    var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };
 
     var pcs: [4]u32 = undefined;
     for (0..4) |i| {

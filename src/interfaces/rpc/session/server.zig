@@ -9,6 +9,7 @@ const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
 const api = @import("ra8_session").api;
+const transport_mod = @import("ra8_session").transport;
 const handlers = @import("handlers.zig");
 const uart_feed = @import("uart_feed.zig");
 const event_feed = @import("event_feed.zig");
@@ -34,6 +35,8 @@ pub const rpc_lib = rpc;
 
 pub const Context = handlers.Context;
 pub const app_codes = handlers.app_codes;
+/// Release one connection's subscriptions, pending stop and lcd state (RA8EMU-1196).
+pub const forget = handlers.forget;
 
 const M = proto.Method;
 const routes = .{
@@ -78,11 +81,17 @@ const routes = .{
     .{ @backingInt(M.rtc), session_rtc.rtc },
     .{ @backingInt(M.input), session_input.input },
     .{ @backingInt(M.advance), session_advance.advance },
+    .{ @backingInt(M.advance_async), session_advance.advanceQueued },
     .{ @backingInt(M.snapshot), session_files.snapshot },
     .{ @backingInt(M.restore), session_files.restore },
 };
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
+
+/// One Host.poll drives an active transport job at most this much host
+/// time, so a frame that answers a long advance stays a frame
+/// (RA8EMU-1196, slice 14).
+const pump_slice_ns: u64 = 10_000_000;
 
 /// One served connection: the route table plus the events it owes.
 pub const Host = struct {
@@ -92,7 +101,11 @@ pub const Host = struct {
     /// The connection starts with no subscriptions.
     pub fn init(wire: rpc.Transport, rx: []u8, context: *Context) Host {
         handlers.forget(context);
-        return .{ .server = Server.init(wire, rx, context, proto.capabilities) };
+        // A host whose own loop pumps between frames advertises bit 15, so
+        // its clients know `advance_async` queues and completes on the
+        // transport topic (RA8EMU-1196, slice 14).
+        const caps = proto.capabilities | (if (context.transport_async) proto.transport_cap else 0);
+        return .{ .server = Server.init(wire, rx, context, caps) };
     }
 
     /// Answer at most one frame, then send the UART bytes, the LCD dirty
@@ -105,6 +118,7 @@ pub const Host = struct {
         try lcd_feed.pump(context, &self.server, tx);
         try event_feed.pump(context, &self.server, tx);
         try trace_feed.pump(context, &self.server, tx);
+        try pumpTransport(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;
             if (context.wants(stopped.core, .stop)) {
@@ -114,3 +128,86 @@ pub const Host = struct {
         return step;
     }
 };
+
+/// Drive the transport's active job one bounded slice and report on the
+/// transport topic (RA8EMU-1196, slice 14): a `TransportEvent` when a
+/// command changed the plane's epoch, and the completion of the advance
+/// this connection queued with `advance_async`, whether it finished or a
+/// newer command preempted it.
+fn pumpTransport(context: *Context, server: *Server, tx: []u8) !void {
+    const plane = context.transport orelse return;
+    const wall = context.wall orelse return;
+    if (plane.job == null and context.advance_ticket == null) return;
+    const now = wall.nowFn(wall.context);
+    const pumped = plane.pump(wall, now + pump_slice_ns) catch return;
+    const subscriber = context.wants(.cpu0, .transport) or context.wants(.cpu1, .transport);
+    if (pumped.finished == null and pumped.report.epoch != context.transport_epoch and subscriber) {
+        context.transport_epoch = pumped.report.epoch;
+        try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), eventOf(pumped.report, null), tx);
+    }
+    const ticket = context.advance_ticket orelse return;
+    if (pumped.finished) |fin| {
+        if (fin.ticket == ticket) {
+            const target = context.advance_target_ns;
+            context.advance_ticket = null;
+            context.advance_target_ns = 0;
+            if (subscriber) {
+                const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
+                context.pending = stop;
+                const to = context.session.now() catch context.advance_from_ns;
+                var event = eventOf(pumped.report, coreOf(fin.core));
+                event.finished = 1;
+                event.from_ns = context.advance_from_ns;
+                event.target_ns = target;
+                event.to_ns = to;
+                event.reason = stop.reason;
+                event.address = stop.address;
+                try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
+            }
+            return;
+        }
+    }
+    // The job is neither running under our ticket nor the plane's newest
+    // finished one: a newer command preempted it, so it stopped where it
+    // got to, halted like any front end's interrupt.
+    const active = plane.job != null and plane.job.?.ticket == ticket;
+    const newest = plane.done != null and plane.done.?.ticket == ticket;
+    if (!active and !newest) {
+        const target = context.advance_target_ns;
+        context.advance_ticket = null;
+        context.advance_target_ns = 0;
+        if (subscriber) {
+            const to = context.session.now() catch context.advance_from_ns;
+            var event = eventOf(pumped.report, context.advance_core);
+            event.finished = 1;
+            event.from_ns = context.advance_from_ns;
+            event.target_ns = target;
+            event.to_ns = to;
+            event.reason = .halt_requested;
+            try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
+        }
+    }
+}
+
+/// The wire form of one transport report; the completion fields stay zero
+/// until the caller fills them for a finished job.
+fn eventOf(report: transport_mod.Report, finished_core: ?proto.Core) proto.TransportEvent {
+    return .{
+        .epoch = report.epoch,
+        .phase = @backingInt(report.phase),
+        .target_ns = report.progress.target_ns orelse 0,
+        .reached_ns = report.progress.reached_ns orelse 0,
+        .slices = report.progress.slices,
+        .finished = 0,
+        .core = finished_core orelse .cpu0,
+        .from_ns = 0,
+        .to_ns = 0,
+        .reason = .count,
+        .address = 0,
+    };
+}
+
+/// The wire's core for a session core.
+fn coreOf(core: api.Core) proto.Core {
+    return @fromBackingInt(@intCast(@backingInt(core)));
+}

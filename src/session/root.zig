@@ -62,6 +62,7 @@ pub const state_options = @import("state_options.zig");
 pub const step_hook = @import("step_hook.zig");
 pub const stop_machine = @import("stop_machine.zig");
 pub const symbols = @import("symbols.zig");
+pub const transport = @import("transport/transport.zig");
 pub const taken_in = @import("taken_in.zig");
 pub const tally = @import("tally.zig");
 pub const touch_spec = @import("touch_spec.zig");

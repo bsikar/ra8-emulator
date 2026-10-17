@@ -30,13 +30,25 @@ pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
     const from = session.now() catch |err| return refuse(err);
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = .bad_args };
+    if (context.transport) |plane| {
+        const wall = context.wall orelse return refuse(error.NoWall);
+        const ticket = plane.command(.{ .advance = .{ .core = which, .ns = args.ns } }) catch |err| return refuse(err);
+        const ended = plane.finish(ticket, wall, null) catch |err| return refuse(err);
+        return reply(context, args.core, from, ended);
+    }
     const kept = budgetOf(session, which) catch |err| return refuse(err);
     const ended = rounds(session, which, target) catch |err| {
         session.setRunBudget(which, kept) catch {};
         return refuse(err);
     };
     session.setRunBudget(which, kept) catch |err| return refuse(err);
-    const stop = handlers.stopped(session, args.core, ended);
+    return reply(context, args.core, from, ended);
+}
+
+/// The reply both paths end with: the stop the run ended in and the time it reached.
+fn reply(context: *handlers.Context, core: proto.Core, from: u64, ended: api.Ended) Outcome {
+    const session = context.session;
+    const stop = handlers.stopped(session, core, ended);
     context.pending = stop;
     const to = session.now() catch |err| return refuse(err);
     return .{ .ok = .{ .core = stop.core, .from_ns = from, .to_ns = to, .reason = stop.reason, .address = stop.address } };
@@ -73,4 +85,30 @@ fn budgetOf(session: *const api.Session, which: api.Core) !u64 {
 fn refuse(err: anyerror) Outcome {
     if (err == error.CoreNotAttached) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
+}
+
+/// The async `advance_async` (RA8EMU-1196, slice 14): a served host whose
+/// own loop pumps between frames queues the advance as a transport job and
+/// replies at once, so the GUI frame never blocks in `finish`; the
+/// completion arrives on the transport topic, so the client subscribes to
+/// it first. Any host without the plane (or without `transport_async`)
+/// refuses, and the client falls back to the blocking `advance`.
+pub fn advanceQueued(context: *handlers.Context, args: proto.Advance) rpc.Outcome(proto.AdvanceQueued) {
+    if (args.ns == 0) return .{ .err = .bad_args };
+    const plane = context.transport orelse return .{ .err = refusedCode() };
+    if (!context.transport_async or context.wall == null) return .{ .err = refusedCode() };
+    const from = context.session.now() catch return .{ .err = refusedCode() };
+    const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
+    const target = std.math.add(u64, from, args.ns) catch return .{ .err = refusedCode() };
+    const ticket = plane.command(.{ .advance = .{ .core = which, .ns = args.ns } }) catch return .{ .err = refusedCode() };
+    context.advance_ticket = ticket;
+    context.advance_from_ns = from;
+    context.advance_target_ns = target;
+    context.advance_core = args.core;
+    return .{ .ok = .{ .core = args.core, .from_ns = from, .target_ns = from + args.ns } };
+}
+
+/// The refusal every queued advance that cannot be answered carries.
+fn refusedCode() rpc.Code {
+    return @fromBackingInt(@intCast(handlers.app_codes.refused));
 }
