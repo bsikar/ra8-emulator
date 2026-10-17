@@ -8,7 +8,6 @@
 //! Opens an SDL window, serves the image on a local session (local_session.zig)
 //! and draws the debugger shell (shell/loop.zig).
 const std = @import("std");
-const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
 const local_session = @import("../local_session.zig");
 const session_worker = @import("../session_worker.zig");
@@ -64,7 +63,6 @@ pub const parse = args_mod.parse;
 pub const pick = args_mod.pick;
 pub const usage = args_mod.usage;
 
-const Env = proto.Client.Env;
 const max_image: usize = 64 * 1024 * 1024;
 
 const WindowBackend = struct {
@@ -243,14 +241,15 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     try session.setup.stageApps(io, allocator, args.apps[0..args.app_count]);
     var hosted: ?shell_hosted.Hosted = null;
     defer if (hosted) |*h| h.deinit();
-    const rx = try allocator.alloc(u8, 2 * Env.max_frame);
-    const tx = try allocator.alloc(u8, Env.max_frame);
     var host_clock = wall_clock.Host.init(io);
     var worker: session_worker.Worker = undefined;
-    defer if (apart(args)) worker.deinit();
+    worker.bind(io, allocator, &session, host_clock.clock());
+    defer worker.deinit();
     var link: session_link.Link = undefined;
-    if (apart(args)) worker.bind(io, allocator, &session, host_clock.clock());
-    if (apart(args)) link.openNative(&worker.native) else link.open(session.transport(), rx, tx);
+    // The local session rides the worker's native mailbox (RA8EMU-1196) in
+    // both modes: the thread serves it only when someone is using the
+    // window, and the shell's own thread drains it between frames otherwise.
+    link.openNative(&worker.native);
     var shell = shell_loop.Shell.init(allocator, try pane_layout.twoCore(allocator));
     if (cap) |c| c.bind(&shell);
     defer if (cap) |c| c.unbind();
@@ -266,7 +265,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     var board_store = shell_board_store.Store{ .io = io, .allocator = allocator, .dir = prefs };
     var recent_store = shell_recents.Store{ .io = io, .allocator = allocator, .dir = prefs };
     var recent_list = recent_store.restore();
-    shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, rx, tx, &board_store);
+    shell.pick = shell_rebuild.launch(allocator, io, args.image, args.apps[0..args.app_count], &session, &shell, &hosted, &link, &worker, &board_store);
     shell.clock = host_clock.clock();
     var time: shell_time.Time = .{};
     shell.time = &time;
@@ -308,7 +307,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.recent_menu = &recent_menu;
     var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &feeds.registers, .edit = &feeds.edit, .memory = &feeds.memory, .memory_field = &feeds.memory_field, .code = &feeds.code, .breaks = &feeds.breaks, .map = &map, .stack = &feeds.stack, .timeline = &shell.timeline.?, .source = &source, .locals = &feeds.locals };
     shell.painter = panes.painter();
-    if (apart(args)) try worker.serveShell(&shell);
+    // A headless, scripted or frame-counted run answers inline; a windowed
+    // run answers on the worker's thread (serveShell starts it).
+    if (apart(args)) try worker.serveShell(&shell) else shell.server = worker.inlineServer();
     try driveAndSave(io, &shell, window, args.image, bytes, args.frames, &layout_store, &recent_store, recent_list, &link);
 }
 
