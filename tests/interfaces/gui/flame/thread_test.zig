@@ -14,7 +14,7 @@ const proto = ra8.rpc.session.rpc;
 const flame_model = gui_app.flame.model;
 
 fn ran(opened: *setup.Served) !void {
-    try opened.open(std.testing.allocator, std.testing.io, test_paths.two_threads, null);
+    try opened.open(std.testing.allocator, std.testing.io, test_paths.two_threads, null, null);
     errdefer opened.deinit();
     opened.owner.session().live.budget = 200_000;
     try opened.sampleStacks(200);

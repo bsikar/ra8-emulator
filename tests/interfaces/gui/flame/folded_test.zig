@@ -22,7 +22,7 @@ fn ask(context: anytype, wanted: proto.FoldedAsk) ![]const u8 {
 }
 
 fn bothRan(opened: *setup.Served) !void {
-    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null);
+    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null, null);
     errdefer opened.deinit();
     opened.owner.session().live.budget = 200_000;
     try opened.openSecond(test_paths.call_tree_cpu1);

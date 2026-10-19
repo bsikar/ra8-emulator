@@ -16,7 +16,7 @@ const image = "tests/fixtures/fpu/fp_basic.elf";
 
 fn opened(gpa: std.mem.Allocator) !served_setup.Served {
     var setup: served_setup.Served = undefined;
-    try setup.open(gpa, std.testing.io, image, null);
+    try setup.open(gpa, std.testing.io, image, null, null);
     return setup;
 }
 

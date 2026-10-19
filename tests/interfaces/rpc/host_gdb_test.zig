@@ -43,7 +43,7 @@ test "host GDB serves ordinary packets, reconnects and drops a slow peer in fini
     defer env.deinit();
     try env.put("HOME", home);
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null);
+    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, io, &env);
     defer bound.deinit();
@@ -106,7 +106,7 @@ test "host GDB sends port 0's console text as O packets ahead of the stop reply"
     defer env.deinit();
     try env.put("HOME", home);
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null);
+    try opened.open(gpa, io, "tests/fixtures/fpu/fp_basic.elf", null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, io, &env);
     defer bound.deinit();

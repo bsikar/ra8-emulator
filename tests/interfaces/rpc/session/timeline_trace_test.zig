@@ -143,7 +143,7 @@ fn recorded(gpa: std.mem.Allocator, io: std.Io, path: []const u8, core: usize, t
 test "the timeline model matches the recorded both-cores trace" {
     const gpa = std.testing.allocator;
     var opened: setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image0, null);
+    try opened.open(gpa, std.testing.io, image0, null, null);
     defer opened.deinit();
     try opened.openSecond(image1);
     var wire = try Wire.init(gpa);

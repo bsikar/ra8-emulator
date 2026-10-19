@@ -20,7 +20,7 @@ fn ask(context: *handlers.Context, block: []const u8, json: bool) ![]const u8 {
 
 test "cpu0's bus lists its blocks, RTC among them, one per line" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const text = try ask(&opened.context, "", false);
     try std.testing.expect(std.mem.indexOf(u8, text, "RTC 0x") != null);
@@ -29,7 +29,7 @@ test "cpu0's bus lists its blocks, RTC among them, one per line" {
 
 test "RTC's registers come back with their offsets" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const text = try ask(&opened.context, "RTC", false);
     try std.testing.expect(std.mem.startsWith(u8, text, "r64cnt 0x00 ?\nseccnt 0x02 ?\n"));
@@ -39,7 +39,7 @@ test "RTC's registers come back with their offsets" {
 
 test "the JSON forms parse, with an undeclared width as null" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const gpa = std.testing.allocator;
     const listed = try std.json.parseFromSlice(std.json.Value, gpa, try ask(&opened.context, "", true), .{});
@@ -55,7 +55,7 @@ test "the JSON forms parse, with an undeclared width as null" {
 
 test "no hook refuses; a listing past the scratch is too long" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const hook = opened.context.peripherals;
     opened.context.peripherals = null;
