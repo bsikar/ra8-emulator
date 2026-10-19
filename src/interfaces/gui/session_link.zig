@@ -78,7 +78,15 @@ pub const Link = struct {
     pub fn openNative(self: *Link, native: *local_native_link.Native) void {
         // The local host always pumps the session's plane, so it carries
         // the transport capability (bit 15, RA8EMU-1196) beside the rest.
-        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities | proto.transport_cap } } };
+        self.openNativePlain(native);
+        self.state.connected.caps |= proto.transport_cap;
+    }
+
+    /// The same native connection with the plain capability set: the
+    /// session answers `advance` with a response, so the shell takes the
+    /// sync path. Tests of the sync path's semantics open this way.
+    pub fn openNativePlain(self: *Link, native: *local_native_link.Native) void {
+        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } } };
     }
 
     /// The session's capability bits, or 0 while not connected.

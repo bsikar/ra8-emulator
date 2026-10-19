@@ -8,7 +8,6 @@ const gui_app = @import("gui_app");
 const Manual = @import("manual_clock.zig").Manual;
 
 const proto = ra8.rpc.session.rpc;
-const Env = proto.Client.Env;
 const draw_list = ra8.render.draw_list;
 const bar = gui_app.time_bar;
 const shell_frame = gui_app.shell.frame;
@@ -19,8 +18,10 @@ pub const height = 480;
 
 pub const Live = struct {
     session: gui_app.local_session.LocalSession,
-    rx: []u8,
-    tx: []u8,
+    /// Frozen at zero: the shell's run sizing read no clock off the old
+    /// loopback, so the native stamp must read none either.
+    worker_clock: Manual = .{},
+    worker: gui_app.session_worker.Worker,
     link: gui_app.session_link.Link,
     shell: gui_app.shell.loop.Shell,
     window: Headless,
@@ -37,11 +38,12 @@ pub const Live = struct {
     /// bar's speed starts at `milli` thousandths of real time: the fixture
     /// images run a 1 GHz clock, which the session cannot keep up with.
     pub fn open(self: *Live, image: []const u8, milli: u64) !void {
+        // Field defaults do not apply to an `undefined` rig; reset first.
+        self.worker_clock = .{};
         const gpa = std.testing.allocator;
         try self.session.open(gpa, std.testing.io, image, null);
-        self.rx = try gpa.alloc(u8, 2 * Env.max_frame);
-        self.tx = try gpa.alloc(u8, Env.max_frame);
-        self.link.open(self.session.transport(), self.rx, self.tx);
+        self.worker.bind(std.testing.io, gpa, &self.session, self.worker_clock.clock());
+        self.link.openNative(&self.worker.native);
         self.shell = .init(gpa, try gui_app.pane_layout.twoCore(gpa));
         self.window = .init(gpa, width, height);
         self.clock = .{ .step_ns = 1000 };
@@ -53,7 +55,7 @@ pub const Live = struct {
         self.pointer = .{};
         self.panes = .{ .board = &self.board, .board_input = &self.pointer, .stack = &self.stack };
         self.shell.link = &self.link;
-        self.shell.server = gui_app.shell.server.served(&self.session);
+        self.shell.server = self.worker.inlineServer();
         self.shell.clock = self.clock.clock();
         self.shell.time = &self.time;
         self.shell.registers = &self.registers;
@@ -77,12 +79,10 @@ pub const Live = struct {
     }
 
     pub fn deinit(self: *Live) void {
-        const gpa = std.testing.allocator;
         self.board.deinit();
         self.window.deinit();
         self.shell.deinit();
-        gpa.free(self.tx);
-        gpa.free(self.rx);
+        self.worker.deinit();
         self.session.deinit();
     }
 
@@ -102,7 +102,14 @@ pub const Live = struct {
     pub fn untilReadOn(self: *Live, index: usize, serial: u32) !void {
         const registers = &self.registers.cores[index];
         for (0..30) |_| {
-            if (self.shell.status.run == .halted and registers.serial != serial and !registers.want and registers.left == 0) return;
+            // The open burst leaves reads queued in the mailbox; a command
+            // sent before they drain is dropped as back-pressure, so settle
+            // waits for the whole link to go quiet, not just the leaf.
+            const quiet = if (self.link.native) |native|
+                native.count == 0 and native.link.pendingCount() == 0 and native.ring_count == 0
+            else
+                false;
+            if (quiet and self.shell.status.run == .halted and registers.serial != serial and !registers.want and registers.left == 0) return;
             try self.step();
         }
         return error.NeverSettled;

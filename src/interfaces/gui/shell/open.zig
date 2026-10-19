@@ -4,6 +4,9 @@
 //! and loaded into the session the way the first image was, so the board
 //! comes back halted at the new image's reset vector. A file that cannot be
 //! read, or is longer than a load carries, never reaches the session, and
+//! a pick that lands while the mailbox is full waits in the shell and is
+//! retried once a frame until the send fits: a full mailbox is the shell's
+//! own back-pressure, not the session refusing the image.
 //! one the session refuses leaves the image that was there as it was; either
 //! way the status strip says so. The window's title names the image in use.
 const std = @import("std");
@@ -36,6 +39,11 @@ pub const Open = struct {
     /// The loaded image's whole path, kept for Reload.
     path_buf: [path_max]u8 = undefined,
     path_len: usize = 0,
+    /// A pick the mailbox turned back: its path waits here, and each frame
+    /// retries the load until the mailbox has room.
+    queued: bool = false,
+    queued_buf: [path_max]u8 = undefined,
+    queued_len: usize = 0,
 
     /// Ask for the picker, as the menu's Open ELF item does.
     pub fn ask(self: *Open) void {
@@ -94,7 +102,12 @@ pub const Open = struct {
             return;
         };
         defer self.allocator.free(bytes);
+        self.queued = false;
         status.load(link, path, bytes) catch |err| {
+            if (err == error.TableFull) {
+                self.hold(path);
+                return;
+            }
             status.refused = if (err == error.Oversize) .too_large else .load;
             return;
         };
@@ -106,6 +119,26 @@ pub const Open = struct {
         if (self.history) |list| _ = list.add(path);
         self.path_len = @min(path.len, path_max);
         @memcpy(self.path_buf[0..self.path_len], path[0..self.path_len]);
+    }
+
+    /// The frame's turn for a pick the mailbox turned back: the load goes
+    /// out like any pick once the send fits, and a still-full mailbox holds
+    /// the path for the next frame.
+    pub fn retry(self: *Open, link: *Link, status: *Status) void {
+        if (!self.queued) return;
+        var buf: [path_max]u8 = undefined;
+        const len = self.queued_len;
+        @memcpy(buf[0..len], self.queued_buf[0..len]);
+        self.queued = false;
+        self.loadPath(buf[0..len], link, status);
+    }
+
+    /// Keeps `path` for the frame's retry. Nothing reached the session, so
+    /// nothing is refused and the image in use stays as it is.
+    fn hold(self: *Open, path: []const u8) void {
+        self.queued_len = @min(path.len, path_max);
+        @memcpy(self.queued_buf[0..self.queued_len], path[0..self.queued_len]);
+        self.queued = true;
     }
 };
 

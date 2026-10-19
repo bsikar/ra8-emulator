@@ -5,6 +5,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
+const Manual = @import("../manual_clock.zig").Manual;
 
 const shell_main = gui_app.shell.main;
 const shell_startup = gui_app.shell.startup;
@@ -14,7 +15,6 @@ const shell_devices = gui_app.shell.devices;
 const session_link = gui_app.session_link;
 const platform = gui_app.platform;
 const Headless = gui_app.headless.Headless;
-const Env = ra8.rpc.session.rpc.Client.Env;
 
 const image = "tests/fixtures/fpu/fp_basic.elf";
 
@@ -104,16 +104,18 @@ fn settle(startup: *shell_startup.Startup, devices: *shell_devices.Devices) !voi
     var session: local_session.LocalSession = undefined;
     try session.open(gpa, io, image, null);
     defer session.deinit();
-    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
-    defer gpa.free(rx);
-    const tx = try gpa.alloc(u8, Env.max_frame);
-    defer gpa.free(tx);
+    // Frozen at zero: the shell here has no clock, and the run sizing
+    // must read none off the worker's stamp either.
+    var worker_clock = Manual{};
+    var worker: gui_app.session_worker.Worker = undefined;
+    worker.bind(io, gpa, &session, worker_clock.clock());
+    defer worker.deinit();
     var link: session_link.Link = undefined;
-    link.open(session.transport(), rx, tx);
+    link.openNative(&worker.native);
     var shell = shell_loop.Shell.init(gpa, try gui_app.pane_layout.twoCore(gpa));
     defer shell.deinit();
     shell.link = &link;
-    shell.server = gui_app.shell.server.served(&session);
+    shell.server = worker.inlineServer();
     shell.devices = devices;
     shell.startup = startup;
     const bytes = try std.Io.Dir.cwd().readFileAlloc(io, image, gpa, .limited(1 << 20));

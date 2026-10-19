@@ -44,7 +44,7 @@ const Bench = struct {
 
     /// Let the session answer and feed what it sent to the bar and the status.
     fn exchange(self: *Bench) !void {
-        try self.rig.session.answer();
+        try self.rig.answer();
         while (self.rig.link.pump()) |arrival| {
             if (self.time.observe(arrival, self.now_ns) == .boundary) continue;
             self.status.observe(&self.rig.link, arrival);

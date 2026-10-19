@@ -149,7 +149,7 @@ test "R2 adjacent Board panel gets its press and schedules its tap without rewin
     try std.testing.expect(shown.contains(x, y));
     try std.testing.expectEqual(grey, bench.pixel(x, y));
     _ = try bench.rig.link.send(proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .session });
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try bench.shell.pump();
     bench.shell.snaps.cursor.moveTo(55);
     const before = bench.shell.snaps;
@@ -159,7 +159,7 @@ test "R2 adjacent Board panel gets its press and schedules its tap without rewin
     try std.testing.expect(pointer.drag.start != null);
     try bench.window.feed(.{ .button = .{ .button = 1, .down = false, .x = x, .y = y } });
     try bench.draw();
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     var scheduled: usize = 0;
     while (bench.rig.link.pump()) |arrival| switch (arrival) {
         .event => |event| if (event.topic == @backingInt(proto.Topic.session)) {

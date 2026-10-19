@@ -42,6 +42,21 @@ fn widestArgs() usize {
 /// types ask for.
 pub const max_args = widestArgs();
 
+/// The names of `Args`' byte-slice fields, the ones whose bytes the
+/// mailbox must own across the wait.
+fn byteFields(comptime Args: type) []const []const u8 {
+    comptime {
+        var names: []const []const u8 = &.{};
+        const shape = @typeInfo(Args).@"struct";
+        for (shape.field_names, shape.field_types) |name, FieldType| {
+            const info = @typeInfo(FieldType);
+            const slice = info == .pointer and info.pointer.size == .slice and info.pointer.child == u8;
+            if (slice) names = names ++ &[_][]const u8{name};
+        }
+        return names;
+    }
+}
+
 pub const Native = struct {
     io: std.Io,
     gpa: std.mem.Allocator,
@@ -76,6 +91,9 @@ pub const Native = struct {
     const Slot = struct {
         args: [max_args]u8 align(16),
         apply: *const fn (args: *const anyopaque, link: *local_native.Link) anyerror!u32,
+        /// The owned copies of the request's byte-slice arguments, freed
+        /// once the apply has run.
+        copies: ?[]u8 = null,
     };
 
     pub fn init(io: std.Io, gpa: std.mem.Allocator, clock: wall_clock.Clock, context: *session_server.Context) Native {
@@ -106,6 +124,8 @@ pub const Native = struct {
 
     pub fn deinit(self: *Native) void {
         self.link.deinit();
+        var held: usize = 0;
+        while (held < self.count) : (held += 1) self.release(&self.slots[(self.head + held) % max_requests]);
         if (self.taken) |bytes| self.gpa.free(bytes);
         var i: usize = 0;
         while (i < self.ring_count) : (i += 1) {
@@ -127,12 +147,46 @@ pub const Native = struct {
         defer self.mutex.unlock(self.io);
         if (self.count >= max_requests) return error.TableFull;
         const slot = &self.slots[(self.head + self.count) % max_requests];
-        slot.* = .{ .args = undefined, .apply = Applier(Args, method).apply };
-        @memcpy(slot.args[0..@sizeOf(Args)], std.mem.asBytes(&args));
+        slot.* = .{ .args = undefined, .apply = Applier(Args, method).apply, .copies = null };
+        try self.takeArgs(Args, slot, args);
         const id: u32 = @intCast(self.link.next_id + self.count);
         self.count += 1;
         self.asked.set(self.io);
         return id;
+    }
+
+    /// Copies `args` into `slot`, owning the bytes behind every byte-slice
+    /// field and pointing the stored copy at them. The apply happens later,
+    /// on the session's serve step, so a caller's bytes cannot be freed
+    /// out from under a queued request (the picked image freed before the
+    /// apply encoded its frame). Nothing was stored when this fails, so
+    /// the slot stays clean for the next caller.
+    fn takeArgs(self: *Native, comptime Args: type, slot: *Slot, args: Args) !void {
+        const fields = comptime byteFields(Args);
+        var total: usize = 0;
+        inline for (fields) |name| total += @field(args, name).len;
+        var value = args;
+        if (total > 0) {
+            const buffer = try self.gpa.alloc(u8, total);
+            errdefer self.gpa.free(buffer);
+            var at: usize = 0;
+            inline for (fields) |name| {
+                const slice = @field(args, name);
+                @memcpy(buffer[at..][0..slice.len], slice);
+                @field(value, name) = buffer[at..][0..slice.len];
+                at += slice.len;
+            }
+            slot.copies = buffer;
+        }
+        @memcpy(slot.args[0..@sizeOf(Args)], std.mem.asBytes(&value));
+    }
+
+    /// Frees a slot's owned bytes once the apply has run (or failed).
+    fn release(self: *Native, slot: *Slot) void {
+        if (slot.copies) |bytes| {
+            self.gpa.free(bytes);
+            slot.copies = null;
+        }
     }
 
     /// The session's thread's step: dispatch what the window queued while
@@ -148,7 +202,11 @@ pub const Native = struct {
         while (self.count > 0 and self.link.pendingCount() < proto.pending_slots) {
             const slot = &self.slots[self.head];
             const args: *const anyopaque = @ptrCast(&slot.args);
-            _ = slot.apply(args, &self.link) catch |err| return err;
+            _ = slot.apply(args, &self.link) catch |err| {
+                self.release(slot);
+                return err;
+            };
+            self.release(slot);
             self.head = (self.head + 1) % max_requests;
             self.count -= 1;
             dispatched = true;
@@ -165,7 +223,9 @@ pub const Native = struct {
             self.answered_ns.store(self.clock.now(), .release);
             self.answered.set(self.io);
         }
-        return dispatched;
+        // A pass that only pumped the transport plane still did work, so a
+        // caller driving to quiescence sees the job through.
+        return dispatched or grew;
     }
 
     /// The window's pump: take one arrival the session owes, oldest

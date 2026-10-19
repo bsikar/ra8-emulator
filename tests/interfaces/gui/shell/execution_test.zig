@@ -57,7 +57,7 @@ test "remote queued execution stays running and retries only after answers free 
         try std.testing.expectEqual(@as(?u32, null), bench.time.run.settled);
         try std.testing.expectEqual(at, bench.time.run.address);
     }
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try execution.exchange(&bench.shell);
     try std.testing.expect(bench.shell.drained);
     try execution.paySlices(&bench.shell, .fresh);
@@ -65,7 +65,7 @@ test "remote queued execution stays running and retries only after answers free 
     // With the remote answer still unsettled, a later frame cannot send twice.
     try execution.paySlices(&bench.shell, .fresh);
     try std.testing.expectEqual(@as(?u32, id), bench.time.run.slice_id);
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try bench.shell.pump();
     try std.testing.expectEqual(@as(?u32, null), bench.time.run.slice_id);
     try std.testing.expect(bench.time.run.lit and !bench.time.run.refused);
@@ -85,7 +85,7 @@ test "a user Pause during queue pressure remains a halt after the queue drains" 
     try std.testing.expectEqual(at, bench.shell.status.run.halted.address);
     try std.testing.expectEqual(@as(?gui.status.bar.Refusal, null), bench.shell.status.refused);
     try std.testing.expectEqual(@as(?u32, null), bench.time.run.halted());
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try execution.exchange(&bench.shell);
     try execution.paySlices(&bench.shell, .fresh);
     try std.testing.expect(!bench.time.run.lit and !bench.time.run.refused);
@@ -101,7 +101,7 @@ test "a genuine served slice refusal still settles the shell at its last address
     const at = bench.time.run.address;
     try execution.paySlices(&bench.shell, .fresh);
     try std.testing.expect(bench.time.run.slice_id != null);
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try execution.exchange(&bench.shell);
     try std.testing.expect(!bench.time.run.lit and bench.time.run.refused);
     try std.testing.expectEqual(at, bench.shell.status.run.halted.address);
@@ -123,7 +123,7 @@ test "local execution drains the queued requests and answers each slice and list
     try bench.open();
     defer bench.deinit();
     var listener: Listener = .{};
-    bench.shell.server = gui.shell.server.served(&bench.rig.session);
+    bench.shell.server = bench.rig.server();
     bench.shell.listener = .{ .context = &listener, .answerFn = Listener.answer };
     try bench.fill();
     try execution.exchange(&bench.shell);
@@ -163,7 +163,7 @@ const LocalsBench = struct {
 
     /// Let the session answer, then take what it sent through the shell.
     fn round(self: *LocalsBench) !void {
-        try self.rig.session.answer();
+        try self.rig.answer();
         try self.shell.pump();
     }
 
@@ -249,7 +249,7 @@ test "a settled Pause walks both cores' locals again" {
     for (&locals.cores) |*model| try std.testing.expect(!touched(model));
     bench.time.pressCommand(.pause, &bench.rig.link, &bench.shell.status);
     try execution.paySlices(&bench.shell, .fresh);
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     try execution.exchange(&bench.shell);
     try execution.paySlices(&bench.shell, .fresh);
     try std.testing.expect(!bench.time.run.lit);

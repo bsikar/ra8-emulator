@@ -174,7 +174,7 @@ test "scripted Pause cancels a queue pressured Run through the capture platform"
     try std.testing.expectEqual(@as(?u32, null), time.run.slice_id);
     try std.testing.expect(try shell.step(cap.platform()));
     try std.testing.expect(shell.status.run == .halted and !time.run.lit and !time.run.refused);
-    try rig.session.answer();
+    try rig.answer();
     try std.testing.expect(try shell.step(cap.platform()));
     try std.testing.expect(shell.status.run == .halted and !time.run.lit);
     try std.testing.expectEqual(@as(?u32, null), time.run.slice_id);

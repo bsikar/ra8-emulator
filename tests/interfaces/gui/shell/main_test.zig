@@ -4,6 +4,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const gui_app = @import("gui_app");
+const Manual = @import("../manual_clock.zig").Manual;
 const shell_main = gui_app.shell.main;
 const shell_server = gui_app.shell.server;
 const Profile = ra8.host.profiles.Profile;
@@ -179,18 +180,19 @@ test "--frames fails once the session is gone instead of waiting for a load" {
     var session: gui_app.local_session.LocalSession = undefined;
     try session.open(gpa, std.testing.io, image, null);
     defer session.deinit();
-    const Env = ra8.rpc.session.rpc.Client.Env;
-    const rx = try gpa.alloc(u8, 2 * Env.max_frame);
-    defer gpa.free(rx);
-    const tx = try gpa.alloc(u8, Env.max_frame);
-    defer gpa.free(tx);
+    // Frozen at zero: the shell here has no clock, and the run sizing
+    // must read none off the worker's stamp either.
+    var worker_clock = Manual{};
+    var worker: gui_app.session_worker.Worker = undefined;
+    worker.bind(std.testing.io, gpa, &session, worker_clock.clock());
+    defer worker.deinit();
     var link: gui_app.session_link.Link = undefined;
-    link.open(session.transport(), rx, tx);
+    link.openNative(&worker.native);
     link.close();
     var shell = gui_app.shell.loop.Shell.init(gpa, try gui_app.pane_layout.twoCore(gpa));
     defer shell.deinit();
     shell.link = &link;
-    shell.server = shell_server.served(&session);
+    shell.server = worker.inlineServer();
     var window = Headless.init(gpa, 480, 320);
     defer window.deinit();
     try std.testing.expectError(error.ImageNotLoaded, shell_main.drive(std.testing.io, &shell, window.platform(), &@as(?gui_app.shell.first_image.Image, .{ .path = image, .bytes = "" }), 4));

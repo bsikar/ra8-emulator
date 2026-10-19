@@ -88,7 +88,7 @@ const Bench = struct {
 
     /// Let the session answer, and take what it sent.
     fn exchange(self: *Bench) !void {
-        try self.rig.session.answer();
+        try self.rig.answer();
         while (self.rig.link.pump()) |arrival| {
             try self.board.observe(arrival, 0);
             switch (arrival) {

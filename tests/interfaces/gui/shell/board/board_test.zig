@@ -141,7 +141,7 @@ test "once the session greets, the feed subscribes the panel and the session top
     const context = &rig.session.setup.context;
     try std.testing.expect(!context.wants(.cpu0, .session));
     board.attach(&rig.link);
-    try rig.session.answer();
+    try rig.answer();
     try std.testing.expect(context.wants(.cpu0, .session));
     try std.testing.expect(context.wants(.cpu0, .lcd_dirty));
     try std.testing.expect(context.wants(.cpu1, .session));
@@ -149,7 +149,7 @@ test "once the session greets, the feed subscribes the panel and the session top
     var answers: usize = 0;
     while (rig.link.pump()) |_| answers += 1;
     board.attach(&rig.link);
-    try rig.session.answer();
+    try rig.answer();
     while (rig.link.pump()) |_| answers += 1;
     try std.testing.expectEqual(@as(usize, 5), answers);
 }

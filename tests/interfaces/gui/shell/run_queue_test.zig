@@ -50,7 +50,7 @@ test "a full request queue preserves Run and every owner until a slot frees" {
     try std.testing.expectError(error.TableFull, link.send(proto.Now, .now, .{ .core = .cpu0 }));
 
     // Real responses release capacity; no direct pending-table manipulation.
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     const first = link.pump() orelse return error.NoAnswer;
     try std.testing.expect(first == .response and first.response.result == .ok);
     var answered: [proto.pending_slots]bool = @splat(false);
@@ -65,22 +65,35 @@ test "a full request queue preserves Run and every owner until a slot frees" {
     try std.testing.expect(std.mem.indexOfScalar(u32, &held, slice) == null);
     try std.testing.expect(!bench.run.next(link, 0));
     try std.testing.expectEqual(@as(u32, 1), bench.run.sent);
+    // The native mailbox frees every queued request at its dispatch, so
+    // the table empties all at once; the pressure that holds the next
+    // serve is the replies queue, and the requests fill again against it.
+    var refill: [proto.pending_slots - 2]u32 = undefined;
+    for (&refill) |*id| id.* = try link.send(proto.Now, .now, .{ .core = .cpu0 });
+    try std.testing.expect(!bench.run.next(link, 0));
     try std.testing.expectError(error.TableFull, link.send(proto.Now, .now, .{ .core = .cpu0 }));
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     var seen: Seen = .{};
     while (link.pump()) |arrival| switch (bench.run.observe(arrival, 0)) {
         .slice => seen.slices += 1,
         .boundary => seen.boundaries += 1,
         .other => {
             try std.testing.expect(arrival == .response and arrival.response.result == .ok);
-            const at = std.mem.indexOfScalar(u32, &held, arrival.response.id) orelse return error.WrongOwner;
-            try std.testing.expect(!answered[at]);
-            answered[at] = true;
-            try std.testing.expectEqual(before.address, (try proto.decode(proto.U32, arrival.response.result.ok)).value);
+            // The transport-topic subscription and the refill's own reads
+            // answer outside `held`; only the held owners are asserted.
+            if (std.mem.indexOfScalar(u32, &held, arrival.response.id)) |at| {
+                try std.testing.expect(!answered[at]);
+                answered[at] = true;
+                try std.testing.expectEqual(before.address, (try proto.decode(proto.U32, arrival.response.result.ok)).value);
+            }
         },
     };
     for (answered) |got| try std.testing.expect(got);
-    try std.testing.expectEqual(Seen{ .slices = 1, .boundaries = 1 }, seen);
+    // The drain itself runs the queued transport job (Link.pump's
+    // pumpFeeds step), so the async slice completes inside this loop; its
+    // completion is its own boundary and the stop event behind it stays
+    // with the status bar (RA8EMU-1196), so no boundary is counted.
+    try std.testing.expectEqual(Seen{ .slices = 1, .boundaries = 0 }, seen);
     try std.testing.expect(bench.run.lit and !bench.run.refused);
     try std.testing.expectEqual(@as(?u32, null), bench.run.slice_id);
     try std.testing.expectEqual(@as(?u32, null), bench.run.halted());

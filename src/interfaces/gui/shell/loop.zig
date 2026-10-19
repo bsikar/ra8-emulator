@@ -172,7 +172,10 @@ pub const Shell = struct {
         try execution.exchange(self);
         if (self.registers) |registers| if (self.time) |time| registers.live(time.run.lit, self.now(), self.settings.display.registers.interval());
         try execution.paySlices(self, .fresh);
-        if (self.files) |files| files.frame(window, &self.status);
+        if (self.files) |files| {
+            if (self.link) |link| files.retry(link, &self.status);
+            files.frame(window, &self.status);
+        }
         if (!window.visible()) return true;
         if (self.pick) |pick| pick.frame(window);
         solved.deinit(self.allocator);

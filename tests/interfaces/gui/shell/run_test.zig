@@ -43,7 +43,7 @@ fn payFrame(rig: *Rig, run: *Run, clock: *Manual, milli: u64) !Seen {
     var seen: Seen = .{};
     run.frame(clock.read(), milli);
     while (run.next(&rig.link, clock.read())) {
-        try rig.session.answer();
+        try rig.answer();
         take(rig, run, clock, &seen);
     }
     return seen;
@@ -61,9 +61,9 @@ const Bench = struct {
     clock: Manual = .{ .step_ns = 1000 },
     run: Run = .{},
 
-    fn open(self: *Bench) !void {
+    fn openPlain(self: *Bench) !void {
         self.* = .{ .rig = undefined };
-        try self.rig.open(image);
+        try self.rig.openPlain(image);
         errdefer self.rig.deinit();
         try self.rig.load(&self.status, image);
         self.run.start(self.status.run.halted.address);
@@ -76,7 +76,7 @@ const Bench = struct {
 
 test "a frame pays what it owes in growing slices, and no slice's end is a stop" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     // From a unit far under what the frame owes, as on a host that was slow.
     bench.run.unit_ns = 1000;
@@ -101,7 +101,7 @@ test "a frame pays what it owes in growing slices, and no slice's end is a stop"
 test "the unit never grows past one frame of board time" {
     var run: Run = .{ .lit = true, .unit_ns = frame_ns - 1 };
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     run.frame(0, gui_app.speed_field.max_wire);
     run.until_ns = std.math.maxInt(u64);
@@ -114,7 +114,7 @@ test "the unit never grows past one frame of board time" {
 
 test "the speed scales what a frame owes, and a frame owes nothing from the one before" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     _ = try bench.pay(2);
     var before = bench.run.board_ns.?;
@@ -130,7 +130,7 @@ test "the speed scales what a frame owes, and a frame owes nothing from the one 
 
 test "max pays slices until the frame's share of wall time is spent" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     bench.clock.step_ns = shell_run.share_ns / 16;
     bench.run.unit_ns = 1000;
@@ -144,7 +144,7 @@ test "max pays slices until the frame's share of wall time is spent" {
 test "a clock that stands still cannot hold a max frame past its slice limit" {
     var run: Run = .{ .lit = true, .until_ns = 1, .sent = shell_run.max_slices, .owed_ns = null };
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     try std.testing.expect(!run.next(&bench.rig.link, 0));
     run.sent = shell_run.max_slices - 1;
@@ -153,7 +153,7 @@ test "a clock that stands still cannot hold a max frame past its slice limit" {
 
 test "a pause hands back where the last slice left the core, once" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     _ = try bench.pay(slow);
     bench.run.pause(&bench.rig.link);
@@ -167,7 +167,7 @@ test "a pause hands back where the last slice left the core, once" {
 
 test "a pause while a slice is out settles when the slice answers" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     bench.run.frame(bench.clock.read(), slow);
     try std.testing.expect(bench.run.next(&bench.rig.link, bench.clock.read()));
@@ -175,7 +175,7 @@ test "a pause while a slice is out settles when the slice answers" {
     bench.run.pause(&bench.rig.link);
     try std.testing.expectEqual(@as(?u32, null), bench.run.halted());
     var seen: Seen = .{};
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     take(&bench.rig, &bench.run, &bench.clock, &seen);
     try std.testing.expectEqual(Seen{ .slices = 1, .boundaries = 1 }, seen);
     try std.testing.expectEqual(@as(?u32, bench.run.address), bench.run.halted());
@@ -183,20 +183,20 @@ test "a pause while a slice is out settles when the slice answers" {
 
 test "a slice that overran the frame's share shrinks the unit in proportion, down to the least" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     bench.clock.step_ns = 0;
     var seen: Seen = .{};
     bench.run.frame(0, 1000);
     try std.testing.expect(bench.run.next(&bench.rig.link, 0));
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     bench.clock.now_ns = 4 * shell_run.share_ns;
     take(&bench.rig, &bench.run, &bench.clock, &seen);
     try std.testing.expectEqual(shell_run.first_unit_ns / 4, bench.run.unit_ns);
 
     bench.run.frame(bench.clock.now_ns, 1000);
     try std.testing.expect(bench.run.next(&bench.rig.link, bench.clock.now_ns));
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     bench.clock.now_ns += 1000 * shell_run.share_ns;
     take(&bench.rig, &bench.run, &bench.clock, &seen);
     try std.testing.expectEqual(shell_run.least_unit_ns, bench.run.unit_ns);
@@ -205,7 +205,7 @@ test "a slice that overran the frame's share shrinks the unit in proportion, dow
 test "after an overrun the unit grows back only to four times what fitted, and the ceiling eases up" {
     var run: Run = .{ .lit = true };
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     const link = &bench.rig.link;
     // A slice of 100 us that took four shares of the frame: 25 us fitted.
@@ -240,7 +240,7 @@ test "after an overrun the unit grows back only to four times what fitted, and t
 test "a fresh overrun pulls an eased ceiling down again" {
     var run: Run = .{ .lit = true, .unit_ns = frame_ns };
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     run.frame(0, gui_app.speed_field.max_wire);
     run.until_ns = std.math.maxInt(u64);
@@ -254,7 +254,7 @@ test "a fresh overrun pulls an eased ceiling down again" {
 
 test "nothing goes out unless Run is lit" {
     var rig: Rig = undefined;
-    try rig.open(image);
+    try rig.openPlain(image);
     defer rig.deinit();
     var run: Run = .{};
     run.frame(0, 1000);
@@ -264,7 +264,7 @@ test "nothing goes out unless Run is lit" {
 
 test "a slice the session refuses ends the run where it was" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     var run: Run = .{ .core = .cpu1 };
     run.start(0x1234);
@@ -276,7 +276,7 @@ test "a slice the session refuses ends the run where it was" {
 
 test "a stop for a reason of its own ends the run and leaves its stop event for the others" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     // Past the blinking, into the loop the image parks in.
     for (0..4) |_| _ = try bench.pay(slow);
@@ -296,7 +296,7 @@ test "a stop for a reason of its own ends the run and leaves its stop event for 
 test "a session on a thread of its own is paid all through the frame and sized by when it answered" {
     var run: Run = .{ .lit = true };
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     const link = &bench.rig.link;
     var answered: std.atomic.Value(u64) = .init(0);
@@ -333,7 +333,7 @@ test "a frame owes the board the period it is given, at the speed asked for" {
 
 test "a full pending table holds the slice back, and the run goes on once a slot frees" {
     var bench: Bench = undefined;
-    try bench.open();
+    try bench.openPlain();
     defer bench.rig.deinit();
     const link = &bench.rig.link;
     // Other leaves' reads fill every slot.
@@ -344,7 +344,7 @@ test "a full pending table holds the slice back, and the run goes on once a slot
     try std.testing.expect(bench.run.lit);
     try std.testing.expect(!bench.run.refused);
     try std.testing.expectEqual(@as(?u32, null), bench.run.halted());
-    try bench.rig.session.answer();
+    try bench.rig.answer();
     while (link.pump()) |_| {}
     try std.testing.expect(bench.run.next(link, bench.clock.read()));
 }

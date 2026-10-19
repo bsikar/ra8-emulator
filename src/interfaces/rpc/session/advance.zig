@@ -99,6 +99,10 @@ pub fn advanceQueued(context: *handlers.Context, args: proto.Advance) rpc.Outcom
     if (!context.transport_async or context.wall == null) return .{ .err = refusedCode() };
     const from = context.session.now() catch return .{ .err = refusedCode() };
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
+    // A core the session can't serve refuses the way the blocking
+    // `advance` does: the plane's queue takes any core, so a job it can't
+    // run would fail mid-flight with nothing reported on the topic.
+    _ = budgetOf(context.session, which) catch return .{ .err = refusedCode() };
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = refusedCode() };
     const ticket = plane.command(.{ .advance = .{ .core = which, .ns = args.ns } }) catch return .{ .err = refusedCode() };
     context.advance_ticket = ticket;
