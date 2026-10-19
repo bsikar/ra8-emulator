@@ -45,11 +45,13 @@ fn ram() Ram {
 const Ticks = struct {
     seen: [8]u32 = @splat(0),
     len: usize = 0,
+    ckpt: [8]u64 = @splat(0),
+    ckpt_len: usize = 0,
     fail: bool = false,
     saved: ra8.chip.core.scheduler.State = .{},
 
     fn hook(self: *Ticks, chunk: u32) zig_boundary.Boundary {
-        return .{ .context = self, .tickFn = tick, .chunk = chunk, .saved = &self.saved };
+        return .{ .context = self, .tickFn = tick, .chunk = chunk, .saved = &self.saved, .checkpointFn = checkpoint };
     }
 
     fn tick(context: *anyopaque, instructions: u32) anyerror!void {
@@ -57,6 +59,13 @@ const Ticks = struct {
         if (self.fail) return error.Refused;
         self.seen[self.len] = instructions;
         self.len += 1;
+    }
+
+    fn checkpoint(context: *anyopaque, round: u64) anyerror!void {
+        const self: *Ticks = @ptrCast(@alignCast(context));
+        if (self.fail) return error.Refused;
+        self.ckpt[self.ckpt_len] = round;
+        self.ckpt_len += 1;
     }
 
     fn total(self: Ticks) u64 {
@@ -81,6 +90,21 @@ test "a run closes whole stretches and saves the budget remainder" {
     try std.testing.expectEqual(cpu.slots, ticks.total() + ticks.saved.stretch.carry);
 }
 
+test "every closed round offers the checkpoint hook with its round number" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    const core: zig_core.ZigCore = .{ .cpu = &cpu };
+    var machine = Machine{};
+    machine.begin();
+    var ticks: Ticks = .{};
+    const ended = try zig_boundary.run(core, &machine, 2500, null, null, ticks.hook(1024));
+    try std.testing.expect(ended == .count);
+    // Two stretches spent, two rounds closed, hooks see rounds 1 and 2.
+    try std.testing.expectEqual(@as(usize, 2), ticks.ckpt_len);
+    try std.testing.expectEqualSlices(u64, &.{ 1, 2 }, ticks.ckpt[0..ticks.ckpt_len]);
+}
+
 test "a stop mid stretch saves progress without ticking" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };
@@ -93,6 +117,7 @@ test "a stop mid stretch saves progress without ticking" {
     const ended = try zig_boundary.run(core, &machine, 100, null, null, ticks.hook(16));
     try std.testing.expect(ended == .stop);
     try std.testing.expectEqual(@as(usize, 0), ticks.len);
+    try std.testing.expectEqual(@as(usize, 0), ticks.ckpt_len);
     try std.testing.expectEqual(cpu.slots, ticks.saved.stretch.carry);
 }
 

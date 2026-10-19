@@ -30,6 +30,18 @@ pub const Boundary = struct {
     /// return. It runs no guest code and ticks no board.
     observeFn: ?*const fn (context: *anyopaque) void = null,
 
+    /// Fires after a round closes (post tick, post next()), before the next
+    /// interval opens. The session owns the policy and the recorder; the
+    /// loop only offers the closed round.
+    checkpointFn: ?*const fn (context: *anyopaque, round: u64) anyerror!void = null,
+
+    /// Offers the closed round to the session's checkpoint policy. A run
+    /// without the hook checkpoints nothing.
+    pub fn checkpoint(self: Boundary, round: u64) Error!void {
+        const hook = self.checkpointFn orelse return;
+        hook(self.context, round) catch return Error.BoundaryFailed;
+    }
+
     pub fn tick(self: Boundary, instructions: u64) Error!void {
         if (instructions == 0) return;
         self.tickFn(self.context, @intCast(instructions)) catch return Error.BoundaryFailed;
@@ -52,6 +64,7 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, w
         if (saved.cut) {
             try edge.tick(saved.stretch.carry);
             saved.next();
+            try edge.checkpoint(saved.at.r);
             continue;
         }
         if (saved.stretch.full == 0) saved.open(widthOf(edge), core.cpu.slots);
@@ -72,6 +85,7 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, w
         if (cut or saved.stretch.left() == 0) {
             try edge.tick(saved.stretch.carry);
             saved.next();
+            try edge.checkpoint(saved.at.r);
         } else if (elapsed < want) return .count;
     }
     return .count;

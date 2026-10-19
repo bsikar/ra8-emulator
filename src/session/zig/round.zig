@@ -44,6 +44,7 @@ const Round = struct {
             .board => done: {
                 try self.edge.tick(self.saved.stretch.carry);
                 self.saved.next();
+                try self.edge.checkpoint(self.saved.at.r);
                 break :done null;
             },
         };
