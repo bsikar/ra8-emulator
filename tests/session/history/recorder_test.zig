@@ -1,6 +1,7 @@
 //! Covers src/session/history/recorder.zig: boundary and intervention
 //! frames reach the storage in order, a torn final tail recovers to the
-//! last whole frame, and group commit fires on both thresholds.
+//! last whole frame, group commit fires on both thresholds, and a
+//! checkpoint's object is durable before its record is staged.
 const std = @import("std");
 const ra8 = @import("ra8");
 const recorder_mod = ra8.session.history_recorder;
@@ -181,4 +182,96 @@ test "the input landing adapter records an intervention at the grid position" {
     try std.testing.expectEqualStrings(&.{ 1, 0x34, 0x12, 0x78, 0x56 }, bodies[0].?);
     try std.testing.expectEqual(record.Intervention.What.button, whats[1]);
     try std.testing.expectEqualStrings(&.{ 4, 1, 1 }, bodies[1].?);
+}
+
+/// One harness over both spaces: the order list proves object-before-log.
+const Both = struct {
+    gpa: std.mem.Allocator,
+    log_bytes: std.ArrayList(u8) = .empty,
+    order: std.ArrayList(u8) = .empty,
+    name: [32]u8 = undefined,
+    object: std.ArrayList(u8) = .empty,
+    syncs: usize = 0,
+
+    fn append(context: *anyopaque, data: []const u8) anyerror!void {
+        const self: *Both = @ptrCast(@alignCast(context));
+        try self.order.append(self.gpa, 'l');
+        try self.log_bytes.appendSlice(self.gpa, data);
+    }
+
+    fn flush(context: *anyopaque) anyerror!void {
+        const self: *Both = @ptrCast(@alignCast(context));
+        try self.order.append(self.gpa, 'f');
+    }
+
+    fn truncate(context: *anyopaque, len: u64) anyerror!void {
+        const self: *Both = @ptrCast(@alignCast(context));
+        self.log_bytes.shrinkRetainingCapacity(@intCast(len));
+    }
+
+    fn put(context: *anyopaque, name: []const u8, bytes: []const u8) anyerror!void {
+        const self: *Both = @ptrCast(@alignCast(context));
+        try self.order.append(self.gpa, 'o');
+        @memcpy(self.name[0..name.len], name);
+        try self.object.appendSlice(self.gpa, bytes);
+    }
+
+    fn sync(context: *anyopaque) anyerror!void {
+        const self: *Both = @ptrCast(@alignCast(context));
+        self.syncs += 1;
+        try self.order.append(self.gpa, 's');
+    }
+
+    fn storage(self: *Both) recorder_mod.Storage {
+        return .{ .context = self, .append = append, .flush = flush, .truncate = truncate };
+    }
+
+    fn objects(self: *Both) recorder_mod.Objects {
+        return .{ .context = self, .put = put, .sync = sync };
+    }
+};
+
+test "a checkpoint writes its object before any log byte and the record decodes back" {
+    const gpa = std.testing.allocator;
+    var both: Both = .{ .gpa = gpa };
+    defer both.log_bytes.deinit(gpa);
+    defer both.order.deinit(gpa);
+    defer both.object.deinit(gpa);
+
+    var rec = try recorder_mod.Recorder.init(gpa, both.storage(), .{});
+    defer rec.deinit();
+    rec.objects = both.objects();
+    rec.observe(0);
+    try rec.checkpoint(header(1), 7, "machine bytes");
+    try std.testing.expectEqualStrings("os", both.order.items);
+    try std.testing.expectEqualStrings("machine bytes", both.object.items);
+    try std.testing.expectEqual(@as(usize, 0), both.log_bytes.items.len);
+
+    try rec.commit(1);
+    try std.testing.expectEqual(@as(usize, 0), rec.pendingBytes());
+    var rest: []const u8 = both.log_bytes.items;
+    var frames: usize = 0;
+    while (rest.len > 0) {
+        const hit = try format.decode(rest);
+        if (hit.frame.kind == @backingInt(record.Kind.checkpoint)) {
+            const got = try record.decodeCheckpoint(hit.frame.payload);
+            try std.testing.expectEqual(@as(u32, 7), got.checkpoint.id);
+            var digest: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash("machine bytes", &digest, .{});
+            try std.testing.expectEqual(digest[0..16].*, got.checkpoint.object);
+        }
+        rest = rest[hit.consumed..];
+        frames += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 1), frames);
+}
+
+test "a checkpoint refuses when no object space is attached" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.bytes.deinit(gpa);
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    try std.testing.expectError(error.NoObjects, rec.checkpoint(header(1), 7, "x"));
 }

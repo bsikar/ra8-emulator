@@ -37,7 +37,7 @@ pub const Recovery = struct {
     torn: bool,
 };
 
-pub const Error = error{ OutOfMemory, WriteFailed } || format.Error;
+pub const Error = error{ OutOfMemory, WriteFailed, NoObjects } || format.Error;
 
 fn countVisit(context: *usize, boundary: log_mod.Boundary) void {
     _ = boundary;
@@ -60,6 +60,18 @@ pub fn recoverSegment(bytes: []const u8, storage: Storage) (format.Error || anye
 }
 
 /// The recorder over one log segment.
+/// The object space a checkpoint's saved machine reaches, as the
+/// application fills it. `put` stores the bytes under the name the
+/// recorder chose; `sync` makes them durable. Object-before-log is the
+/// order this module proves: a checkpoint's bytes are durable here
+/// before its record can become visible in the log, so a reader never
+/// follows a record to an object the storage does not hold.
+pub const Objects = struct {
+    context: *anyopaque,
+    put: *const fn (context: *anyopaque, name: []const u8, bytes: []const u8) anyerror!void,
+    sync: *const fn (context: *anyopaque) anyerror!void,
+};
+
 pub const Recorder = struct {
     gpa: std.mem.Allocator,
     storage: Storage,
@@ -70,6 +82,9 @@ pub const Recorder = struct {
     staging: *std.Io.Writer.Allocating,
     /// Bytes the storage holds for this segment so far.
     committed_bytes: u64 = 0,
+    /// The object space checkpoints write through, as the application
+    /// fills it; a recorder without one refuses checkpoints.
+    objects: ?Objects = null,
 
     pub fn init(gpa: std.mem.Allocator, storage: Storage, policy: log_mod.CommitPolicy) Error!Recorder {
         const staging = try gpa.create(std.Io.Writer.Allocating);
@@ -97,6 +112,30 @@ pub const Recorder = struct {
     /// boundary.
     pub fn recordIntervention(self: *Recorder, header: record.Header, intervention: record.Intervention) anyerror!void {
         try self.stage(@backingInt(record.Kind.intervention), header, intervention.what, intervention.body);
+    }
+
+    /// Pins one checkpoint: writes the saved machine's bytes into the
+    /// object space under the 128-bit truncated SHA-256 of the bytes,
+    /// makes them durable with a sync, and only then stages the
+    /// Checkpoint record, so the record never names an object the
+    /// storage does not hold yet. The staged record leaves at the next
+    /// commit, with whatever frames share it.
+    pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
+        const objects = self.objects orelse return Error.NoObjects;
+        var digest: [32]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+        var name: [32]u8 = undefined;
+        for (digest[0..16], 0..) |byte, i| {
+            _ = std.fmt.bufPrint(name[i * 2 ..][0..2], "{x:0>2}", .{byte}) catch unreachable;
+        }
+        try objects.put(objects.context, &name, bytes);
+        try objects.sync(objects.context);
+        var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64);
+        defer staging.deinit();
+        try record.encodeCheckpoint(&staging.writer, header, .{ .id = id, .object = digest[0..16].* });
+        const payload = staging.writer.buffered();
+        try format.encode(&self.staging.writer, @backingInt(record.Kind.checkpoint), payload);
+        self.log.pending_bytes += format.header_len + payload.len;
     }
 
     fn stage(self: *Recorder, kind: u16, header: record.Header, what: anytype, body: []const u8) anyerror!void {
