@@ -117,9 +117,8 @@ pub const Board = struct {
     transfers1: dtc.Dtc,
     /// DTCSAR: which of DTC0 and DTC1 the boot handed to Non-secure.
     transfer_attribution: dtc.attribution.Unit,
-    /// The DMA module gate, and the eight channels behind it. Both are built
-    /// in attach(): the channels need a pointer to this board's own bank, and
-    /// the engine whose memory they copy.
+    /// The DMA module gate and its eight channels, both built in attach():
+    /// the channels need a pointer to this board's own bank and memory.
     dma: dmac.Dmac,
     dma_module: dma_bank.Bank = .{},
     pins: gpio.Gpio,
@@ -135,9 +134,8 @@ pub const Board = struct {
     /// The two 12-bit D/A channels. No result readback on this part, so the
     /// code stream and DACR0.DACEN are the whole observable.
     analog: dac.Dac,
-    /// The 16-bit A/D converter. No analog core behind it, so the observable
-    /// is which scans actually ran and what they put in the result
-    /// registers.
+    /// The 16-bit A/D converter. No analog core behind it, so the
+    /// observable is which scans ran and what they put in the registers.
     adc: adc.Adc,
     /// Safe shutoff: the request flags that force the GPT outputs of a group
     /// into high impedance, and the state bit firmware reads back to prove it.
@@ -179,8 +177,8 @@ pub const Board = struct {
     ratios: ckdiv.Ckdiv,
 
     /// The four clock sources and the stabilisation flags that follow their
-    /// stop bits. Built in attach(): every store is PRC0-gated, so it needs a
-    /// pointer to this board's own protection model rather than a copy.
+    /// stop bits. Built in attach(): every store is PRC0-gated, so it needs
+    /// a pointer to this board's own protection rather than a copy.
     oscillators: oscsf.Oscillators,
     subclk: subclock.Unit,
     /// LOCOCR: the low-speed oscillator's stop bit.
@@ -248,8 +246,7 @@ pub const Board = struct {
     trace: rtt.Rtt = .{},
     /// The SD card on the Pmod2 line, the other way an image reaches
     /// storage. Built in attach(): it holds only the blocks something wrote,
-    /// so it needs the board's allocator, and attach() is where it goes on a
-    /// line.
+    /// so it needs the board's allocator and attach() is where it sits.
     sd: sd_card.Card,
     /// The card as something on SCI0's line. Built in attach(), which is
     /// also where it is handed the card it speaks for: it holds a pointer,
