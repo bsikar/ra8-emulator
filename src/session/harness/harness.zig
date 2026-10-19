@@ -177,11 +177,10 @@ pub const Harness = struct {
         self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);
     }
 
-    /// Publish CPU0's ThreadX switches and exception entry and return on
-    /// the session's event stream (RA8EMU-346). The tracer sits in front of
-    /// the core and is drained at each chunk boundary. Stamps are CPU0's
-    /// retired instructions, one cycle each, at the time base's rate. False
-    /// when the image has no ThreadX; call once, after open.
+    /// Publish CPU0's ThreadX switches and exception entry and return on the
+    /// session's event stream (RA8EMU-346): the tracer sits in front of the
+    /// core, drained at each chunk boundary; stamps are CPU0's retired
+    /// instructions, one cycle each. False with no ThreadX; call once.
     pub fn traceRtos(self: *Harness) bool {
         const state = self.state;
         state.tracer = rtos_hook.resolve(state.image, .{}) orelse return false;
@@ -311,6 +310,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer allocator.destroy(state);
     state.allocator = allocator;
     state.recording = null;
+    state.persistent = null;
     state.bytes = try options.host().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
     errdefer allocator.free(state.bytes);
     state.image = try elf.Image.init(state.bytes);
