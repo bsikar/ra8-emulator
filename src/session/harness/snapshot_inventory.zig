@@ -20,6 +20,8 @@ pub fn complete(comptime State: type) bool {
         .{ .name = "files", .reason = "Stable snapshot owner bindings" },
         .{ .name = "state_file", .reason = "Host file path and I/O handles" },
         .{ .name = "history", .reason = "Debugger rewind history retained" },
+        .{ .name = "landing", .reason = "Input landing adapter wiring (slice 16)" },
+        .{ .name = "landing_observer", .reason = "Input landing observer wiring (slice 16)" },
         .{ .name = "recording", .reason = "Debugger undo trail retained" },
         .{ .name = "display", .reason = "Target renderer wiring and host buffers; guest vsync saved on board" },
         .{ .name = "tracer", .reason = "Host trace instrumentation retained" },

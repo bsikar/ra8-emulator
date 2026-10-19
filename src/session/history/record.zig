@@ -233,7 +233,9 @@ pub fn decodeBoundary(payload: []const u8) Error!BoundaryRecord {
     return .{ .header = hit.header, .boundary = .{ .what = hit.what, .body = hit.body } };
 }
 
-fn encodeBodied(writer: anytype, header: Header, what: u16, body: []const u8) !void {
+// The body every record but the root shares, public for the recorder which
+// stages the same payload shape into its frames.
+pub fn encodeBodied(writer: anytype, header: Header, what: u16, body: []const u8) !void {
     try encodeHeader(writer, header);
     try writer.writeInt(u16, what, .little);
     try writer.writeInt(u32, @intCast(body.len), .little);

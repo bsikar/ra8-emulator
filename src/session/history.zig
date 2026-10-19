@@ -12,6 +12,11 @@
 //! whoever displays it.
 const std = @import("std");
 const session_state = @import("board/state.zig");
+const history_record = @import("history/record.zig");
+const history_position = @import("history/position.zig");
+const recorder_mod = @import("history/recorder.zig");
+const scheduler = @import("ra8_chip").core.scheduler;
+const input_script = @import("ra8_components").input_script;
 
 pub const History = struct {
     files: *session_state.Files,
@@ -24,6 +29,11 @@ pub const History = struct {
     /// Index of the oldest live frame; the newest is one behind head + count.
     head: usize = 0,
     count: u32 = 0,
+    /// The persistent recorder (slice 16), when the session streams its
+    /// history into an application-owned store beside this ring.
+    recorder: ?*recorder_mod.Recorder = null,
+    /// The next event log record's sequence number.
+    seq: u32 = 0,
 
     /// One recorded stop: the serialized run plus what the caller read off
     /// it. `tag` is the stop's own kind (stop, count, fault), for a rewind
@@ -42,6 +52,20 @@ pub const History = struct {
         ring.items.len = capacity;
         @memset(ring.items, .{});
         return .{ .files = files, .gpa = gpa, .capacity = capacity, .ring = ring };
+    }
+
+    /// Attaches the persistent recorder (slice 16); recording sites then
+    /// stream frames into the application-owned store beside this ring.
+    pub fn attachRecorder(self: *History, recorder: *recorder_mod.Recorder) void {
+        self.recorder = recorder;
+    }
+
+    /// Records one intervention frame through the attached recorder at the
+    /// given position; no recorder attached keeps this a no-op.
+    pub fn recordIntervention(self: *History, position: history_position.Position, what: history_record.Intervention.What, body: []const u8) anyerror!void {
+        const rec = self.recorder orelse return;
+        try rec.recordIntervention(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
+        self.seq += 1;
     }
 
     pub fn deinit(self: *History) void {
@@ -98,5 +122,42 @@ pub const History = struct {
         var total: usize = 0;
         for (self.ring.items) |entry| total += entry.bytes.len;
         return total;
+    }
+};
+
+/// The input landing adapter (slice 16): turns a scripted input event's
+/// landing into an intervention frame at the position the scheduler holds
+/// as the event applies. The session builds one from an attached history
+/// and scheduler grid, and the board boundary passes its observer into
+/// every scripted dispatch. A landing that fails never stalls the run:
+/// the error waits here for the session to check.
+pub const Landing = struct {
+    history: *History,
+    /// The live scheduler state; its current position is where a landing
+    /// reports itself.
+    grid: *const scheduler.State,
+    failed: ?anyerror = null,
+
+    /// The board-facing observer; its context is this adapter.
+    pub fn observer(self: *Landing) input_script.Script.Landing {
+        return .{ .context = self, .notify = &notify };
+    }
+
+    fn notify(context: *anyopaque, event: input_script.Event, at_ns: u64) void {
+        _ = at_ns;
+        const self: *Landing = @ptrCast(@alignCast(context));
+        var body: [input_script.max_body_len]u8 = undefined;
+        var writer: std.Io.Writer = .fixed(&body);
+        input_script.encodeBody(&writer, event) catch |err| {
+            self.failed = err;
+            return;
+        };
+        const what: history_record.Intervention.What = switch (event) {
+            .button => .button,
+            .tap, .swipe, .longpress => .tap,
+        };
+        self.history.recordIntervention(self.grid.at, what, writer.buffered()) catch |err| {
+            if (self.failed == null) self.failed = err;
+        };
     }
 };

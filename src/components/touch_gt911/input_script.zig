@@ -9,6 +9,40 @@ pub const Event = union(enum) {
     longpress: struct { point: gt911.Contact, duration_ns: u64 },
     button: struct { down: bool, button_id: Button },
 };
+/// The event's own bytes for the history recorder (slice 16): one tag
+/// byte, then the fields little-endian. The event's detail stays with the
+/// subsystem that emitted it; the recorder just carries it.
+pub const max_body_len: usize = 17;
+
+pub fn encodeBody(writer: anytype, event: Event) !void {
+    switch (event) {
+        .tap => |contact| {
+            try writer.writeByte(1);
+            try writer.writeInt(u16, contact.x, .little);
+            try writer.writeInt(u16, contact.y, .little);
+        },
+        .swipe => |move| {
+            try writer.writeByte(2);
+            try writer.writeInt(u16, move.from.x, .little);
+            try writer.writeInt(u16, move.from.y, .little);
+            try writer.writeInt(u16, move.to.x, .little);
+            try writer.writeInt(u16, move.to.y, .little);
+            try writer.writeInt(u64, move.duration_ns, .little);
+        },
+        .longpress => |hold| {
+            try writer.writeByte(3);
+            try writer.writeInt(u16, hold.point.x, .little);
+            try writer.writeInt(u16, hold.point.y, .little);
+            try writer.writeInt(u64, hold.duration_ns, .little);
+        },
+        .button => |press| {
+            try writer.writeByte(4);
+            try writer.writeByte(@intFromBool(press.down));
+            try writer.writeByte(@backingInt(press.button_id));
+        },
+    }
+}
+
 pub const Timed = struct { at_ns: u64, event: Event };
 pub const max_events = 256;
 pub const Button = enum { sw1, sw2 };
@@ -66,7 +100,19 @@ pub const Script = struct {
         return due;
     }
 
+    /// The landing observer (slice 16): called once per queued event as it
+    /// applies, with the event and its own scheduled time. Gesture frames
+    /// the event generates later stay derived: the queued event replays them.
+    pub const Landing = struct {
+        context: *anyopaque,
+        notify: *const fn (context: *anyopaque, event: Event, at_ns: u64) void,
+    };
+
     pub fn dispatch(self: *Script, now_ns: u64, panel: *gt911.Panel, pins: *gpio.Gpio, input: *host.Input) void {
+        return self.dispatchObserved(now_ns, panel, pins, input, null);
+    }
+
+    pub fn dispatchObserved(self: *Script, now_ns: u64, panel: *gt911.Panel, pins: *gpio.Gpio, input: *host.Input, observer: ?*const Landing) void {
         // Script times are absolute virtual board time, as the doc says:
         // "at 2s" is 2 s after reset, wherever the first boundary lands.
         const elapsed = now_ns;
@@ -77,6 +123,7 @@ pub const Script = struct {
         };
         while (self.cursor < self.len and self.events[self.cursor].at_ns <= elapsed) : (self.cursor += 1) {
             const timed = self.events[self.cursor];
+            if (observer) |observed| observed.notify(observed.context, timed.event, timed.at_ns);
             switch (timed.event) {
                 .tap => |point| panel.queue(point) catch {
                     input.refused += 1;

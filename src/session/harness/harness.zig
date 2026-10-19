@@ -24,6 +24,7 @@ const memmap = @import("ra8_chip").core.memmap;
 const session_display = @import("../board/display.zig");
 const session_state = @import("../board/state.zig");
 const session_history = @import("../history.zig");
+const input_script = @import("ra8_components").input_script;
 const history_trail = @import("../history/trail.zig");
 const chunk_clock = @import("../chunk_clock.zig");
 pub const files = @import("files.zig");
@@ -89,6 +90,11 @@ const State = struct {
     files: session_state.Files,
     state_file: files.StateFile,
     history: session_history.History,
+    /// The input landing adapter (slice 16) and the observer built from it;
+    /// board dispatches report through it while the boundary's saved state
+    /// carries the landing's position.
+    landing: session_history.Landing,
+    landing_observer: input_script.Script.Landing,
     /// The undo trail while a run records, null until `record` starts it.
     recording: ?history_trail.Recording = null,
     reboot: Reboot,
@@ -371,6 +377,9 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.session.event_sources.chunk = &state.chunk;
     state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk, .idle_skip = options.idle_skip };
     state.session.live.boundary = state.edge.hook();
+    state.landing = .{ .history = &state.history, .grid = &state.edge.saved };
+    state.landing_observer = state.landing.observer();
+    state.board.input_landing = &state.landing_observer;
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .images = &state.loading.loaded, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
     state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir, .root = options.root };
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);

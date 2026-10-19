@@ -220,6 +220,9 @@ pub const Board = struct {
     /// Host touches sampled at each board boundary under `--touch @PATH`.
     touch_input: gt911.host.Input = .{},
     input_script: @import("ra8_components").input_script.Script = .{},
+    /// The input landing observer (slice 16), set by the session when it
+    /// records history; the boundary passes it into every script dispatch.
+    input_landing: ?*const @import("ra8_components").input_script.Script.Landing = null,
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
