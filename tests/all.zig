@@ -48,6 +48,7 @@ test {
     _ = @import("session/zig/round_test.zig");
     _ = @import("session/zig/wall_test.zig");
     _ = @import("session/zig/cut_bus_test.zig");
+    _ = @import("session/zig/boundary_test.zig");
     _ = @import("chip/core/cpu/exception/reset_scs_test.zig");
     _ = @import("chip/core/cpu/decode/decode_test.zig");
     _ = @import("chip/core/cpu/decode/cache_test.zig");
