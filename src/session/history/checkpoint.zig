@@ -37,6 +37,9 @@ pub const Checkpoint = struct {
         const header: record.Header = .{ .position = self.saved.at, .seq = 0 };
         try self.recorder.checkpoint(header, self.next_id, bytes);
         self.next_id += 1;
+        // The record commits at once: object-before-log's record half, so
+        // a crash never leaves a durable object without its naming record.
+        try self.recorder.commit(0);
     }
 
     /// The boundary-facing hook.

@@ -45,6 +45,7 @@ const decode = @import("ra8_chip").core.cpu.decode;
 pub const stacks = @import("stacks.zig");
 const load_input = @import("load_input.zig");
 const block_cache = @import("block_cache.zig");
+pub const checkpoints = @import("checkpoints.zig");
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;
@@ -71,9 +72,8 @@ const State = struct {
     driver: step_hook.Driver,
     watching: watch_bus.WatchBus,
     cpu: cpu_mod.Cpu,
-    /// CPU0's decoded instructions and formed blocks, as a plain run keeps
-    /// them (boot.zig runOn), so a session runs at a plain run's pace
-    /// (RA8EMU-1120).
+    /// CPU0's decoded instructions and formed blocks, as a plain run keeps them
+    /// (boot.zig runOn), so a session runs at a plain run's pace (RA8EMU-1120).
     decoded: decode.cache.DecodeCache,
     formed: *decode.block_cache.BlockCache,
     pending: NvicSource,
@@ -90,13 +90,14 @@ const State = struct {
     files: session_state.Files,
     state_file: files.StateFile,
     history: session_history.History,
-    /// The input landing adapter (slice 16) and the observer built from it;
-    /// board dispatches report through it while the boundary's saved state
-    /// carries the landing's position.
+    /// The input landing adapter (slice 16) and its observer: board dispatches
+    /// report through it, and the boundary's saved state carries its position.
     landing: session_history.Landing,
     landing_observer: input_script.Script.Landing,
     /// The undo trail while a run records, null until `record` starts it.
     recording: ?history_trail.Recording = null,
+    /// The armed checkpoint pair when the application bound a host history root.
+    persistent: ?*checkpoints.Armed = null,
     reboot: Reboot,
     display: session_display.Host,
     tracer: ?rtos_hook.Tracer,
@@ -292,6 +293,7 @@ pub const Harness = struct {
         state.plugs_arena.deinit();
         block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
         if (state.recording) |*held| held.deinit();
+        if (state.persistent) |held| checkpoints.disarm(state.allocator, held);
         state.cpu0.close();
         state.board.deinit();
         state.loading.deinit();
@@ -393,4 +395,6 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.display.watch.useIo(io);
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
+    if (options.history_storage != null and options.history_objects != null and options.checkpoint_every != 0)
+        state.persistent = try checkpoints.arm(allocator, &state.session.live, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.checkpoint_every);
 }

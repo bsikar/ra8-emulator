@@ -25,6 +25,7 @@ test {
     _ = @import("history/trail_test.zig");
     _ = @import("history/recorder_test.zig");
     _ = @import("history/checkpoint_test.zig");
+    _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");

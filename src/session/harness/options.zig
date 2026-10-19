@@ -3,11 +3,18 @@
 const std = @import("std");
 const part = @import("ra8_chip").core.part;
 const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
+const history_recorder = @import("../history/recorder.zig");
 
 pub const Options = struct {
     elf_path: []const u8,
     device: part.Part = .ra8p1,
     input_script: ?[]const u8 = null,
+    /// The persistent history's host side (RA8EMU-1196), as the application
+    /// fills it: the log segment's storage and the checkpoint objects' space,
+    /// both over the application's history root. Both set arm the closed-round
+    /// checkpoints; either missing records nothing.
+    history_storage: ?history_recorder.Storage = null,
+    history_objects: ?history_recorder.Objects = null,
     /// The board profile's text (RA8EMU-1152); null is the shipped EK-RA8D2
     /// default. Its labels point into the caller's text and outlive it.
     board_profile: ?[]const u8 = null,

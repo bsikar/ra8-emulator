@@ -103,6 +103,7 @@ test "the policy checkpoints every Nth closed round" {
     try cp.fire(2);
     try std.testing.expectEqual(@as(u32, 1), cp.next_id);
     try std.testing.expectEqual(@as(usize, 1), objects.syncs);
+    try std.testing.expect(sink.bytes.items.len > 0);
     try cp.fire(3);
     try std.testing.expectEqual(@as(u32, 1), cp.next_id);
     try cp.fire(4);
@@ -133,8 +134,7 @@ test "a checkpoint's object holds the save stream and its record names it" {
     try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
     try std.testing.expectEqualStrings("ckpt", objects.items.items[0].bytes);
 
-    // The record stages behind the object: commit, then decode it back.
-    try rec.commit(1);
+    // The record committed with the object; decode it back out of the log.
     var hit: ?record.CheckpointRecord = null;
     var cursor: usize = 0;
     while (cursor < sink.bytes.items.len) {

@@ -23,6 +23,7 @@ pub fn complete(comptime State: type) bool {
         .{ .name = "landing", .reason = "Input landing adapter wiring (slice 16)" },
         .{ .name = "landing_observer", .reason = "Input landing observer wiring (slice 16)" },
         .{ .name = "recording", .reason = "Debugger undo trail retained" },
+        .{ .name = "persistent", .reason = "Host history recorder and checkpoint policy; armed per run" },
         .{ .name = "display", .reason = "Target renderer wiring and host buffers; guest vsync saved on board" },
         .{ .name = "tracer", .reason = "Host trace instrumentation retained" },
         .{ .name = "listener", .reason = "Host trace bus callback wiring" },
