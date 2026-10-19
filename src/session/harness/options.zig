@@ -15,6 +15,8 @@ pub const Options = struct {
     state_dir: ?[]const u8 = null,
     /// How many stops the rewind history keeps (RA8EMU-1170); the oldest falls off past it.
     history_frames: u32 = 240,
+    /// One checkpoint every N closed rounds (RA8EMU-1196); zero disables.
+    checkpoint_every: u32 = 64,
     settle_window_ns: u64 = 50_000_000,
     /// Whether the boundary stretches across idle sleeps (RA8EMU-1120).
     idle_skip: bool = true,

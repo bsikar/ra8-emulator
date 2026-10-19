@@ -16,8 +16,9 @@ const stop_machine = @import("../stop_machine.zig");
 const watch_bus = @import("../watch/bus.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
 const round = @import("round.zig");
+const history_checkpoint = @import("../history/checkpoint.zig");
 
-pub const Error = error{ AlreadyRunning, CoreNotAttached, BoundaryFailed };
+pub const Error = error{ AlreadyRunning, CoreNotAttached, BoundaryFailed, SecondCore };
 
 /// The commands that run the core.
 pub const Command = enum { run, cont, step, next, finish };
@@ -54,6 +55,8 @@ pub const ZigSession = struct {
     boundary: ?zig_boundary.Boundary = null,
     saved: scheduler.State = .{},
     ended_index: u8 = 0,
+    /// The closed-round checkpoint policy, when armed (RA8EMU-1196).
+    checkpoints: ?*history_checkpoint.Checkpoint = null,
 
     /// Give the session to CPU `index`. The core left behind holds where
     /// it stopped, with its own breaks, watches and clock.
@@ -93,6 +96,18 @@ pub const ZigSession = struct {
         }
         defer zig_boundary.observe(edge);
         return round.run(self, edge, target);
+    }
+
+    /// Arms the closed-round checkpoints on the session's boundary.
+    /// Refuses while a second core is attached (RA8EMU-768), the rule
+    /// the wire snapshot and restore methods follow.
+    pub fn armCheckpoints(self: *ZigSession, checkpoints: *history_checkpoint.Checkpoint) Error!void {
+        if (self.other != null) return Error.SecondCore;
+        self.checkpoints = checkpoints;
+        if (self.boundary) |*edge| {
+            edge.checkpoint_context = checkpoints;
+            edge.checkpointFn = &history_checkpoint.Checkpoint.hook;
+        }
     }
 
     /// The core as the printers and the unwinder read it.

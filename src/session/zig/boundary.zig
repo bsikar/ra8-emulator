@@ -34,12 +34,16 @@ pub const Boundary = struct {
     /// interval opens. The session owns the policy and the recorder; the
     /// loop only offers the closed round.
     checkpointFn: ?*const fn (context: *anyopaque, round: u64) anyerror!void = null,
+    /// The hook's own context when it differs from the boundary's: the
+    /// session binds its checkpoint controller here, and instrumentation
+    /// wrappers forward the pair untouched.
+    checkpoint_context: ?*anyopaque = null,
 
     /// Offers the closed round to the session's checkpoint policy. A run
     /// without the hook checkpoints nothing.
     pub fn checkpoint(self: Boundary, round: u64) Error!void {
         const hook = self.checkpointFn orelse return;
-        hook(self.context, round) catch return Error.BoundaryFailed;
+        hook(self.checkpoint_context orelse self.context, round) catch return Error.BoundaryFailed;
     }
 
     pub fn tick(self: Boundary, instructions: u64) Error!void {

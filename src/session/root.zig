@@ -37,6 +37,7 @@ pub const history_log = @import("history/log.zig");
 pub const history_root = @import("history/root.zig");
 pub const history_trail = @import("history/trail.zig");
 pub const history_recorder = @import("history/recorder.zig");
+pub const history_checkpoint = @import("history/checkpoint.zig");
 pub const mem_dump = @import("mem_dump.zig");
 pub const pc_hits = @import("pc_hits.zig");
 pub const place = @import("place/place.zig");
