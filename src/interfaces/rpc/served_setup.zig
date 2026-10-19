@@ -28,6 +28,17 @@ const txm_debug = @import("ra8_session").txm.debug;
 const proto = @import("session/rpc.zig");
 const served = @import("session/server.zig");
 
+const history_bind = @import("history_bind.zig");
+
+/// How a served session's persistent history is rooted, when the caller
+/// asks for one (RA8EMU-1196). Null keeps the RAM-only window and
+/// checkpoints; a root puts every record on the host's disk through the
+/// application-owned bind.
+pub const HistoryOpts = struct {
+    root: []const u8,
+    checkpoint_every: u32 = 64,
+};
+
 pub const Served = struct {
     owner: harness.Harness,
     context: served.Context,
@@ -41,11 +52,26 @@ pub const Served = struct {
     stacks: ?*harness.stacks.Stacks = null,
     /// CPU1, once openSecond brought it up (RA8EMU-1147).
     second: ?*cpu1_bringup.Cpu1 = null,
+    /// The persistent history's host side, once history asked for a root
+    /// (RA8EMU-1196). The harness's armed checkpoints write through it.
+    history: ?*history_bind.Bind = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
-    pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8) !void {
-        var owner = try harness.open(allocator, io, .{ .elf_path = elf_path, .board_profile = board_profile });
+    pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history_opts: ?HistoryOpts) !void {
+        // The bind outlives the harness: the armed checkpoints write
+        // through its shapes until the harness's teardown disarms, so on
+        // an error the harness goes first and the bind closes second.
+        var bind: ?*history_bind.Bind = null;
+        errdefer if (bind) |b| if (b.close()) |_| {} else |_| {};
+        if (history_opts) |opts| bind = try history_bind.Bind.open(allocator, io, opts.root);
+        var owner = try harness.open(allocator, io, .{
+            .elf_path = elf_path,
+            .board_profile = board_profile,
+            .history_storage = if (bind) |b| b.storage else null,
+            .history_objects = if (bind) |b| b.objects else null,
+            .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
+        });
         errdefer owner.deinit();
         _ = owner.watchModules();
         const Env = served.Server.Env;
@@ -54,7 +80,7 @@ pub const Served = struct {
         const tx = try allocator.alloc(u8, Env.max_frame);
         errdefer allocator.free(tx);
         const scratch = try allocator.alloc(u8, proto.max_payload);
-        self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io };
+        self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
         // The transport rides the context so run-control methods route
         // through it (slice 14), and the host clock bounds its pumps.
@@ -155,6 +181,7 @@ pub const Served = struct {
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
         self.owner.deinit();
+        if (self.history) |bind| if (bind.close()) |_| {} else |_| {};
     }
 };
 

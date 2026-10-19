@@ -14,7 +14,7 @@ pub const LocalSession = struct {
     /// names (RA8EMU-1152; null is the shipped default). The host and the
     /// context point into `self`, so it stays put until `deinit`.
     pub fn open(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8) !void {
-        try self.setup.open(allocator, io, elf_path, board_profile);
+        try self.setup.open(allocator, io, elf_path, board_profile, null);
     }
 
     /// Bring up cpu1 from `path` in the already-open session (RA8EMU-1192).

@@ -16,7 +16,7 @@ const image = "tests/fixtures/fpu/fp_basic.elf";
 test "an opened image greets a client over a loopback" {
     const gpa = std.testing.allocator;
     var opened: setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     const Env = proto.Client.Env;
     const pipes = [2][]u8{ try gpa.alloc(u8, 2 * Env.max_frame), try gpa.alloc(u8, 2 * Env.max_frame) };
@@ -34,7 +34,7 @@ test "an opened image greets a client over a loopback" {
 
 test "the map, stack, rtc, parts and camera hooks are set" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const context = &opened.context;
     try std.testing.expect(context.listing != null);
@@ -65,7 +65,7 @@ test "set_camera_source opens the source from the host and installs it on the bo
     defer gpa.free(path);
 
     var opened: setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     const source = &opened.owner.board().capture.source;
     const before = source.label;
@@ -81,7 +81,7 @@ test "set_camera_source opens the source from the host and installs it on the bo
 
 test "a source that will not open is refused and the old one stays" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, image, null);
+    try opened.open(std.testing.allocator, std.testing.io, image, null, null);
     defer opened.deinit();
     const source = &opened.owner.board().capture.source;
     const before = source.label;

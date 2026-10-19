@@ -64,7 +64,7 @@ test "a client over the socket is served on the opened session" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -92,7 +92,7 @@ test "a client's subscriptions stay off the panes' context" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -130,7 +130,7 @@ test "a hung-up client is dropped and the next one is taken" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -160,7 +160,7 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, std.testing.io, &env);
     defer bound.deinit();
@@ -272,7 +272,7 @@ test "an async advance queues over the socket and completes on the transport top
     var env = try envWithHome(gpa, home);
     defer env.deinit();
     var opened: served_setup.Served = undefined;
-    try opened.open(gpa, std.testing.io, image, null);
+    try opened.open(gpa, std.testing.io, image, null, null);
     defer opened.deinit();
     // The hosted shell binds the queued advance contract on (hosted.zig);
     // the test mirrors it so the listener's client sees bit 15.

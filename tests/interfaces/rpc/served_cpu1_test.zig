@@ -21,7 +21,7 @@ fn ask(context: anytype, core: proto.FoldedAsk) ![]const u8 {
 
 /// Both cores up and sampled; each core then runs its own budget.
 fn bothRan(opened: *setup.Served) !void {
-    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null);
+    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null, null);
     errdefer opened.deinit();
     opened.owner.session().live.budget = 200_000;
     try opened.openSecond(test_paths.call_tree_cpu1);
@@ -57,7 +57,7 @@ test "CPU0's rows stay CPU0's once CPU1 is up" {
 
 test "a CPU1 image that cannot be read is refused and leaves CPU0 served" {
     var opened: setup.Served = undefined;
-    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null);
+    try opened.open(std.testing.allocator, std.testing.io, test_paths.call_tree, null, null);
     defer opened.deinit();
     try std.testing.expectError(error.FileNotFound, opened.openSecond("tests/fixtures/no_such_cpu1.elf"));
     try std.testing.expect(opened.second == null);

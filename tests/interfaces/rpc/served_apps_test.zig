@@ -33,7 +33,7 @@ test "a served session stages an admitted app before boot" {
     const path = try staged(tmp, "hello.ra8app", &bytes);
     defer std.testing.allocator.free(path);
     var setup: served_setup.Served = undefined;
-    try setup.open(std.testing.allocator, io, image, null);
+    try setup.open(std.testing.allocator, io, image, null, null);
     defer setup.deinit();
     try setup.stageApps(io, std.testing.allocator, &.{path});
 }
@@ -46,14 +46,14 @@ test "a served session refuses a malformed app before boot" {
     const path = try staged(tmp, "bad.ra8app", &bytes);
     defer std.testing.allocator.free(path);
     var setup: served_setup.Served = undefined;
-    try setup.open(std.testing.allocator, io, image, null);
+    try setup.open(std.testing.allocator, io, image, null, null);
     defer setup.deinit();
     try std.testing.expectError(error.Validation, setup.stageApps(io, std.testing.allocator, &.{path}));
 }
 
 test "an apps-only stage with no app paths changes nothing" {
     var setup: served_setup.Served = undefined;
-    try setup.open(std.testing.allocator, io, image, null);
+    try setup.open(std.testing.allocator, io, image, null, null);
     defer setup.deinit();
     try setup.stageApps(io, std.testing.allocator, &.{});
 }
