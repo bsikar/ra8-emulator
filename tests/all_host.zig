@@ -320,4 +320,5 @@ test {
     _ = @import("interfaces/rpc/session/periph_test.zig");
     _ = @import("interfaces/rpc/session/folded_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");
+    _ = @import("interfaces/rpc/history_bind_test.zig");
 }
