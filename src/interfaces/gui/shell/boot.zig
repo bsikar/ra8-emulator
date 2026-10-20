@@ -51,7 +51,7 @@ pub const Boot = struct {
         self.link.openNative(&self.worker.native);
         const shell = self.shell;
         shell_hosted.bindHosted(&self.hosted, self.allocator, self.io, self.env, self.window, image.path, &self.session, &self.link, shell);
-        shell.pick = shell_rebuild.launch(self.allocator, self.io, image.path, self.apps, &self.session, shell, &self.hosted, &self.link, self.rx, self.tx, self.store);
+        shell.pick = shell_rebuild.launch(self.allocator, self.io, image.path, self.apps, &self.session, shell, &self.hosted, &self.link, &self.worker, self.store);
         if (shell.camera) |camera| camera.preview_provider = .{ .context = &self.session, .previewFn = cameraPreview };
         if (shell.files) |files| files.keep(image.path);
         self.image = image;
