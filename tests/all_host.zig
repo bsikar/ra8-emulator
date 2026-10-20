@@ -10,6 +10,7 @@ test {
     _ = @import("host/history/budget_test.zig");
     _ = @import("host/history/readback_test.zig");
     _ = @import("host/history/crash_test.zig");
+    _ = @import("host/history/enospc_test.zig");
     _ = @import("host/history/prune_test.zig");
     _ = @import("host/history/catalog_test.zig");
     _ = @import("host/history/layout_test.zig");

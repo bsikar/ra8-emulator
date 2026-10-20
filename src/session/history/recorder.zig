@@ -208,6 +208,14 @@ pub const Recorder = struct {
         try self.commit(now_ns);
     }
 
+    /// Puts the storage back at the committed length after a commit's
+    /// append or flush failed: none of the batch's bytes counted as
+    /// committed, and a full device can stop the write in part. A
+    /// failure here is the reopen's own recovery to catch.
+    fn rollbackBatch(self: *Recorder) void {
+        self.storage.truncate(self.storage.context, self.committed_bytes) catch {};
+    }
+
     /// Hands the log its first time sample without committing.
     pub fn observe(self: *Recorder, now_ns: u64) void {
         self.log.observe(now_ns);
@@ -217,7 +225,10 @@ pub const Recorder = struct {
     /// flush, and restarts both thresholds on the caller's clock. With a
     /// disk budget filled, a commit whose bytes the volume or the share
     /// cannot take refuses with error.HistoryFull first, and its bytes
-    /// stay staged for a later retry.
+    /// stay staged for a later retry. A commit whose append or flush the
+    /// storage cannot finish leaves the storage at the committed length
+    /// and its bytes staged the same way: a full device can stop the
+    /// write in part, and the retry must never land on top of it.
     pub fn commit(self: *Recorder, now_ns: u64) anyerror!void {
         if (self.disk) |watch| {
             if (self.log.pending_bytes > 0) {
@@ -227,8 +238,14 @@ pub const Recorder = struct {
         try self.log.commit(now_ns);
         const bytes = self.staging.writer.buffered();
         if (bytes.len == 0) return;
-        try self.storage.append(self.storage.context, bytes);
-        try self.storage.flush(self.storage.context);
+        self.storage.append(self.storage.context, bytes) catch |err| {
+            self.rollbackBatch();
+            return err;
+        };
+        self.storage.flush(self.storage.context) catch |err| {
+            self.rollbackBatch();
+            return err;
+        };
         self.committed_bytes += bytes.len;
         self.staging.writer.end = 0;
     }
