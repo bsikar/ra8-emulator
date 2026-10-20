@@ -77,7 +77,7 @@ test "acceptance: a torn tail recovers to the last whole frame on the real store
     defer temp.cleanup();
     const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(root);
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
     defer {
         rec.deinit();
@@ -125,7 +125,7 @@ test "acceptance: a whole frame that fails its crc refuses the reopen" {
     defer temp.cleanup();
     const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(root);
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
     defer rec.deinit();
     rec.observe(0);
@@ -163,7 +163,7 @@ test "acceptance: a closed session leaves the root's catalog empty" {
     defer gpa.free(root);
     var base_root = try history.base.Base.open(gpa, std.testing.io, root, .cache);
     defer base_root.close();
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     try bind.storage.append(bind.storage.context, "recorded bytes");
     try bind.objects.put(bind.objects.context, "0123456789abcdef", "object bytes");
     var entries = try history.catalog.Iterator.init(&base_root);
@@ -181,7 +181,7 @@ test "acceptance: a commit the volume cannot take refuses, then relief lands it"
     defer temp.cleanup();
     const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(root);
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
     defer {
         rec.deinit();
@@ -223,7 +223,7 @@ test "acceptance: an unmeasured history runs with no disk budget at all" {
     defer temp.cleanup();
     const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(root);
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
     defer {
         rec.deinit();
