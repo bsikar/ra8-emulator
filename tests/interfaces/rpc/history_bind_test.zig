@@ -7,13 +7,39 @@ const history = ra8.host.history;
 
 const bind_mod = ra8.rpc.history_bind;
 
+test "an explicit cap sizes the bind's budget and scales its pieces" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const cap = history.budget.bytes.floor;
+    const plain = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
+    const plain_floor = plain.disk.?.floor;
+    _ = plain.close() catch {};
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{ .cap = cap });
+    defer _ = bind.close() catch {};
+    try std.testing.expectEqual(cap, bind.disk.?.cap);
+    try std.testing.expectEqual(cap * 60 / 100, bind.checkpoint_cap);
+    try std.testing.expectEqual(plain_floor, bind.disk.?.floor);
+}
+
+test "a cap below the minimum share refuses the open" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    try std.testing.expectError(error.BudgetTooSmall, bind_mod.Bind.open(gpa, std.testing.io, root, .{ .cap = 1024 }));
+}
+
 test "the bind appends the log, puts objects and deletes its session on close" {
     const gpa = std.testing.allocator;
     var temp = std.testing.tmpDir(.{});
     defer temp.cleanup();
     const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
     defer gpa.free(root);
-    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
     try bind.storage.append(bind.storage.context, "hello");
     try bind.storage.append(bind.storage.context, "world");
     try bind.storage.flush(bind.storage.context);

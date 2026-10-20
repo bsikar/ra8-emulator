@@ -53,6 +53,19 @@ test "--allow-state-files parses once (RA8EMU-1175)" {
     try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--allow-state-files", "--allow-state-files", "--stdio", "a.elf" }) == null);
 }
 
+test "--history-budget caps the served history's share next to --history (RA8EMU-1196)" {
+    const asked = parse(&.{ "ra8_emulator", "serve", "--history", "h", "--history-budget", "268435456", "--stdio", "a.elf" }).?;
+    try std.testing.expectEqual(@as(?u64, 268435456), asked.history_budget);
+    try std.testing.expectEqualStrings("h", asked.history.?);
+}
+
+test "--history-budget without --history, twice, or non-numeric is refused" {
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history-budget", "100", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "h", "--history-budget", "1", "--history-budget", "2", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "h", "--history-budget", "abc", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "off", "--history-budget", "100", "--stdio", "a.elf" }) == null);
+}
+
 test "isLoopback separates loopback from the world (RA8EMU-1175)" {
     const listen = cli_app.serve.listen;
     try std.testing.expect(listen.isLoopback(try std.Io.net.IpAddress.parse("127.0.0.1", 0)));
