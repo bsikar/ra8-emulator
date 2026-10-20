@@ -26,6 +26,7 @@ pub fn arm(
     saved: *const scheduler.State,
     storage: history_recorder.Storage,
     objects: history_recorder.Objects,
+    disk: ?history_recorder.Budget,
     every: u32,
 ) !*Armed {
     const armed = try allocator.create(Armed);
@@ -33,6 +34,7 @@ pub fn arm(
     armed.recorder = try history_recorder.Recorder.init(allocator, storage, .{});
     errdefer armed.recorder.deinit();
     armed.recorder.objects = objects;
+    armed.recorder.disk = disk;
     armed.checkpoints = .{
         .context = files,
         .saveFn = saveMachine,

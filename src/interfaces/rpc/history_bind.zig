@@ -24,6 +24,11 @@ pub const Bind = struct {
     /// bind, which stays put until close.
     storage: session_recorder.Storage,
     objects: session_recorder.Objects,
+    /// The disk budget the recorder checks before every commit and
+    /// checkpoint: this history's share of the volume and a fresh
+    /// free-space read per check.
+    disk: ?session_recorder.Budget = null,
+    watch: ?*VolumeWatch = null,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -43,6 +48,15 @@ pub const Bind = struct {
         bind.sink.* = .{ .byte = bind.log };
         bind.storage = .{ .context = bind.sink, .append = &appendLog, .flush = &flushLog, .truncate = &truncateLog };
         bind.objects = .{ .context = bind, .put = &putObject, .sync = &syncObjects };
+        // The budget: one read at open sizes the share this history
+        // takes, and every check reads the volume fresh.
+        const volume = try history.resources.volume(allocator, io, bind.base.dir);
+        const shares = history.budget.disk(volume.total, 1);
+        const watch = try allocator.create(VolumeWatch);
+        errdefer allocator.destroy(watch);
+        watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir };
+        bind.watch = watch;
+        bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor };
         return bind;
     }
 
@@ -52,6 +66,9 @@ pub const Bind = struct {
     pub fn close(self: *Bind) !history.session.Outcome {
         const gpa = self.gpa;
         self.log.vtable.close(self.log.context);
+        self.disk = null;
+        if (self.watch) |watch| gpa.destroy(watch);
+        self.watch = null;
         if (self.session.close(null, .move)) |outcome| {
             self.base.close();
             gpa.destroy(self.sink);
@@ -72,6 +89,16 @@ pub const Bind = struct {
 };
 
 const LogSink = struct { byte: history.storage.ByteFile };
+
+/// Reads the volume fresh for every budget check; the history root's
+/// directory is the handle the read goes through.
+const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir };
+
+fn freeVolume(context: *anyopaque) anyerror!u64 {
+    const watch: *VolumeWatch = @ptrCast(@alignCast(context));
+    const volume = try history.resources.volume(watch.gpa, watch.io, watch.dir);
+    return volume.available;
+}
 
 fn sinkOf(context: *anyopaque) *LogSink {
     return @ptrCast(@alignCast(context));

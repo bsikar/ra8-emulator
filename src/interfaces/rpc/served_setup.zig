@@ -70,6 +70,7 @@ pub const Served = struct {
             .board_profile = board_profile,
             .history_storage = if (bind) |b| b.storage else null,
             .history_objects = if (bind) |b| b.objects else null,
+            .history_disk = if (bind) |b| b.disk else null,
             .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
         });
         errdefer owner.deinit();

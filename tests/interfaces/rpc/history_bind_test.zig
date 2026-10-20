@@ -36,5 +36,9 @@ test "the bind appends the log, puts objects and deletes its session on close" {
     object.vtable.close(object.context);
     try std.testing.expectEqual(@as(usize, 12), held);
     try std.testing.expectEqualStrings("object bytes", &object_bytes);
+    try std.testing.expect(bind.disk != null);
+    try std.testing.expect(bind.disk.?.cap > 0);
+    try std.testing.expect(bind.disk.?.floor > 0);
+    try std.testing.expect(try bind.disk.?.free(bind.disk.?.context) > 0);
     try std.testing.expectEqual(history.session.Outcome.deleted, try bind.close());
 }
