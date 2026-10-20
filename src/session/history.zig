@@ -99,6 +99,13 @@ pub const History = struct {
         }
     }
 
+    /// Puts the run back to a state the persisted history kept: the save
+    /// stream's bytes a checkpoint's object carries (RA8EMU-1196). The
+    /// twice-replay comparison restores from these and re-runs forward.
+    pub fn restoreBytes(self: *History, bytes: []const u8) anyerror!void {
+        try self.files.readFrom(bytes);
+    }
+
     /// Puts the run back `back` stops behind the newest; back 0 is the
     /// newest frame itself. A slot the ring has not reached refuses.
     pub fn restore(self: *History, back: u32) anyerror!void {
