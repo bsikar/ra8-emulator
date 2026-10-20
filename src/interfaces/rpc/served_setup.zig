@@ -29,16 +29,24 @@ const proto = @import("session/rpc.zig");
 const served = @import("session/server.zig");
 
 const history_bind = @import("history_bind.zig");
+const history_ram = @import("history_ram.zig");
+const history_resources = @import("ra8_host").history.resources;
 
 /// How a served session's persistent history is rooted, when the caller
-/// asks for one (RA8EMU-1196). Null keeps the RAM-only window and
-/// checkpoints; a root puts every record on the host's disk through the
-/// application-owned bind.
+/// asks for one (RA8EMU-1196). A root puts every record on the host's
+/// disk through the application-owned bind; a null root keeps the
+/// history RAM-only through history_ram, capped by the RAM share, so
+/// nothing it writes lands on the disk. No options at all records
+/// nothing.
 pub const HistoryOpts = struct {
-    root: []const u8,
+    root: ?[]const u8 = null,
     checkpoint_every: u32 = 64,
-    /// An explicit cap on the served session's history share, in bytes.
+    /// An explicit cap on the served session's disk history share, in
+    /// bytes; only with a root.
     budget: ?u64 = null,
+    /// An explicit cap on the RAM-only history's share, in bytes; only
+    /// without a root. Null sizes the share from the host's RAM.
+    ram_budget: ?u64 = null,
 };
 
 pub const Served = struct {
@@ -57,6 +65,9 @@ pub const Served = struct {
     /// The persistent history's host side, once history asked for a root
     /// (RA8EMU-1196). The harness's armed checkpoints write through it.
     history: ?*history_bind.Bind = null,
+    /// The RAM-only history's host side, once history asked to stay off
+    /// disk (RA8EMU-1196). The harness's armed checkpoints write through it.
+    ram_history: ?*history_ram.RamHistory = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
@@ -64,15 +75,26 @@ pub const Served = struct {
         // The bind outlives the harness: the armed checkpoints write
         // through its shapes until the harness's teardown disarms, so on
         // an error the harness goes first and the bind closes second.
+        // The history outlives the harness: the armed checkpoints write
+        // through its shapes until the harness's teardown disarms, so on
+        // an error the harness goes first and the history closes second.
         var bind: ?*history_bind.Bind = null;
         errdefer if (bind) |b| if (b.close()) |_| {} else |_| {};
-        if (history_opts) |opts| bind = try history_bind.Bind.open(allocator, io, opts.root, .{ .cap = opts.budget });
+        var ram: ?*history_ram.RamHistory = null;
+        errdefer if (ram) |r| r.deinit();
+        if (history_opts) |opts| {
+            if (opts.root) |root| {
+                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget });
+            } else {
+                ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
+            }
+        }
         var owner = try harness.open(allocator, io, .{
             .elf_path = elf_path,
             .board_profile = board_profile,
-            .history_storage = if (bind) |b| b.storage else null,
-            .history_objects = if (bind) |b| b.objects else null,
-            .history_disk = if (bind) |b| b.disk else null,
+            .history_storage = if (bind) |b| b.storage else if (ram) |r| r.storage else null,
+            .history_objects = if (bind) |b| b.objects else if (ram) |r| r.object_space else null,
+            .history_disk = if (bind) |b| b.disk else if (ram) |r| r.budget else null,
             .history_checkpoint_cap = if (bind) |b| b.checkpoint_cap else 0,
             .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
         });
@@ -84,7 +106,7 @@ pub const Served = struct {
         const tx = try allocator.alloc(u8, Env.max_frame);
         errdefer allocator.free(tx);
         const scratch = try allocator.alloc(u8, proto.max_payload);
-        self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind };
+        self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind, .ram_history = ram };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
         // The transport rides the context so run-control methods route
         // through it (slice 14), and the host clock bounds its pumps.
@@ -186,6 +208,7 @@ pub const Served = struct {
         self.gpa.free(self.rx);
         self.owner.deinit();
         if (self.history) |bind| if (bind.close()) |_| {} else |_| {};
+        if (self.ram_history) |ram| ram.deinit();
     }
 };
 
