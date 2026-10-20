@@ -22,6 +22,8 @@ test "checkCommit refuses what the volume or the share cannot take" {
     try std.testing.expectError(error.HistoryFull, budget.checkCommit(0, 200, 100, 1_000, 0));
     // The share is already spent.
     try std.testing.expectError(error.HistoryFull, budget.checkCommit(95, 10, 100, 1_000, 0));
+    // Even at the u64 ceiling a spent share refuses.
+    try std.testing.expectError(error.HistoryFull, budget.checkCommit(std.math.maxInt(u64), 1, std.math.maxInt(u64), std.math.maxInt(u64), 0));
     // What fits answers with the pressure it leaves behind.
     try std.testing.expectEqual(budget.Pressure.normal, try budget.checkCommit(0, 10, 100, 1_000, 0));
     try std.testing.expectEqual(budget.Pressure.warning, try budget.checkCommit(80, 5, 100, 1_000, 0));

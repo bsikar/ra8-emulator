@@ -39,11 +39,4 @@ test "host lifecycle disk quotas warning free floor and overflow refusal" {
     try std.testing.expectEqual(disk.session / 5, disk.frames);
     try std.testing.expectEqual(10 * gib, disk.free_floor);
     try std.testing.expectEqual(gib, budget.disk(5 * gib, 10).session);
-    try std.testing.expectEqual(budget.Pressure.normal, budget.pressure(79, 100));
-    try std.testing.expectEqual(budget.Pressure.warning, budget.pressure(80, 100));
-    try std.testing.expectEqual(budget.Pressure.history_full, budget.pressure(100, 100));
-    try std.testing.expectError(error.HistoryFull, budget.checkCommit(90, 10, 100, 1000, 100));
-    try std.testing.expectError(error.HistoryFull, budget.checkCommit(0, 11, 100, 110, 100));
-    try std.testing.expectError(error.HistoryFull, budget.checkCommit(std.math.maxInt(u64), 1, std.math.maxInt(u64), std.math.maxInt(u64), 0));
-    try std.testing.expectEqual(budget.Pressure.warning, try budget.checkCommit(70, 10, 100, 110, 100));
 }
