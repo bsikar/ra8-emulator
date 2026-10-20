@@ -15,13 +15,18 @@ const orphan_name = "ffffffffffffffffffffffffffffffff";
 const Fake = struct {
     log_dir: std.Io.Dir,
     objects_dir: std.Io.Dir,
+    frames_dir: std.Io.Dir,
 
     fn storeOf(self: *Fake) history.storage.Store {
         return .{ .context = self, .vtable = &vtable };
     }
 
     fn dirOf(self: *Fake, space: history.layout.Space) std.Io.Dir {
-        return if (space == .log) self.log_dir else self.objects_dir;
+        return switch (space) {
+            .log => self.log_dir,
+            .frames => self.frames_dir,
+            else => self.objects_dir,
+        };
     }
 
     const vtable: history.storage.Store.Vtable = .{ .open = open, .remove = remove, .rename = rename, .list = list };
@@ -164,6 +169,13 @@ fn writeSegment(fake: *Fake, bytes: []const u8) !void {
     try file.vtable.write(file.context, 0, bytes);
 }
 
+fn putFrame(fake: *Fake, name: []const u8, bytes: []const u8) !void {
+    const st = fake.storeOf();
+    const file = try st.vtable.open(st.context, .frames, name, .create);
+    defer file.vtable.close(file.context);
+    try file.vtable.write(file.context, 0, bytes);
+}
+
 fn putObject(fake: *Fake, name: []const u8, bytes: []const u8) !void {
     const st = fake.storeOf();
     const file = try st.vtable.open(st.context, .objects, name, .create);
@@ -176,7 +188,9 @@ test "the orphan sweep drops the objects the log does not name" {
     defer log_tmp.cleanup();
     var objects_tmp = std.testing.tmpDir(.{ .iterate = true });
     defer objects_tmp.cleanup();
-    var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir };
+    var frames_tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer frames_tmp.cleanup();
+    var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir, .frames_dir = frames_tmp.dir };
 
     var buffer: [256]u8 = undefined;
     var stream = std.Io.Writer.fixed(&buffer);
@@ -205,7 +219,9 @@ test "a segment the walk cannot finish stops the sweep" {
     defer log_tmp.cleanup();
     var objects_tmp = std.testing.tmpDir(.{ .iterate = true });
     defer objects_tmp.cleanup();
-    var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir };
+    var frames_tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer frames_tmp.cleanup();
+    var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir, .frames_dir = frames_tmp.dir };
 
     // A frame that lies about its CRC (not its length): len 4, kind 1,
     // crc 0xdeadbeef, a four-byte payload. The length passes the bound, so
@@ -218,4 +234,31 @@ test "a segment the walk cannot finish stops the sweep" {
     const st = fake.storeOf();
     const still = try st.vtable.open(st.context, .objects, orphan_name, .read);
     still.vtable.close(still.context);
+}
+
+test "the frames sweep drops the whole cache" {
+    var log_tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer log_tmp.cleanup();
+    var objects_tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer objects_tmp.cleanup();
+    var frames_tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer frames_tmp.cleanup();
+    var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir, .frames_dir = frames_tmp.dir };
+
+    const zero_name = "f0000000000000000000000000000000";
+    const one_name = "f1111111111111111111111111111111";
+    try putFrame(&fake, zero_name, "1234");
+    try putFrame(&fake, one_name, "1234567");
+    try putObject(&fake, referenced_name, "kept");
+
+    const report = try history.prune.frames(fake.storeOf());
+    try std.testing.expectEqual(@as(usize, 2), report.frames);
+    try std.testing.expectEqual(@as(u64, 11), report.frame_bytes);
+
+    const st = fake.storeOf();
+    try std.testing.expectError(error.FileNotFound, st.vtable.open(st.context, .frames, zero_name, .read));
+    try std.testing.expectError(error.FileNotFound, st.vtable.open(st.context, .frames, one_name, .read));
+    // The sweep never left the frames space.
+    const kept = try st.vtable.open(st.context, .objects, referenced_name, .read);
+    kept.vtable.close(kept.context);
 }

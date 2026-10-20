@@ -56,3 +56,37 @@ const Sweep = struct {
         self.bytes += size;
     }
 };
+
+/// The frames step of the relief order. The frames space holds only the
+/// frame cache: its files are delete-on-close (the open path unlinks the
+/// name on POSIX and opens delete-on-close on Windows), so no record the
+/// committed log carries names one, and a file still listed there is a
+/// cache entry no handle holds or a leftover the close path never got to
+/// remove. The sweep drops every file it lists and reports what it
+/// reclaimed; a removal that fails is a hard error, so relief never
+/// claims bytes it did not get back.
+pub const FrameReport = struct {
+    /// Frame-cache files the frames space dropped.
+    frames: usize = 0,
+    /// Bytes the dropped files held.
+    frame_bytes: u64 = 0,
+};
+
+pub fn frames(store: storage.Store) !FrameReport {
+    var sweep = FrameSweep{ .store = store };
+    try store.vtable.list(store.context, .frames, .{ .context = &sweep, .visit = &FrameSweep.visit });
+    return .{ .frames = sweep.count, .frame_bytes = sweep.bytes };
+}
+
+const FrameSweep = struct {
+    store: storage.Store,
+    count: usize = 0,
+    bytes: u64 = 0,
+
+    fn visit(context: *anyopaque, name: []const u8, size: u64) anyerror!void {
+        const self: *FrameSweep = @ptrCast(@alignCast(context));
+        try self.store.vtable.remove(self.store.context, .frames, name);
+        self.count += 1;
+        self.bytes += size;
+    }
+};
