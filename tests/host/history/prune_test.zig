@@ -207,7 +207,10 @@ test "a segment the walk cannot finish stops the sweep" {
     defer objects_tmp.cleanup();
     var fake = Fake{ .log_dir = log_tmp.dir, .objects_dir = objects_tmp.dir };
 
-    try writeSegment(&fake, "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff");
+    // A frame that lies about its CRC (not its length): len 4, kind 1,
+    // crc 0xdeadbeef, a four-byte payload. The length passes the bound, so
+    // the walk reaches the CRC check and stops there.
+    try writeSegment(&fake, "\x04\x00\x00\x00\x01\x00\xef\xbe\xad\xde\x00\x00\x00\x00");
     try putObject(&fake, orphan_name, "orphans");
 
     try std.testing.expectError(error.BadCrc, history.prune.orphans(fake.storeOf(), allocator, .{ .collect = &Bridge.collect }));
