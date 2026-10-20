@@ -8,6 +8,7 @@ pub const resources = @import("resources.zig");
 pub const runtime = @import("runtime.zig");
 pub const catalog = @import("catalog.zig");
 pub const sweep = @import("sweep.zig");
+pub const prune = @import("prune.zig");
 pub const storage = @import("storage.zig");
 pub const layout = @import("layout.zig");
 pub const name = @import("name.zig");
