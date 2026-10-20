@@ -31,6 +31,16 @@ test "host lifecycle exact four RAM tiers and intermediate degradation stay boun
     try std.testing.expectEqual(516 * mib, degraded.checkpoints);
 }
 
+test "host lifecycle disk share override scales the derived pieces and enforces its floor" {
+    const disk = try budget.diskCapped(200 * gib, 4, 2 * gib);
+    try std.testing.expectEqual(2 * gib, disk.session);
+    try std.testing.expectEqual(2 * gib / 5, disk.frames);
+    try std.testing.expectEqual(2 * gib * 60 / 100, disk.checkpoints);
+    try std.testing.expectEqual(10 * gib, disk.free_floor);
+    try std.testing.expectEqual(10 * gib, disk.ephemeral);
+    try std.testing.expectError(error.BudgetTooSmall, budget.diskCapped(200 * gib, 4, 127 * mib));
+}
+
 test "host lifecycle disk quotas warning free floor and overflow refusal" {
     const disk = budget.disk(200 * gib, 4);
     try std.testing.expectEqual(10 * gib, disk.ephemeral);
