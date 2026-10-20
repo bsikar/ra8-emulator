@@ -1,7 +1,9 @@
 //! The slice's acceptance scenarios on the real host store behind the
 //! RPC bind: a crash's torn tail recovers to the last whole frame, a
-//! whole frame that fails its CRC refuses the reopen, and a closed
-//! session leaves the root's catalog with nothing of it left.
+//! whole frame that fails its CRC refuses the reopen, a closed session
+//! leaves the root's catalog with nothing of it left, a commit the
+//! volume cannot take refuses and stays staged until the relief lands
+//! it, and an unmeasured history runs with no budget at all.
 const std = @import("std");
 const ra8 = @import("ra8");
 const history = ra8.host.history;
@@ -32,6 +34,42 @@ const Trim = struct {
         return .{ .context = self, .append = undefined, .flush = undefined, .truncate = truncate };
     }
 };
+
+/// The controllable free-space source the budget scenarios drive: the
+/// volume holds whatever the test sets, and the relief it supplies
+/// counts its runs and reclaims the bytes the test names.
+const Volume = struct {
+    free_now: u64 = 0,
+    reclaim: u64 = 0,
+    reliefs: usize = 0,
+
+    fn free(context: *anyopaque) anyerror!u64 {
+        const self: *Volume = @ptrCast(@alignCast(context));
+        return self.free_now;
+    }
+
+    fn relieve(context: *anyopaque) anyerror!void {
+        const self: *Volume = @ptrCast(@alignCast(context));
+        self.reliefs += 1;
+        self.free_now += self.reclaim;
+    }
+
+    fn budget(self: *Volume) recorder_mod.Budget {
+        return .{
+            .context = self,
+            .free = free,
+            .cap = 1024 * 1024,
+            .floor = 512 * 1024,
+            .relief = relieve,
+        };
+    }
+};
+
+fn segmentLength(store: anytype) !u64 {
+    const log = try store.vtable.open(store.context, .log, "events-0", .read);
+    defer log.vtable.close(log.context);
+    return try log.vtable.length(log.context);
+}
 
 test "acceptance: a torn tail recovers to the last whole frame on the real store" {
     const gpa = std.testing.allocator;
@@ -135,4 +173,73 @@ test "acceptance: a closed session leaves the root's catalog empty" {
     try std.testing.expectEqual(history.session.Outcome.deleted, try bind.close());
     var after = try history.catalog.Iterator.init(&base_root);
     try std.testing.expect((try after.next()) == null);
+}
+
+test "acceptance: a commit the volume cannot take refuses, then relief lands it" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
+    defer {
+        rec.deinit();
+        _ = bind.close() catch {};
+    }
+    var volume: Volume = .{ .free_now = 8 * 1024 * 1024 };
+    rec.disk = volume.budget();
+    rec.observe(0);
+    try rec.recordBoundary(header(1), .{ .what = .c6_bytes, .body = "abc" });
+    try rec.recordIntervention(header(2), .{ .what = .tap, .body = "xy" });
+    try rec.commit(1);
+
+    const store = history.storage.Store.from(&bind.session);
+    const landed = try segmentLength(&store);
+
+    // The volume empties under the session: the commit refuses with
+    // HistoryFull, its bytes stay staged for a later retry, the
+    // segment on disk holds nothing new, and the relief the
+    // application supplied ran exactly once before the refusal stood.
+    volume.free_now = 0;
+    try rec.recordBoundary(header(3), .{ .what = .c6_bytes, .body = "tail" });
+    try std.testing.expectError(error.HistoryFull, rec.commit(2));
+    try std.testing.expect(rec.pendingBytes() > 0);
+    try std.testing.expectEqual(landed, try segmentLength(&store));
+    try std.testing.expectEqual(@as(usize, 1), volume.reliefs);
+
+    // A relief that reclaims bytes makes the retry land: the staged
+    // frame leaves in one append, and the re-check's answer stands.
+    volume.reclaim = 8 * 1024 * 1024;
+    try rec.commit(3);
+    try std.testing.expectEqual(@as(usize, 0), rec.pendingBytes());
+    try std.testing.expect(try segmentLength(&store) > landed);
+    try std.testing.expectEqual(@as(usize, 2), volume.reliefs);
+}
+
+test "acceptance: an unmeasured history runs with no disk budget at all" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root);
+    var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
+    defer {
+        rec.deinit();
+        _ = bind.close() catch {};
+    }
+
+    // No budget filled: the way an in-RAM session runs. Every commit
+    // lands without a disk check, and the pressure the application
+    // would read never leaves normal.
+    rec.observe(0);
+    for (0..64) |seq| {
+        try rec.recordBoundary(header(@intCast(seq + 1)), .{ .what = .c6_bytes, .body = "abc" });
+        try rec.commit(@intCast(seq + 1));
+        try std.testing.expectEqual(@as(usize, 0), rec.pendingBytes());
+        try std.testing.expect(rec.last_pressure == .normal);
+    }
+    const store = history.storage.Store.from(&bind.session);
+    try std.testing.expect(try segmentLength(&store) > 0);
 }
