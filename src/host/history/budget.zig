@@ -79,19 +79,6 @@ pub fn disk(volume: u64, live: u64) Disk {
     };
 }
 
-pub const Pressure = enum { normal, warning, history_full };
-
-pub fn pressure(used: u64, cap: u64) Pressure {
-    if (used >= cap) return .history_full;
-    return if (@as(u128, used) * 100 >= @as(u128, cap) * 80) .warning else .normal;
-}
-
-/// Checked before each group commit with fresh host free-space information.
-pub fn checkCommit(used: u64, additional: u64, cap: u64, free: u64, floor: u64) error{HistoryFull}!Pressure {
-    if (additional > free or free - additional < floor or additional > cap or used >= cap - additional) return error.HistoryFull;
-    return pressure(used + additional, cap);
-}
-
 pub const Relief = enum { orphans, frames, checkpoints, stop };
 pub const relief_order = [_]Relief{ .orphans, .frames, .checkpoints, .stop };
 

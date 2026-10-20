@@ -19,6 +19,7 @@ const std = @import("std");
 const format = @import("format.zig");
 const log_mod = @import("log.zig");
 const record = @import("record.zig");
+const budget = @import("budget.zig");
 
 /// The host storage the recorder writes through, as the application
 /// fills it. Session calls these and nothing else about the host.
@@ -72,6 +73,22 @@ pub const Objects = struct {
     sync: *const fn (context: *anyopaque) anyerror!void,
 };
 
+/// The disk-side budget the application fills: the share this history's
+/// bytes must stay under on the volume, and the fresh free-space read the
+/// recorder asks for before each commit and checkpoint. Null keeps an
+/// unmeasured history, the way an in-RAM session runs. The share and the
+/// floor come from the application's budget math; the free-space read
+/// crosses as a callback because session never touches the host.
+pub const Budget = struct {
+    context: *anyopaque,
+    /// Bytes the volume has free right now, read fresh per check.
+    free: *const fn (context: *anyopaque) anyerror!u64,
+    /// This history's share of the volume.
+    cap: u64,
+    /// The free space the volume must still hold after the bytes go out.
+    floor: u64,
+};
+
 pub const Recorder = struct {
     gpa: std.mem.Allocator,
     storage: Storage,
@@ -85,6 +102,15 @@ pub const Recorder = struct {
     /// The object space checkpoints write through, as the application
     /// fills it; a recorder without one refuses checkpoints.
     objects: ?Objects = null,
+    /// The disk-side budget, as the application fills it; null is
+    /// unmeasured, and nothing is refused.
+    disk: ?Budget = null,
+    /// Bytes the object space holds for this segment's checkpoints, part
+    /// of what the budget counts as used.
+    object_bytes: u64 = 0,
+    /// The pressure the last disk check answered with; the application
+    /// reads it to warn at 80 percent before the stop at 100.
+    last_pressure: budget.Pressure = .normal,
 
     pub fn init(gpa: std.mem.Allocator, storage: Storage, policy: log_mod.CommitPolicy) Error!Recorder {
         const staging = try gpa.create(std.Io.Writer.Allocating);
@@ -122,6 +148,10 @@ pub const Recorder = struct {
     /// commit, with whatever frames share it.
     pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
         const objects = self.objects orelse return Error.NoObjects;
+        if (self.disk) |watch| {
+            const free = try watch.free(watch.context);
+            self.last_pressure = try budget.checkCommit(self.committed_bytes + self.object_bytes, bytes.len, watch.cap, free, watch.floor);
+        }
         var digest: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
         var name: [32]u8 = undefined;
@@ -136,6 +166,7 @@ pub const Recorder = struct {
         const payload = staging.writer.buffered();
         try format.encode(&self.staging.writer, @backingInt(record.Kind.checkpoint), payload);
         self.log.pending_bytes += format.header_len + payload.len;
+        self.object_bytes += bytes.len;
     }
 
     fn stage(self: *Recorder, kind: u16, header: record.Header, what: anytype, body: []const u8) anyerror!void {
@@ -160,8 +191,17 @@ pub const Recorder = struct {
     }
 
     /// Releases every staged byte to the storage as one append plus one
-    /// flush, and restarts both thresholds on the caller's clock.
+    /// flush, and restarts both thresholds on the caller's clock. With a
+    /// disk budget filled, a commit whose bytes the volume or the share
+    /// cannot take refuses with error.HistoryFull first, and its bytes
+    /// stay staged for a later retry.
     pub fn commit(self: *Recorder, now_ns: u64) anyerror!void {
+        if (self.disk) |watch| {
+            if (self.log.pending_bytes > 0) {
+                const free = try watch.free(watch.context);
+                self.last_pressure = try budget.checkCommit(self.committed_bytes + self.object_bytes, self.log.pending_bytes, watch.cap, free, watch.floor);
+            }
+        }
         try self.log.commit(now_ns);
         const bytes = self.staging.writer.buffered();
         if (bytes.len == 0) return;

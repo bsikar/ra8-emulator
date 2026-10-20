@@ -7,6 +7,7 @@ const ra8 = @import("ra8");
 const recorder_mod = ra8.session.history_recorder;
 const format = ra8.session.history_format;
 const log_mod = ra8.session.history_log;
+const budget_mod = ra8.session.history_budget;
 const record = ra8.session.history_record;
 const scheduler = ra8.chip.core.scheduler;
 
@@ -274,4 +275,52 @@ test "a checkpoint refuses when no object space is attached" {
     var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
     defer rec.deinit();
     try std.testing.expectError(error.NoObjects, rec.checkpoint(header(1), 7, "x"));
+}
+
+/// The disk-side budget a test fills: a fixed free-space answer, every
+/// read counted.
+const Watch = struct {
+    free_bytes: u64,
+    reads: usize = 0,
+
+    fn free(context: *anyopaque) anyerror!u64 {
+        const self: *Watch = @ptrCast(@alignCast(context));
+        self.reads += 1;
+        return self.free_bytes;
+    }
+
+    fn budget(self: *Watch, cap: u64, floor: u64) recorder_mod.Budget {
+        return .{ .context = self, .free = free, .cap = cap, .floor = floor };
+    }
+};
+
+test "a commit the share cannot take refuses and keeps its bytes staged" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.bytes.deinit(gpa);
+    var watch: Watch = .{ .free_bytes = 1_000_000 };
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.disk = watch.budget(1_000, 0);
+    try rec.recordBoundary(header(1), .{ .what = .c6_bytes, .body = "abc" });
+    try rec.commit(0);
+    const first = rec.committed_bytes;
+    try std.testing.expect(first > 0);
+
+    // A share already exactly spent refuses the next commit, and the
+    // refused bytes stay staged for a later retry.
+    rec.disk = watch.budget(first, 0);
+    try rec.recordBoundary(header(2), .{ .what = .camera_change, .body = "x" });
+    try std.testing.expectError(error.HistoryFull, rec.commit(1));
+    try std.testing.expect(rec.pendingBytes() > 0);
+    try std.testing.expectEqual(@as(usize, 1), sink.flushes);
+    try std.testing.expectEqual(@as(usize, 2), watch.reads);
+
+    // With the share raised past the spent bytes, the same bytes go out,
+    // and the pressure the commit leaves behind is the warning band.
+    rec.disk = watch.budget(first + rec.pendingBytes() + 100, 0);
+    try rec.commit(2);
+    try std.testing.expectEqual(@as(usize, 2), sink.flushes);
+    try std.testing.expectEqual(budget_mod.Pressure.warning, rec.last_pressure);
 }
