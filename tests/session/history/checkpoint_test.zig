@@ -177,9 +177,9 @@ test "a projected total past the checkpoint cap thins the cadence" {
 
     var saved: scheduler.State = .{};
     var cp = controller(&rec, &saved, &objects, 2);
-    cp.object_cap = 3;
+    cp.object_cap = 5;
 
-    // The first checkpoint lands; its object is 4 bytes, past the cap.
+    // The first checkpoint lands; its 4-byte object fits the cap.
     try cp.fire(2);
     try std.testing.expectEqual(@as(u32, 1), cp.next_id);
     try std.testing.expectEqual(@as(u64, 4), cp.last_size);
@@ -196,6 +196,31 @@ test "a projected total past the checkpoint cap thins the cadence" {
     // doubles again.
     try cp.fire(8);
     try std.testing.expectEqual(@as(u32, 8), cp.every);
+    try std.testing.expectEqual(@as(u32, 1), cp.next_id);
+    try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
+}
+
+test "a checkpoint alone past the cap refuses the run" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.observe(0);
+    rec.objects = objects.objects();
+
+    var saved: scheduler.State = .{};
+    var cp = controller(&rec, &saved, &objects, 1);
+    cp.object_cap = 3;
+
+    // The first checkpoint lands at 4 bytes; the cap cannot take a
+    // second one whatever cadence runs, so the next hit refuses.
+    try cp.fire(1);
+    try std.testing.expectEqual(@as(u64, 4), cp.last_size);
+    try std.testing.expectError(error.HistoryFull, cp.fire(2));
     try std.testing.expectEqual(@as(u32, 1), cp.next_id);
     try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
 }
