@@ -24,11 +24,12 @@ pub const usage =
     \\       --history DIR puts the session's persistent history in DIR; --history off keeps it RAM only
     \\       --checkpoint-every N writes a closed-round checkpoint every N rounds (default 64)
     \\       --history-budget BYTES caps the served session's history share (with --history DIR; minimum 128 MiB)
+    \\       --ram-budget BYTES caps the RAM-only history's share (with --history off; minimum 128 MiB)
     \\
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, checkpoint_every: u32 = 64, history_budget: ?u64 = null };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
@@ -42,8 +43,10 @@ pub fn parse(argv: []const []const u8) ?Asked {
     var cpu1: ?[]const u8 = null;
     var sdhi: card_setup.Sdhi = .{};
     var history_root: ?[]const u8 = null;
+    var history_off = false;
     var checkpoint_every: u32 = 64;
     var history_budget: ?u64 = null;
+    var ram_budget: ?u64 = null;
     var checkpoint_set = false;
     var at: usize = 2;
     while (at < argv.len) : (at += 1) {
@@ -61,9 +64,9 @@ pub fn parse(argv: []const []const u8) ?Asked {
         } else if (std.mem.eql(u8, argv[at], "--app") and valued) {
             at += 1;
             sdhi.addApp(argv[at]) catch return null;
-        } else if (std.mem.eql(u8, argv[at], "--history") and history_root == null and valued) {
+        } else if (std.mem.eql(u8, argv[at], "--history") and history_root == null and !history_off and valued) {
             at += 1;
-            if (!std.mem.eql(u8, argv[at], "off")) history_root = argv[at];
+            if (std.mem.eql(u8, argv[at], "off")) history_off = true else history_root = argv[at];
         } else if (std.mem.eql(u8, argv[at], "--checkpoint-every") and !checkpoint_set and valued) {
             at += 1;
             checkpoint_every = std.fmt.parseInt(u32, argv[at], 10) catch return null;
@@ -71,10 +74,15 @@ pub fn parse(argv: []const []const u8) ?Asked {
         } else if (std.mem.eql(u8, argv[at], "--history-budget") and history_budget == null and valued) {
             at += 1;
             history_budget = std.fmt.parseInt(u64, argv[at], 10) catch return null;
+        } else if (std.mem.eql(u8, argv[at], "--ram-budget") and ram_budget == null and valued) {
+            at += 1;
+            ram_budget = std.fmt.parseInt(u64, argv[at], 10) catch return null;
         } else break;
     }
     // A cap means nothing without a persistent history to cap.
     if (history_budget != null and history_root == null) return null;
+    // A RAM share cap means nothing without a RAM-only history to cap.
+    if (ram_budget != null and !history_off) return null;
     // Drop the options; the transport then sits at index 2 as before.
     var rest: [5][]const u8 = undefined;
     const left = argv.len - at;
@@ -86,7 +94,9 @@ pub fn parse(argv: []const []const u8) ?Asked {
     asked.folded = folded;
     asked.allow_state_files = allow_state;
     asked.history = history_root;
+    asked.history_off = history_off;
     asked.history_budget = history_budget;
+    asked.ram_budget = ram_budget;
     asked.checkpoint_every = checkpoint_every;
     asked.cpu1 = cpu1;
     asked.sdhi = sdhi;
@@ -124,6 +134,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     var setup: served_setup.Served = undefined;
     const history_opts: ?served_setup.HistoryOpts = if (asked.history) |root|
         .{ .root = root, .checkpoint_every = asked.checkpoint_every, .budget = asked.history_budget }
+    else if (asked.history_off)
+        .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget }
     else
         null;
     setup.open(allocator, io, asked.elf, null, history_opts) catch |err| {

@@ -66,6 +66,25 @@ test "--history-budget without --history, twice, or non-numeric is refused" {
     try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "off", "--history-budget", "100", "--stdio", "a.elf" }) == null);
 }
 
+test "--ram-budget caps the RAM-only history next to --history off (RA8EMU-1196)" {
+    const asked = parse(&.{ "ra8_emulator", "serve", "--history", "off", "--ram-budget", "268435456", "--stdio", "a.elf" }).?;
+    try std.testing.expectEqual(@as(?u64, 268435456), asked.ram_budget);
+    try std.testing.expect(asked.history_off);
+    try std.testing.expect(asked.history == null);
+}
+
+test "--ram-budget without --history off, twice, or non-numeric is refused" {
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--ram-budget", "100", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "h", "--ram-budget", "100", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "off", "--ram-budget", "1", "--ram-budget", "2", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "off", "--ram-budget", "abc", "--stdio", "a.elf" }) == null);
+}
+
+test "a second --history after off is refused (RA8EMU-1196)" {
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "off", "--history", "h", "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "h", "--history", "off", "--stdio", "a.elf" }) == null);
+}
+
 test "isLoopback separates loopback from the world (RA8EMU-1175)" {
     const listen = cli_app.serve.listen;
     try std.testing.expect(listen.isLoopback(try std.Io.net.IpAddress.parse("127.0.0.1", 0)));
