@@ -37,6 +37,8 @@ const history_bind = @import("history_bind.zig");
 pub const HistoryOpts = struct {
     root: []const u8,
     checkpoint_every: u32 = 64,
+    /// An explicit cap on the served session's history share, in bytes.
+    budget: ?u64 = null,
 };
 
 pub const Served = struct {
@@ -64,7 +66,7 @@ pub const Served = struct {
         // an error the harness goes first and the bind closes second.
         var bind: ?*history_bind.Bind = null;
         errdefer if (bind) |b| if (b.close()) |_| {} else |_| {};
-        if (history_opts) |opts| bind = try history_bind.Bind.open(allocator, io, opts.root);
+        if (history_opts) |opts| bind = try history_bind.Bind.open(allocator, io, opts.root, .{ .cap = opts.budget });
         var owner = try harness.open(allocator, io, .{
             .elf_path = elf_path,
             .board_profile = board_profile,

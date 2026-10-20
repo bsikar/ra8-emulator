@@ -36,7 +36,13 @@ pub const Bind = struct {
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
-    pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !*Bind {
+    pub const Options = struct {
+        /// An explicit session share cap in bytes, instead of the volume's
+        /// computed share. The volume's free floor and the relief stay.
+        cap: ?u64 = null,
+    };
+
+    pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
         const bind = try allocator.create(Bind);
         errdefer allocator.destroy(bind);
         bind.* = .{ .gpa = allocator, .base = undefined, .session = undefined, .log = undefined, .sink = undefined, .storage = undefined, .objects = undefined };
@@ -55,7 +61,10 @@ pub const Bind = struct {
         // The budget: one read at open sizes the share this history
         // takes, and every check reads the volume fresh.
         const volume = try history.resources.volume(allocator, io, bind.base.dir);
-        const shares = history.budget.disk(volume.total, 1);
+        const shares = if (opts.cap) |capped|
+            try history.budget.diskCapped(volume.total, 1, capped)
+        else
+            history.budget.disk(volume.total, 1);
         const watch = try allocator.create(VolumeWatch);
         errdefer allocator.destroy(watch);
         watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir, .store = store };

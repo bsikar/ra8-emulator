@@ -79,6 +79,18 @@ pub fn disk(volume: u64, live: u64) Disk {
     };
 }
 
+/// disk() with the session's share capped by an explicit override: the
+/// derived pieces scale from the capped share, the volume's own floors
+/// stay. Below the minimum share the answer is BudgetTooSmall.
+pub fn diskCapped(volume: u64, live: u64, cap: u64) error{BudgetTooSmall}!Disk {
+    if (cap < bytes.floor) return error.BudgetTooSmall;
+    var result = disk(volume, live);
+    result.session = cap;
+    result.frames = cap / 5;
+    result.checkpoints = percent(cap, 60);
+    return result;
+}
+
 pub const Relief = enum { orphans, frames, checkpoints, stop };
 pub const relief_order = [_]Relief{ .orphans, .frames, .checkpoints, .stop };
 
