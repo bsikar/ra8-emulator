@@ -27,6 +27,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return app.map_main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return app.serve.main.run(allocator, io, argv);
     if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return app.sweep.cli.run(io, init.environ_map, argv);
+    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "history")) return app.history_cli.run(allocator, io, argv);
     const options = app.cli.parse(argv) catch return app.debug_front.refused(allocator, io, argv);
     const image = app.image_file.open(io, allocator, options.path) catch return 1;
     return app.zig.run.main_path.run(allocator, io, image, options);

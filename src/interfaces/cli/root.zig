@@ -13,6 +13,7 @@ pub const map_main = @import("map_main.zig");
 pub const session_ctl = @import("session_ctl.zig");
 pub const ctl = @import("ctl/ctl.zig");
 pub const host = @import("host/host.zig");
+pub const history_cli = @import("history_cli.zig");
 pub const video_out = @import("video_out.zig");
 pub const gif_out = @import("gif_out.zig");
 pub const debug_front = @import("debug_front.zig");
