@@ -36,6 +36,7 @@ pub const history_store = @import("history/store.zig");
 pub const history_log = @import("history/log.zig");
 pub const history_root = @import("history/root.zig");
 pub const history_trail = @import("history/trail.zig");
+pub const history_refs = @import("history/refs.zig");
 pub const history_recorder = @import("history/recorder.zig");
 pub const history_checkpoint = @import("history/checkpoint.zig");
 pub const history_budget = @import("history/budget.zig");
