@@ -37,12 +37,19 @@ pub const Checkpoint = struct {
     /// object the storage does not hold (object-before-log).
     pub fn fire(self: *Checkpoint, round: u64) anyerror!void {
         if (self.every == 0 or round == 0 or round % self.every != 0) return;
-        // The projection: if the last checkpoint's size again would put
-        // the objects past the checkpoints partition, thin the cadence
-        // instead of refusing the run; the next hit comes later.
-        if (self.object_cap != 0 and self.recorder.object_bytes + self.last_size > self.object_cap) {
-            self.every = std.math.mul(u32, self.every, 2) catch std.math.maxInt(u32);
-            return;
+        // The budget's relief order, the controller's share of it: the
+        // orphans and frames steps belong to the host's prune (the
+        // recorder cannot scan its object space), so the controller
+        // applies the checkpoints step, thinning the cadence when the
+        // last checkpoint's size again would put the objects past the
+        // checkpoints partition, and the stop step, refusing when one
+        // checkpoint alone cannot fit whatever cadence runs.
+        if (self.object_cap != 0) {
+            if (self.last_size > self.object_cap) return error.HistoryFull;
+            if (self.recorder.object_bytes + self.last_size > self.object_cap) {
+                self.every = std.math.mul(u32, self.every, 2) catch std.math.maxInt(u32);
+                return;
+            }
         }
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.recorder.gpa, 4096);
         defer staging.deinit();
