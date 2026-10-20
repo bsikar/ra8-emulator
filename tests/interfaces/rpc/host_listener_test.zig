@@ -219,7 +219,11 @@ test "a gdb client breaks, continues, hits it and reads registers" {
     const host = bound.gdb.items[0];
     try slow_peer.block(host.client.?.stream);
     try gdb.send("qRcmd,");
-    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 2000;
+    // The drop is a matter of the host noticing the stopped reader,
+    // not of the clock: two validation runs at once have shown two
+    // seconds to be shorter than a loaded runner takes, so the check
+    // takes the same ten seconds the queued-reply loop below does.
+    const deadline = std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() + 10_000;
     while (host.client != null and std.Io.Timestamp.now(std.testing.io, .awake).toMilliseconds() < deadline) bound.pumpGdb();
     try std.testing.expect(host.client == null);
 }
