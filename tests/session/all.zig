@@ -25,6 +25,7 @@ test {
     _ = @import("history/trail_test.zig");
     _ = @import("history/recorder_test.zig");
     _ = @import("history/replay_test.zig");
+    _ = @import("twice_replay_test.zig");
     _ = @import("history/checkpoint_test.zig");
     _ = @import("history/refs_test.zig");
     _ = @import("history/budget_test.zig");
