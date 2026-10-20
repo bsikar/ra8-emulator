@@ -282,6 +282,10 @@ test "a checkpoint refuses when no object space is attached" {
 const Watch = struct {
     free_bytes: u64,
     reads: usize = 0,
+    /// How many bytes each relief run adds to the free-space answer,
+    /// and how many times the relief ran.
+    relief_bytes: u64 = 0,
+    reliefs: usize = 0,
 
     fn free(context: *anyopaque) anyerror!u64 {
         const self: *Watch = @ptrCast(@alignCast(context));
@@ -291,6 +295,18 @@ const Watch = struct {
 
     fn budget(self: *Watch, cap: u64, floor: u64) recorder_mod.Budget {
         return .{ .context = self, .free = free, .cap = cap, .floor = floor };
+    }
+
+    /// The same budget with the test's relief attached: a refusal frees
+    /// `relief_bytes` and re-checks once.
+    fn reliefBudget(self: *Watch, cap: u64, floor: u64) recorder_mod.Budget {
+        return .{ .context = self, .free = free, .cap = cap, .floor = floor, .relief = &relief };
+    }
+
+    fn relief(context: *anyopaque) anyerror!void {
+        const self: *Watch = @ptrCast(@alignCast(context));
+        self.reliefs += 1;
+        self.free_bytes += self.relief_bytes;
     }
 };
 
@@ -326,4 +342,50 @@ test "a commit the share cannot take refuses and keeps its bytes staged" {
     try rec.commit(2);
     try std.testing.expectEqual(@as(usize, 2), sink.flushes);
     try std.testing.expectEqual(budget_mod.Pressure.warning, rec.last_pressure);
+}
+
+test "a refused commit runs the application's relief and lands on the re-check" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.bytes.deinit(gpa);
+    var watch: Watch = .{ .free_bytes = 1_000_000 };
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.disk = watch.budget(1_000, 0);
+    try rec.recordBoundary(header(1), .{ .what = .c6_bytes, .body = "abc" });
+    try rec.commit(0);
+    const first = rec.committed_bytes;
+
+    // The volume, not the share, is what refuses: the free-space read
+    // holds almost nothing. The relief frees enough for the re-check,
+    // so the same bytes go out without a second commit call.
+    watch.free_bytes = 10;
+    watch.relief_bytes = 10_000;
+    rec.disk = watch.reliefBudget(1_000, 0);
+    try rec.recordBoundary(header(2), .{ .what = .camera_change, .body = "def" });
+    try rec.commit(1);
+    try std.testing.expectEqual(@as(usize, 0), rec.pendingBytes());
+    try std.testing.expect(rec.committed_bytes > first);
+    try std.testing.expectEqual(@as(usize, 1), watch.reliefs);
+    try std.testing.expectEqual(@as(usize, 2), sink.flushes);
+}
+
+test "a relief that frees nothing keeps the refusal" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.bytes.deinit(gpa);
+    var watch: Watch = .{ .free_bytes = 10 };
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.disk = watch.reliefBudget(1_000, 0);
+    try rec.recordBoundary(header(1), .{ .what = .c6_bytes, .body = "abc" });
+    try std.testing.expectError(error.HistoryFull, rec.commit(0));
+    // The relief ran once and the re-check refused again, so the bytes
+    // stay staged for a later retry.
+    try std.testing.expectEqual(@as(usize, 1), watch.reliefs);
+    try std.testing.expect(rec.pendingBytes() > 0);
+    try std.testing.expectEqual(@as(usize, 2), watch.reads);
+    try std.testing.expectEqual(@as(usize, 0), sink.flushes);
 }
