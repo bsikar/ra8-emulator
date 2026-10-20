@@ -317,9 +317,12 @@ test "a commit the share cannot take refuses and keeps its bytes staged" {
     try std.testing.expectEqual(@as(usize, 1), sink.flushes);
     try std.testing.expectEqual(@as(usize, 2), watch.reads);
 
-    // With the share raised past the spent bytes, the same bytes go out,
-    // and the pressure the commit leaves behind is the warning band.
-    rec.disk = watch.budget(first + rec.pendingBytes() + 100, 0);
+    // With the share raised past the spent bytes into the warning band on
+    // purpose (20% headroom over what the retry will spend), the same
+    // bytes go out, and the pressure the commit leaves behind is the
+    // warning band.
+    const spent = first + rec.pendingBytes();
+    rec.disk = watch.budget(spent + spent / 5, 0);
     try rec.commit(2);
     try std.testing.expectEqual(@as(usize, 2), sink.flushes);
     try std.testing.expectEqual(budget_mod.Pressure.warning, rec.last_pressure);
