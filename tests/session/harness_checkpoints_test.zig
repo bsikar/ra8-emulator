@@ -37,6 +37,7 @@ test "arming binds the controller to the session's boundary" {
         .{ .context = &context, .append = Stub.append, .flush = Stub.flush, .truncate = Stub.truncate },
         .{ .context = &context, .put = Stub.put, .sync = Stub.sync },
         .{ .context = &context, .free = Stub.free, .cap = 100, .floor = 10 },
+        600,
         64,
     );
     defer checkpoints_mod.disarm(gpa, armed);
@@ -47,5 +48,6 @@ test "arming binds the controller to the session's boundary" {
     try std.testing.expect(armed.recorder.objects != null);
     try std.testing.expectEqual(@as(u64, 100), armed.recorder.disk.?.cap);
     try std.testing.expectEqual(@as(u64, 10), armed.recorder.disk.?.floor);
+    try std.testing.expectEqual(@as(u64, 600), armed.checkpoints.object_cap);
     try std.testing.expectEqual(@as(u32, 64), armed.checkpoints.every);
 }

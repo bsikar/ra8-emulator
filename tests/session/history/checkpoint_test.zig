@@ -162,3 +162,40 @@ test "arming refuses while a second core is attached" {
     var cp: checkpoint_mod.Checkpoint = undefined;
     try std.testing.expectError(error.SecondCore, session.armCheckpoints(&cp));
 }
+
+test "a projected total past the checkpoint cap thins the cadence" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.observe(0);
+    rec.objects = objects.objects();
+
+    var saved: scheduler.State = .{};
+    var cp = controller(&rec, &saved, &objects, 2);
+    cp.object_cap = 3;
+
+    // The first checkpoint lands; its object is 4 bytes, past the cap.
+    try cp.fire(2);
+    try std.testing.expectEqual(@as(u32, 1), cp.next_id);
+    try std.testing.expectEqual(@as(u64, 4), cp.last_size);
+    try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
+
+    // The next hit's projection (4 + 4) is past the cap: the cadence
+    // doubles and nothing lands.
+    try cp.fire(4);
+    try std.testing.expectEqual(@as(u32, 4), cp.every);
+    try std.testing.expectEqual(@as(u32, 1), cp.next_id);
+    try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
+
+    // The next hit at the doubled cadence still projects over: it
+    // doubles again.
+    try cp.fire(8);
+    try std.testing.expectEqual(@as(u32, 8), cp.every);
+    try std.testing.expectEqual(@as(u32, 1), cp.next_id);
+    try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
+}

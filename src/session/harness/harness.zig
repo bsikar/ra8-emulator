@@ -396,5 +396,5 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
     if (options.history_storage != null and options.history_objects != null and options.checkpoint_every != 0)
-        state.persistent = try checkpoints.arm(allocator, &state.session.live, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.history_disk, options.checkpoint_every);
+        state.persistent = try checkpoints.arm(allocator, &state.session.live, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.history_disk, options.history_checkpoint_cap, options.checkpoint_every);
 }

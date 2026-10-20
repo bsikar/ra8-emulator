@@ -27,6 +27,7 @@ pub fn arm(
     storage: history_recorder.Storage,
     objects: history_recorder.Objects,
     disk: ?history_recorder.Budget,
+    checkpoint_cap: u64,
     every: u32,
 ) !*Armed {
     const armed = try allocator.create(Armed);
@@ -41,6 +42,7 @@ pub fn arm(
         .recorder = &armed.recorder,
         .saved = saved,
         .every = every,
+        .object_cap = checkpoint_cap,
     };
     try session.armCheckpoints(&armed.checkpoints);
     return armed;

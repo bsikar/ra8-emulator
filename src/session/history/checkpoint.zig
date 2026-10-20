@@ -23,6 +23,13 @@ pub const Checkpoint = struct {
     every: u32 = 64,
     /// The next checkpoint's record id.
     next_id: u32 = 0,
+    /// The bytes checkpoints may take on the volume; zero runs the
+    /// cadence unprojected. The application fills it from its share
+    /// math (the checkpoints partition, 60% of the ephemeral share).
+    object_cap: u64 = 0,
+    /// The last landed checkpoint's object size, the projection's stand
+    /// in for the next one.
+    last_size: u64 = 0,
 
     /// Offers a closed round to the policy. On every Nth round the save
     /// stream goes to the recorder's object space first, then the
@@ -30,6 +37,13 @@ pub const Checkpoint = struct {
     /// object the storage does not hold (object-before-log).
     pub fn fire(self: *Checkpoint, round: u64) anyerror!void {
         if (self.every == 0 or round == 0 or round % self.every != 0) return;
+        // The projection: if the last checkpoint's size again would put
+        // the objects past the checkpoints partition, thin the cadence
+        // instead of refusing the run; the next hit comes later.
+        if (self.object_cap != 0 and self.recorder.object_bytes + self.last_size > self.object_cap) {
+            self.every = std.math.mul(u32, self.every, 2) catch std.math.maxInt(u32);
+            return;
+        }
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.recorder.gpa, 4096);
         defer staging.deinit();
         try self.saveFn(self.context, &staging.writer);
@@ -37,6 +51,7 @@ pub const Checkpoint = struct {
         const header: record.Header = .{ .position = self.saved.at, .seq = 0 };
         try self.recorder.checkpoint(header, self.next_id, bytes);
         self.next_id += 1;
+        self.last_size = bytes.len;
         // The record commits at once: object-before-log's record half, so
         // a crash never leaves a durable object without its naming record.
         try self.recorder.commit(0);

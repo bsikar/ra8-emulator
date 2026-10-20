@@ -71,6 +71,7 @@ pub const Served = struct {
             .history_storage = if (bind) |b| b.storage else null,
             .history_objects = if (bind) |b| b.objects else null,
             .history_disk = if (bind) |b| b.disk else null,
+            .history_checkpoint_cap = if (bind) |b| b.checkpoint_cap else 0,
             .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
         });
         errdefer owner.deinit();

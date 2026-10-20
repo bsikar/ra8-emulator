@@ -19,6 +19,10 @@ pub const Options = struct {
     /// this history takes on the volume and a fresh free-space read per
     /// check. Null runs the history uncapped.
     history_disk: ?history_recorder.Budget = null,
+    /// The bytes checkpoints may take on the volume (RA8EMU-1196): the
+    /// application fills it from its share math, the projection thins
+    /// the cadence past it. Zero runs the cadence unprojected.
+    history_checkpoint_cap: u64 = 0,
     /// The board profile's text (RA8EMU-1152); null is the shipped EK-RA8D2
     /// default. Its labels point into the caller's text and outlive it.
     board_profile: ?[]const u8 = null,

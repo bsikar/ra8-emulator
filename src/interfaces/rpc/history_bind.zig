@@ -29,6 +29,9 @@ pub const Bind = struct {
     /// free-space read per check.
     disk: ?session_recorder.Budget = null,
     watch: ?*VolumeWatch = null,
+    /// The checkpoints partition's bytes, what the cadence projection
+    /// keeps the checkpoint objects within.
+    checkpoint_cap: u64 = 0,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -57,6 +60,7 @@ pub const Bind = struct {
         watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir };
         bind.watch = watch;
         bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor };
+        bind.checkpoint_cap = shares.checkpoints;
         return bind;
     }
 
