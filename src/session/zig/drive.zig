@@ -71,11 +71,17 @@ pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: 
     // the poll asks the source afresh before trusting a hush again.
     if (core.cpu.quiet) |hushing| hushing.stirAll();
     var left = if (target != null and target.? <= core.cpu.slots) @max(count, 1) else count;
+    // The resume grace's step spends the tick the quiet path would spend
+    // at its chunk's start: the recorded run projects the chunk once,
+    // before its first instruction, so the quiet continuation after the
+    // grace step must not project again (RA8EMU-1196).
+    var grace_ticked = false;
     while (left > 0) {
         // Nothing armed: run as a plain run does. The watch bus stays armed
         // so firmware that programs the FPB or DWT still reaches them.
         if (machine.quiet()) {
-            if (clock) |counting| counting.tick(core, machine);
+            if (clock) |counting| if (!grace_ticked) counting.tick(core, machine);
+            grace_ticked = false;
             const went = quietRun(core, watch, left, target);
             retired.* += went.ran;
             left -= went.ran;
@@ -85,6 +91,8 @@ pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: 
             if (core.cpu.cut) |cut| if (cut.fired) return .count;
             continue;
         }
+        const resumed_step = machine.resumed;
+        if (!resumed_step) grace_ticked = false;
         if (!machine.resumed and (machine.pendingData() or machine.halt_pending)) {
             const stop = machine.onInstruction(event(core));
             zig_monitor.take(core, machine);
@@ -100,6 +108,7 @@ pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: 
         if (target) |at| if (core.cpu.slots >= at) return .count;
         if (core.cpu.fetch_guard) |guard| if (guard.holds(core.cpu.regs.pc)) return .count;
         if (clock) |counting| counting.tick(core, machine);
+        if (resumed_step) grace_ticked = true;
         const now = event(core);
         // The poll entered an exception: the resume grace belongs to the old
         // PC, and a step ends here, before the handler's first instruction.

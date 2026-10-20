@@ -151,11 +151,6 @@ pub const Machine = struct {
     /// DHCSR.C_STEP is set.
     pub fn proceed(self: *Machine) void {
         self.start(if (self.dcb.stepping()) .step else .running, null);
-        // A resume with nothing armed or pending has a grace instruction
-        // that delivers nothing (armFrom only acts in step_over), so spend
-        // it here: the interval runs quiet and the cycle clock samples at
-        // boundaries, not one slot past them (RA8EMU-1196).
-        if (self.graceIdle()) self.resumed = false;
     }
 
     /// Run from a fresh start rather than a resume: the first instruction
@@ -200,15 +195,7 @@ pub const Machine = struct {
     /// Then `onInstruction` returns null and changes nothing, and no access
     /// the instruction makes can trip anything, so a driver may skip both.
     pub fn quiet(self: *const Machine) bool {
-        return !self.resumed and self.graceIdle();
-    }
-
-    /// Everything `quiet` asks besides the resume grace: a resumed machine
-    /// in this state has a grace instruction that delivers nothing (armFrom
-    /// only acts in step_over), so a clean resume may spend the grace and
-    /// run quiet (RA8EMU-1196).
-    pub fn graceIdle(self: *const Machine) bool {
-        return self.mode == .running and !self.halt_pending and
+        return self.mode == .running and !self.resumed and !self.halt_pending and
             self.hits_len == 0 and self.unit_pending == null and
             self.monitor_pending == null and self.breaks.len == 0 and
             self.watches.len == 0 and !self.fpb.enabled and !dwtArmed(&self.dwt);
