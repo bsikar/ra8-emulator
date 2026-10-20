@@ -87,6 +87,11 @@ pub const Budget = struct {
     cap: u64,
     /// The free space the volume must still hold after the bytes go out.
     floor: u64,
+    /// The relief the application supplies for a refused commit or
+    /// checkpoint: it runs once when the check refuses, before the
+    /// refusal stands, so the retry can land. Null keeps a history
+    /// that refuses without relief.
+    relief: ?*const fn (context: *anyopaque) anyerror!void = null,
 };
 
 pub const Recorder = struct {
@@ -149,8 +154,7 @@ pub const Recorder = struct {
     pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
         const objects = self.objects orelse return Error.NoObjects;
         if (self.disk) |watch| {
-            const free = try watch.free(watch.context);
-            self.last_pressure = try budget.checkCommit(self.committed_bytes + self.object_bytes, bytes.len, watch.cap, free, watch.floor);
+            _ = try self.checkDisk(watch, self.committed_bytes + self.object_bytes, bytes.len);
         }
         var digest: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
@@ -167,6 +171,25 @@ pub const Recorder = struct {
         try format.encode(&self.staging.writer, @backingInt(record.Kind.checkpoint), payload);
         self.log.pending_bytes += format.header_len + payload.len;
         self.object_bytes += bytes.len;
+    }
+
+    /// The disk-side check both a commit and a checkpoint run: one
+    /// fresh free-space read, and on a refusal the application's
+    /// relief, once, then one re-check whose answer stands. The relief
+    /// crosses as a callback the same way the free-space read does,
+    /// because session never touches the host.
+    fn checkDisk(self: *Recorder, watch: Budget, used: u64, additional: u64) anyerror!budget.Pressure {
+        const free = try watch.free(watch.context);
+        if (budget.checkCommit(used, additional, watch.cap, free, watch.floor)) |answer| {
+            self.last_pressure = answer;
+            return answer;
+        } else |err| {
+            const relieve = watch.relief orelse return err;
+            try relieve(watch.context);
+            const relieved = try watch.free(watch.context);
+            self.last_pressure = try budget.checkCommit(used, additional, watch.cap, relieved, watch.floor);
+            return self.last_pressure;
+        }
     }
 
     fn stage(self: *Recorder, kind: u16, header: record.Header, what: anytype, body: []const u8) anyerror!void {
@@ -198,8 +221,7 @@ pub const Recorder = struct {
     pub fn commit(self: *Recorder, now_ns: u64) anyerror!void {
         if (self.disk) |watch| {
             if (self.log.pending_bytes > 0) {
-                const free = try watch.free(watch.context);
-                self.last_pressure = try budget.checkCommit(self.committed_bytes + self.object_bytes, self.log.pending_bytes, watch.cap, free, watch.floor);
+                _ = try self.checkDisk(watch, self.committed_bytes + self.object_bytes, self.log.pending_bytes);
             }
         }
         try self.log.commit(now_ns);

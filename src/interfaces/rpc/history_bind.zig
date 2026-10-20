@@ -58,9 +58,9 @@ pub const Bind = struct {
         const shares = history.budget.disk(volume.total, 1);
         const watch = try allocator.create(VolumeWatch);
         errdefer allocator.destroy(watch);
-        watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir };
+        watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir, .store = store };
         bind.watch = watch;
-        bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor };
+        bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor, .relief = &relieveVolume };
         bind.checkpoint_cap = shares.checkpoints;
         return bind;
     }
@@ -96,8 +96,20 @@ pub const Bind = struct {
 const LogSink = struct { byte: history.storage.ByteFile };
 
 /// Reads the volume fresh for every budget check; the history root's
-/// directory is the handle the read goes through.
-const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir };
+/// directory is the handle the read goes through. The store rides along
+/// for the relief the budget's refusal path runs.
+const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, store: history.storage.Store };
+
+/// The relief a refused commit or checkpoint runs before the refusal
+/// stands: the frames step only. The frames space holds pure
+/// delete-on-close cache, so the sweep is safe while the session is
+/// open. The orphan sweep needs a root no session holds open (a staged
+/// checkpoint's object is on disk before its log record is), so it
+/// stays a quiescent prune rather than live relief.
+fn relieveVolume(context: *anyopaque) anyerror!void {
+    const watch: *VolumeWatch = @ptrCast(@alignCast(context));
+    _ = try history.prune.frames(watch.store);
+}
 
 fn freeVolume(context: *anyopaque) anyerror!u64 {
     const watch: *VolumeWatch = @ptrCast(@alignCast(context));
