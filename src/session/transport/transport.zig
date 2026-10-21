@@ -80,13 +80,26 @@ const Job = struct {
     /// A seek job's resolved plan: where it lands and where its replay
     /// starts.
     const SeekKind = struct {
-        /// The seek's landing position; this slice's primitive stops at
-        /// round granularity.
+        /// The seek's landing position, phase included.
         target: seek_engine.Position,
         /// Where the replay starts.
         base: seek_engine.Base,
         /// Whether a checkpoint base's object is already restored.
         restored: bool = false,
+        /// Wall moments and replay rounds the job's ETA rate comes from.
+        rate: RateWindow = .{},
+    };
+
+    /// The two moments a seek's ETA divides by: the window's opening
+    /// sample and the newest one. The opening sample slides forward
+    /// whenever the span would outgrow the contract's five seconds, so
+    /// the rate stays a recent one.
+    const RateWindow = struct {
+        window_wall_ns: u64 = 0,
+        window_r: u64 = 0,
+        last_wall_ns: u64 = 0,
+        last_r: u64 = 0,
+        has: bool = false,
     };
 };
 
@@ -205,13 +218,16 @@ pub const Transport = struct {
     pub fn report(self: *const Transport) Report {
         var progress: command_mod.Progress = .{};
         var phase: command_mod.Phase = .halted;
-        if (self.job) |job| {
+        if (self.job) |*job| {
             progress.slices = job.slices;
             if (job.kind == .advance) {
                 progress.target_ns = job.target_ns;
                 progress.reached_ns = self.session.now() catch null;
             }
-            if (job.kind == .seek) progress.target_position = job.kind.seek.target;
+            if (job.kind == .seek) {
+                progress.target_position = job.kind.seek.target;
+                progress.eta_ns = self.seekEta(job);
+            }
             phase = switch (job.kind) {
                 .play => .playing,
                 .cont => .continuing,
@@ -255,7 +271,9 @@ pub const Transport = struct {
     }
 
     fn drive(self: *Transport, job: *Job, wall: Wall, until_ns: u64) !?Finished {
-        while (wall.nowFn(wall.context) < until_ns) {
+        while (true) {
+            const now_ns = wall.nowFn(wall.context);
+            if (now_ns >= until_ns) break;
             const ended: ?api.Ended = switch (job.kind) {
                 .play, .cont => try self.playSlice(job),
                 .advance => try self.advanceSlice(job),
@@ -263,6 +281,7 @@ pub const Transport = struct {
                 .seek => try self.seekSlice(job),
             };
             job.slices += 1;
+            if (job.kind == .seek) self.sampleSeekRate(job, now_ns);
             if (ended) |stop| return self.settle(job, stop);
         }
         return null;
@@ -324,6 +343,41 @@ pub const Transport = struct {
         return null;
     }
 
+    /// Fold one seek slice into the job's rate window: the slice's
+    /// opening wall moment paired with the round the slice ended on.
+    /// The window slides when it outgrows five seconds.
+    fn sampleSeekRate(self: *const Transport, job: *Job, wall_ns: u64) void {
+        const grid = self.session.grid orelse return;
+        const s = &job.kind.seek.rate;
+        const at_r = grid.at.r;
+        if (!s.has) {
+            s.* = .{ .window_wall_ns = wall_ns, .window_r = at_r, .last_wall_ns = wall_ns, .last_r = at_r, .has = true };
+            return;
+        }
+        s.last_wall_ns = wall_ns;
+        s.last_r = at_r;
+        if (wall_ns - s.window_wall_ns > rate_window_ns) {
+            s.window_wall_ns = wall_ns;
+            s.window_r = at_r;
+        }
+    }
+
+    /// A seek's arrival estimate: the rounds still to replay divided by
+    /// the replay rate the job's wall window measured. Null until the
+    /// window holds both a span and a round of movement, so a seek's
+    /// first reports and an instant restore-only replay carry none.
+    fn seekEta(self: *const Transport, job: *const Job) ?u64 {
+        const s = &job.kind.seek.rate;
+        if (!s.has) return null;
+        const wall = s.last_wall_ns -| s.window_wall_ns;
+        const rounds = s.last_r -| s.window_r;
+        if (wall == 0 or rounds == 0) return null;
+        const grid = self.session.grid orelse return null;
+        const remaining = job.kind.seek.target.r -| grid.at.r;
+        const eta = @as(u128, remaining) * @as(u128, wall) / @as(u128, rounds);
+        return @intCast(@min(eta, std.math.maxInt(u64)));
+    }
+
     /// Close a finished job: put its budget back, forget it, and remember
     /// the result. The result is captured before the job is cleared, since
     /// the caller's pointer lives inside the optional being cleared.
@@ -339,6 +393,9 @@ pub const Transport = struct {
         return self.session.event_stream.nearFull();
     }
 };
+
+/// The wall span a seek's ETA rate window covers before it slides.
+const rate_window_ns: u64 = 5 * std.time.ns_per_s;
 
 /// A checkpoint record's 128-bit digest as its object name: the lowercase
 /// hex the object space files carry (refs.zig's encoding).

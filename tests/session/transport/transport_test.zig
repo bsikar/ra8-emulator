@@ -318,6 +318,79 @@ test "a seek replays forward from a checkpoint base to a round past it" {
     try std.testing.expect(session.grid.?.at.r >= target_r);
 }
 
+test "a running seek quotes its eta from its measured replay rate" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 4,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    const facts = try TestBridge.facts(&state);
+    try std.testing.expect(facts.checkpoints.len >= 1);
+    const base = facts.checkpoints[0].position;
+    // The live cursor must sit strictly above the target so the seek
+    // really replays, and the run must continue past the target's round
+    // so the crossing slice ends on its budget rather than on the
+    // firmware's end: extend the run until the cursor is two rounds
+    // past the earliest checkpoint.
+    var guard: usize = 0;
+    while (session.grid.?.at.r < base.r + 2 and guard < 8) : (guard += 1) {
+        _ = try session.run(.cpu0, .cont);
+    }
+    try std.testing.expect(session.grid.?.at.r >= base.r + 2);
+    // One round past the earliest checkpoint. Each pump here is exactly
+    // one slice, so the slice that crosses into the target's round
+    // reports while the job still runs and the estimate is quotable.
+    const text = try std.fmt.allocPrint(gpa, "{d}:{s}:{d}:{s}", .{
+        base.r + 1,
+        @tagName(base.phase),
+        base.o,
+        @tagName(base.gap),
+    });
+    defer gpa.free(text);
+    // A budget far under the replay's cost keeps any single run slice
+    // from swallowing it.
+    try session.setRunBudget(.cpu0, 100_000);
+
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .seek = .{ .target = text } });
+    var first: ?u64 = null;
+    var last: ?u64 = null;
+    var landed: ?u64 = null;
+    while (landed == null) {
+        const pumped = try t.pump(fake.wall(), fake.now_ns + 2_000_000);
+        if (pumped.report.progress.eta_ns) |eta| {
+            if (first == null) first = eta;
+            last = eta;
+        }
+        if (pumped.finished) |fin| landed = fin.ticket;
+    }
+    try std.testing.expectEqual(ticket, landed.?);
+    // The estimate was quoted while the replay ran, and it never grew
+    // as the replay consumed the rounds it was quoted from.
+    try std.testing.expect(first != null);
+    try std.testing.expect(last != null);
+    try std.testing.expect(last.? <= first.?);
+    // The job is over: the report is halted and quotes no estimate.
+    const report = t.report();
+    try std.testing.expect(report.phase == .halted);
+    try std.testing.expect(report.progress.eta_ns == null);
+}
+
 test "a seek to a later phase of the checkpoint's round runs past the restore" {
     const gpa = std.testing.allocator;
     var sink: fakes.Sink = .{ .gpa = gpa };
