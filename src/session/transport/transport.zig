@@ -36,6 +36,7 @@ pub const Ticket = command_mod.Ticket;
 pub const Phase = command_mod.Phase;
 pub const Progress = command_mod.Progress;
 pub const Report = command_mod.Report;
+pub const State = command_mod.State;
 pub const Pumped = command_mod.Pumped;
 pub const Finished = command_mod.Finished;
 pub const Wall = command_mod.Wall;
@@ -74,6 +75,11 @@ const Job = struct {
     target_ns: u64 = 0,
     /// A step's remaining instructions.
     left: u64 = 0,
+    /// Where a play or continue moves; backward is refused until the
+    /// history contracts land, so forward is the only value today.
+    dir: command_mod.Direction = .fwd,
+    /// A play's pace, when one was asked for; null is `max`.
+    speed: ?f64 = null,
 
     const Kind = union(enum) { play, cont, step, advance, seek: SeekKind };
 
@@ -188,7 +194,7 @@ pub const Transport = struct {
         self.epoch += 1;
         try self.session.setRunBudget(core, change.budget);
         const ticket = self.issue();
-        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = core, .kind = kind, .prior_budget = prior, .budget = change.budget };
+        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = core, .kind = kind, .prior_budget = prior, .budget = change.budget, .dir = .fwd, .speed = speed };
         return ticket;
     }
 
@@ -218,6 +224,7 @@ pub const Transport = struct {
     pub fn report(self: *const Transport) Report {
         var progress: command_mod.Progress = .{};
         var phase: command_mod.Phase = .halted;
+        var state: ?command_mod.State = null;
         if (self.job) |*job| {
             progress.slices = job.slices;
             if (job.kind == .advance) {
@@ -235,10 +242,18 @@ pub const Transport = struct {
                 .step => .stepping,
                 .seek => .seeking,
             };
+            state = switch (job.kind) {
+                .play => .{ .playing = .{ .dir = job.dir, .speed = job.speed } },
+                .cont => .{ .continuing = .{ .dir = job.dir } },
+                .advance => .{ .advancing = .{ .target_ns = job.target_ns } },
+                .step => .{ .stepping = .{ .core = job.core, .count = job.left } },
+                .seek => .{ .seeking = .{ .target = job.kind.seek.target } },
+            };
         }
         return .{
             .epoch = self.epoch,
             .phase = phase,
+            .state = state,
             .position = if (self.session.grid) |grid| grid.at else null,
             .progress = progress,
         };
