@@ -71,6 +71,7 @@ pub const Method = enum(u16) {
     locals = 0x0129,
     locals_at = 0x012A,
     advance_async = 0x012B,
+    seek = 0x012C,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -142,6 +143,12 @@ pub const Ack = struct { accepted: u8 };
 /// `advance_async` accepted a long advance: the job is queued on the
 /// transport and the completion arrives on the transport topic (slice 14).
 pub const AdvanceQueued = struct { core: Core, from_ns: u64, target_ns: u64 };
+/// A `seek` request (slice 17): the target as text in the design's own
+/// language (section 2), validated by the queue door on the server.
+pub const Seek = struct {
+    target: []const u8,
+    pub const max_len = .{ .target = 256 };
+};
 /// One transport report on the transport topic: the plane's state, and
 /// when `finished` is 1 the advance the client asked `advance_async` for,
 /// stopped where it got to. `phase` matches the transport's Phase order.
