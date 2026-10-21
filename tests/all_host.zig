@@ -306,6 +306,7 @@ test {
     _ = @import("interfaces/rpc/host_gdb_test.zig");
     _ = @import("interfaces/rpc/socket_transport_test.zig");
     _ = @import("interfaces/rpc/served_setup_test.zig");
+    _ = @import("interfaces/rpc/history_off_nodisk_test.zig");
     _ = @import("interfaces/rpc/session_list_parts_test.zig");
     _ = @import("interfaces/rpc/session_board_parts_test.zig");
     _ = @import("interfaces/rpc/session_board_profile_test.zig");
