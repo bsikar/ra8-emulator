@@ -24,6 +24,9 @@ pub const app_codes = struct {
     pub const no_core: u16 = 0x0101;
     /// A read asked for more bytes than one reply carries.
     pub const too_long: u16 = 0x0102;
+    /// A seek's history read failed: the committed log or the checkpoint
+    /// object it names is unreadable (RA8EMU-1196, slice 17).
+    pub const history: u16 = 0x0103;
 };
 
 pub const Method = enum(u16) {
