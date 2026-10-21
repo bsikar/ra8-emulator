@@ -129,7 +129,12 @@ test "a malformed or backward play is refused and changes nothing" {
     const phase = t.report().phase;
     try std.testing.expectError(transport.Error.InvalidSpeed, t.command(.{ .play = .{ .speed = 0 } }));
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .play = .{ .dir = .back } }));
-    try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{} }));
+    // An empty target and any unparsable one are refused at the door;
+    // a well-formed one is still refused with NotReady, its drive pending.
+    try std.testing.expectError(transport.Error.InvalidArgs, t.command(.{ .seek = .{} }));
+    try std.testing.expectError(transport.Error.InvalidArgs, t.command(.{ .seek = .{ .target = "nope" } }));
+    try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "3:cpu1:4:polled" } }));
+    try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "2:3:cpu0:1:retired" } }));
     try std.testing.expectEqual(epoch, t.report().epoch);
     try std.testing.expectEqual(phase, t.report().phase);
 }

@@ -35,8 +35,9 @@ pub const Advance = struct {
 };
 
 pub const Seek = struct {
-    /// v1 transport accepts the type; execution waits for the history
-    /// contracts (units 17/18) and is refused with NotReady until then.
+    /// v1 transport accepts the type and validates the target text at the
+    /// door; execution waits for the position-stop primitive and the
+    /// committed-log bridge, and is refused with NotReady until then.
     target: []const u8 = "",
 };
 
@@ -70,6 +71,13 @@ pub const Progress = struct {
     reached_ns: ?u64 = null,
     /// Slices the job has driven so far.
     slices: u64 = 0,
+    /// A seek's resolved target position, once its plan is known. Time
+    /// targets resolve against the virtual-time index first, so this stays
+    /// null until the target names a position the run can hold.
+    target_position: ?scheduler.Position = null,
+    /// A seek's arrival estimate, in host nanoseconds at the live rate,
+    /// once the replay distance is known.
+    eta_ns: ?u64 = null,
 };
 
 pub const Report = struct {

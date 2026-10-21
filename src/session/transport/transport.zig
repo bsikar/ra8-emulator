@@ -13,15 +13,18 @@
 //! it maps onto the run budget and never touches guest state.
 //!
 //! Seek and run-to are part of the command language but stay refused with
-//! NotReady in this slice: seek's base needs the history contracts (units
-//! 17/18), and a run-to lands where a breakpoint would, which is its own
-//! stop-ordering case. Their types exist so front ends already speak them.
+//! NotReady in this slice: seek's base needs the committed-log bridge and
+//! the position-stop primitive, and a run-to lands where a breakpoint
+//! would, which is its own stop-ordering case. Their types exist so front
+//! ends already speak them, and a seek's target text is parsed at the door
+//! so a malformed one is InvalidArgs, not a silent refusal.
 
 const std = @import("std");
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
 const debug_session = @import("../session.zig");
 const session_speed = @import("../speed.zig");
+const seek_target = @import("../history/seek_target.zig");
 
 pub const Command = command_mod.Command;
 pub const Ticket = command_mod.Ticket;
@@ -97,7 +100,15 @@ pub const Transport = struct {
                 self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = advance.core, .kind = .advance, .prior_budget = prior, .target_ns = target };
                 return ticket;
             },
-            .seek, .run_to => return Error.NotReady,
+            .seek => |seek| {
+                // The target text is validated at the door, so a front end
+                // learns about a typo now, not when the drive lands. The
+                // execution itself waits for the position-stop primitive
+                // and the committed-log bridge, and stays refused.
+                _ = seek_target.parse(seek.target) catch return Error.InvalidArgs;
+                return Error.NotReady;
+            },
+            .run_to => return Error.NotReady,
         }
     }
 
