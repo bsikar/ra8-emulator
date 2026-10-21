@@ -43,6 +43,7 @@ pub const history_budget = @import("history/budget.zig");
 pub const history_replay = @import("history/replay.zig");
 pub const history_seek_target = @import("history/seek_target.zig");
 pub const history_seek_engine = @import("history/seek_engine.zig");
+pub const history_seek_facts = @import("history/seek_facts.zig");
 pub const mem_dump = @import("mem_dump.zig");
 pub const pc_hits = @import("pc_hits.zig");
 pub const place = @import("place/place.zig");
