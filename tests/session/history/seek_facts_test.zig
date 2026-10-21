@@ -38,6 +38,7 @@ test "one walk gathers the log's checkpoints in order and its furthest round" {
     try record.encodeBranch(&payload.writer, at(4, 7), .{ .id = 2, .parent = 1, .fork_at = at(4, 7).position, .reason = .writes });
     try frame(&buf.writer, @backingInt(record.Kind.branch), payload.writer.buffered());
     const first = try checkpoint(&buf.writer, &payload, 4, 8, 9);
+    payload.clearRetainingCapacity();
     try record.encodeBoundary(&payload.writer, at(5, 9), .{ .what = .c6_bytes, .body = "hi" });
     try frame(&buf.writer, @backingInt(record.Kind.boundary), payload.writer.buffered());
     const second = try checkpoint(&buf.writer, &payload, 7, 10, 11);
