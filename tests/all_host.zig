@@ -79,6 +79,7 @@ test {
     _ = @import("interfaces/gui/local_native_test.zig");
     _ = @import("interfaces/gui/local_native_link_test.zig");
     _ = @import("interfaces/rpc/session/advance_transport_test.zig");
+    _ = @import("interfaces/rpc/session/seek_test.zig");
     _ = @import("interfaces/rpc/host_listener_discovery_test.zig");
     _ = @import("interfaces/gui/preview_relay_test.zig");
     _ = @import("interfaces/gui/shell/startup_test.zig");
