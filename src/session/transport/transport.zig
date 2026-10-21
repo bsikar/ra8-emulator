@@ -12,12 +12,15 @@
 //! byte-identical to never pausing. A play's speed only changes scheduling:
 //! it maps onto the run budget and never touches guest state.
 //!
-//! Seek and run-to are part of the command language but stay refused with
-//! NotReady in this slice: seek's base needs the committed-log bridge and
-//! the position-stop primitive, and a run-to lands where a breakpoint
-//! would, which is its own stop-ordering case. Their types exist so front
-//! ends already speak them, and a seek's target text is parsed at the door
-//! so a malformed one is InvalidArgs, not a silent refusal.
+//! Seek and run-to are part of the command language. A seek's target text
+//! is parsed at the door, so a malformed one is InvalidArgs, not a silent
+//! refusal. With no history bridge bound a seek stays NotReady; with one
+//! bound the transport plans it from the committed log's facts and
+//! executes it: restore the chosen base's checkpoint object, then run
+//! forward until the landing round, where the primitive stops at round
+//! granularity (phase-precise landing is the unit 17/18 refinement). A
+//! run-to lands where a breakpoint would, which is its own stop-ordering
+//! case, and stays NotReady.
 
 const std = @import("std");
 const api = @import("../api.zig");
@@ -25,6 +28,7 @@ const command_mod = @import("command.zig");
 const debug_session = @import("../session.zig");
 const session_speed = @import("../speed.zig");
 const seek_target = @import("../history/seek_target.zig");
+const seek_engine = @import("../history/seek_engine.zig");
 
 pub const Command = command_mod.Command;
 pub const Ticket = command_mod.Ticket;
@@ -39,6 +43,20 @@ pub const Error = command_mod.Error;
 
 /// One blocking `finish` pump is at most this much host time between polls.
 const finish_slice_ns: u64 = 50_000_000;
+
+/// The committed-log bridge the application binds (RA8EMU-1196, unit 17):
+/// how the transport reads the served history. Null keeps the seek
+/// refusal; bound, a seek plans from the bridge's facts and executes
+/// through it.
+pub const Bridge = struct {
+    context: *anyopaque,
+    /// The committed log's facts for planning, gathered fresh per call.
+    /// The bridge owns the returned memory until the next call.
+    facts: *const fn (*anyopaque) anyerror!seek_engine.Facts,
+    /// Put the machine back at a checkpoint's saved state. The name is
+    /// the checkpoint record's 128-bit digest as its 32-hex object name.
+    restore: *const fn (*anyopaque, object: []const u8) anyerror!void,
+};
 
 const Job = struct {
     ticket: Ticket,
@@ -56,7 +74,19 @@ const Job = struct {
     /// A step's remaining instructions.
     left: u64 = 0,
 
-    const Kind = union(enum) { play, cont, step, advance };
+    const Kind = union(enum) { play, cont, step, advance, seek: SeekKind };
+
+    /// A seek job's resolved plan: where it lands and where its replay
+    /// starts.
+    const SeekKind = struct {
+        /// The seek's landing position; this slice's primitive stops at
+        /// round granularity.
+        target: seek_engine.Position,
+        /// Where the replay starts.
+        base: seek_engine.Base,
+        /// Whether a checkpoint base's object is already restored.
+        restored: bool = false,
+    };
 };
 
 pub const Transport = struct {
@@ -66,6 +96,9 @@ pub const Transport = struct {
     job: ?Job = null,
     /// The newest job that finished, so a late `finish` still answers.
     done: ?Finished = null,
+    /// The bound history bridge (unit 17), when the application serves
+    /// one. Null keeps a seek refused.
+    history: ?Bridge = null,
 
     /// Validate and queue a command. Nothing runs until the next `pump`.
     pub fn command(self: *Transport, cmd: Command) !Ticket {
@@ -100,16 +133,37 @@ pub const Transport = struct {
                 self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = advance.core, .kind = .advance, .prior_budget = prior, .target_ns = target };
                 return ticket;
             },
-            .seek => |seek| {
-                // The target text is validated at the door, so a front end
-                // learns about a typo now, not when the drive lands. The
-                // execution itself waits for the position-stop primitive
-                // and the committed-log bridge, and stays refused.
-                _ = seek_target.parse(seek.target) catch return Error.InvalidArgs;
-                return Error.NotReady;
-            },
+            .seek => |seek| return self.queueSeek(seek.target),
             .run_to => return Error.NotReady,
         }
+    }
+
+    /// Validate, plan and queue a seek against the bound history bridge.
+    fn queueSeek(self: *Transport, text: []const u8) !Ticket {
+        const target = seek_target.parse(text) catch return Error.InvalidArgs;
+        const bridge = self.history orelse return Error.NotReady;
+        // Only a position target executes today: the other kinds' plans
+        // name the index their resolution still waits for, so they stay
+        // refused until it lands.
+        const pos: seek_engine.Position = switch (target) {
+            .position => |pt| pt.position,
+            else => return Error.NotReady,
+        };
+        const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+        const plan = switch (seek_engine.plan(target, facts)) {
+            .plan => |plan| plan,
+            .pending => return Error.NotReady,
+        };
+        // A position target lands on the boundary grid; without one there
+        // is nothing to land on.
+        if (self.session.grid == null) return Error.InvalidArgs;
+        const core = self.session.currentCore();
+        const prior = budgetOf(self.session, core);
+        self.cancel();
+        self.epoch += 1;
+        const ticket = self.issue();
+        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = core, .kind = .{ .seek = .{ .target = pos, .base = plan.base } }, .prior_budget = prior };
+        return ticket;
     }
 
     fn queuePlay(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
@@ -156,11 +210,13 @@ pub const Transport = struct {
                 progress.target_ns = job.target_ns;
                 progress.reached_ns = self.session.now() catch null;
             }
+            if (job.kind == .seek) progress.target_position = job.kind.seek.target;
             phase = switch (job.kind) {
                 .play => .playing,
                 .cont => .continuing,
                 .advance => .advancing,
                 .step => .stepping,
+                .seek => .seeking,
             };
         }
         return .{
@@ -203,6 +259,7 @@ pub const Transport = struct {
                 .play, .cont => try self.playSlice(job),
                 .advance => try self.advanceSlice(job),
                 .step => try self.stepSlice(job),
+                .seek => try self.seekSlice(job),
             };
             job.slices += 1;
             if (ended) |stop| return self.settle(job, stop);
@@ -239,6 +296,32 @@ pub const Transport = struct {
         return null;
     }
 
+    /// Drive one seek slice: restore a checkpoint base once, then run
+    /// forward until the landing round. The stop is round-granular: the
+    /// first check whose position's round has reached the target's ends
+    /// the seek there, and phase-precise landing is the unit 17/18
+    /// refinement. A stop the run meets on the way settles the seek with
+    /// it, the way a play's does.
+    fn seekSlice(self: *Transport, job: *Job) !?api.Ended {
+        const seek_job = &job.kind.seek;
+        switch (seek_job.base) {
+            .current => {},
+            .checkpoint => |base| if (!seek_job.restored) {
+                const bridge = self.history orelse return Error.NotReady;
+                var name: [32]u8 = undefined;
+                objectName(base.object, &name);
+                try bridge.restore(bridge.context, &name);
+                seek_job.restored = true;
+                return null;
+            },
+        }
+        const grid = self.session.grid orelse return error.NoGrid;
+        if (grid.at.r >= seek_job.target.r) return reached();
+        const ended = try self.session.run(job.core, .cont);
+        if (ended != .count) return ended;
+        return null;
+    }
+
     /// Close a finished job: put its budget back, forget it, and remember
     /// the result. The result is captured before the job is cleared, since
     /// the caller's pointer lives inside the optional being cleared.
@@ -254,6 +337,14 @@ pub const Transport = struct {
         return self.session.event_stream.nearFull();
     }
 };
+
+/// A checkpoint record's 128-bit digest as its object name: the lowercase
+/// hex the object space files carry (refs.zig's encoding).
+fn objectName(digest: [16]u8, name: *[32]u8) void {
+    for (digest, 0..) |byte, i| {
+        _ = std.fmt.bufPrint(name[i * 2 ..][0..2], "{x:0>2}", .{byte}) catch unreachable;
+    }
+}
 
 fn reached() ?api.Ended {
     const count: api.Ended = .count;
