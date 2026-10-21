@@ -31,6 +31,7 @@ test {
     _ = @import("history/refs_test.zig");
     _ = @import("history/seek_target_test.zig");
     _ = @import("history/seek_engine_test.zig");
+    _ = @import("history/seek_facts_test.zig");
     _ = @import("history/budget_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
