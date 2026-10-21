@@ -318,6 +318,53 @@ test "a seek replays forward from a checkpoint base to a round past it" {
     try std.testing.expect(session.grid.?.at.r >= target_r);
 }
 
+test "a seek to a later phase of the checkpoint's round runs past the restore" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    const facts = try TestBridge.facts(&state);
+    try std.testing.expect(facts.checkpoints.len >= 1);
+    // One slot later in the checkpoint's own round and phase: the
+    // restore alone cannot satisfy it, so the seek must run the round
+    // forward to the target's phase instead of ending on the restore.
+    const base = facts.checkpoints[0].position;
+    const text = try std.fmt.allocPrint(gpa, "{d}:{s}:{d}:{s}", .{
+        base.r,
+        @tagName(base.phase),
+        base.o + 1,
+        @tagName(base.gap),
+    });
+    defer gpa.free(text);
+
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .seek = .{ .target = text } });
+    const pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    try std.testing.expect(pumped.finished != null);
+    try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
+    // The landing never sits on the checkpoint it restored from: the
+    // position reached the target's phase, or the round past it.
+    const landed = session.grid.?.at;
+    const ord = ra8.session.history_position.compare(landed, base) catch return error.TestUnexpectedResult;
+    try std.testing.expectEqual(std.math.Order.gt, ord);
+}
+
 test "a seek without a bridge, on a pending kind, or past the log stays refused" {
     const gpa = std.testing.allocator;
     var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf });

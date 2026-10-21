@@ -17,10 +17,10 @@
 //! refusal. With no history bridge bound a seek stays NotReady; with one
 //! bound the transport plans it from the committed log's facts and
 //! executes it: restore the chosen base's checkpoint object, then run
-//! forward until the landing round, where the primitive stops at round
-//! granularity (phase-precise landing is the unit 17/18 refinement). A
-//! run-to lands where a breakpoint would, which is its own stop-ordering
-//! case, and stays NotReady.
+//! forward until the landing position, reached in the position's own
+//! order (round, then phase, offset, gap), never before it within the
+//! target's round. A run-to lands where a breakpoint would, which is its
+//! own stop-ordering case, and stays NotReady.
 
 const std = @import("std");
 const api = @import("../api.zig");
@@ -28,6 +28,7 @@ const command_mod = @import("command.zig");
 const debug_session = @import("../session.zig");
 const session_speed = @import("../speed.zig");
 const seek_target = @import("../history/seek_target.zig");
+const position_mod = @import("../history/position.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 
 pub const Command = command_mod.Command;
@@ -297,11 +298,11 @@ pub const Transport = struct {
     }
 
     /// Drive one seek slice: restore a checkpoint base once, then run
-    /// forward until the landing round. The stop is round-granular: the
-    /// first check whose position's round has reached the target's ends
-    /// the seek there, and phase-precise landing is the unit 17/18
-    /// refinement. A stop the run meets on the way settles the seek with
-    /// it, the way a play's does.
+    /// forward until the landing position. The landing is phase-precise:
+    /// the first check whose position has reached the target's, in the
+    /// position's own order, ends the seek there; a check earlier in the
+    /// target's round keeps running. A stop the run meets on the way
+    /// settles the seek with it, the way a play's does.
     fn seekSlice(self: *Transport, job: *Job) !?api.Ended {
         const seek_job = &job.kind.seek;
         switch (seek_job.base) {
@@ -316,7 +317,8 @@ pub const Transport = struct {
             },
         }
         const grid = self.session.grid orelse return error.NoGrid;
-        if (grid.at.r >= seek_job.target.r) return reached();
+        const ord = position_mod.compare(grid.at, seek_job.target) catch return error.OtherLine;
+        if (ord != .lt) return reached();
         const ended = try self.session.run(job.core, .cont);
         if (ended != .count) return ended;
         return null;
