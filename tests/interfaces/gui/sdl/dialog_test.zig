@@ -28,9 +28,10 @@ fn choose(picker: *const dialog.Picker, path: ?[*:0]const u8) void {
 test "a chosen file crosses the event queue and comes out as its path" {
     try std.testing.expect(c.SDL_Init(c.SDL_INIT_EVENTS));
     defer c.SDL_Quit();
-    var picker = dialog.Picker.init();
+    var picker = dialog.Picker.init(&dialog.image_filters);
     defer picker.deinit();
     try std.testing.expect(picker.kind >= c.SDL_EVENT_USER);
+    try std.testing.expectEqual(@as([]const c.SDL_DialogFileFilter, &dialog.image_filters), picker.filters);
     try std.testing.expectEqual(@as(?[]const u8, null), drain(&picker));
     choose(&picker, "/tmp/ra8 images/app.elf");
     try std.testing.expectEqualStrings("/tmp/ra8 images/app.elf", drain(&picker).?);
@@ -40,7 +41,7 @@ test "a chosen file crosses the event queue and comes out as its path" {
 test "a later choice replaces the path held, and the one before it is let go" {
     try std.testing.expect(c.SDL_Init(c.SDL_INIT_EVENTS));
     defer c.SDL_Quit();
-    var picker = dialog.Picker.init();
+    var picker = dialog.Picker.init(&dialog.image_filters);
     defer picker.deinit();
     choose(&picker, "first.elf");
     const first = drain(&picker).?;
@@ -52,7 +53,7 @@ test "a later choice replaces the path held, and the one before it is let go" {
 test "an error or a cancelled picker posts nothing" {
     try std.testing.expect(c.SDL_Init(c.SDL_INIT_EVENTS));
     defer c.SDL_Quit();
-    var picker = dialog.Picker.init();
+    var picker = dialog.Picker.init(&dialog.image_filters);
     defer picker.deinit();
     dialog.chosen(@ptrFromInt(picker.kind), null, 0);
     choose(&picker, null);
@@ -62,12 +63,22 @@ test "an error or a cancelled picker posts nothing" {
 test "another event of SDL's is not taken for a choice, and a picker with no event type takes none" {
     try std.testing.expect(c.SDL_Init(c.SDL_INIT_EVENTS));
     defer c.SDL_Quit();
-    var picker = dialog.Picker.init();
+    var picker = dialog.Picker.init(&dialog.image_filters);
     defer picker.deinit();
     var other = std.mem.zeroes(c.SDL_Event);
     other.type = c.SDL_EVENT_QUIT;
     try std.testing.expectEqual(@as(?[]const u8, null), picker.take(&other));
-    var shut: dialog.Picker = .{ .kind = 0 };
+    var shut: dialog.Picker = .{ .kind = 0, .filters = &dialog.image_filters };
     var mine = std.mem.zeroes(c.SDL_Event);
     try std.testing.expectEqual(@as(?[]const u8, null), shut.take(&mine));
+}
+
+test "the profile picker keeps the board profile filters it was given" {
+    try std.testing.expect(c.SDL_Init(c.SDL_INIT_EVENTS));
+    defer c.SDL_Quit();
+    var picker = dialog.Picker.init(&dialog.profile_filters);
+    defer picker.deinit();
+    try std.testing.expectEqual(@as([]const c.SDL_DialogFileFilter, &dialog.profile_filters), picker.filters);
+    choose(&picker, "/tmp/ek_ra8d2.board");
+    try std.testing.expectEqualStrings("/tmp/ek_ra8d2.board", drain(&picker).?);
 }
