@@ -81,6 +81,21 @@ test "command queues a job and runs nothing" {
     try std.testing.expect(report.position == null); // no run yet, no position
 }
 
+test "the report carries the running job's state payloads" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    var t = transport.Transport{ .session = opened.session() };
+    try std.testing.expect(t.report().state == null); // nothing queued yet
+    _ = try t.command(.{ .cont = .{} });
+    try std.testing.expectEqual(@as(transport.State, .{ .continuing = .{ .dir = .fwd } }), t.report().state.?);
+    _ = try t.command(.{ .step = .{ .core = .cpu0, .count = 3 } });
+    try std.testing.expectEqual(@as(transport.State, .{ .stepping = .{ .core = .cpu0, .count = 3 } }), t.report().state.?);
+    _ = try t.command(.{ .play = .{ .speed = 2.5 } });
+    try std.testing.expectEqual(@as(transport.State, .{ .playing = .{ .dir = .fwd, .speed = 2.5 } }), t.report().state.?);
+    _ = try t.command(.pause);
+    try std.testing.expect(t.report().state == null);
+}
+
 test "a paced play drives bounded slices and outlives the wall" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
     defer opened.deinit();

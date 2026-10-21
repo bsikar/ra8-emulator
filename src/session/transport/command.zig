@@ -83,9 +83,44 @@ pub const Progress = struct {
 pub const Report = struct {
     epoch: u64,
     phase: Phase,
+    /// The running job's state with its payloads, or null when nothing
+    /// runs. `phase` stays the bare tag; this is what a front end
+    /// renders the state from.
+    state: ?State = null,
     /// The live scheduler position, when the run has a boundary grid.
     position: ?scheduler.Position,
     progress: Progress,
+};
+
+/// What the running job is, with the payloads a front end renders from
+/// it (section 2.1's transport states). The report's `phase` stays the
+/// bare tag the wire already carries; this carries the rest of the
+/// state's shape. It is null when nothing runs.
+///
+/// The payloads carry only what the job really holds: a step's kind and
+/// direction and a seek's post-landing `then` are not modelled yet and
+/// arrive with their own contracts, so they are absent here rather than
+/// faked.
+pub const State = union(enum) {
+    playing: struct {
+        dir: Direction,
+        /// Times real time; null is `max` (unpaced).
+        speed: ?f64,
+    },
+    continuing: struct { dir: Direction },
+    advancing: struct {
+        /// The virtual time the advance runs until.
+        target_ns: u64,
+    },
+    stepping: struct {
+        core: api.Core,
+        /// Steps still to run.
+        count: u64,
+    },
+    seeking: struct {
+        /// The seek's landing position, phase included.
+        target: scheduler.Position,
+    },
 };
 
 /// A job that ended during a pump, with the ticket that queued it.
