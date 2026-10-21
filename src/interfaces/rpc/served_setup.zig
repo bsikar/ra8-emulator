@@ -30,6 +30,7 @@ const served = @import("session/server.zig");
 
 const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
+const history_bridge = @import("history_bridge.zig");
 const history_resources = @import("ra8_host").history.resources;
 
 /// How a served session's persistent history is rooted, when the caller
@@ -68,6 +69,10 @@ pub const Served = struct {
     /// The RAM-only history's host side, once history asked to stay off
     /// disk (RA8EMU-1196). The harness's armed checkpoints write through it.
     ram_history: ?*history_ram.RamHistory = null,
+    /// The transport's history bridge (RA8EMU-1196, slice 17), once
+    /// history records: a seek plans from the committed log and restores
+    /// through the checkpoint objects. Points into `self`.
+    bridge: ?history_bridge.Bridge = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
@@ -111,6 +116,18 @@ pub const Served = struct {
         // The transport rides the context so run-control methods route
         // through it (slice 14), and the host clock bounds its pumps.
         self.context.transport = self.owner.transport();
+        // The history bridge (RA8EMU-1196, slice 17): a session that
+        // records history binds it, so a seek plans from the committed
+        // log and puts the machine back through the checkpoint objects.
+        // The bridge points into `self`, which stays put until deinit.
+        if (self.history != null or self.ram_history != null) {
+            self.bridge = .{ .gpa = allocator, .session = self.owner.session(), .disk = self.history, .ram = self.ram_history };
+            self.context.transport.?.history = .{
+                .context = &self.bridge.?,
+                .facts = &history_bridge.Bridge.facts,
+                .restore = &history_bridge.Bridge.restore,
+            };
+        }
         self.context.wall = .{ .context = self, .nowFn = hostClock };
         self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
         self.context.board_profile = self.owner.boardProfile();
@@ -193,6 +210,7 @@ pub const Served = struct {
     }
 
     pub fn deinit(self: *Served) void {
+        if (self.bridge) |*b| b.deinit();
         if (self.stacks) |stacks| {
             self.owner.unsampleStacks(stacks);
             if (self.second) |cpu1| stacks.unwatch(1, cpu1.cpu());

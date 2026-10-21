@@ -5,9 +5,12 @@
 //! language: the queue door parses it, and malformed text is bad_args on
 //! the wire too.
 //!
-//! Today every well-formed seek refuses: a seek's execution waits on the
-//! position-stop primitive and the committed-log bridge, so the door
-//! answers NotReady and this file speaks that refusal until they land.
+//! A well-formed seek whose target plans against the transport's bound
+//! history bridge is queued on the transport and answered accepted; its
+//! completion surfaces on the transport topic. A target whose resolution
+//! waits on an index still to land plans pending, a host without a bridge
+//! or a plane stays refused, and a history read failure answers the
+//! app's history code (RA8EMU-1196).
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
 const handlers = @import("handlers.zig");
@@ -15,17 +18,13 @@ const handlers = @import("handlers.zig");
 const Outcome = rpc.Outcome(proto.Ack);
 
 pub fn seek(context: *handlers.Context, args: proto.Seek) Outcome {
-    if (context.transport) |plane| {
-        _ = plane.command(.{ .seek = .{ .target = args.target } }) catch |err| {
-            if (err == error.InvalidArgs) return .{ .err = .bad_args };
-            return refuse();
-        };
-        // The door never accepts a seek today (NotReady), so nothing is
-        // queued here; a ticket landing would mean the execution path
-        // arrived and this handler needs its drive added.
-        return refuse();
-    }
-    return refuse();
+    const plane = context.transport orelse return refuse();
+    _ = plane.command(.{ .seek = .{ .target = args.target } }) catch |err| switch (err) {
+        error.InvalidArgs => return .{ .err = .bad_args },
+        error.HistoryBroken => return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) },
+        else => return refuse(),
+    };
+    return .{ .ok = .{ .accepted = 1 } };
 }
 
 fn refuse() Outcome {
