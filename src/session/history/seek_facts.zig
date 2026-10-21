@@ -26,7 +26,15 @@ pub fn gather(gpa: std.mem.Allocator, bytes: []const u8) Error!Facts {
     errdefer list.deinit(gpa);
     var head_r: u64 = 0;
     var ctx = Ctx{ .gpa = gpa, .list = &list, .head_r = &head_r };
-    _ = try replay_mod.replay(bytes, &ctx, visit);
+    const recovery = replay_mod.replay(bytes, &ctx, visit) catch |err| {
+        // The walk's visitor is type-erased, so replay reports anyerror;
+        // this file's contract is the walk's own error set. OutOfMemory
+        // comes from the visit; anything else is replay's. An error
+        // outside the set trips the cast's check instead of vanishing.
+        if (err == error.OutOfMemory) return error.OutOfMemory;
+        return @errorCast(err);
+    };
+    _ = recovery;
     return .{ .checkpoints = try list.toOwnedSlice(gpa), .head_r = head_r };
 }
 
