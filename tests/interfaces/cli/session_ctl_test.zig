@@ -80,6 +80,12 @@ test "ctl --json drives load, run, step, pause, regs and mem against a running s
     try std.testing.expectEqual(Term{ .exited = 1 }, refused.term);
     try std.testing.expectEqualStrings("Refused", refused.field("error").string);
     try std.testing.expectEqual(@as(i64, ra8.rpc.session.server.app_codes.too_long), try expectInteger(refused.field("code")));
+
+    var seeked = try run(gpa, spec, &.{ "seek", "12.402s" });
+    defer seeked.deinit();
+    try std.testing.expectEqual(Term{ .exited = 1 }, seeked.term);
+    try std.testing.expectEqualStrings("Refused", seeked.field("error").string);
+    try std.testing.expectEqual(@as(i64, ra8.rpc.session.server.app_codes.refused), try expectInteger(seeked.field("code")));
 }
 
 fn stoppedAt(answer: *const Answer) !struct { reason: []const u8, pc: i64 } {
