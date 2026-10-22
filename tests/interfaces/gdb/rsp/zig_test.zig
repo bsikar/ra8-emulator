@@ -185,6 +185,60 @@ test "a continue through the transport answers the same stop replies" {
     try std.testing.expectEqual(transport.Phase.halted, plane.report().phase);
 }
 
+test "reads stay quiet and core reads refuse while a transport job moves" {
+    var memory = ram();
+    // 0x08 e7fe b . : a loop that never stops on its own
+    memory.bytes[8] = 0xFE;
+    memory.bytes[9] = 0xE7;
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    const session: zig_session.ZigSession = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 50 };
+    var api_session: session_api.Session = .{ .live = session };
+    var plane: transport.Transport = .{ .session = &api_session };
+    const Wall = struct {
+        ns: u64 = 0,
+        fn now(context: *anyopaque) u64 {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.ns += 1_000_000;
+            return self.ns;
+        }
+    };
+    var fake_wall: Wall = .{};
+    const wall: transport.Wall = .{ .context = &fake_wall, .nowFn = Wall.now };
+    const Poll = struct {
+        asked: u32 = 0,
+        fn hit(context: *anyopaque) bool {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.asked += 1;
+            return self.asked == 3;
+        }
+    };
+    var interrupt: Poll = .{};
+    var target: zig_run.Target = .{ .session = &api_session, .transport = &plane, .wall = wall };
+    const stub = dispatch.Dispatch{ .zig = &target };
+
+    // Queue a continue and drive one slice, so the job is moving.
+    const ticket = try plane.command(.{ .cont = .{} });
+    var pumped: u32 = 0;
+    while (plane.busy() == null and pumped < 4) : (pumped += 1) {
+        _ = try plane.pump(wall, fake_wall.ns + 10_000_000);
+    }
+    try std.testing.expect(plane.busy() != null);
+
+    // The stale stop stays unspoken and core reads refuse mid-run.
+    try expectReply(&target, "?", "");
+    var out: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("E00", try stub.answer("pf", &out));
+    try std.testing.expectEqualStrings("E01", try stub.answer("m8,4", &out));
+
+    // The run ends through its poll and reads answer from the stop again.
+    target.last = try plane.finish(ticket, wall, .{ .context = &interrupt, .pollFn = Poll.hit });
+    target.back = 0;
+    try expectReply(&target, "?", "T02thread:1;");
+    try std.testing.expectEqualStrings("08000000", try stub.answer("pf", &out));
+}
+
 test "Dispatch with a Zig session reads the Zig core's registers and memory" {
     var memory = ram();
     var cpu: Cpu = .{ .bus = memory.view() };

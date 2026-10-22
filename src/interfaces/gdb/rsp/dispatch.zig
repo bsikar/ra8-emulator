@@ -61,6 +61,18 @@ pub const Dispatch = struct {
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
         if (self.zig) |live| {
             if (zig_run.handles(request)) return zig_run.answer(live, request, out);
+            // The transport's read gate: while a job moves the machine is
+            // mid-run, so core-touching reads refuse rather than read it.
+            // The busy state rides the transport report; the honest reply
+            // here is that the read did not happen.
+            if (live.transport) |plane| {
+                if (plane.busy() != null and needsCore(request[0])) {
+                    return copy(out, switch (request[0]) {
+                        'm', 'M', 'X' => memory_error,
+                        else => request_error,
+                    });
+                }
+            }
             const core = live.session.currentCore();
             const machine = live.session.machine(core) catch return copy(out, request_error);
             const view = live.session.view(core) catch return copy(out, request_error);
