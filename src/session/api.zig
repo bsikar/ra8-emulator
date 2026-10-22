@@ -217,7 +217,7 @@ pub const Session = struct {
         if (self.live.boundary == null) try self.advanceBoard(core, self.live.core.cpu.retired - retired_before);
         const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index)); // A served round also runs the other core.
         self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-        if (self.history) |h| if (!self.replaying) try h.capture((if (stopped == core) self.live.core else self.live.other.?.core).cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
+        if (self.history) |h| try self.recordStop(h, core, stopped, ended);
         if (ended == .core) {
             const address: ?u32 = switch (ended.core) {
                 .count => null,
@@ -230,6 +230,17 @@ pub const Session = struct {
     }
     pub fn step(self: *Session, core: Core) anyerror!Ended {
         return self.run(core, .step);
+    }
+
+    /// A finished round reaches the history ring (RA8EMU-1170) with the
+    /// stopping core's pc, an ended/running tag and the event clock's
+    /// reading. A replay re-lives the past, so the ring holds while one runs.
+    fn recordStop(self: *Session, h: *History, asked: Core, stopped: Core, ended: Ended) anyerror!void {
+        if (self.replaying) return;
+        const stopped_pc: u32 = if (stopped == asked) self.live.core.cpu.regs.pc else self.live.other.?.core.cpu.regs.pc;
+        const tag: u16 = if (ended == .core) 1 else 0;
+        const at_ns: u64 = if (self.event_clock) |clock| clock.nowFn(clock.context) else 0;
+        try h.capture(stopped_pc, tag, at_ns);
     }
 
     /// Puts the run back `back` recorded stops (RA8EMU-1170); forward replays.
