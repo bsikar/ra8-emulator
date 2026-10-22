@@ -146,6 +146,15 @@ fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u
 
 /// Why the core last stopped, as gdb reads it.
 fn stopReply(target: *Target, out: []u8) Error![]const u8 {
+    // The read gate (the contract's "reads return busy{state}" while a
+    // job moves): a job in flight has not stopped, so the stale last
+    // stop stays unspoken and the empty payload answers as pump mode
+    // does while it still runs. The busy state itself rides the
+    // transport report, where the front ends read it.
+    if (target.pending) return out[0..0];
+    if (target.transport) |plane| {
+        if (plane.busy() != null) return out[0..0];
+    }
     const ended = target.last orelse return reply(target, out, sigtrap);
     return switch (ended) {
         .count => reply(target, out, sigtrap),
