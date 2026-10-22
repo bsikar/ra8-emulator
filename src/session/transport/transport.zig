@@ -116,7 +116,7 @@ fn jobState(job: *const Job) command_mod.State {
         .play => .{ .playing = .{ .dir = job.dir, .speed = job.speed } },
         .cont => .{ .continuing = .{ .dir = job.dir } },
         .advance => .{ .advancing = .{ .target_ns = job.target_ns } },
-        .step => .{ .stepping = .{ .core = job.core, .count = job.left } },
+        .step => .{ .stepping = .{ .core = job.core, .count = job.left, .dir = job.dir } },
         .seek => .{ .seeking = .{ .target = job.kind.seek.target } },
     };
 }
@@ -147,11 +147,12 @@ pub const Transport = struct {
             },
             .step => |step| {
                 if (step.count == 0) return Error.InvalidArgs;
+                if (step.dir == .back and self.history == null) return Error.NotReady;
                 const prior = budgetOf(self.session, step.core);
                 self.cancel();
                 self.epoch += 1;
                 const ticket = self.issue();
-                self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = step.core, .kind = .step, .prior_budget = prior, .left = step.count };
+                self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = step.core, .kind = .step, .prior_budget = prior, .left = step.count, .dir = step.dir };
                 return ticket;
             },
             .advance => |advance| {
@@ -328,6 +329,12 @@ pub const Transport = struct {
     }
 
     fn stepSlice(self: *Transport, job: *Job) !?api.Ended {
+        // Backward execution resolves the canonical stop before the
+        // cursor's from the committed log and replays to it through the
+        // bound bridge; until that contract lands the queue door's
+        // refusal is all the command answers, so a queued backward job
+        // reports exactly that instead of running forward.
+        if (job.dir == .back) return Error.NotReady;
         const ended = try self.session.run(job.core, .step);
         job.left -= 1;
         const point = ended == .stop and ended.stop != .stepped;

@@ -24,6 +24,10 @@ pub const Play = struct {
 pub const Step = struct {
     core: api.Core,
     count: u64 = 1,
+    /// Where the step moves. Backward needs a bound history bridge (the
+    /// step undoes one instruction through restore and replay) and stays
+    /// refused without one.
+    dir: Direction = .fwd,
 };
 
 pub const Cont = struct {};
@@ -97,10 +101,10 @@ pub const Report = struct {
 /// bare tag the wire already carries; this carries the rest of the
 /// state's shape. It is null when nothing runs.
 ///
-/// The payloads carry only what the job really holds: a step's kind and
-/// direction and a seek's post-landing `then` are not modelled yet and
-/// arrive with their own contracts, so they are absent here rather than
-/// faked.
+/// The payloads carry only what the job really holds: a step's kind
+/// (instruction, over, finish) and a seek's post-landing `then` are not
+/// modelled yet and arrive with their own contracts, so they are absent
+/// here rather than faked.
 pub const State = union(enum) {
     playing: struct {
         dir: Direction,
@@ -116,6 +120,8 @@ pub const State = union(enum) {
         core: api.Core,
         /// Steps still to run.
         count: u64,
+        /// Where the step moves, the command's own direction.
+        dir: Direction,
     },
     seeking: struct {
         /// The seek's landing position, phase included.
