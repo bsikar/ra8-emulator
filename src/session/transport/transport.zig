@@ -130,6 +130,10 @@ const Job = struct {
         /// Whether the landing is the log's beginning, settled as
         /// history_start instead of a finished step.
         start: bool = false,
+        /// The base the machine queued at, fixed once: a cancel returns
+        /// the machine to this checkpoint exactly, whatever the replay
+        /// later rebased to.
+        origin: seek_engine.Base,
     };
 };
 
@@ -201,7 +205,7 @@ pub const Transport = struct {
                                 .budget = 1,
                                 .left = step.count,
                                 .dir = .back,
-                                .back = .{ .cursor = at, .base = plan.base, .target = at, .start = true },
+                                .back = .{ .cursor = at, .base = plan.base, .target = at, .start = true, .origin = plan.base },
                             };
                         } else {
                             // The log holds no checkpoint: the machine's
@@ -215,7 +219,7 @@ pub const Transport = struct {
                                 .budget = 1,
                                 .left = step.count,
                                 .dir = .back,
-                                .back = .{ .cursor = .{}, .base = .current, .target = null, .start = true },
+                                .back = .{ .cursor = .{}, .base = .current, .target = null, .start = true, .origin = .current },
                             };
                         }
                         return ticket;
@@ -240,7 +244,7 @@ pub const Transport = struct {
                         .budget = 1,
                         .left = step.count,
                         .dir = .back,
-                        .back = .{ .cursor = grid.at, .base = plan.base },
+                        .back = .{ .cursor = grid.at, .base = plan.base, .origin = plan.base },
                     };
                     return ticket;
                 }
@@ -317,6 +321,17 @@ pub const Transport = struct {
     fn cancel(self: *Transport) void {
         if (self.job) |job| {
             self.session.setRunBudget(job.core, job.prior_budget) catch {};
+            // A backward job's cancel returns the machine to the origin
+            // checkpoint it queued at, whatever its replay rebased to
+            // meanwhile (the seek contract's cancel rule, prompt 17).
+            if (job.back) |*back| switch (back.origin) {
+                .current => {},
+                .checkpoint => |base| if (self.history) |bridge| {
+                    var name: [32]u8 = undefined;
+                    objectName(base.object, &name);
+                    bridge.restore(bridge.context, &name) catch {};
+                },
+            };
             self.job = null;
         }
     }
