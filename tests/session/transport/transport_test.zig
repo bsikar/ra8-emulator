@@ -608,3 +608,43 @@ test "a backward step at the log's beginning settles with history_start" {
     try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
     try std.testing.expectEqualStrings("history_start", @tagName(pumped.finished.?.ended.stop));
 }
+
+test "cancelling a backward step restores the origin checkpoint" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    const origin = session.grid.?.at;
+    var fake = FakeWall{};
+    const step_ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
+    _ = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    _ = try t.command(.pause);
+    try std.testing.expectError(error.Cancelled, t.finish(step_ticket, fake.wall(), null));
+
+    // The machine sits at the origin checkpoint again: the checkpoint
+    // the job queued at, not wherever its replay had reached.
+    const gathered = try seek_facts_mod.gather(gpa, sink.bytes.items);
+    defer gpa.free(gathered.checkpoints);
+    const plan = switch (seek_engine_mod.backBase(origin, .{ .current = origin, .checkpoints = gathered.checkpoints })) {
+        .plan => |plan| plan,
+        .pending => return error.TestUnexpectedResult,
+    };
+    const landed = session.grid.?.at;
+    try std.testing.expect((try position_mod.compare(landed, plan.base.checkpoint.position)) == .eq);
+}
