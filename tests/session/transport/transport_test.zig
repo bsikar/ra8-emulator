@@ -90,7 +90,7 @@ test "the report carries the running job's state payloads" {
     _ = try t.command(.{ .cont = .{} });
     try std.testing.expectEqual(@as(transport.State, .{ .continuing = .{ .dir = .fwd } }), t.report().state.?);
     _ = try t.command(.{ .step = .{ .core = .cpu0, .count = 3 } });
-    try std.testing.expectEqual(@as(transport.State, .{ .stepping = .{ .core = .cpu0, .count = 3 } }), t.report().state.?);
+    try std.testing.expectEqual(@as(transport.State, .{ .stepping = .{ .core = .cpu0, .count = 3, .dir = .fwd } }), t.report().state.?);
     _ = try t.command(.{ .play = .{ .speed = 2.5 } });
     try std.testing.expectEqual(@as(transport.State, .{ .playing = .{ .dir = .fwd, .speed = 2.5 } }), t.report().state.?);
     _ = try t.command(.pause);
@@ -183,6 +183,44 @@ test "a malformed or backward play is refused and changes nothing" {
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "2:3:cpu0:1:retired" } }));
     try std.testing.expectEqual(epoch, t.report().epoch);
     try std.testing.expectEqual(phase, t.report().phase);
+}
+
+test "a backward step is refused without a bridge" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    var t = transport.Transport{ .session = opened.session() };
+    try std.testing.expectError(transport.Error.NotReady, t.command(.{ .step = .{ .core = .cpu0, .dir = .back } }));
+}
+
+test "a backward step queues against a bound bridge and reports its direction" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+    var fake = FakeWall{};
+    const before = try session.now();
+    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
+    const report = t.report();
+    try std.testing.expectEqual(@as(transport.State, .{ .stepping = .{ .core = .cpu0, .count = 1, .dir = .back } }), report.state.?);
+    // The queue door answers; execution still waits for the prior-stop
+    // contract, so the pump reports the refusal and nothing moves.
+    try std.testing.expectError(transport.Error.NotReady, t.finish(ticket, fake.wall(), null));
+    try std.testing.expectEqual(before, try session.now());
 }
 
 test "advance runs to its virtual target and finishes its ticket" {
