@@ -71,6 +71,10 @@ pub const Session = struct {
     event_sources: event_sources.Sources = .{},
     /// The rewind history (RA8EMU-1170), when the harness attached one.
     history: ?*history_mod.History = null,
+    /// Set while a job replays recorded history (RA8EMU-1196): the
+    /// machine's states are the past's, not new stops, so the history
+    /// ring records nothing while it holds.
+    replaying: bool = false,
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
@@ -213,7 +217,7 @@ pub const Session = struct {
         if (self.live.boundary == null) try self.advanceBoard(core, self.live.core.cpu.retired - retired_before);
         const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index)); // A served round also runs the other core.
         self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-        if (self.history) |h| try h.capture((if (stopped == core) self.live.core else self.live.other.?.core).cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
+        if (self.history) |h| if (!self.replaying) try h.capture((if (stopped == core) self.live.core else self.live.other.?.core).cpu.regs.pc, if (ended == .core) 1 else 0, if (self.event_clock) |clock| clock.nowFn(clock.context) else 0);
         if (ended == .core) {
             const address: ?u32 = switch (ended.core) {
                 .count => null,

@@ -38,7 +38,6 @@ pub const Bridge = struct {
         const self: *Bridge = @ptrCast(@alignCast(context));
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
-        const grid = self.session.grid orelse return error.NoHistory;
         const bytes: []const u8 = blk: {
             if (self.ram) |r| break :blk r.log_bytes.items;
             if (self.disk) |d| {
@@ -52,7 +51,11 @@ pub const Bridge = struct {
         };
         const gathered = try seek_facts.gather(self.gpa, bytes);
         self.facts_scratch = gathered;
-        return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
+        // A never-run machine has no grid: its cursor sits at or before
+        // every checkpoint, which a zeroed position says. A session with
+        // no log still refuses above.
+        if (self.session.grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
+        return .{ .current = .{}, .checkpoints = gathered.checkpoints };
     }
 
     /// Put the machine back at a checkpoint's saved state; `object` is

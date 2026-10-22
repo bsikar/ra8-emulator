@@ -58,6 +58,9 @@ pub const Stop = union(enum) {
     /// A DWT comparator the firmware set to raise a debug event matched,
     /// by index. A data match is reported once its instruction retired.
     unit_watch: usize,
+    /// A backward run reached the beginning of the recorded history: no
+    /// earlier canonical stop exists on this line (RA8EMU-1196).
+    history_start,
 };
 
 /// The point a step over or a step out is running to.
