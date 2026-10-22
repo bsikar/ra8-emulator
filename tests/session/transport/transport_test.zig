@@ -11,6 +11,7 @@ const transport = ra8.session.transport;
 const fakes = @import("../history_fakes.zig");
 const seek_engine_mod = ra8.session.history_seek_engine;
 const seek_facts_mod = ra8.session.history_seek_facts;
+const position_mod = ra8.session.history_position;
 
 const history_elf = "tests/fixtures/dfu/dfu_bootloader.elf";
 
@@ -213,14 +214,15 @@ test "a backward step queues against a bound bridge and reports its direction" {
     var t = transport.Transport{ .session = session };
     t.history = state.bridge();
     var fake = FakeWall{};
-    const before = try session.now();
+    const queued = session.grid.?.at;
     const ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
     const report = t.report();
     try std.testing.expectEqual(@as(transport.State, .{ .stepping = .{ .core = .cpu0, .count = 1, .dir = .back } }), report.state.?);
-    // The queue door answers; execution still waits for the prior-stop
-    // contract, so the pump reports the refusal and nothing moves.
-    try std.testing.expectError(transport.Error.NotReady, t.finish(ticket, fake.wall(), null));
-    try std.testing.expectEqual(before, try session.now());
+    // The queue door answers and the job runs: discovery and landing
+    // replay through the bound bridge and the machine steps back to the
+    // stop before the queue-time cursor, so virtual time goes back too.
+    _ = try t.finish(ticket, fake.wall(), null);
+    try std.testing.expect((try position_mod.compare(session.grid.?.at, queued)) == .lt);
 }
 
 test "advance runs to its virtual target and finishes its ticket" {
@@ -292,11 +294,13 @@ const TestBridge = struct {
 
     fn facts(context: *anyopaque) anyerror!seek_engine_mod.Facts {
         const self: *TestBridge = @ptrCast(@alignCast(context));
-        const grid = self.opened.session().grid orelse return error.NoGrid;
         if (self.prior) |old| self.gpa.free(old.checkpoints);
         const gathered = try seek_facts_mod.gather(self.gpa, self.sink.bytes.items);
         self.prior = gathered;
-        return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
+        // A never-run machine has no grid: its cursor sits at or before
+        // every checkpoint, which a zeroed position says.
+        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
+        return .{ .current = .{}, .checkpoints = gathered.checkpoints };
     }
 
     fn restore(context: *anyopaque, object: []const u8) anyerror!void {
@@ -539,4 +543,68 @@ test "a seek without a bridge, on a pending kind, or past the log stays refused"
     t.history = state.bridge();
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "3:cpu1:4:polled" } }));
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "12.402s" } }));
+}
+
+test "a backward step replays to the stop before the cursor" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    const queued = session.grid.?.at;
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
+    var pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    var rounds: usize = 0;
+    while (pumped.finished == null) : (rounds += 1) {
+        try std.testing.expect(rounds < 1_000_000);
+        pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    }
+    try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
+    try std.testing.expectEqualStrings("stepped", @tagName(pumped.finished.?.ended.stop));
+    const landed = session.grid.?.at;
+    try std.testing.expect((try position_mod.compare(landed, queued)) == .lt);
+}
+
+test "a backward step at the log's beginning settles with history_start" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
+    const pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    try std.testing.expect(pumped.finished != null);
+    try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
+    try std.testing.expectEqualStrings("history_start", @tagName(pumped.finished.?.ended.stop));
 }

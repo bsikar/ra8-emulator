@@ -104,6 +104,31 @@ fn planPosition(target: Position, facts: Facts) Outcome {
     return checkpointPlan(chosen, target);
 }
 
+/// Plans a backward step's base: the checkpoint at or before the
+/// cursor, the one place a forward replay reaches both the cursor and
+/// every stop before it. The cursor itself is never a backward step's
+/// base, so with no checkpoint there the outcome stays pending naming
+/// the reverse window's undo base (unit 21).
+pub fn backBase(cursor: Position, facts: Facts) Outcome {
+    const best = nearestAtOrBefore(cursor, facts.checkpoints) orelse
+        return .{ .pending = .{ .what = "the reverse window's undo base" } };
+    return checkpointPlan(best, cursor);
+}
+
+/// Plans a backward step's base when the machine has never stopped:
+/// the cursor sits at or before every checkpoint, so the earliest one
+/// is both base and landing, and the step settles with history_start.
+pub fn backBaseAtStart(facts: Facts) Outcome {
+    var best: ?Checkpoint = null;
+    for (facts.checkpoints) |c| {
+        const better = best == null or c.position.r < best.?.position.r;
+        if (better) best = c;
+    }
+    const chosen = best orelse
+        return .{ .pending = .{ .what = "the reverse window's undo base" } };
+    return checkpointPlan(chosen, chosen.position);
+}
+
 fn checkpointPlan(chosen: Checkpoint, target: Position) Outcome {
     return .{ .plan = .{
         .base = .{ .checkpoint = .{
