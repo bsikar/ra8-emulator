@@ -1,8 +1,9 @@
 //! Transport tests: a command queues without running, the pump is bounded by
 //! the wall, the newest command preempts, pause stops at the gap, a
 //! malformed or backward play is refused unchanged, an advance reaches its
-//! virtual target, a firing poll interrupts and settles, and pause-then-play
-//! is byte-identical to never pausing.
+//! virtual target, a firing poll interrupts and settles, pause-then-play
+//! is byte-identical to never pausing, and the read gate reports busy{state}
+//! only while a job is actually moving.
 
 const std = @import("std");
 const ra8 = @import("ra8");
@@ -94,6 +95,31 @@ test "the report carries the running job's state payloads" {
     try std.testing.expectEqual(@as(transport.State, .{ .playing = .{ .dir = .fwd, .speed = 2.5 } }), t.report().state.?);
     _ = try t.command(.pause);
     try std.testing.expect(t.report().state == null);
+}
+
+test "reads are quiet until a job actually moves" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    var t = transport.Transport{ .session = opened.session() };
+    try std.testing.expect(t.busy() == null); // nothing queued yet
+    _ = try t.command(.{ .cont = .{} });
+    try std.testing.expect(t.busy() == null); // queued, but its first pump has not run
+}
+
+test "reads return the running job's state while it moves" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+    try loopFixture(&opened);
+    var fake = FakeWall{};
+    var t = transport.Transport{ .session = opened.session() };
+    _ = try t.command(.{ .cont = .{} });
+    _ = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    try std.testing.expectEqual(@as(transport.State, .{ .continuing = .{ .dir = .fwd } }), t.busy().?);
+    try std.testing.expectEqual(transport.Phase.continuing, t.report().phase);
+    _ = try t.command(.pause);
+    try std.testing.expect(t.busy() == null); // the pause drops the job at once; the machine is parked at the gap
+    _ = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    try std.testing.expect(t.busy() == null);
 }
 
 test "a paced play drives bounded slices and outlives the wall" {

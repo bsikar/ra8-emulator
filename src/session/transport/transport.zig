@@ -109,6 +109,18 @@ const Job = struct {
     };
 };
 
+/// The state payload a job reports with, from the payloads it really
+/// holds (section 2.1). Shared by the report and the read gate.
+fn jobState(job: *const Job) command_mod.State {
+    return switch (job.kind) {
+        .play => .{ .playing = .{ .dir = job.dir, .speed = job.speed } },
+        .cont => .{ .continuing = .{ .dir = job.dir } },
+        .advance => .{ .advancing = .{ .target_ns = job.target_ns } },
+        .step => .{ .stepping = .{ .core = job.core, .count = job.left } },
+        .seek => .{ .seeking = .{ .target = job.kind.seek.target } },
+    };
+}
+
 pub const Transport = struct {
     session: *api.Session,
     epoch: u64 = 0,
@@ -242,13 +254,7 @@ pub const Transport = struct {
                 .step => .stepping,
                 .seek => .seeking,
             };
-            state = switch (job.kind) {
-                .play => .{ .playing = .{ .dir = job.dir, .speed = job.speed } },
-                .cont => .{ .continuing = .{ .dir = job.dir } },
-                .advance => .{ .advancing = .{ .target_ns = job.target_ns } },
-                .step => .{ .stepping = .{ .core = job.core, .count = job.left } },
-                .seek => .{ .seeking = .{ .target = job.kind.seek.target } },
-            };
+            state = jobState(job);
         }
         return .{
             .epoch = self.epoch,
@@ -257,6 +263,19 @@ pub const Transport = struct {
             .position = if (self.session.grid) |grid| grid.at else null,
             .progress = progress,
         };
+    }
+
+    /// The read gate (the contract's "reads return busy{state}" while
+    /// moving): the running job's state when a read must not touch the
+    /// machine, null when it may. A job between slices is in flight; a
+    /// queued job has driven no slice yet, so it has moved the machine
+    /// nowhere and reads are free until its first pump.
+    pub fn busy(self: *const Transport) ?command_mod.State {
+        if (self.job) |*job| {
+            if (job.slices == 0) return null;
+            return jobState(job);
+        }
+        return null;
     }
 
     /// Block on one ticket until its job ends, polling between slices.
