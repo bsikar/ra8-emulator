@@ -102,6 +102,8 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     const grid = self.session.grid orelse return error.NoGrid;
     const ord = position_mod.compare(grid.at, seek_job.target) catch return error.OtherLine;
     if (ord != .lt) return transport_mod.reached();
+    self.session.setReplaying(true);
+    defer self.session.setReplaying(false);
     const ended = try self.session.run(job.core, .cont);
     if (ended != .count) return ended;
     return null;

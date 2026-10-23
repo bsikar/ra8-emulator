@@ -136,8 +136,8 @@ fn queueAtGrid(self: *Transport, step: command_mod.Step, facts: seek_engine.Fact
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     // The whole job replays recorded history: nothing it does is a
     // new stop, so the history ring records none of it.
-    defer self.session.replaying = false;
-    self.session.replaying = true;
+    defer self.session.setReplaying(false);
+    self.session.setReplaying(true);
     const back = &job.back.?;
     // A machine that never stopped with no checkpoint in the log
     // stands at the history's beginning already: nothing to
