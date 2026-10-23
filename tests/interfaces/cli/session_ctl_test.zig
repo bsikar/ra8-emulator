@@ -360,3 +360,12 @@ test "ctl parse: folded takes an optional thread and an optional window" {
     try std.testing.expectEqual(@as(u64, 2), both.command.folded.to_ns);
     try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "folded", "1", "2", "3", "4" }));
 }
+
+test "ctl parse: rc takes no arguments" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const asked = try ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "rc" });
+    try std.testing.expect(asked.command == .rc);
+    try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "rc", "0.5s" }));
+}
