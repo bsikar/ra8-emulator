@@ -277,35 +277,13 @@ pub const StackReport = struct {
     size: u32,
     overflow: u32,
 };
-/// A core's call chain, innermost first (RA8EMU-1125): `count` frames in
-/// `frames`, each a StackFrame as backtrace_wire.zig packs it.
-pub const Backtrace = struct {
-    core: Core,
-    count: u8,
-    frames: []const u8,
-    pub const max_len = .{ .frames = backtrace_bytes };
-};
-/// One frame of a Backtrace. `interrupted` is 1 when an exception sits
-/// between this frame and the one inside it; `line` is 0 and `file` empty
-/// where the line table does not cover the frame, and `name` empty where
-/// no symbol does.
-pub const StackFrame = struct {
-    pc: u32,
-    interrupted: u8,
-    offset: u32,
-    line: u32,
-    name: []const u8,
-    file: []const u8,
-    pub const max_len = .{ .name = frame_name_cap, .file = frame_file_cap };
-};
-/// The most frames a Backtrace carries, and the characters a frame's
-/// function and file name keep.
-pub const backtrace_frames = 32;
-pub const frame_name_cap = 40;
-pub const frame_file_cap = 32;
-/// One frame's widest encoding plus the length byte before it.
-pub const frame_bytes = 1 + 4 + 1 + 4 + 4 + 4 + frame_name_cap + 4 + frame_file_cap;
-pub const backtrace_bytes = backtrace_frames * frame_bytes;
+pub const Backtrace = @import("backtrace_wire.zig").Backtrace;
+pub const StackFrame = @import("backtrace_wire.zig").StackFrame;
+pub const backtrace_frames = @import("backtrace_wire.zig").backtrace_frames;
+pub const frame_name_cap = @import("backtrace_wire.zig").frame_name_cap;
+pub const frame_file_cap = @import("backtrace_wire.zig").frame_file_cap;
+pub const frame_bytes = @import("backtrace_wire.zig").frame_bytes;
+pub const backtrace_bytes = @import("backtrace_wire.zig").backtrace_bytes;
 /// The source place of a core's pc (RA8EMU-1125): the file and line the pc
 /// belongs to, looked up in the image's .debug_line. `found` is 0 and the
 /// path empty when there is no image or the line table does not cover the

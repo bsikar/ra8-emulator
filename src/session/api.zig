@@ -24,6 +24,8 @@ const tap_part = @import("tap_part.zig");
 const session_speed = @import("speed.zig");
 const history_mod = @import("history.zig");
 const event_sources = @import("event/sources.zig");
+const session_input = @import("input.zig");
+const session_points = @import("points.zig");
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
@@ -155,41 +157,37 @@ pub const Session = struct {
 
     /// Read the latest visible widget snapshot published by ra8_widget.
     pub fn widgets(self: *Session, allocator: std.mem.Allocator, core: Core) anyerror![]Widget {
-        const address = self.widget_tree_addresses[@backingInt(core)] orelse return error.NoWidgetTree;
-        return widget_tree.read(try self.view(core), address, allocator);
+        return session_input.widgets(self, allocator, core);
     }
 
     /// Tap the center of the uniquely named widget at virtual time `at_ns`.
     pub fn tapWidget(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8) anyerror!void {
-        try self.tapWidgetPart(allocator, core, at_ns, name, .centre);
+        return session_input.tapWidget(self, allocator, core, at_ns, name);
     }
 
     /// Tap one part (cell, row, pager control, point) of a named widget.
     pub fn tapWidgetPart(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8, part: TapPart) anyerror!void {
-        const tree = try self.widgets(allocator, core);
-        defer allocator.free(tree);
-        const point = try tap_part.aim(try tap_part.find(tree, name), part);
-        try self.tap(core, at_ns, point.x, point.y);
+        return session_input.tapWidgetPart(self, allocator, core, at_ns, name, part);
     }
 
     /// Queue a panel-pixel tap for virtual board time `at_ns`.
     pub fn tap(self: *Session, core: Core, at_ns: u64, x: u16, y: u16) anyerror!void {
-        try self.scheduleInput(core, at_ns, .{ .tap = .{ .x = x, .y = y } });
+        return session_input.tap(self, core, at_ns, x, y);
     }
 
     /// Queue a swipe; intermediate reports use the input script's cadence.
     pub fn swipe(self: *Session, core: Core, at_ns: u64, from: gt911.Contact, to: gt911.Contact, duration_ns: u64) anyerror!void {
-        try self.scheduleInput(core, at_ns, .{ .swipe = .{ .from = from, .to = to, .duration_ns = duration_ns } });
+        return session_input.swipe(self, core, at_ns, from, to, duration_ns);
     }
 
     /// Queue repeated contact reports for a virtual-time long press.
     pub fn longpress(self: *Session, core: Core, at_ns: u64, point: gt911.Contact, duration_ns: u64) anyerror!void {
-        try self.scheduleInput(core, at_ns, .{ .longpress = .{ .point = point, .duration_ns = duration_ns } });
+        return session_input.longpress(self, core, at_ns, point, duration_ns);
     }
 
     /// Queue an active-low board button press (released by the shared script).
     pub fn button(self: *Session, core: Core, at_ns: u64, which: Button) anyerror!void {
-        try self.scheduleInput(core, at_ns, .{ .button = .{ .down = true, .button_id = which } });
+        return session_input.button(self, core, at_ns, which);
     }
 
     fn advanceBoard(self: *Session, core: Core, instructions: u64) anyerror!void {
@@ -200,13 +198,6 @@ pub const Session = struct {
             try board.tick.run(board.guest, count);
             left -= count;
         }
-    }
-
-    fn scheduleInput(self: *Session, core: Core, at_ns: u64, event: input_script.Event) anyerror!void {
-        try self.select(core);
-        const script = self.input_script orelse return Error.NoInput;
-        try script.schedule(.{ .at_ns = at_ns, .event = event });
-        self.publish(.{ .core = core, .kind = .input_scheduled });
     }
 
     pub fn run(self: *Session, core: Core, command: Run) anyerror!Ended {
@@ -302,52 +293,34 @@ pub const Session = struct {
         self.dirty();
         self.publish(.{ .core = core, .kind = .memory_written, .address = address });
     }
+    pub const RemovedPoint = session_points.RemovedPoint;
+
     pub fn setBreakpoint(self: *Session, core: Core, point: breakpoint.Break) anyerror!BreakId {
-        try self.select(core);
-        const id = try self.live.machine.addBreak(point);
-        self.publish(.{ .core = core, .kind = .breakpoint_set, .address = point.address });
-        return id;
+        return session_points.setBreakpoint(self, core, point);
     }
 
     pub fn setWatchpoint(self: *Session, core: Core, point: watch_table.Watch) anyerror!WatchId {
-        try self.select(core);
-        const id = try self.live.machine.addWatch(point);
-        self.publish(.{ .core = core, .kind = .watchpoint_set, .address = point.first });
-        return id;
+        return session_points.setWatchpoint(self, core, point);
     }
 
     pub fn clearBreakpoint(self: *Session, core: Core, id: BreakId) anyerror!void {
-        try self.select(core);
-        try self.live.machine.breaks.remove(id);
-        self.publish(.{ .core = core, .kind = .breakpoint_cleared });
+        return session_points.clearBreakpoint(self, core, id);
     }
 
     pub fn clearWatchpoint(self: *Session, core: Core, id: WatchId) anyerror!void {
-        try self.select(core);
-        try self.live.machine.watches.remove(id);
-        self.publish(.{ .core = core, .kind = .watchpoint_cleared });
+        return session_points.clearWatchpoint(self, core, id);
     }
-    pub const RemovedPoint = enum { breakpoint, watchpoint };
 
     pub fn removePoint(self: *Session, core: Core, id: u32) anyerror!RemovedPoint {
-        try self.select(core);
-        self.live.machine.breaks.remove(id) catch |err| {
-            if (err != error.NoSuchBreak) return err;
-            self.live.machine.watches.remove(id) catch return error.NoSuchBreak;
-            self.publish(.{ .core = core, .kind = .watchpoint_cleared });
-            return .watchpoint;
-        };
-        self.publish(.{ .core = core, .kind = .breakpoint_cleared });
-        return .breakpoint;
+        return session_points.removePoint(self, core, id);
     }
 
     pub fn breakpointExists(self: *Session, core: Core, id: BreakId) anyerror!bool {
-        return (try self.machine(core)).breaks.get(id) != null;
+        return session_points.breakpointExists(self, core, id);
     }
 
     pub fn watchKind(self: *Session, core: Core, id: WatchId) anyerror!?watch_table.Kind {
-        const point = (try self.machine(core)).watches.get(id) orelse return null;
-        return point.kind;
+        return session_points.watchKind(self, core, id);
     }
 
     pub fn hasCore(self: *const Session, core: Core) bool {
@@ -396,7 +369,7 @@ pub const Session = struct {
         return self.event_stream.read(id, out);
     }
 
-    fn select(self: *Session, core: Core) anyerror!void {
+    pub fn select(self: *Session, core: Core) anyerror!void {
         return self.live.switchTo(@backingInt(core));
     }
 
@@ -407,7 +380,7 @@ pub const Session = struct {
     }
 
     /// Publish a board observation into bounded subscriber queues.
-    fn publish(self: *Session, event: Event) void {
+    pub fn publish(self: *Session, event: Event) void {
         var stamped = event;
         stamped.virtual_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else self.now() catch 0;
         self.event_stream.publish(stamped);

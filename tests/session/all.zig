@@ -56,6 +56,8 @@ test {
     _ = @import("panel/watch_test.zig");
     _ = @import("speed_test.zig");
     _ = @import("transport/transport_test.zig");
+    _ = @import("transport/seek_test.zig");
+    _ = @import("transport/back_test.zig");
     _ = @import("zig/script_test.zig");
     _ = @import("watch/bus_test.zig");
     _ = @import("unit_view_test.zig");
