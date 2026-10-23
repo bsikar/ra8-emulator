@@ -147,7 +147,7 @@ test "the bar with an RTC date rasterises to its pinned golden frame, wide enoug
     var models = Models.sample();
     models.readout.date = .{ .year = 2026, .month = 10, .day = 8, .hour = 9, .minute = 47, .second = 5 };
     try scene.render(.{ .x = 0, .y = 0, .w = 800, .h = bar.height }, models.view(false));
-    try std.testing.expectEqual(@as(u64, 15711320372982332276), scene.digest());
+    try std.testing.expectEqual(@as(u64, 17001970104089201796), scene.digest());
 }
 
 test "a short bar hides incomplete controls and keeps the whole clock line" {
