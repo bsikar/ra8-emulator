@@ -212,6 +212,7 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
             try branches_codec.encode(graph, &allocating.writer);
             sink.writeFn(sink.context, allocating.written()) catch |err| {
                 _ = graph.nodes.remove(new_branch_id);
+                if (graph.next_branch_id == new_branch_id + 1) graph.next_branch_id = new_branch_id;
                 return err;
             };
         }
@@ -275,8 +276,8 @@ pub fn confirmFork(self: *Session) anyerror!void {
     const router = self.fork_router orelse return error.NoHistory;
     var pending = router.popPending() orelse return error.NoPendingFork;
     defer fork_router_mod.freeAction(router.allocator, &pending.action);
-    router.first_fork_confirmed = true;
     try executeFork(self, pending.reason, pending.position, pending.action);
+    router.first_fork_confirmed = true;
 }
 
 /// Cancels the pending fork, clearing it without mutating state.

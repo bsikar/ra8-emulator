@@ -99,6 +99,7 @@ const MockHarness = struct {
     mock_storage: MockStorage,
     recorder: recorder_mod.Recorder,
     net_closed: bool = false,
+    console_buf: [256]u8 = undefined,
     console_fed: ?[]const u8 = null,
     camera_spec: ?[]const u8 = null,
     plug_endpoint: ?session_api.Endpoint = null,
@@ -150,7 +151,9 @@ const MockHarness = struct {
     }
     fn feedConsole(ctx: *anyopaque, bytes: []const u8) anyerror!void {
         const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        self.console_fed = bytes;
+        const len = @min(bytes.len, self.console_buf.len);
+        @memcpy(self.console_buf[0..len], bytes[0..len]);
+        self.console_fed = self.console_buf[0..len];
     }
     fn setCamera(ctx: *anyopaque, spec: []const u8) anyerror!void {
         const self: *MockHarness = @ptrCast(@alignCast(ctx));
@@ -200,13 +203,13 @@ test "confirmation flow and record ordering: branch record then intervention rec
     // Verify ordering in new segment: branch record first, then intervention record
     const seg_data = h.mock_storage.seg_bytes.items;
     const f1 = try format_mod.decode(seg_data);
-    try std.testing.expectEqual(@backingInt(record_mod.Kind.branch), f1.kind);
-    const branch_rec = try record_mod.decodeBranch(f1.payload);
+    try std.testing.expectEqual(@backingInt(record_mod.Kind.branch), f1.frame.kind);
+    const branch_rec = try record_mod.decodeBranch(f1.frame.payload);
     try std.testing.expectEqual(@as(u64, 4), branch_rec.branch.fork_at.r);
 
-    const f2 = try format_mod.decode(seg_data[f1.frame_len..]);
-    try std.testing.expectEqual(@backingInt(record_mod.Kind.intervention), f2.kind);
-    const interv = try record_mod.decodeIntervention(f2.payload);
+    const f2 = try format_mod.decode(seg_data[f1.consumed..]);
+    try std.testing.expectEqual(@backingInt(record_mod.Kind.intervention), f2.frame.kind);
+    const interv = try record_mod.decodeIntervention(f2.frame.payload);
     try std.testing.expectEqual(record_mod.Intervention.What.keystroke, interv.intervention.what);
     try std.testing.expectEqualStrings("test-input-2", interv.intervention.body);
     try std.testing.expectEqual(@as(u64, 4), interv.header.position.r);
