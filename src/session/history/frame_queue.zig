@@ -41,6 +41,7 @@ const SpinLock = struct {
 
     fn lock(self: *SpinLock) void {
         while (self.state.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
+            std.atomic.spinLoopHint();
             std.Thread.yield() catch {};
         }
     }
@@ -121,6 +122,7 @@ pub const Queue = struct {
                 return null;
             }
             self.lock.unlock();
+            std.atomic.spinLoopHint();
             std.Thread.yield() catch {};
         }
     }
