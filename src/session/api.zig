@@ -147,6 +147,9 @@ pub const Session = struct {
     pub fn currentPosition(self: *const Session) history_position.Position {
         return session_fork.currentPosition(self);
     }
+    pub fn notePosition(self: *Session, pos: history_position.Position) void {
+        session_fork.notePosition(self, pos);
+    }
     pub fn forkPending(self: *const Session) ?session_fork.PendingFork {
         return session_fork.forkPending(self);
     }
