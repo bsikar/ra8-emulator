@@ -1,0 +1,246 @@
+//! Bounded reverse window trail buffer and exact undo/redo engine (Section 2.5).
+//!
+//! Reuses the existing write observer and trail machinery from `trail.zig`.
+//! Memory writes are tracked without a parallel observer. Undo swaps pre/post
+//! in-place and redo swaps back, invalidating code caches on every restored range.
+//! Accounting is in honest bytes (headers + payload), evicting oldest slots
+//! first when exceeding budget.
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const store_mod = @import("ra8_chip").core.cpu.memory.store;
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const trail_mod = @import("trail.zig");
+const slot_mod = @import("window_slot.zig");
+
+pub const Position = slot_mod.Position;
+pub const Core = slot_mod.Core;
+pub const SlotKind = slot_mod.SlotKind;
+pub const WindowSlot = slot_mod.WindowSlot;
+pub const RegDiff = slot_mod.RegDiff;
+pub const ArchState = slot_mod.ArchState;
+
+pub const ByteSwapRecord = struct {
+    base: u32,
+    offset: u64,
+    part: ?u16,
+    data: []u8,
+};
+
+pub const SlotPayload = struct {
+    slot: WindowSlot,
+    diffs: []RegDiff,
+    byte_records: []ByteSwapRecord,
+};
+
+pub const WindowTrail = struct {
+    allocator: Allocator,
+    recording: *trail_mod.Recording,
+    store: *store_mod.Store,
+    capacity_bytes: usize,
+    used_honest_bytes: usize = 0,
+    slots: []SlotPayload = &.{},
+    head: usize = 0,
+    count: usize = 0,
+    cursor: usize = 0,
+    recording_mark: usize = 0,
+    pre_state: ArchState = .{},
+    active_slot: bool = false,
+    active_pos: Position = undefined,
+    active_core: Core = .cpu0,
+
+    pub fn init(
+        allocator: Allocator,
+        recording: *trail_mod.Recording,
+        store: *store_mod.Store,
+        capacity_bytes: usize,
+    ) WindowTrail {
+        return .{
+            .allocator = allocator,
+            .recording = recording,
+            .store = store,
+            .capacity_bytes = capacity_bytes,
+        };
+    }
+
+    pub fn deinit(self: *WindowTrail) void {
+        var i: usize = 0;
+        while (i < self.count) : (i += 1) {
+            const idx = (self.head + i) % self.slots.len;
+            self.freePayload(self.slots[idx]);
+        }
+        if (self.slots.len > 0) self.allocator.free(self.slots);
+        self.* = undefined;
+    }
+
+    pub fn startSlot(self: *WindowTrail, core: Core, pos: Position, pre: *const ArchState) void {
+        self.recording_mark = self.recording.record_count;
+        self.pre_state = pre.*;
+        self.active_pos = pos;
+        self.active_core = core;
+        self.active_slot = true;
+    }
+
+    pub fn endSlot(self: *WindowTrail, post: *const ArchState, kind: SlotKind) !void {
+        if (!self.active_slot) return;
+        self.active_slot = false;
+        self.truncateFuture();
+
+        const new_records = self.recording.records[self.recording_mark..self.recording.record_count];
+        var byte_count: usize = 0;
+        for (new_records) |r| if (r == .bytes) {
+            byte_count += 1;
+        };
+
+        const byte_records = try self.allocator.alloc(ByteSwapRecord, byte_count);
+        errdefer self.allocator.free(byte_records);
+
+        var total_payload_bytes: usize = 0;
+        var b_idx: usize = 0;
+        for (new_records) |r| switch (r) {
+            .bytes => |b| {
+                byte_records[b_idx] = .{
+                    .base = b.base,
+                    .offset = b.offset,
+                    .part = b.part,
+                    .data = b.pre,
+                };
+                total_payload_bytes += b.pre.len;
+                b_idx += 1;
+            },
+            .barrier => {},
+        };
+        // Reset recording count so records are not freed twice
+        self.recording.record_count = self.recording_mark;
+
+        var diff_buf: [slot_mod.reg_tag_count]RegDiff = undefined;
+        const diff_count = slot_mod.diffArch(&self.pre_state, post, &diff_buf);
+        const diffs = try self.allocator.alloc(RegDiff, diff_count);
+        errdefer self.allocator.free(diffs);
+        @memcpy(diffs, diff_buf[0..diff_count]);
+
+        const honest_bytes = @sizeOf(SlotPayload) +
+            diffs.len * @sizeOf(RegDiff) +
+            byte_records.len * @sizeOf(ByteSwapRecord) +
+            total_payload_bytes;
+
+        while (self.count > 0 and self.used_honest_bytes + honest_bytes > self.capacity_bytes) {
+            self.evictOldest();
+        }
+
+        try self.ensureCapacity();
+        const insert_idx = (self.head + self.count) % self.slots.len;
+        self.slots[insert_idx] = .{
+            .slot = .{
+                .position = self.active_pos,
+                .kind = kind,
+                .core = self.active_core,
+                .diff_count = @intCast(diffs.len),
+                .byte_count = @intCast(byte_records.len),
+                .honest_bytes = honest_bytes,
+            },
+            .diffs = diffs,
+            .byte_records = byte_records,
+        };
+        self.count += 1;
+        self.cursor = self.count;
+        self.used_honest_bytes += honest_bytes;
+    }
+
+    pub fn undoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu) !bool {
+        if (self.cursor == 0) return false;
+        self.cursor -= 1;
+        const payload = self.slotAt(self.cursor);
+        var i = payload.byte_records.len;
+        while (i > 0) {
+            i -= 1;
+            try self.swapMemoryRecord(&payload.byte_records[i]);
+        }
+        var arch = ArchState.capture(cpu);
+        slot_mod.swapDiffInState(payload.diffs, &arch);
+        arch.restore(cpu);
+        return true;
+    }
+
+    pub fn redoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu) !bool {
+        if (self.cursor >= self.count) return false;
+        const payload = self.slotAt(self.cursor);
+        for (payload.byte_records) |*rec| {
+            try self.swapMemoryRecord(rec);
+        }
+        var arch = ArchState.capture(cpu);
+        slot_mod.swapDiffInState(payload.diffs, &arch);
+        arch.restore(cpu);
+        self.cursor += 1;
+        return true;
+    }
+
+    pub fn slotAt(self: *WindowTrail, idx: usize) *SlotPayload {
+        return &self.slots[(self.head + idx) % self.slots.len];
+    }
+
+    fn swapMemoryRecord(self: *WindowTrail, rec: *ByteSwapRecord) !void {
+        const addr: u32 = @intCast(rec.base + rec.offset);
+        if (rec.part) |part_idx| {
+            if (part_idx < self.recording.part_count) {
+                const part = self.recording.parts[part_idx];
+                part.raw(part.ctx, @intCast(rec.offset), rec.data);
+            }
+            return;
+        }
+        var temp_buf: [256]u8 = undefined;
+        const temp = if (rec.data.len <= temp_buf.len)
+            temp_buf[0..rec.data.len]
+        else
+            try self.allocator.alloc(u8, rec.data.len);
+        defer if (rec.data.len > temp_buf.len) self.allocator.free(temp);
+
+        if (self.store.locate(addr, rec.data.len)) |loc| {
+            @memcpy(temp, loc.bytes);
+        } else {
+            try self.store.read(.none, addr, temp);
+        }
+
+        try self.store.rawWrite(addr, rec.data);
+        @memcpy(rec.data, temp);
+        self.store.fan().notify(addr, rec.data.len);
+    }
+
+    fn truncateFuture(self: *WindowTrail) void {
+        while (self.count > self.cursor) {
+            const last_idx = (self.head + self.count - 1) % self.slots.len;
+            const last = &self.slots[last_idx];
+            self.used_honest_bytes -= last.slot.honest_bytes;
+            self.freePayload(last.*);
+            self.count -= 1;
+        }
+    }
+
+    fn evictOldest(self: *WindowTrail) void {
+        if (self.count == 0) return;
+        const oldest = &self.slots[self.head];
+        self.used_honest_bytes -= oldest.slot.honest_bytes;
+        self.freePayload(oldest.*);
+        self.head = (self.head + 1) % self.slots.len;
+        self.count -= 1;
+        if (self.cursor > 0) self.cursor -= 1;
+    }
+
+    fn freePayload(self: *WindowTrail, p: SlotPayload) void {
+        for (p.byte_records) |r| self.allocator.free(r.data);
+        if (p.byte_records.len > 0) self.allocator.free(p.byte_records);
+        if (p.diffs.len > 0) self.allocator.free(p.diffs);
+    }
+
+    fn ensureCapacity(self: *WindowTrail) !void {
+        if (self.count < self.slots.len) return;
+        const new_cap = if (self.slots.len == 0) 16 else self.slots.len * 2;
+        const new_slots = try self.allocator.alloc(SlotPayload, new_cap);
+        var i: usize = 0;
+        while (i < self.count) : (i += 1) {
+            new_slots[i] = self.slots[(self.head + i) % self.slots.len];
+        }
+        if (self.slots.len > 0) self.allocator.free(self.slots);
+        self.slots = new_slots;
+        self.head = 0;
+    }
+};
