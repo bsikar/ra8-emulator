@@ -24,6 +24,7 @@ pub const step_budget: u64 = 0;
 /// The debugger step keys' keycodes (SDL: F-keys carry the scan-code mask).
 pub const key_f10: u32 = 0x40000043;
 pub const key_f11: u32 = 0x40000044;
+pub const key_f5: u32 = 0x4000003E;
 
 /// F10 steps over, F11 steps into, shift+F11 steps out; null when not one.
 pub fn keyControl(code: u32, shift: bool) ?bar.Control {
@@ -32,6 +33,17 @@ pub fn keyControl(code: u32, shift: bool) ?bar.Control {
         key_f11 => if (shift) .out else .step,
         else => null,
     };
+}
+
+/// Reverse-continue (design 2.4): shift+F5 backs the run up to the latest
+/// breakpoint or fault behind it, over the transport's `rcont` job. The
+/// stop it lands on arrives as a stop event, so this sends and reports
+/// nothing else; the bar's step policy gates it, since the run must be
+/// halted to search backwards.
+pub fn rcont(status: *Status, run: *shell_run.Run, link: *Link) !void {
+    if (!enabled(.step, status, run)) return error.NotReady;
+    if (link.state != .connected) return error.NotConnected;
+    _ = try link.send(proto.CoreOnly, .rcont, .{ .core = status.core });
 }
 
 /// The buffers the view's field and clock text live in; they outlive the view.

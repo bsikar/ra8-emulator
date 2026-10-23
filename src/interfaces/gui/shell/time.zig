@@ -117,6 +117,14 @@ pub const Time = struct {
     /// A debugger step key over a source or disassembly pane (RA8EMU-1188):
     /// F10 over, F11 into, shift+F11 out, under the bar's one policy.
     pub fn stepKey(self: *Time, code: u32, shift: bool, status: *Status, link: *Link) bool {
+        if (code == time_bar_capture.key_f5 and shift) {
+            time_bar_capture.rcont(status, &self.run, link) catch {
+                status.refused = .run;
+                return true;
+            };
+            status.refused = null;
+            return true;
+        }
         const control = time_bar_capture.keyControl(code, shift) orelse return false;
         if (!time_bar_capture.enabled(control, status, &self.run)) return false;
         self.pressCommand(control, link, status);
