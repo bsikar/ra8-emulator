@@ -35,6 +35,12 @@ pub fn paused(w: anytype, json: bool) !void {
     try w.writeAll(if (json) "{\"paused\":true}\n" else "paused\n");
 }
 
+/// The accepted ack for `rc`: the queued ticket completes on the
+/// transport topic, so the word itself reports only acceptance.
+pub fn rcont(w: anytype, json: bool) !void {
+    if (json) try w.print("{{\"rc\":\"queued\"}}\n", .{}) else try w.print("rc queued\n", .{});
+}
+
 pub fn registers(w: anytype, json: bool, regs: []const Reg) !void {
     if (json) try w.writeAll("{\"registers\":{");
     for (regs, 0..) |reg, index| {

@@ -26,6 +26,7 @@ pub const usage =
     \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
     \\            advance 500ms|600s
     \\            seek TARGET (12.402s, +500ms, -2s, 25%)
+    \\            rc (reverse-continue: back to the latest break or fault behind the run)
     \\            plug MODEL@ENDPOINT | unplug ENDPOINT
     \\            snapshot PATH | restore PATH (paths on the serving host)
     \\            map (the memory map of the image last loaded)
@@ -50,6 +51,11 @@ pub const Command = union(enum) {
     /// 17): `12.402s`, `+500ms`, `-2s`, `25%`. The door parses it; while
     /// the position-stop primitive is pending the served host refuses.
     seek: []const u8,
+    /// Reverse-continue (design 2.4): back to the latest breakpoint or
+    /// fault behind the run, through restore and replay. The served
+    /// host queues it on the transport and answers accepted; the stop
+    /// surfaces on the transport topic.
+    rc,
     step,
     pause,
     regs: []const proto.Register,
@@ -140,6 +146,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
     if (eql(u8, name, "seek")) return if (args.len == 1) .{ .seek = args[0] } else error.BadArguments;
+    if (eql(u8, name, "rc")) return if (args.len == 0) .rc else error.BadArguments;
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
     if (eql(u8, name, "map")) return if (args.len == 0) .map else error.BadArguments;
@@ -276,6 +283,10 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             // primitive is pending, so the refusal below is the live
             // path and the drive lands with the execution ticket.
             _ = try client.call(proto.Ack, proto.Seek, .seek, .{ .target = text });
+        },
+        .rc => {
+            _ = try client.call(proto.Ack, proto.CoreOnly, .rcont, .{ .core = .cpu0 });
+            try out.rcont(w, json);
         },
         .step => try runTo(client, w, json, null),
         .pause => {

@@ -19,6 +19,7 @@ const parts = @import("parts.zig");
 const session_camera = @import("camera.zig");
 const session_advance = @import("advance.zig");
 const session_seek = @import("seek.zig");
+const session_rcont = @import("rcont.zig");
 const session_files = @import("files.zig");
 const session_map = @import("map.zig");
 const session_stack = @import("stack.zig");
@@ -84,6 +85,7 @@ pub const routes = .{
     .{ @backingInt(M.advance), session_advance.advance },
     .{ @backingInt(M.advance_async), session_advance.advanceQueued },
     .{ @backingInt(M.seek), session_seek.seek },
+    .{ @backingInt(M.rcont), session_rcont.rcont },
     .{ @backingInt(M.snapshot), session_files.snapshot },
     .{ @backingInt(M.restore), session_files.restore },
 };
