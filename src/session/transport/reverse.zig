@@ -127,8 +127,8 @@ pub fn queue(self: *Transport) !Ticket {
 
 /// Drive one reverse-continue in two passes over the committed log.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
-    defer self.session.replaying = false;
-    self.session.replaying = true;
+    defer self.session.setReplaying(false);
+    self.session.setReplaying(true);
     const rc = &job.rc.?;
     if (rc.start) return .{ .stop = .history_start };
     const grid = self.session.grid orelse return error.NoGrid;

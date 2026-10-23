@@ -11,6 +11,12 @@ const history = @import("ra8_host").history;
 const session_recorder = @import("ra8_session").history_recorder;
 const session_refs = @import("ra8_session").history_refs;
 
+/// Formats the segment leaf name for a given branch and segment index.
+pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
+    if (branch == 0 and seg == 0) return "events-0";
+    return std.fmt.bufPrint(buf, "events-{d}-{d}", .{ branch, seg });
+}
+
 /// The run's first log segment. Segments number upward when the store
 /// grows one; a bind opens segment zero.
 const log_leaf = "events-0";
@@ -55,8 +61,14 @@ pub const Bind = struct {
         errdefer bind.log.vtable.close(bind.log.context);
         bind.sink = try allocator.create(LogSink);
         errdefer allocator.destroy(bind.sink);
-        bind.sink.* = .{ .byte = bind.log };
-        bind.storage = .{ .context = bind.sink, .append = &appendLog, .flush = &flushLog, .truncate = &truncateLog };
+        bind.sink.* = .{ .bind = bind, .byte = bind.log };
+        bind.storage = .{
+            .context = bind.sink,
+            .append = &appendLog,
+            .flush = &flushLog,
+            .truncate = &truncateLog,
+            .switchSegment = &switchSegmentLog,
+        };
         bind.objects = .{ .context = bind, .put = &putObject, .sync = &syncObjects };
         // The budget: one read at open sizes the share this history
         // takes, and every check reads the volume fresh.
@@ -102,7 +114,10 @@ pub const Bind = struct {
     }
 };
 
-const LogSink = struct { byte: history.storage.ByteFile };
+const LogSink = struct {
+    bind: *Bind,
+    byte: history.storage.ByteFile,
+};
 
 /// Reads the volume fresh for every budget check; the history root's
 /// directory is the handle the read goes through. The store rides along
@@ -144,6 +159,19 @@ fn flushLog(context: *anyopaque) anyerror!void {
 fn truncateLog(context: *anyopaque, len: u64) anyerror!void {
     const byte = sinkOf(context).byte;
     try byte.vtable.truncate(byte.context, len);
+}
+
+fn switchSegmentLog(context: *anyopaque, branch: u32, seg: u32) anyerror!void {
+    const sink = sinkOf(context);
+    const bind = sink.bind;
+    try sink.byte.vtable.sync(sink.byte.context);
+    sink.byte.vtable.close(sink.byte.context);
+    var buf: [64]u8 = undefined;
+    const leaf = try segmentName(&buf, branch, seg);
+    const store = history.storage.Store.from(&bind.session);
+    const new_byte = try store.vtable.open(store.context, .log, leaf, .create);
+    sink.byte = new_byte;
+    bind.log = new_byte;
 }
 
 fn bindOf(context: *anyopaque) *Bind {

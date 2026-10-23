@@ -7,6 +7,7 @@
 //! pause is Session.pause.
 const std = @import("std");
 const speed = @import("run/run.zig").speed;
+const debug_session = @import("session.zig");
 
 /// Where a running engine takes the new factor, in thousandths of real time,
 /// or null to run unpaced as `--speed max` does (RA8EMU-714).
@@ -34,3 +35,16 @@ pub const Change = struct {
         return .{ .budget = @intFromFloat(@max(scaled, 1)), .milli = @intFromFloat(milli) };
     }
 };
+
+pub fn setSpeed(session: anytype, core: anytype, factor: ?f64) anyerror!void {
+    const change = try Change.of(factor, debug_session.limits.default_budget);
+    try setRunBudget(session, core, change.budget);
+    if (session.speed) |hook| try hook.setFn(hook.context, change.milli);
+    session.publish(.{ .core = core, .kind = .speed_changed });
+}
+
+pub fn setRunBudget(session: anytype, core: anytype, instructions: u64) anyerror!void {
+    if (instructions == 0) return error.InvalidSpeed;
+    try session.select(core);
+    session.live.budget = instructions;
+}

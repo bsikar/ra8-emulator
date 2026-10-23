@@ -16,7 +16,7 @@ pub const Event = struct {
     address: ?u32 = null,
     ended: ?@import("../zig/drive.zig").Ended = null,
     payload: Payload = .none,
-    pub const Kind = enum { loaded, paused, stopped, rewound, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged, uart_byte, gpio_changed, led_changed, lcd_frame, fault, reset, watchdog, rtos_switch, rtos_idle, isr_enter, isr_leave, module_loaded, module_unloaded, module_faulted };
+    pub const Kind = enum { loaded, paused, stopped, rewound, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged, uart_byte, gpio_changed, led_changed, lcd_frame, fault, reset, watchdog, rtos_switch, rtos_idle, isr_enter, isr_leave, module_loaded, module_unloaded, module_faulted, bkpt_skipped, console_input, camera_changed };
 
     pub const Rect = struct { x: u16, y: u16, width: u16, height: u16 };
     pub const Payload = union(enum) {

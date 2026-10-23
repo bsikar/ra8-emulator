@@ -28,6 +28,7 @@ pub const Storage = struct {
     append: *const fn (context: *anyopaque, bytes: []const u8) anyerror!void,
     flush: *const fn (context: *anyopaque) anyerror!void,
     truncate: *const fn (context: *anyopaque, len: u64) anyerror!void,
+    switchSegment: ?*const fn (context: *anyopaque, branch: u32, seg: u32) anyerror!void = null,
 };
 
 /// What a recovered segment answered.
@@ -104,6 +105,10 @@ pub const Recorder = struct {
     staging: *std.Io.Writer.Allocating,
     /// Bytes the storage holds for this segment so far.
     committed_bytes: u64 = 0,
+    /// Total committed bytes across all segments of this history.
+    history_bytes: u64 = 0,
+    /// Set while re-executing recorded history; skips staging new records.
+    replaying: bool = false,
     /// The object space checkpoints write through, as the application
     /// fills it; a recorder without one refuses checkpoints.
     objects: ?Objects = null,
@@ -139,6 +144,25 @@ pub const Recorder = struct {
         try self.stage(@backingInt(record.Kind.boundary), header, boundary.what, boundary.body);
     }
 
+    /// Records a branch record when a line forks from another.
+    pub fn recordBranch(self: *Recorder, header: record.Header, branch: record.Branch) anyerror!void {
+        if (self.replaying) return;
+        var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64);
+        defer staging.deinit();
+        try record.encodeBranch(&staging.writer, header, branch);
+        try self.stagePayload(@backingInt(record.Kind.branch), staging.writer.buffered());
+    }
+
+    /// Switches the recorder to a new segment for branch `branch`, committing
+    /// any pending bytes on the current segment first.
+    pub fn switchSegment(self: *Recorder, now_ns: u64, branch: u32, seg: u32) anyerror!void {
+        try self.commit(now_ns);
+        if (self.storage.switchSegment) |sw| {
+            try sw(self.storage.context, branch, seg);
+        }
+        self.committed_bytes = 0;
+    }
+
     /// Records a host-originated mutation that crossed a dispatching
     /// boundary.
     pub fn recordIntervention(self: *Recorder, header: record.Header, intervention: record.Intervention) anyerror!void {
@@ -154,7 +178,7 @@ pub const Recorder = struct {
     pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
         const objects = self.objects orelse return Error.NoObjects;
         if (self.disk) |watch| {
-            _ = try self.checkDisk(watch, self.committed_bytes + self.object_bytes, bytes.len);
+            _ = try self.checkDisk(watch, self.history_bytes + self.object_bytes, bytes.len);
         }
         var digest: [32]u8 = undefined;
         std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
@@ -167,9 +191,7 @@ pub const Recorder = struct {
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64);
         defer staging.deinit();
         try record.encodeCheckpoint(&staging.writer, header, .{ .id = id, .object = digest[0..16].* });
-        const payload = staging.writer.buffered();
-        try format.encode(&self.staging.writer, @backingInt(record.Kind.checkpoint), payload);
-        self.log.pending_bytes += format.header_len + payload.len;
+        try self.stagePayload(@backingInt(record.Kind.checkpoint), staging.writer.buffered());
         self.object_bytes += bytes.len;
     }
 
@@ -192,13 +214,18 @@ pub const Recorder = struct {
         }
     }
 
+    fn stagePayload(self: *Recorder, kind: u16, payload: []const u8) anyerror!void {
+        if (self.replaying) return;
+        try format.encode(&self.staging.writer, kind, payload);
+        self.log.pending_bytes += format.header_len + payload.len;
+    }
+
     fn stage(self: *Recorder, kind: u16, header: record.Header, what: anytype, body: []const u8) anyerror!void {
+        if (self.replaying) return;
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64 + body.len);
         defer staging.deinit();
         try record.encodeBodied(&staging.writer, header, @backingInt(what), body);
-        const payload = staging.writer.buffered();
-        try format.encode(&self.staging.writer, kind, payload);
-        self.log.pending_bytes += format.header_len + payload.len;
+        try self.stagePayload(kind, staging.writer.buffered());
     }
 
     /// Commits at the first of the policy's two thresholds, on the
@@ -232,7 +259,7 @@ pub const Recorder = struct {
     pub fn commit(self: *Recorder, now_ns: u64) anyerror!void {
         if (self.disk) |watch| {
             if (self.log.pending_bytes > 0) {
-                _ = try self.checkDisk(watch, self.committed_bytes + self.object_bytes, self.log.pending_bytes);
+                _ = try self.checkDisk(watch, self.history_bytes + self.object_bytes, self.log.pending_bytes);
             }
         }
         try self.log.commit(now_ns);
@@ -247,6 +274,7 @@ pub const Recorder = struct {
             return err;
         };
         self.committed_bytes += bytes.len;
+        self.history_bytes += bytes.len;
         self.staging.writer.end = 0;
     }
 

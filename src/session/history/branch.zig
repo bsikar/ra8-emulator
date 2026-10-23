@@ -101,13 +101,17 @@ pub const BranchGraph = struct {
         if (!self.nodes.contains(parent_id)) return Error.NoSuchBranch;
         const id = self.next_branch_id;
         self.next_branch_id += 1;
+        var end_pos = fork_at;
+        end_pos.branch = id;
+        var fork_pos = fork_at;
+        fork_pos.branch = id;
         const node: BranchNode = .{
             .id = id,
             .parent = parent_id,
-            .fork_at = fork_at,
+            .fork_at = fork_pos,
             .reason = reason,
             .created_ns = created_ns,
-            .recorded_end = fork_at,
+            .recorded_end = end_pos,
             .is_live = false,
         };
         try self.nodes.put(id, node);
