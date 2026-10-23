@@ -9,7 +9,7 @@
 const api = @import("../api.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
 
-pub const Error = error{ InvalidSpeed, InvalidArgs, NotReady, Cancelled, HistoryBroken };
+pub const Error = error{ InvalidSpeed, InvalidArgs, NotReady, Cancelled, HistoryBroken, WatchArmed };
 
 /// Where a play or step moves. Backward play is refused until the history
 /// contracts land (units 17/18); the type is here so front ends speak it.
@@ -55,6 +55,11 @@ pub const Command = union(enum) {
     pause,
     step: Step,
     cont: Cont,
+    /// Reverse-continue: a backward search over the recorded path for
+    /// the latest breakpoint or fault behind the run, through restore
+    /// and replay (design 2.4). Needs a bound history bridge and is
+    /// refused while any watchpoint is armed (v1).
+    rcont,
     advance: Advance,
     seek: Seek,
     run_to: RunTo,
@@ -65,7 +70,7 @@ pub const Ticket = u64;
 
 /// What the engine was doing when reported (section 3's transport states).
 /// An advance is its own phase: it runs until a virtual time, not a stop.
-pub const Phase = enum { halted, playing, continuing, advancing, stepping, seeking };
+pub const Phase = enum { halted, playing, continuing, advancing, stepping, seeking, reverse_continuing };
 
 /// How far a job has gone, in the units the job itself carries.
 pub const Progress = struct {
@@ -126,6 +131,10 @@ pub const State = union(enum) {
     seeking: struct {
         /// The seek's landing position, phase included.
         target: scheduler.Position,
+    },
+    reverse_continuing: struct {
+        /// The core the search runs on.
+        core: api.Core,
     },
 };
 
