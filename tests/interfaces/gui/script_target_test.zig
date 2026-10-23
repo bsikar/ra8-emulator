@@ -67,3 +67,26 @@ test "resolve board switches and touch" {
     try std.testing.expect(pt_touch.?.x >= 0 and pt_touch.?.x < width);
     try std.testing.expect(pt_touch.?.y >= 0 and pt_touch.?.y < height);
 }
+
+test "resolve the seek field and the history track" {
+    const width: i32 = 1024;
+    const height: i32 = 768;
+    var layout = try pane_layout.twoCore(std.testing.allocator);
+    defer layout.deinit();
+
+    const pt_seek = script.target.resolve(std.testing.allocator, &layout, width, height, null, .{ .named = .bar_seek });
+    const pt_track = script.target.resolve(std.testing.allocator, &layout, width, height, null, .{ .named = .bar_track });
+
+    try std.testing.expect(pt_seek != null);
+    try std.testing.expect(pt_track != null);
+
+    // The seek field sits in the bar row at the bottom, right of the speed field.
+    const pt_speed = script.target.resolve(std.testing.allocator, &layout, width, height, null, .{ .named = .bar_speed });
+    try std.testing.expect(pt_speed != null);
+    try std.testing.expect(pt_seek.?.y > height - 60);
+    try std.testing.expect(pt_seek.?.x > pt_speed.?.x);
+
+    // The track row sits above the bar, full width.
+    try std.testing.expect(pt_track.?.y < pt_seek.?.y);
+    try std.testing.expectEqual(@divTrunc(width, 2), pt_track.?.x);
+}

@@ -122,12 +122,12 @@ test "a click on the speed field takes the keyboard, and Enter sets what a frame
     try bench.open();
     defer bench.rig.deinit();
     const link = &bench.rig.link;
-    try std.testing.expect(!bench.time.handle(.{ .text = .of("2") }, link));
+    try std.testing.expect(!bench.time.handle(.{ .text = .of("2") }, link, &bench.status));
     try std.testing.expect(bench.click(.field));
     try std.testing.expect(bench.time.editing);
-    try std.testing.expect(bench.time.handle(.{ .text = .of("2") }, link));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("2") }, link, &bench.status));
     try std.testing.expect(bench.time.view(&bench.status).editing);
-    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link));
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link, &bench.status));
     try std.testing.expect(!bench.time.editing);
     try bench.exchange();
     try std.testing.expectEqual(@as(u64, 2000), bench.time.field.applied);
@@ -135,8 +135,8 @@ test "a click on the speed field takes the keyboard, and Enter sets what a frame
     try std.testing.expectEqual(@as(?u64, 2 * shell_run.frame_ns), bench.time.run.owed_ns);
 
     try std.testing.expect(bench.click(.field));
-    try std.testing.expect(bench.time.handle(.{ .text = .of("max") }, link));
-    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("max") }, link, &bench.status));
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link, &bench.status));
     try bench.exchange();
     bench.time.frame(link, 0);
     try std.testing.expectEqual(@as(?u64, null), bench.time.run.owed_ns);
@@ -148,8 +148,8 @@ test "Escape, and a press off the field, let the keyboard go" {
     defer bench.rig.deinit();
     const link = &bench.rig.link;
     try std.testing.expect(bench.click(.field));
-    try std.testing.expect(bench.time.handle(.{ .text = .of("7") }, link));
-    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.escape, .down = true } }, link));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("7") }, link, &bench.status));
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.escape, .down = true } }, link, &bench.status));
     try std.testing.expect(!bench.time.editing);
     try std.testing.expectEqual(slow, bench.time.field.applied);
 
@@ -175,7 +175,7 @@ test "speed dropdown opens on drop arrow, selects presets, and dismisses on Esca
     try std.testing.expect(bench.time.view(&bench.status).open);
 
     // Escape closes the dropdown
-    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.escape, .down = true } }, link));
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.escape, .down = true } }, link, &bench.status));
     try std.testing.expect(!bench.time.open);
 
     // Re-open and click the text field area: closes dropdown and enters editing
@@ -209,13 +209,13 @@ test "a preset answered after the field is reopened keeps the newer edit in Fiel
     try std.testing.expect(bench.time.pressDropdown(area, row5.x + 2, row5.y + 2, link));
     // The preset is in flight; the user reopens the field and types.
     try std.testing.expect(bench.click(.field));
-    try std.testing.expect(bench.time.handle(.{ .text = .of("3") }, link));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("3") }, link, &bench.status));
     try bench.exchange();
     try std.testing.expectEqual(@as(u64, 5000), bench.time.field.applied);
     try std.testing.expect(bench.time.editing and bench.time.field.editing);
     try std.testing.expectEqualStrings("3", try bench.time.field.shown(&buf));
     try std.testing.expect(bench.time.view(&bench.status).editing);
-    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link));
+    try std.testing.expect(bench.time.handle(.{ .key = .{ .code = codes.enter, .down = true } }, link, &bench.status));
     try bench.exchange();
     try std.testing.expectEqual(@as(u64, 3000), bench.time.field.applied);
     try std.testing.expect(!bench.time.editing and !bench.time.field.editing);
@@ -227,7 +227,7 @@ test "a preset answered after the field is reopened keeps the newer edit in Fiel
     try bench.exchange();
     try std.testing.expectEqualStrings("5x", try bench.time.field.shown(&buf));
     try std.testing.expect(bench.time.field.fresh and bench.time.editing and bench.time.field.editing);
-    try std.testing.expect(bench.time.handle(.{ .text = .of("2") }, link));
+    try std.testing.expect(bench.time.handle(.{ .text = .of("2") }, link, &bench.status));
     try std.testing.expectEqualStrings("2", try bench.time.field.shown(&buf));
 }
 

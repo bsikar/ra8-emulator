@@ -13,6 +13,7 @@ const pane_layout = gui_app.pane_layout;
 const status_bar = gui_app.status.bar;
 const strip = gui_app.status_strip;
 const time_bar = gui_app.time_bar;
+const history_strip = gui_app.history_strip;
 const menu_bar = gui_app.menu_bar;
 const frame = gui_app.shell.frame;
 const State = gui_app.session_link.State;
@@ -72,16 +73,18 @@ test "panes and pane titles name each kind and core" {
     try std.testing.expectEqualStrings("CPU1", frame.coreName(.cpu1));
 }
 
-test "the panes take the window under the menu strip and above the time bar and the status strip" {
+test "the panes take the window under the menu strip and above the history strip, the time bar and the status strip" {
     const area = frame.panesArea(width, height);
-    try std.testing.expectEqual(frame.Rect{ .x = 0, .y = menu_bar.height, .w = width, .h = height - menu_bar.height - strip.height - time_bar.height }, area);
+    try std.testing.expectEqual(frame.Rect{ .x = 0, .y = menu_bar.height, .w = width, .h = height - menu_bar.height - strip.height - time_bar.height - history_strip.height }, area);
     try std.testing.expectEqual(@as(i32, 0), frame.panesArea(width, 4).h);
 }
 
 test "the time bar's row sits on top of the status strip, under the panes" {
     const row = frame.barArea(width, height);
     const panes = frame.panesArea(width, height);
-    try std.testing.expectEqual(panes.y + panes.h, row.y);
+    const track = frame.trackArea(width, height);
+    try std.testing.expectEqual(panes.y + panes.h, track.y);
+    try std.testing.expectEqual(track.y + track.h, row.y);
     try std.testing.expectEqual(strip.area(width, height).y, row.y + row.h);
     try std.testing.expectEqual(@as(i32, width), row.w);
 }
@@ -144,7 +147,8 @@ test "the perimeter border is retained when a painter fills the body" {
 test "shell frame edge: panesArea and barArea under constrained heights" {
     const strip_h = strip.height;
     const time_h = time_bar.height;
-    const chrome_h = menu_bar.height + strip_h + time_h;
+    const track_h = history_strip.height;
+    const chrome_h = menu_bar.height + strip_h + time_h + track_h;
 
     const zero_panes = frame.panesArea(480, 10);
     try std.testing.expectEqual(@as(i32, 0), zero_panes.h);
@@ -159,6 +163,9 @@ test "shell frame edge: panesArea and barArea under constrained heights" {
     const bar = frame.barArea(480, 100);
     try std.testing.expectEqual(time_h, bar.h);
     try std.testing.expectEqual(100 - time_h - strip_h, bar.y);
+    const track = frame.trackArea(480, 100);
+    try std.testing.expectEqual(track_h, track.h);
+    try std.testing.expectEqual(bar.y - track_h, track.y);
 }
 
 test "shell frame edge: titleOf and bodyOf never invert or exceed area" {

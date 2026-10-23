@@ -2,6 +2,7 @@
 //! loop's button, pointer and key events, split out of shell/loop.zig so it
 //! keeps to the frame itself. Each takes the shell the event hit.
 const platform = @import("../platform.zig");
+const geom = @import("../geom.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_frame = @import("../ui/shell/frame.zig");
 const shell_loop = @import("loop.zig");
@@ -56,7 +57,15 @@ pub fn pressFields(shell: *Shell, x: i32, y: i32) bool {
     const in_plug = if (shell.plug) |plug| plug.press(x, y) else false;
     const in_file = if (shell.camera_file) |file| file.press(x, y) else false;
     const in_memory = if (shell.memory_field) |field| field.press(x, y) else false;
-    return pressBar(shell, x, y) or in_plug or in_file or in_memory;
+    return pressTrack(shell, x, y) or pressBar(shell, x, y) or in_plug or in_file or in_memory;
+}
+/// Offer a press to the history strip (slice 19): a click seeks.
+pub fn pressTrack(shell: *Shell, x: i32, y: i32) bool {
+    const track = shell.track;
+    if (!geom.contains(track, x, y)) return false;
+    const time = shell.time orelse return false;
+    const link = shell.link orelse return false;
+    return time.pressTrack(track, x, &shell.status, link);
 }
 /// Offer a press to the time bar: the timeline cursor's home.
 pub fn pressBar(shell: *Shell, x: i32, y: i32) bool {

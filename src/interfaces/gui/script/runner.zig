@@ -148,8 +148,8 @@ pub const Runner = struct {
                 }
             },
             .key => |k| {
-                try self.events.append(self.allocator, .{ .key = .{ .code = k.code, .down = true } });
-                try self.events.append(self.allocator, .{ .key = .{ .code = k.code, .down = false } });
+                try self.events.append(self.allocator, .{ .key = .{ .code = k.code, .down = true, .shift = k.shift, .primary = k.primary } });
+                try self.events.append(self.allocator, .{ .key = .{ .code = k.code, .down = false, .shift = k.shift, .primary = k.primary } });
             },
             .quit => {
                 try self.events.append(self.allocator, .quit);

@@ -131,6 +131,12 @@ fn parseClick(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     if (std.mem.eql(u8, target_tok, "bar:speed")) {
         return .{ .click = .{ .named = .bar_speed } };
     }
+    if (std.mem.eql(u8, target_tok, "bar:seek")) {
+        return .{ .click = .{ .named = .bar_seek } };
+    }
+    if (std.mem.eql(u8, target_tok, "bar:track")) {
+        return .{ .click = .{ .named = .bar_track } };
+    }
     if (std.mem.eql(u8, target_tok, "camera:allow_once")) {
         return .{ .click = .{ .named = .camera_allow_once } };
     }
@@ -201,23 +207,52 @@ fn parseType(allocator: std.mem.Allocator, line: []const u8) ParseError!Action {
 
 fn parseKey(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     const key_tok = tokens.next() orelse return error.BadTarget;
-    if (std.ascii.eqlIgnoreCase(key_tok, "Return") or std.ascii.eqlIgnoreCase(key_tok, "Enter")) {
-        return .{ .key = .{ .code = 0x0D } };
+    var name = key_tok;
+    var shift = false;
+    var primary = false;
+    while (std.mem.indexOfScalar(u8, name, '+')) |sep| {
+        const modifier = name[0..sep];
+        if (std.ascii.eqlIgnoreCase(modifier, "shift")) {
+            shift = true;
+        } else if (std.ascii.eqlIgnoreCase(modifier, "ctrl") or std.ascii.eqlIgnoreCase(modifier, "control")) {
+            primary = true;
+        } else {
+            return error.BadTarget;
+        }
+        name = name[sep + 1 ..];
     }
-    if (std.ascii.eqlIgnoreCase(key_tok, "Escape") or std.ascii.eqlIgnoreCase(key_tok, "Esc")) {
-        return .{ .key = .{ .code = 0x1B } };
-    }
-    if (std.ascii.eqlIgnoreCase(key_tok, "Space")) {
-        return .{ .key = .{ .code = 0x20 } };
-    }
-    if (std.ascii.eqlIgnoreCase(key_tok, "Tab")) {
-        return .{ .key = .{ .code = 0x09 } };
-    }
-    if (std.ascii.eqlIgnoreCase(key_tok, "Backspace")) {
-        return .{ .key = .{ .code = 0x08 } };
-    }
-    if (key_tok.len == 1) {
-        return .{ .key = .{ .code = key_tok[0] } };
-    }
-    return error.BadTarget;
+    if (name.len == 0) return error.BadTarget;
+    const plain: ?u32 = if (std.ascii.eqlIgnoreCase(name, "Return") or std.ascii.eqlIgnoreCase(name, "Enter"))
+        0x0D
+    else if (std.ascii.eqlIgnoreCase(name, "Escape") or std.ascii.eqlIgnoreCase(name, "Esc"))
+        0x1B
+    else if (std.ascii.eqlIgnoreCase(name, "Space"))
+        0x20
+    else if (std.ascii.eqlIgnoreCase(name, "Tab"))
+        0x09
+    else if (std.ascii.eqlIgnoreCase(name, "Backspace"))
+        0x08
+    else
+        null;
+    const extended: ?u32 = if (std.ascii.eqlIgnoreCase(name, "F5"))
+        action_mod.KeyCode.f5
+    else if (std.ascii.eqlIgnoreCase(name, "F10"))
+        action_mod.KeyCode.f10
+    else if (std.ascii.eqlIgnoreCase(name, "F11"))
+        action_mod.KeyCode.f11
+    else if (std.ascii.eqlIgnoreCase(name, "Home"))
+        action_mod.KeyCode.home
+    else if (std.ascii.eqlIgnoreCase(name, "End"))
+        action_mod.KeyCode.end
+    else if (std.ascii.eqlIgnoreCase(name, "Left"))
+        action_mod.KeyCode.left
+    else if (std.ascii.eqlIgnoreCase(name, "Right"))
+        action_mod.KeyCode.right
+    else
+        null;
+    const code = plain orelse extended orelse {
+        if (name.len == 1) return .{ .key = .{ .code = name[0], .shift = shift, .primary = primary } };
+        return error.BadTarget;
+    };
+    return .{ .key = .{ .code = code, .shift = shift, .primary = primary } };
 }

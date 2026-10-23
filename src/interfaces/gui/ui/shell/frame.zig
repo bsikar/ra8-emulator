@@ -13,6 +13,7 @@ const font = @import("ra8_render").font;
 const pane_layout = @import("../pane_layout.zig");
 const status_strip = @import("../status_strip.zig");
 const time_bar = @import("../time_bar.zig");
+const history_strip = @import("../history_strip.zig");
 const theme_picker = @import("../theme_picker.zig");
 const menu_bar = @import("../../menu_bar.zig");
 const widget_paint = @import("ra8_render").widget_paint;
@@ -66,6 +67,8 @@ pub const Shell = struct {
     /// The time bar's view, from src/interfaces/gui/shell/time.zig; a bare frame draws it
     /// with nothing lit.
     bar: time_bar.View = .{},
+    /// The history track's view (slice 19), from the shell's time controller.
+    track: history_strip.View = .{},
     /// The theme picker at the strip's right end (RA8EMU-1165), from
     /// src/interfaces/gui/shell/theme.zig; a bare frame has none.
     themes: ?theme_picker.View = null,
@@ -103,14 +106,20 @@ pub fn coreName(core: pane_layout.Core) []const u8 {
 }
 
 /// The panes' share of the window: everything under the menu strip and
-/// above the time bar and the status strip.
+/// above the history strip, the time bar and the status strip.
 pub fn panesArea(width: i32, height: i32) Rect {
-    return .{ .x = 0, .y = menu_bar.height, .w = width, .h = @max(0, height - menu_bar.height - status_strip.height - time_bar.height) };
+    return .{ .x = 0, .y = menu_bar.height, .w = width, .h = @max(0, height - menu_bar.height - history_strip.height - status_strip.height - time_bar.height) };
 }
 
-/// The time bar's row, on top of the status strip.
+/// The time bar's row, on top of the status strip, under the history strip.
 pub fn barArea(width: i32, height: i32) Rect {
     return .{ .x = 0, .y = height - status_strip.height - time_bar.height, .w = width, .h = time_bar.height };
+}
+
+/// The history strip's row, on top of the time bar.
+pub fn trackArea(width: i32, height: i32) Rect {
+    const bar = barArea(width, height);
+    return .{ .x = 0, .y = bar.y - history_strip.height, .w = width, .h = history_strip.height };
 }
 
 pub fn titleOf(area: draw_list.Rect) draw_list.Rect {
@@ -162,6 +171,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
         }
         try drawLeaf(list, &paint, theme, pane, toGeom(placed.area), shell.painter, tabs);
     }
+    history_strip.draw(&paint, theme, toList(trackArea(shell.width, shell.height)), shell.track);
     time_bar.draw(&paint, theme, toList(barArea(shell.width, shell.height)), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {

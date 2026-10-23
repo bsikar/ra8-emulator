@@ -21,6 +21,8 @@ pub const NamedTarget = enum {
     bar_step_over,
     bar_step_out,
     bar_speed,
+    bar_seek,
+    bar_track,
     camera_allow_once,
     camera_always,
     camera_cam,
@@ -43,11 +45,31 @@ pub const Drag = struct {
     duration_ms: u32,
 };
 
+/// Key codes a script's `key` action names (platform.Event.key's `code`).
+/// The window's extended keys use SDL scancode numbering, the same table
+/// time/bar_capture.zig's key_f5/key_f10/key_f11/key_home/key_end come
+/// from; the arrows follow the same numbering.
+pub const KeyCode = struct {
+    pub const f5: u32 = 0x4000003E;
+    pub const f10: u32 = 0x40000043;
+    pub const f11: u32 = 0x40000044;
+    pub const home: u32 = 0x4000004A;
+    pub const end: u32 = 0x4000004D;
+    pub const right: u32 = 0x4000004F;
+    pub const left: u32 = 0x40000050;
+};
+
 pub const Action = union(enum) {
     click: Target,
     drag: Drag,
     type_text: []const u8,
-    key: struct { code: u8 },
+    key: struct {
+        code: u32,
+        /// The shift modifier was held with the key.
+        shift: bool = false,
+        /// The OS's shortcut modifier was held (platform.Event.key's `primary`).
+        primary: bool = false,
+    },
     quit,
 };
 

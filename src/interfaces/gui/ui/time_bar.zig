@@ -26,6 +26,9 @@ pub const clock_min: i32 = 13 * font.cell_w + 2 * pad;
 /// The longest speed text the field shows; gui/time.bar_capture.zig pins it
 /// to the speed field's own limit.
 pub const field_chars: usize = 12;
+/// The longest seek target the seek field shows; gui/time.bar_capture.zig
+/// pins it to the seek field's own limit.
+pub const seek_chars: usize = 20;
 pub const drop_w: i32 = 14;
 pub const drop_row_h: i32 = font.glyph_h + 4;
 pub const drop_popover_h: i32 = 1 + @as(i32, @intCast(speed_field.presets.len)) * drop_row_h;
@@ -38,6 +41,7 @@ pub const Control = enum {
     out,
     field,
     drop,
+    seek,
 
     pub fn label(self: Control) []const u8 {
         return switch (self) {
@@ -46,7 +50,7 @@ pub const Control = enum {
             .step => "Step",
             .over => "Over",
             .out => "Out",
-            .field, .drop => "",
+            .field, .drop, .seek => "",
         };
     }
 };
@@ -60,6 +64,7 @@ pub const Layout = struct {
     over: Rect,
     out: Rect,
     field: Rect,
+    seek: Rect,
     clock: Rect,
 
     pub fn of(bar: Rect) Layout {
@@ -74,8 +79,12 @@ pub const Layout = struct {
             Rect{ .x = x, .y = top, .w = 0, .h = 0 }
         else
             place(bar, &x, top, .field);
+        const seek = if (field.empty() or bar.x + bar.w - pad - x < width(.seek) + gap + clock_min)
+            Rect{ .x = x, .y = top, .w = 0, .h = 0 }
+        else
+            place(bar, &x, top, .seek);
         const clock_rect = bar.intersect(.{ .x = x, .y = top, .w = bar.x + bar.w - pad - x, .h = control_h });
-        return .{ .run = run, .pause = pause_at, .step = step, .over = over, .out = out, .field = field, .clock = clock_rect };
+        return .{ .run = run, .pause = pause_at, .step = step, .over = over, .out = out, .field = field, .seek = seek, .clock = clock_rect };
     }
 
     /// Only whole controls have paint and hit targets. Leave room for the clock.
@@ -97,6 +106,7 @@ pub const Layout = struct {
             .over => self.over,
             .out => self.out,
             .field => self.field,
+            .seek => self.seek,
             .drop => dropBox(self.field),
         };
     }
@@ -106,6 +116,7 @@ pub const Layout = struct {
 pub fn width(control: Control) i32 {
     const chars = switch (control) {
         .field => field_chars,
+        .seek => seek_chars,
         .drop => 0,
         else => control.label().len,
     };
@@ -154,6 +165,8 @@ pub const View = struct {
     command_refused: bool = false,
     field: []const u8 = "",
     field_refused: bool = false,
+    seek: []const u8 = "",
+    seek_editing: bool = false,
     editing: bool = false,
     open: bool = false,
     applied: ?u64 = null,
@@ -172,6 +185,7 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, bar: Rect, vi
         button(table, theme, layout.rect(control), control, view);
     }
     fieldBox(table, theme, layout.field, view);
+    seekBox(table, theme, layout.seek, view);
     clock(table, theme, layout.clock, view);
     table.pop_clip.?(table.user);
     if (view.open and !layout.field.empty()) dropdown(table, theme, layout.field, view);
@@ -205,7 +219,7 @@ fn lights(control: Control, view: View) bool {
     return switch (control) {
         .run => view.run_lit,
         .pause => view.pause_lit,
-        .step, .over, .out, .field, .drop => false,
+        .step, .over, .out, .field, .drop, .seek => false,
     };
 }
 
@@ -217,7 +231,7 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
         .step => view.step_enabled,
         .over => view.over_enabled,
         .out => view.out_enabled,
-        .field, .drop => true,
+        .field, .drop, .seek => true,
     };
     const on = lights(control, view) and (enabled or control == .run);
     var descriptor = widget.button.Button{
@@ -228,7 +242,7 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .step => "Step",
             .over => "Over",
             .out => "Out",
-            .field, .drop => "",
+            .field, .drop, .seek => "",
         },
         .on_press = null,
         .fg = word(if (on) theme.background else if (!enabled) theme.muted else theme.ink),
@@ -237,13 +251,13 @@ fn button(paint: *const widget.types.Paint, theme: *const Theme, area: Rect, con
             .run => theme.runLit(),
             .pause => theme.pauseLit(),
             .step, .over, .out => theme.step_active,
-            .field, .drop => theme.accent,
+            .field, .drop, .seek => theme.accent,
         }),
         .border = word(if (on) switch (control) {
             .run => theme.good,
             .pause => theme.highlight,
             .step, .over, .out => theme.step_active,
-            .field, .drop => theme.accent,
+            .field, .drop, .seek => theme.accent,
         } else theme.control_border),
         .presses = 0,
         .pad = 3,
@@ -344,6 +358,23 @@ fn fieldBox(table: *const widget.types.Paint, theme: *const Theme, area: Rect, v
     fillArea(table, .{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
 }
 
+fn seekBox(table: *const widget.types.Paint, theme: *const Theme, area: Rect, view: View) void {
+    if (area.empty()) return;
+    fillArea(table, area, theme.well);
+    outline(table, area, if (view.seek_editing) theme.accent else theme.control_border);
+    const shown = view.seek;
+    label(table, .{ .x = area.x, .y = area.y, .w = area.w, .h = area.h }, shown, theme.ink, theme.well);
+    if (!view.seek_editing) {
+        const caption = "Seek";
+        const left = area.x + area.w - pad - @as(i32, @intCast(font.textWidth(caption.len)));
+        if (left >= area.x + 2 * pad + @as(i32, @intCast(font.textWidth(shown.len))))
+            drawText(table, left, area.y + draw_list.centre(area.h, font.glyph_h), caption, theme.muted, theme.well);
+        return;
+    }
+    const caret_x = area.x + pad + @as(i32, @intCast(font.textWidth(shown.len)));
+    fillArea(table, .{ .x = caret_x, .y = area.y + 2, .w = 1, .h = area.h - 4 }, theme.ink);
+}
+
 fn drawDropArrow(table: *const widget.types.Paint, theme: *const Theme, area: Rect, open: bool) void {
     if (area.empty()) return;
     const cx = area.x + @divTrunc(area.w, 2);
@@ -394,5 +425,6 @@ pub fn hit(bar: Rect, x: i32, y: i32) ?Control {
         if (dropBox(layout.field).contains(x, y)) return .drop;
         return .field;
     }
+    if (layout.seek.contains(x, y)) return .seek;
     return null;
 }

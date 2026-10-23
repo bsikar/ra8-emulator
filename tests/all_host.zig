@@ -82,6 +82,10 @@ test {
     _ = @import("interfaces/rpc/session/seek_test.zig");
     _ = @import("interfaces/rpc/host_listener_discovery_test.zig");
     _ = @import("interfaces/gui/preview_relay_test.zig");
+    _ = @import("interfaces/gui/history_track_test.zig");
+    _ = @import("interfaces/gui/history_strip_test.zig");
+    _ = @import("interfaces/gui/time/press_track_test.zig");
+    _ = @import("interfaces/gui/time/seek_field_test.zig");
     _ = @import("interfaces/gui/shell/startup_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");

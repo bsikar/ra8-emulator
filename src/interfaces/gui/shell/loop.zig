@@ -121,6 +121,8 @@ pub const Shell = struct {
     clock: ?wall_clock.Clock = null,
     drained: bool = true,
     bar: shell_frame.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
+    /// The history strip's row, on top of the bar's row (slice 19).
+    track: shell_frame.Rect = .{ .x = 0, .y = 0, .w = 0, .h = 0 },
     held: ?pane_layout.Gutter = null,
     /// The menu strip's state (RA8EMU-957) and the window's width.
     menu: menu_bar.Menu = .{},
@@ -160,6 +162,7 @@ pub const Shell = struct {
         var solved = try shell_frame.solve(&self.layout, self.allocator, width, height);
         defer solved.deinit(self.allocator);
         self.bar = shell_frame.barArea(width, height);
+        self.track = shell_frame.trackArea(width, height);
         self.height = height;
         menu_actions.observe(self, window, width);
         while (window.poll()) |event| {
@@ -189,6 +192,7 @@ pub const Shell = struct {
             .solved = &solved,
             .strip = status_capture.strip(&self.status, self.state()),
             .bar = if (self.time) |time| time.view(&self.status) else .{},
+            .track = if (self.time) |time| time.trackView() else .{},
             .menu = self.menu,
             .width = width,
             .height = height,
@@ -245,7 +249,7 @@ pub const Shell = struct {
                 if (self.themes.key(event)) return;
                 if (shell_press.pageConsole(self, event, solved)) return;
                 if (shell_press.stepKeys(self, event, solved)) return;
-                if (self.time) |time| if (self.link) |link| if (time.handle(event, link)) return;
+                if (self.time) |time| if (self.link) |link| if (time.handle(event, link, &self.status)) return;
                 if (self.plug) |plug| _ = plug.handle(event);
                 if (self.camera_file) |file| _ = file.handle(event);
                 if (self.memory_field) |field| _ = field.handle(event);

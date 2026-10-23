@@ -48,6 +48,12 @@ pub const Refusal = enum {
     /// be read, or it is larger than one load can carry.
     unread,
     too_large,
+    /// The transport refused a seek (slice 19): the target's resolution
+    /// index has not landed, or the run is not halted to seek from.
+    seek,
+    /// The transport refused a turbo run (slice 19): the advance was
+    /// declined, or the link in reach cannot carry one.
+    advance,
 
     pub fn message(self: Refusal) []const u8 {
         return switch (self) {
@@ -55,6 +61,8 @@ pub const Refusal = enum {
             .run => "the session refused to run",
             .unread => "the file could not be read",
             .too_large => "the image is too large for the session (64 MiB at most)",
+            .seek => "the session refused the seek",
+            .advance => "the session refused the advance",
         };
     }
 };
