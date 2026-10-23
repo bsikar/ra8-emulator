@@ -2,6 +2,7 @@
 //! these resources and inject callbacks into the embedding API.
 pub const app_dirs = @import("../app_dirs.zig");
 pub const base = @import("base.zig");
+pub const branches_file = @import("branches_file.zig");
 pub const gates = @import("gates.zig");
 pub const budget = @import("budget.zig");
 pub const resources = @import("resources.zig");
