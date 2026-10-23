@@ -47,6 +47,9 @@ test {
     _ = @import("history/replay_feeder_test.zig");
     _ = @import("history/action_codec_test.zig");
     _ = @import("history/lifecycle_test.zig");
+    _ = @import("history/window_budget_test.zig");
+    _ = @import("history/window_slot_test.zig");
+    _ = @import("history/window_trail_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
