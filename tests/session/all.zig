@@ -33,6 +33,10 @@ test {
     _ = @import("history/seek_engine_test.zig");
     _ = @import("history/seek_facts_test.zig");
     _ = @import("history/budget_test.zig");
+    _ = @import("history/branch_test.zig");
+    _ = @import("history/branch_prune_test.zig");
+    _ = @import("history/branches_codec_test.zig");
+    _ = @import("history/branches_recover_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");

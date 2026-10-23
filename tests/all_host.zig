@@ -9,6 +9,7 @@ test {
     _ = @import("host/history/base_test.zig");
     _ = @import("host/history/budget_test.zig");
     _ = @import("host/history/readback_test.zig");
+    _ = @import("host/history/branches_file_test.zig");
     _ = @import("host/history/crash_test.zig");
     _ = @import("host/history/enospc_test.zig");
     _ = @import("host/history/lifecycle_exact_test.zig");
