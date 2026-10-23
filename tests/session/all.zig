@@ -42,6 +42,8 @@ test {
     _ = @import("history/pack_test.zig");
     _ = @import("history/pack_index_test.zig");
     _ = @import("history/incremental_restore_test.zig");
+    _ = @import("history/dirty_pages_test.zig");
+    _ = @import("history/checkpoint_engine_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
