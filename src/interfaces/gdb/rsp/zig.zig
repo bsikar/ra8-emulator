@@ -97,10 +97,13 @@ fn vcont(target: *Target, actions: []const u8, out: []u8) Error![]const u8 {
 /// The reverse packets: `bs` puts the run one recorded stop back, `bc`
 /// rewinds to the newest breakpoint or fault behind it in the recorded
 /// window, the window's oldest stop when `bc` finds neither (RA8EMU-1170).
-/// Without a history the reply is the error.
+/// With a transport plane bound both go through the plane's own jobs, the
+/// reverse-continue over the committed log; without one the in-session
+/// ring answers, and without a history the reply is the error.
 fn reverse(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     const step = std.mem.eql(u8, request, "bs");
     if (!step and !std.mem.eql(u8, request, "bc")) return copy(out, request_error);
+    if (target.transport) |plane| return transportReverse(target, plane, step, out);
     const history = target.session.history orelse return copy(out, request_error);
     if (history.len() == 0) return copy(out, request_error);
     var at = target.back + 1;
@@ -167,6 +170,22 @@ fn stopReply(target: *Target, out: []u8) Error![]const u8 {
             else => reply(target, out, sigtrap),
         },
     };
+}
+
+/// The reverse packets through the session's transport plane: a backward
+/// step is the plane's backward `step`, a reverse-continue is the plane's
+/// `rcont` job over the committed log, and settling at the log's
+/// beginning carries `replaylog:begin` so gdb knows the run sits there.
+fn transportReverse(target: *Target, plane: *transport_mod.Transport, step: bool, out: []u8) Error![]const u8 {
+    const asked: transport_mod.Command = if (step)
+        .{ .step = .{ .core = target.session.currentCore(), .dir = .back } }
+    else
+        .{ .rcont = {} };
+    const ticket = plane.command(asked) catch return copy(out, request_error);
+    const ended = plane.finish(ticket, target.wall, transportPoll(target)) catch return copy(out, request_error);
+    target.last = ended;
+    target.back = 0;
+    return stopReply(target, out);
 }
 
 /// gdb names a watch by what it was set to catch, so the kind comes from
