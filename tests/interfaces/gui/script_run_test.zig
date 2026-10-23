@@ -111,3 +111,31 @@ test "headless auto-quit after cooldown" {
     try std.testing.expect(ev_quit != null);
     try std.testing.expectEqual(script.runner.Event.quit, ev_quit.?);
 }
+
+test "runner carries a modified key's modifiers into the events" {
+    const text =
+        \\at 0ms key shift+f5
+    ;
+    var parsed = try script.parser.parse(std.testing.allocator, text);
+    defer parsed.deinit();
+
+    var runner = script.runner.Runner.init(std.testing.allocator, parsed.items.items, false);
+    defer runner.deinit();
+
+    var layout = try pane_layout.twoCore(std.testing.allocator);
+    defer layout.deinit();
+
+    try runner.advance(&layout, 1024, 768, null, 0, 0);
+
+    const down = runner.poll();
+    try std.testing.expect(down != null);
+    try std.testing.expectEqual(script.action.KeyCode.f5, down.?.key.code);
+    try std.testing.expectEqual(true, down.?.key.shift);
+    try std.testing.expectEqual(false, down.?.key.primary);
+    try std.testing.expectEqual(true, down.?.key.down);
+
+    const up = runner.poll();
+    try std.testing.expect(up != null);
+    try std.testing.expectEqual(script.action.KeyCode.f5, up.?.key.code);
+    try std.testing.expectEqual(false, up.?.key.down);
+}

@@ -17,6 +17,7 @@ const raster = ra8.render.raster;
 const font = ra8.render.font;
 const status_bar = gui_app.status.bar;
 const speed_field = gui_app.speed_field;
+const seek_field = gui_app.seek_field;
 const time_readout = gui_app.time.readout;
 const session_link = gui_app.session_link;
 const bar = gui_app.time_bar;
@@ -33,6 +34,7 @@ const elf_path = "tests/fixtures/fpu/fp_basic.elf";
 const Models = struct {
     status: Status = .{},
     field: speed_field.Field = .{},
+    seek: seek_field.Field = .{},
     readout: time_readout.Readout = .{},
     texts: capture.Texts = .{},
     run: Run = .{},
@@ -47,7 +49,7 @@ const Models = struct {
     }
 
     fn view(self: *Models, editing: bool) bar.View {
-        return capture.view(&self.texts, &self.status, &self.field, &self.readout, &self.run, editing, false);
+        return capture.view(&self.texts, &self.status, &self.field, &self.seek, &self.readout, &self.run, editing, false, false);
     }
 };
 
@@ -392,4 +394,17 @@ test "control boundaries have only whole buttons and never actionable slivers" {
         for (controls) |control| try std.testing.expect(bar.Layout.of(area).rect(control).empty());
         try std.testing.expectEqual(@as(?bar.Control, null), bar.hit(area, 27, 18));
     }
+}
+
+test "time bar: a turbo run notes Advancing" {
+    var models = Models.sample();
+    models.run.turbo_out = true;
+    try std.testing.expectEqualStrings("Advancing", models.view(false).note.?);
+}
+
+test "time bar: the turbo note carries the estimate" {
+    var models = Models.sample();
+    models.run.turbo_out = true;
+    models.run.turbo_eta = 1_500_000_000;
+    try std.testing.expectEqualStrings("Advancing, ~2s left", models.view(false).note.?);
 }

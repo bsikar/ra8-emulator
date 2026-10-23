@@ -46,7 +46,7 @@ fn resolveNamed(
     named: NamedTarget,
 ) ?Point {
     switch (named) {
-        .bar_run, .bar_pause, .bar_step, .bar_step_over, .bar_step_out, .bar_speed => {
+        .bar_run, .bar_pause, .bar_step, .bar_step_over, .bar_step_out, .bar_speed, .bar_seek => {
             const bar_area = shell_frame.barArea(width, height);
             const tb = time_bar.Layout.of(shell_frame.toList(bar_area));
             const rect = switch (named) {
@@ -56,9 +56,14 @@ fn resolveNamed(
                 .bar_step_over => tb.over,
                 .bar_step_out => tb.out,
                 .bar_speed => tb.field,
+                // A bar too narrow for the seek field drops it; no target then.
+                .bar_seek => if (tb.seek.empty()) return null else tb.seek,
                 else => unreachable,
             };
             return centerOf(rect);
+        },
+        .bar_track => {
+            return centerOf(shell_frame.toList(shell_frame.trackArea(width, height)));
         },
         .camera_allow_once, .camera_always, .camera_cam, .camera_grd => {
             var solved = shell_frame.solve(layout, allocator, width, height) catch return null;

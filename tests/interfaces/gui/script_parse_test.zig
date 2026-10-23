@@ -102,3 +102,57 @@ test "parse error conditions" {
     try std.testing.expectError(error.BadTarget, script.parser.parse(std.testing.allocator, "at 1s click nonexistent:target"));
     try std.testing.expectError(error.BadCoordinates, script.parser.parse(std.testing.allocator, "at 1s click"));
 }
+
+test "parse named and modified keys" {
+    const text =
+        \\at 1s key shift+f5
+        \\at 2s key ctrl+shift+f11
+        \\at 3s key Home
+        \\at 4s key End
+        \\at 5s key Left
+        \\at 6s key Right
+        \\at 7s key ctrl+f11
+    ;
+
+    var parsed = try script.parser.parse(std.testing.allocator, text);
+    defer parsed.deinit();
+
+    try std.testing.expectEqual(@as(usize, 7), parsed.items.items.len);
+    const keys = parsed.items.items;
+
+    try std.testing.expectEqual(script.action.KeyCode.f5, keys[0].action.key.code);
+    try std.testing.expectEqual(true, keys[0].action.key.shift);
+    try std.testing.expectEqual(false, keys[0].action.key.primary);
+
+    try std.testing.expectEqual(script.action.KeyCode.f11, keys[1].action.key.code);
+    try std.testing.expectEqual(true, keys[1].action.key.shift);
+    try std.testing.expectEqual(true, keys[1].action.key.primary);
+
+    try std.testing.expectEqual(script.action.KeyCode.home, keys[2].action.key.code);
+    try std.testing.expectEqual(script.action.KeyCode.end, keys[3].action.key.code);
+    try std.testing.expectEqual(script.action.KeyCode.left, keys[4].action.key.code);
+    try std.testing.expectEqual(script.action.KeyCode.right, keys[5].action.key.code);
+
+    try std.testing.expectEqual(script.action.KeyCode.f11, keys[6].action.key.code);
+    try std.testing.expectEqual(true, keys[6].action.key.primary);
+    try std.testing.expectEqual(false, keys[6].action.key.shift);
+}
+
+test "parse an unknown key modifier is a bad target" {
+    try std.testing.expectError(error.BadTarget, script.parser.parse(std.testing.allocator, "at 1s key alt+f5"));
+    try std.testing.expectError(error.BadTarget, script.parser.parse(std.testing.allocator, "at 1s key shift+"));
+}
+
+test "parse the seek and track click targets" {
+    const text =
+        \\at 1s click bar:seek
+        \\at 2s click bar:track
+    ;
+
+    var parsed = try script.parser.parse(std.testing.allocator, text);
+    defer parsed.deinit();
+
+    try std.testing.expectEqual(@as(usize, 2), parsed.items.items.len);
+    try std.testing.expectEqual(script.action.NamedTarget.bar_seek, parsed.items.items[0].action.click.named);
+    try std.testing.expectEqual(script.action.NamedTarget.bar_track, parsed.items.items[1].action.click.named);
+}
