@@ -43,6 +43,7 @@ const std = @import("std");
 const proto = @import("ra8_rpc").session.rpc;
 const session_link = @import("../session_link.zig");
 const speed_field = @import("../speed_field.zig");
+const run_turbo = @import("run_turbo.zig");
 
 const Link = session_link.Link;
 const Arrival = session_link.Arrival;
@@ -209,14 +210,7 @@ pub const Run = struct {
     /// link: the job, its preemption and its records are the
     /// transport's, and a plain link has no queue to hold a long one.
     pub fn turbo(self: *Run, link: *Link, ns: u64) !void {
-        if (self.lit or self.turbo_id != null or self.turbo_out) return error.NotReady;
-        if (ns == 0) return error.NotReady;
-        if (link.caps() & proto.transport_cap == 0) return error.NotReady;
-        if (!self.subscribed) {
-            _ = try link.send(proto.Subscription, .subscribe, .{ .core = self.core, .topic = .transport });
-            self.subscribed = true;
-        }
-        self.turbo_id = try link.send(proto.Advance, .advance_async, .{ .core = self.core, .ns = ns });
+        return run_turbo.turbo(self, link, ns);
     }
 
     /// Send the frame's next slice. False when Run is not lit, a slice is
@@ -257,92 +251,48 @@ pub const Run = struct {
     /// Take an arrival at wall time `now_ns`.
     pub fn observe(self: *Run, arrival: Arrival, now_ns: u64) Seen {
         switch (arrival) {
-            .response => |response| {
-                if (self.turbo_id) |id| {
-                    if (response.id == id) {
-                        self.turbo_id = null;
-                        const queued: ?proto.AdvanceQueued = switch (response.result) {
-                            .ok => |bytes| proto.decode(proto.AdvanceQueued, bytes) catch null,
-                            .err => null,
-                        };
-                        if (queued == null) {
-                            self.turbo_refused = true;
-                        } else {
-                            self.turbo_out = true;
-                            self.turbo_target_ns = queued.?.target_ns;
-                            self.turbo_from_ns = queued.?.from_ns;
-                            self.turbo_started_wall_ns = now_ns;
-                            self.turbo_eta = null;
-                        }
-                        return .other;
-                    }
-                }
-                if (self.slice_id == null or response.id != self.slice_id.?) return .other;
-                if (self.slice_async) {
-                    // The queue confirmation (RA8EMU-1196): the slice stays
-                    // out and completes on the transport topic.
-                    const queued: ?proto.AdvanceQueued = switch (response.result) {
-                        .ok => |bytes| proto.decode(proto.AdvanceQueued, bytes) catch null,
-                        .err => null,
-                    };
-                    if (queued == null) {
-                        self.slice_id = null;
-                        self.refuse();
-                        return .slice;
-                    }
-                    return .other;
-                }
-                self.slice_id = null;
-                self.answered(response.result, now_ns);
-                return .slice;
-            },
-            .event => |event| {
-                if (event.topic == @backingInt(proto.Topic.transport)) {
-                    const done = proto.decode(proto.TransportEvent, event.payload) catch return .other;
-                    if (self.turbo_out) {
-                        // The turbo's own completion (slice 19): the job
-                        // landed where it got to. A pause that preempted it
-                        // hands its halt back through the settled path.
-                        // A progress event moves the board time and
-                        // re-derives the estimate from the rate so far;
-                        // the clock poll keeps the readout fresh (slice 19).
-                        if (done.finished != 1) {
-                            self.board_ns = done.reached_ns;
-                            const elapsed = now_ns -| self.turbo_started_wall_ns;
-                            const moved = done.reached_ns -| self.turbo_from_ns;
-                            if (elapsed != 0 and done.reached_ns > self.turbo_from_ns) {
-                                const rate: u128 = moved / elapsed;
-                                if (rate != 0) {
-                                    const remaining = done.target_ns -| done.reached_ns;
-                                    self.turbo_eta = @intCast(remaining / rate);
-                                }
-                            }
-                            return .other;
-                        }
-                        self.turbo_out = false;
-                        self.turbo_arrived = true;
-                        self.turbo_eta = null;
-                        self.turbo_target_ns = 0;
-                        self.turbo_from_ns = 0;
-                        self.turbo_started_wall_ns = 0;
-                        self.address = done.address;
-                        self.board_ns = done.to_ns;
-                        if (done.reason == .halt_requested) self.settled = done.address;
-                        return .slice;
-                    }
-                    if (!self.slice_async or self.slice_id == null) return .other;
-                    if (done.finished != 1) return .other;
-                    self.slice_id = null;
-                    self.arrived(done.to_ns -| done.from_ns, done.to_ns, done.address, done.reason, now_ns);
-                    return .slice;
-                }
-                if (!self.boundary_due or event.topic != @backingInt(proto.Topic.stop)) return .other;
-                const stop = proto.decode(proto.Stopped, event.payload) catch return .other;
-                if (stop.core != self.core or stop.reason != .count) return .other;
-                self.boundary_due = false;
-                return .boundary;
-            },
+            .response => |response| return self.observeResponse(response, now_ns),
+            .event => |event| return self.observeEvent(event, now_ns),
         }
+    }
+
+    fn observeResponse(self: *Run, response: anytype, now_ns: u64) Seen {
+        if (run_turbo.observeResponse(self, response, now_ns)) |seen| return seen;
+        if (self.slice_id == null or response.id != self.slice_id.?) return .other;
+        if (self.slice_async) {
+            // The queue confirmation (RA8EMU-1196): the slice stays
+            // out and completes on the transport topic.
+            const queued: ?proto.AdvanceQueued = switch (response.result) {
+                .ok => |bytes| proto.decode(proto.AdvanceQueued, bytes) catch null,
+                .err => null,
+            };
+            if (queued == null) {
+                self.slice_id = null;
+                self.refuse();
+                return .slice;
+            }
+            return .other;
+        }
+        self.slice_id = null;
+        self.answered(response.result, now_ns);
+        return .slice;
+    }
+
+    fn observeEvent(self: *Run, event: anytype, now_ns: u64) Seen {
+        if (event.topic == @backingInt(proto.Topic.transport)) {
+            const done = proto.decode(proto.TransportEvent, event.payload) catch return .other;
+            if (run_turbo.observeTransport(self, done, now_ns)) |seen| return seen;
+            if (!self.slice_async or self.slice_id == null) return .other;
+            if (done.finished != 1) return .other;
+            self.slice_id = null;
+            self.arrived(done.to_ns -| done.from_ns, done.to_ns, done.address, done.reason, now_ns);
+            return .slice;
+        }
+        if (!self.boundary_due or event.topic != @backingInt(proto.Topic.stop)) return .other;
+        const stop = proto.decode(proto.Stopped, event.payload) catch return .other;
+        if (stop.core != self.core or stop.reason != .count) return .other;
+        self.boundary_due = false;
+        return .boundary;
     }
 
     fn answered(self: *Run, result: proto.Client.Env.Result, now_ns: u64) void {

@@ -2,5 +2,7 @@ zig-pkg/
 build/
 .ra8-emulator/
 # filtered test binaries some suite runs drop into the tree root
-chip.periph.glcdc
-shell
+/chip.periph.glcdc
+/shell
+.zig-cache/
+zig-out/

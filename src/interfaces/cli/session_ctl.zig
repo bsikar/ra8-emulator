@@ -267,11 +267,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
     const json = request.json;
     switch (request.command) {
         .events => |options| return events.watch(client, w, json, options),
-        .load => |path| {
-            const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(@intCast(chunk_load.max_image)));
-            _ = try chunk_load.loadImageCall(client, .cpu0, image);
-            try out.loaded(w, json, path, image.len);
-        },
+        .load => |path| try loadFile(allocator, io, client, w, json, path),
         .run => |budget| try runTo(client, w, json, budget),
         .advance => |ns| {
             const moved = try client.call(proto.Advanced, proto.Advance, .advance, .{ .core = .cpu0, .ns = ns });
@@ -293,19 +289,8 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             _ = try client.call(proto.Ack, proto.CoreOnly, .pause, .{ .core = .cpu0 });
             try out.paused(w, json);
         },
-        .regs => |regs| {
-            var values: [max_regs]out.Reg = undefined;
-            for (regs, values[0..regs.len]) |reg, *value| {
-                const read = try client.call(proto.U32, proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = reg });
-                value.* = .{ .register = reg, .value = read.value };
-            }
-            try out.registers(w, json, values[0..regs.len]);
-        },
-        .mem => |at| {
-            const args: proto.ReadMemory = .{ .core = .cpu0, .address = at.address, .length = at.length };
-            const memory = try client.call(proto.Memory, proto.ReadMemory, .read_memory, args);
-            try out.memory(w, json, at.address, memory.bytes);
-        },
+        .regs => |regs| try readRegs(client, w, json, regs),
+        .mem => |at| try readMem(client, w, json, at.address, at.length),
         .speed => |milli| {
             _ = try client.call(proto.Ack, proto.SetSpeed, .set_speed, .{ .core = .cpu0, .milli = milli });
             try out.speed(w, json, milli);
@@ -315,12 +300,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             try out.point(w, json, "breakpoint", id.value, address, null);
         },
         .set_break_name => |name| try breakNamed(client, w, json, name),
-        .set_watch => |at| {
-            const last = std.math.add(u32, at.address, watch_bytes - 1) catch return error.BadAddress;
-            const args: proto.Watch = .{ .core = .cpu0, .first = at.address, .last = last, .access = at.access };
-            const id = try client.call(proto.U32, proto.Watch, .set_watchpoint, args);
-            try out.point(w, json, "watchpoint", id.value, at.address, at.access);
-        },
+        .set_watch => |at| try setWatch(client, w, json, at.address, at.access),
         .clear_break => |id| try clear(client, w, json, .clear_breakpoint, id),
         .clear_watch => |id| try clear(client, w, json, .clear_watchpoint, id),
         .part => |asked| {
@@ -350,6 +330,34 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
         },
     }
     return 0;
+}
+
+fn loadFile(allocator: std.mem.Allocator, io: std.Io, client: *Client, w: *std.Io.Writer, json: bool, path: []const u8) !void {
+    const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(@intCast(chunk_load.max_image)));
+    _ = try chunk_load.loadImageCall(client, .cpu0, image);
+    try out.loaded(w, json, path, image.len);
+}
+
+fn readRegs(client: *Client, w: *std.Io.Writer, json: bool, regs: []const proto.Register) !void {
+    var values: [max_regs]out.Reg = undefined;
+    for (regs, values[0..regs.len]) |reg, *value| {
+        const read = try client.call(proto.U32, proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = reg });
+        value.* = .{ .register = reg, .value = read.value };
+    }
+    try out.registers(w, json, values[0..regs.len]);
+}
+
+fn readMem(client: *Client, w: *std.Io.Writer, json: bool, address: u32, length: u32) !void {
+    const args: proto.ReadMemory = .{ .core = .cpu0, .address = address, .length = length };
+    const memory = try client.call(proto.Memory, proto.ReadMemory, .read_memory, args);
+    try out.memory(w, json, address, memory.bytes);
+}
+
+fn setWatch(client: *Client, w: *std.Io.Writer, json: bool, address: u32, access: proto.Access) !void {
+    const last = std.math.add(u32, address, watch_bytes - 1) catch return error.BadAddress;
+    const args: proto.Watch = .{ .core = .cpu0, .first = address, .last = last, .access = access };
+    const id = try client.call(proto.U32, proto.Watch, .set_watchpoint, args);
+    try out.point(w, json, "watchpoint", id.value, address, access);
 }
 
 /// Bytes a `watch` covers from its address, the same span the debugger's

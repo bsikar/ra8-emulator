@@ -26,6 +26,15 @@ jobs:
       - name: Check formatting
         run: zig fmt --check build.zig build_tests.zig src tests tools
 
+      - name: Gate (length and terminology)
+        run: zig build gate -j1
+
+      - name: Build
+        run: zig build -j1
+
+      - name: Build with GUI
+        run: zig build -Dgui -j1
+
       - name: Chip suite
         run: |
           zig build ra8_tests-exe

@@ -194,6 +194,7 @@ test {
     _ = @import("interfaces/gui/session_event_wire_test.zig");
     _ = @import("interfaces/gui/session_led_wire_test.zig");
     _ = @import("interfaces/gui/time_bar_test.zig");
+    _ = @import("interfaces/gui/time_bar_paint_test.zig");
     _ = @import("interfaces/gui/time_bar_dropdown_test.zig");
     _ = @import("interfaces/gui/time_bar_field_test.zig");
     _ = @import("interfaces/gui/time_bar_keys_test.zig");
@@ -235,6 +236,7 @@ test {
     _ = @import("interfaces/gui/shell/run_test.zig");
     _ = @import("interfaces/gui/shell/run_async_test.zig");
     _ = @import("interfaces/gui/shell/run_queue_test.zig");
+    _ = @import("interfaces/gui/shell/run_turbo_test.zig");
     _ = @import("interfaces/gui/shell/time_test.zig");
     _ = @import("interfaces/gui/shell/theme_test.zig");
     _ = @import("interfaces/gui/shell_run_live_test.zig");
@@ -304,6 +306,7 @@ test {
     _ = @import("interfaces/cli/debug_front_test.zig");
     _ = @import("interfaces/cli/sweep/cli_test.zig");
     _ = @import("interfaces/cli/sweep/elf_test.zig");
+    _ = @import("interfaces/cli/sweep/elf_interrupt_test.zig");
     _ = @import("interfaces/rpc/session/rpc_test.zig");
     _ = @import("interfaces/rpc/stdio_transport_test.zig");
     _ = @import("interfaces/rpc/session/server_test.zig");
