@@ -37,6 +37,11 @@ test {
     _ = @import("history/branch_prune_test.zig");
     _ = @import("history/branches_codec_test.zig");
     _ = @import("history/branches_recover_test.zig");
+    _ = @import("history/object_id_test.zig");
+    _ = @import("history/manifest_test.zig");
+    _ = @import("history/pack_test.zig");
+    _ = @import("history/pack_index_test.zig");
+    _ = @import("history/incremental_restore_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");

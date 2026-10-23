@@ -53,6 +53,7 @@ test {
     _ = @import("host/history/session_test.zig");
     _ = @import("host/history/storage_test.zig");
     _ = @import("host/history/sweep_test.zig");
+    _ = @import("host/history/pack_file_test.zig");
     _ = @import("host/pipe_pair_test.zig");
     _ = @import("host/socket_flags_test.zig");
     _ = @import("host/sock/sock_test.zig");

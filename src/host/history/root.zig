@@ -26,3 +26,4 @@ pub const remove = @import("remove.zig");
 pub const rename = @import("rename.zig");
 pub const scratch = @import("scratch.zig");
 pub const session = @import("session.zig");
+pub const pack_file = @import("pack_file.zig");
