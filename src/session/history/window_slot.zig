@@ -5,6 +5,7 @@
 //!   basepri, faultmask, msplim, psplim, low marks, pac keys, returns)
 //! - Floating-point state (s0-s31, fpscr, vpr, fpccr, fpcar, fpdscr, cpacr)
 //! - Banked security state (current mode, other msp/psp/limits/masks/control)
+//! - Architectural slot counters (slots, retired, sync entries)
 //! - Exclusive monitor and event register
 //!
 //! Stores compact deltas per slot (only modified fields), with symmetric
@@ -113,6 +114,12 @@ pub const RegTag = enum(u8) {
     banked_other_control,
     banked_other_low_msp,
     banked_other_low_psp,
+    slots_lo,
+    slots_hi,
+    retired_lo,
+    retired_hi,
+    sync_entries_lo,
+    sync_entries_hi,
     exclusive,
     event,
 };
@@ -136,6 +143,9 @@ pub const ArchState = struct {
     regs: regs_mod.Regs = .{},
     fp: fp_state.State = .{},
     banked: banked_mod.Banked = .{},
+    slots: u64 = 0,
+    retired: u64 = 0,
+    sync_entries: u64 = 0,
     exclusive: ?u32 = null,
     event: bool = false,
 
@@ -144,6 +154,9 @@ pub const ArchState = struct {
             .regs = cpu.regs,
             .fp = cpu.fp,
             .banked = cpu.banked,
+            .slots = cpu.slots,
+            .retired = cpu.retired,
+            .sync_entries = cpu.sync_entries,
             .exclusive = cpu.exclusive,
             .event = cpu.event,
         };
@@ -153,6 +166,9 @@ pub const ArchState = struct {
         cpu.regs = self.regs;
         cpu.fp = self.fp;
         cpu.banked = self.banked;
+        cpu.slots = self.slots;
+        cpu.retired = self.retired;
+        cpu.sync_entries = self.sync_entries;
         cpu.exclusive = self.exclusive;
         cpu.event = self.event;
     }
@@ -160,12 +176,13 @@ pub const ArchState = struct {
     pub fn readField(self: *const ArchState, tag: RegTag, val: *u32, valid: *bool) void {
         val.* = 0;
         valid.* = true;
-        const n = @backingInt(tag);
-        if (n <= 12) {
-            val.* = self.regs.low[n];
-        } else if (n >= @backingInt(RegTag.s0) and n <= @backingInt(RegTag.s31)) {
-            val.* = self.fp.bank.s[n - @backingInt(RegTag.s0)];
-        } else switch (tag) {
+        switch (tag) {
+            .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => {
+                val.* = self.regs.low[@backingInt(tag) - @backingInt(RegTag.r0)];
+            },
+            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => {
+                val.* = self.fp.bank.s[@backingInt(tag) - @backingInt(RegTag.s0)];
+            },
             .msp => val.* = self.regs.msp,
             .psp => val.* = self.regs.psp,
             .lr => val.* = self.regs.lr,
@@ -187,19 +204,15 @@ pub const ArchState = struct {
             .pac_key_u1 => val.* = self.regs.pac_key_u[1],
             .pac_key_u2 => val.* = self.regs.pac_key_u[2],
             .pac_key_u3 => val.* = self.regs.pac_key_u[3],
-            .exc_return => {
-                if (self.regs.exc_return) |v| {
-                    val.* = v;
-                } else {
-                    valid.* = false;
-                }
+            .exc_return => if (self.regs.exc_return) |v| {
+                val.* = v;
+            } else {
+                valid.* = false;
             },
-            .fnc_return => {
-                if (self.regs.fnc_return) |v| {
-                    val.* = v;
-                } else {
-                    valid.* = false;
-                }
+            .fnc_return => if (self.regs.fnc_return) |v| {
+                val.* = v;
+            } else {
+                valid.* = false;
             },
             .fpscr => val.* = @bitCast(self.fp.fpscr),
             .vpr => val.* = @bitCast(self.fp.vpr),
@@ -218,25 +231,29 @@ pub const ArchState = struct {
             .banked_other_control => val.* = self.banked.other.control,
             .banked_other_low_msp => val.* = self.banked.other.low_msp,
             .banked_other_low_psp => val.* = self.banked.other.low_psp,
-            .exclusive => {
-                if (self.exclusive) |v| {
-                    val.* = v;
-                } else {
-                    valid.* = false;
-                }
+            .slots_lo => val.* = @truncate(self.slots),
+            .slots_hi => val.* = @truncate(self.slots >> 32),
+            .retired_lo => val.* = @truncate(self.retired),
+            .retired_hi => val.* = @truncate(self.retired >> 32),
+            .sync_entries_lo => val.* = @truncate(self.sync_entries),
+            .sync_entries_hi => val.* = @truncate(self.sync_entries >> 32),
+            .exclusive => if (self.exclusive) |v| {
+                val.* = v;
+            } else {
+                valid.* = false;
             },
             .event => val.* = @intFromBool(self.event),
-            else => unreachable,
         }
     }
 
     pub fn writeField(self: *ArchState, tag: RegTag, val: u32, valid: bool) void {
-        const n = @backingInt(tag);
-        if (n <= 12) {
-            self.regs.low[n] = val;
-        } else if (n >= @backingInt(RegTag.s0) and n <= @backingInt(RegTag.s31)) {
-            self.fp.bank.s[n - @backingInt(RegTag.s0)] = val;
-        } else switch (tag) {
+        switch (tag) {
+            .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => {
+                self.regs.low[@backingInt(tag) - @backingInt(RegTag.r0)] = val;
+            },
+            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => {
+                self.fp.bank.s[@backingInt(tag) - @backingInt(RegTag.s0)] = val;
+            },
             .msp => self.regs.msp = val,
             .psp => self.regs.psp = val,
             .lr => self.regs.lr = val,
@@ -277,9 +294,14 @@ pub const ArchState = struct {
             .banked_other_control => self.banked.other.control = val,
             .banked_other_low_msp => self.banked.other.low_msp = val,
             .banked_other_low_psp => self.banked.other.low_psp = val,
+            .slots_lo => self.slots = (self.slots & 0xFFFF_FFFF_0000_0000) | val,
+            .slots_hi => self.slots = (self.slots & 0x0000_0000_FFFF_FFFF) | (@as(u64, val) << 32),
+            .retired_lo => self.retired = (self.retired & 0xFFFF_FFFF_0000_0000) | val,
+            .retired_hi => self.retired = (self.retired & 0x0000_0000_FFFF_FFFF) | (@as(u64, val) << 32),
+            .sync_entries_lo => self.sync_entries = (self.sync_entries & 0xFFFF_FFFF_0000_0000) | val,
+            .sync_entries_hi => self.sync_entries = (self.sync_entries & 0x0000_0000_FFFF_FFFF) | (@as(u64, val) << 32),
             .exclusive => self.exclusive = if (valid) val else null,
             .event => self.event = (val != 0),
-            else => unreachable,
         }
     }
 };
@@ -321,27 +343,11 @@ pub fn swapDiffInState(diffs: []RegDiff, state: *ArchState) void {
     }
 }
 
-pub fn applyUndo(diffs: []const RegDiff, state: *ArchState) void {
-    var i = diffs.len;
-    while (i > 0) {
-        i -= 1;
-        state.writeField(diffs[i].tag, diffs[i].pre, diffs[i].pre_valid);
-    }
-}
-
-pub fn applyRedo(diffs: []const RegDiff, state: *ArchState) void {
-    for (diffs) |d| {
-        state.writeField(d.tag, d.post, d.post_valid);
-    }
-}
-
 pub const WindowSlot = struct {
     position: Position,
     kind: SlotKind,
     core: Core,
-    diff_start: u32 = 0,
     diff_count: u16 = 0,
-    byte_start: u32 = 0,
     byte_count: u32 = 0,
     honest_bytes: usize = 0,
 };
