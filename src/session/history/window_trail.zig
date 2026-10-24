@@ -163,10 +163,10 @@ pub const WindowTrail = struct {
         errdefer self.allocator.free(diffs);
         @memcpy(diffs, diff_buf[0..diff_count]);
 
-        const micro_copy = if (micro_bytes.len > 0)
+        const micro_copy: []u8 = if (micro_bytes.len > 0)
             try self.allocator.dupe(u8, micro_bytes)
         else
-            &.{};
+            @constCast(&.{});
         errdefer if (micro_copy.len > 0) self.allocator.free(micro_copy);
 
         const post_digest = if (collected.kind == .complex or micro_bytes.len > 0)
@@ -229,10 +229,9 @@ pub const WindowTrail = struct {
             try self.undoMemoryRecord(&payload.byte_records[i]);
         }
 
-        if (payload.micro_bytes.len > 0) {
-            if (board) |b| {
-                try micro_mod.MicroCheckpoint.restore(.{ .bytes = payload.micro_bytes, .touched_mask = 0 }, b);
-            }
+        if (payload.micro_bytes.len > 0 and @TypeOf(board) != @TypeOf(null)) {
+            const b = if (@typeInfo(@TypeOf(board)) == .optional) (board orelse return error.RequiresBoard) else board;
+            try micro_mod.restoreBytes(payload.micro_bytes, b);
         }
 
         const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
@@ -258,7 +257,9 @@ pub const WindowTrail = struct {
 
         if (payload.slot.kind == .complex) {
             const re_exec = re_exec_fn orelse return error.RequiresReExecution;
-            if (board == null) return error.RequiresReExecution;
+            if (@TypeOf(board) == @TypeOf(null)) return error.RequiresReExecution;
+            const b = if (@typeInfo(@TypeOf(board)) == .optional) (board orelse return error.RequiresReExecution) else board;
+            _ = b;
             try re_exec();
             const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
             const post_arch = ArchState.capture(target);

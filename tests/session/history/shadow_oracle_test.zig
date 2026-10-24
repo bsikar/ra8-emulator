@@ -95,19 +95,18 @@ test "shadow oracle recording verification helper" {
     var store = try Store.init(null);
     defer store.deinit();
 
-    var rec = trail_mod.Recording.init(testing.allocator, &store);
+    var slots: [2]u64 = .{ 0, 0 };
+    var rec = trail_mod.Recording.init(testing.allocator, .{ &slots[0], &slots[1] }, &store);
     defer rec.deinit();
+    rec.arm();
 
     var oracle = ShadowOracle.init(testing.allocator);
     defer oracle.deinit();
 
-    var mem: [page_size]u8 = @splat(0x11);
-    try oracle.trackRegion(0x2000_0000, &mem);
+    try oracle.trackStore(&store);
 
     // Legitimate write hooked through recording
-    mem[10] = 0x22;
-    var pre_byte: [1]u8 = .{0x11};
-    try rec.takeBytes(.cpu, 0x2000_0000, 10, null, &pre_byte);
+    try store.write(.cpu0, ra8.chip.core.memmap.ram[0].base + 10, &.{0x22});
 
-    try oracle.verifyRecording(rec.records[0..rec.record_count]);
+    try oracle.verifyRecording(rec.slice());
 }

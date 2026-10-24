@@ -87,7 +87,7 @@ test "injected divergence detected with the right position" {
     var buf: [256]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try refusal.format(&writer);
-    const report = writer.written();
+    const report = writer.buffered();
     try testing.expect(std.mem.indexOf(u8, report, "HistoryDivergence at round=42") != null);
 }
 
@@ -103,6 +103,16 @@ test "MMIO slot undo/redo round trip with matching digest" {
     defer window.deinit();
 
     var board = MockBoard{ .mmio_val = 0x1111 };
+    var table: micro_mod.BlockSectionTable = .{};
+    try table.register(0x4000_0000, 0x1000, .registry);
+    var tracker = micro_mod.TouchedTracker.init(&table);
+    tracker.arm();
+    tracker.touch(.registry);
+
+    // Pre-state micro checkpoint
+    var pre_checkpoint = try micro_mod.MicroCheckpoint.capture(testing.allocator, &board, &tracker);
+    defer pre_checkpoint.deinit(testing.allocator);
+
     var pre_arch: ArchState = .{};
     pre_arch.regs.low[0] = 0x10;
     pre_arch.regs.pc = 0x1000;
@@ -116,8 +126,7 @@ test "MMIO slot undo/redo round trip with matching digest" {
     post_arch.regs.low[0] = 0x20;
     post_arch.regs.pc = 0x1004;
 
-    const post_micro = "post_mmio_bytes_0x2222";
-    try window.endSlotWithMicro(&post_arch, .complex, post_micro);
+    try window.endSlotWithMicro(&post_arch, .complex, pre_checkpoint.bytes);
 
     try testing.expectEqual(@as(usize, 1), window.count);
     try testing.expectEqual(@as(usize, 1), window.cursor);
@@ -129,6 +138,7 @@ test "MMIO slot undo/redo round trip with matching digest" {
     const undone = try window.undoOneWithBoard(&cpu, null, &board);
     try testing.expect(undone);
     try testing.expectEqual(@as(usize, 0), window.cursor);
+    try testing.expectEqual(@as(u32, 0x1111), board.mmio_val);
     const restored_arch = ArchState.capture(&cpu);
     try testing.expectEqual(@as(u32, 0x10), restored_arch.regs.low[0]);
     try testing.expectEqual(@as(u32, 0x1000), restored_arch.regs.pc);
