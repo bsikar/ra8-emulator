@@ -14,6 +14,7 @@ const input_script = @import("ra8_components").input_script;
 const replay_feeder = @import("history/replay_feeder.zig");
 const async_traffic = @import("history/async_traffic.zig");
 const lifecycle = @import("history/lifecycle.zig");
+const new_history = @import("new_history.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -358,25 +359,10 @@ pub fn recordStop(self: *Session, h: *api.History, asked: Core, stopped: Core, e
 }
 
 pub fn load(self: *Session, core: Core, image: []const u8) anyerror!void {
-    if (self.root) |root| {
-        const id = history_root.identity(image);
-        const expected_id = switch (core) {
-            .cpu0 => root.elf0.identity,
-            .cpu1 => if (root.elf1) |e1| e1.identity else return error.DifferentImage,
-        };
-        if (!std.mem.eql(u8, &expected_id, &id)) {
-            return error.DifferentImage;
-        }
-    } else if (self.fork_router != null) {
-        const id = history_root.identity(image);
+    if (new_history.differs(self, core, image)) return new_history.start(self, core, image);
+    if (self.root == null and self.fork_router != null) {
         const idx = @as(usize, @backingInt(core));
-        if (self.image_identity[idx]) |expected_id| {
-            if (!std.mem.eql(u8, &expected_id, &id)) {
-                return error.DifferentImage;
-            }
-        } else {
-            self.image_identity[idx] = id;
-        }
+        if (self.image_identity[idx] == null) self.image_identity[idx] = history_root.identity(image);
     }
     return routeIntervention(self, core, .load, .{ .load = .{ .core = core, .image = image } });
 }

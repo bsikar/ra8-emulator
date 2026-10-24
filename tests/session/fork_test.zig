@@ -314,9 +314,8 @@ test "root image identity and notePosition canonicalization" {
     };
     h.session.attachRoot(&root);
 
-    // Mismatched load image refuses
-    try std.testing.expectError(error.DifferentImage, h.session.load(.cpu0, "DIFFERENT-IMAGE"));
-    // Matching image succeeds
+    // The root's own image loads on the recorded history; a different
+    // image starts a new history instead (tests/session/new_history_test.zig).
     try h.session.load(.cpu0, root_img);
     try std.testing.expect(h.loaded_image != null);
 

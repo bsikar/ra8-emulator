@@ -28,7 +28,6 @@ test "branch_state handles status and list updates and tracks confirmation state
             .child_count = 1,
             .reason = 0,
             .flags = 1, // live
-            .pad = 0,
         },
         .{
             .id = 1,
@@ -38,11 +37,12 @@ test "branch_state handles status and list updates and tracks confirmation state
             .child_count = 0,
             .reason = 1,
             .flags = 0,
-            .pad = 0,
         },
     };
 
-    state.handleList(.{ .count = 2, .bytes = std.mem.sliceAsBytes(&items) });
+    var wire_bytes: [2 * proto.branch_wire.item_bytes]u8 = undefined;
+    for (items, 0..) |item, i| proto.branch_wire.put(&wire_bytes, i, item);
+    state.handleList(.{ .count = 2, .bytes = &wire_bytes });
     try std.testing.expectEqual(@as(usize, 2), state.items_len);
     try std.testing.expectEqual(@as(u32, 0), state.items()[0].id);
     try std.testing.expect(state.items()[0].is_live);

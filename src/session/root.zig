@@ -50,6 +50,7 @@ pub const history_branches_codec = @import("history/branches_codec.zig");
 pub const history_branches_recover = @import("history/branches_recover.zig");
 pub const history_fork_router = @import("history/fork_router.zig");
 pub const fork = @import("fork.zig");
+pub const new_history = @import("new_history.zig");
 pub const history_async_queue = @import("history/async_queue.zig");
 pub const history_async_traffic = @import("history/async_traffic.zig");
 pub const history_cross_seek = @import("history/cross_seek.zig");

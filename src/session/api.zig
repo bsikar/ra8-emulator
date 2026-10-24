@@ -92,6 +92,8 @@ pub const Session = struct {
     image_identity: [2]?[16]u8 = .{ null, null },
     root: ?*const history_root.Root = null,
     graph_sink: ?GraphSink = null,
+    /// Opens a new history when a different image loads (new_history.zig).
+    new_history: ?session_fork.fork_types.NewHistoryHook = null,
     net_hook: ?NetHook = null,
     console_hook: ?ConsoleHook = null,
     camera_hook: ?CameraHook = null,
@@ -133,6 +135,9 @@ pub const Session = struct {
     }
     pub fn attachGraphSink(self: *Session, sink: GraphSink) void {
         self.graph_sink = sink;
+    }
+    pub fn attachNewHistory(self: *Session, hook: session_fork.fork_types.NewHistoryHook) void {
+        self.new_history = hook;
     }
     pub fn attachRoot(self: *Session, r: *const history_root.Root) void {
         self.root = r;

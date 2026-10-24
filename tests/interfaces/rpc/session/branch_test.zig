@@ -45,9 +45,9 @@ test "branchList returns branch array over RPC context" {
     const outcome = branch_rpc.branchList(&rig.context, .{ .core = .cpu0 });
     switch (outcome) {
         .ok => |list| {
-            const items = std.mem.bytesAsSlice(proto.BranchItem, list.bytes);
             try std.testing.expectEqual(@as(u32, 2), list.count);
-            try std.testing.expectEqual(@as(usize, 2), items.len);
+            try std.testing.expectEqual(@as(usize, 2), proto.branch_wire.count(list.bytes));
+            const items = [_]proto.BranchItem{ proto.branch_wire.get(list.bytes, 0), proto.branch_wire.get(list.bytes, 1) };
             try std.testing.expectEqual(@as(u32, 0), items[0].id);
             try std.testing.expectEqual(@as(u32, 1), items[0].child_count);
             try std.testing.expectEqual(@as(u32, 1), items[1].id);
