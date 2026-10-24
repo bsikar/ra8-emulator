@@ -50,6 +50,9 @@ test {
     _ = @import("history/window_budget_test.zig");
     _ = @import("history/window_slot_test.zig");
     _ = @import("history/window_trail_test.zig");
+    _ = @import("history/micro_checkpoint_test.zig");
+    _ = @import("history/window_digest_test.zig");
+    _ = @import("history/shadow_oracle_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
