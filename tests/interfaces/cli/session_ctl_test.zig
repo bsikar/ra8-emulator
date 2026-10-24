@@ -369,3 +369,13 @@ test "ctl parse: rc takes no arguments" {
     try std.testing.expect(asked.command == .rc);
     try std.testing.expectError(error.BadArguments, ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "rc", "0.5s" }));
 }
+
+test "ctl parse: write-reg and write-mem commands" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const wreg = try ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "write-reg", "r0", "0x1234" });
+    try std.testing.expectEqual(@as(u32, 0x1234), wreg.command.write_cmd.write_reg.value);
+    const wmem = try ctl.parse(a, &.{ "ra8", "ctl", "--connect", "unix:/s", "write-mem", "0x20000000", "deadbeef" });
+    try std.testing.expectEqual(@as(u32, 0x20000000), wmem.command.write_cmd.write_mem.addr);
+}

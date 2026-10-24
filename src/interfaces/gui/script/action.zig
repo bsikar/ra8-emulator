@@ -29,6 +29,8 @@ pub const NamedTarget = enum {
     camera_grd,
     board_sw1,
     board_sw2,
+    banner_confirm,
+    banner_cancel,
 };
 
 pub const Target = union(enum) {

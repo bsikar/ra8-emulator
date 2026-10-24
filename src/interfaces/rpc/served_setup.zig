@@ -50,6 +50,7 @@ pub const HistoryOpts = struct {
     /// An explicit cap on the RAM-only history's share, in bytes; only
     /// without a root. Null sizes the share from the host's RAM.
     ram_budget: ?u64 = null,
+    kept: bool = false,
 };
 
 pub const Served = struct {
@@ -71,8 +72,8 @@ pub const Served = struct {
     /// The RAM-only history's host side, once history asked to stay off
     /// disk (RA8EMU-1196). The harness's armed checkpoints write through it.
     ram_history: ?*history_ram.RamHistory = null,
-    ram_graph: ?session_branch.BranchGraph = null,
-    ram_router: ?session_fork.ForkRouter = null,
+    ram_graph: ?*session_branch.BranchGraph = null,
+    ram_router: ?*session_fork.ForkRouter = null,
     /// The transport's history bridge (RA8EMU-1196, slice 17), once
     /// history records: a seek plans from the committed log and restores
     /// through the checkpoint objects. Points into `self`.
@@ -93,7 +94,7 @@ pub const Served = struct {
         errdefer if (ram) |r| r.deinit();
         if (history_opts) |opts| {
             if (opts.root) |root| {
-                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget });
+                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget, .kept = opts.kept });
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
@@ -141,19 +142,30 @@ pub const Served = struct {
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
         self.context.camera = .{ .context = self, .setFn = setCamera };
         self.owner.session().attachCamera(.{ .context = self, .changeFn = setCameraDirect });
-        if (self.history) |b| {
-            self.owner.session().attachForkRouter(&b.router);
-            self.owner.session().attachGraphSink(b.graph_sink);
-        } else {
-            self.ram_graph = try session_branch.BranchGraph.init(allocator);
-            self.ram_router = session_fork.ForkRouter.init(allocator, &self.ram_graph.?);
-            self.owner.session().attachForkRouter(&self.ram_router.?);
-        }
+        try self.attachHistoryRouter(allocator);
         self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = closeC6 });
         self.owner.session().attachConsole(.{ .context = self, .feedFn = feedConsoleDirect });
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
+    }
+
+    fn attachHistoryRouter(self: *Served, allocator: std.mem.Allocator) !void {
+        if (self.history) |b| {
+            self.owner.session().attachForkRouter(&b.router);
+            self.owner.session().attachGraphSink(b.graph_sink);
+        } else {
+            const graph = try allocator.create(session_branch.BranchGraph);
+            errdefer allocator.destroy(graph);
+            graph.* = try session_branch.BranchGraph.init(allocator);
+            errdefer graph.deinit();
+            const router = try allocator.create(session_fork.ForkRouter);
+            errdefer allocator.destroy(router);
+            router.* = session_fork.ForkRouter.init(allocator, graph);
+            self.ram_graph = graph;
+            self.ram_router = router;
+            self.owner.session().attachForkRouter(router);
+        }
     }
 
     /// Sample CPU0's call stacks every `every` instructions and answer
@@ -241,8 +253,14 @@ pub const Served = struct {
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
         self.owner.deinit();
-        if (self.ram_router) |*r| r.deinit();
-        if (self.ram_graph) |*g| g.deinit();
+        if (self.ram_router) |r| {
+            r.deinit();
+            self.gpa.destroy(r);
+        }
+        if (self.ram_graph) |g| {
+            g.deinit();
+            self.gpa.destroy(g);
+        }
         if (self.history) |bind| if (bind.close()) |_| {} else |_| {};
         if (self.ram_history) |ram| ram.deinit();
     }

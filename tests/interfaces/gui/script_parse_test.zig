@@ -49,12 +49,14 @@ test "parse named click targets" {
         \\at 9s click board:sw1
         \\at 10s click board:sw2
         \\at 11s click board:touch 120 240
+        \\at 12s click banner:confirm
+        \\at 13s click banner:cancel
     ;
 
     var parsed = try script.parser.parse(std.testing.allocator, text);
     defer parsed.deinit();
 
-    try std.testing.expectEqual(@as(usize, 11), parsed.items.items.len);
+    try std.testing.expectEqual(@as(usize, 13), parsed.items.items.len);
     try std.testing.expectEqual(script.action.NamedTarget.bar_run, parsed.items.items[0].action.click.named);
     try std.testing.expectEqual(script.action.NamedTarget.bar_pause, parsed.items.items[1].action.click.named);
     try std.testing.expectEqual(script.action.NamedTarget.bar_step, parsed.items.items[2].action.click.named);
@@ -67,6 +69,8 @@ test "parse named click targets" {
     try std.testing.expectEqual(script.action.NamedTarget.board_sw2, parsed.items.items[9].action.click.named);
     try std.testing.expectEqual(@as(u16, 120), parsed.items.items[10].action.click.touch.x);
     try std.testing.expectEqual(@as(u16, 240), parsed.items.items[10].action.click.touch.y);
+    try std.testing.expectEqual(script.action.NamedTarget.banner_confirm, parsed.items.items[11].action.click.named);
+    try std.testing.expectEqual(script.action.NamedTarget.banner_cancel, parsed.items.items[12].action.click.named);
 }
 
 test "parse drag, type, and keys" {
