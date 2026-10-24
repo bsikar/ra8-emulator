@@ -153,39 +153,41 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
 pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, action: Action) anyerror!void {
     const router = self.fork_router orelse return;
     const now_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else self.now() catch 0;
-    const old_branch = router.active_line;
-    var new_branch_id: u32 = old_branch;
+    const canon_fork = if (router.graph) |graph|
+        try graph.canonicalize(router.active_line, fork_pos)
+    else
+        fork_pos;
+    const parent_branch = canon_fork.branch;
+    var new_branch_id: u32 = parent_branch;
     if (router.graph) |graph| {
-        new_branch_id = try graph.addBranch(old_branch, fork_pos, reason, now_ns);
+        new_branch_id = try graph.addBranch(parent_branch, canon_fork, reason, now_ns);
     }
-    if (self.persistent_recorder) |rec| {
-        try rec.switchSegment(now_ns, new_branch_id, 0);
-        try rec.recordBranch(
-            .{ .position = fork_pos, .seq = router.nextSeq() },
-            .{ .id = new_branch_id, .parent = old_branch, .fork_at = fork_pos, .reason = reason },
-        );
-    }
+    errdefer if (router.graph) |graph| {
+        _ = graph.nodes.remove(new_branch_id);
+        if (graph.next_branch_id == new_branch_id + 1) graph.next_branch_id = new_branch_id;
+    };
     if (self.graph_sink) |sink| {
         if (router.graph) |graph| {
             var allocating = try std.Io.Writer.Allocating.initCapacity(router.allocator, 1024);
             defer allocating.deinit();
             try branches_codec.encode(graph, &allocating.writer);
-            sink.writeFn(sink.context, allocating.written()) catch |err| {
-                _ = graph.nodes.remove(new_branch_id);
-                if (graph.next_branch_id == new_branch_id + 1) graph.next_branch_id = new_branch_id;
-                return err;
-            };
+            try sink.writeFn(sink.context, allocating.written());
         }
+    }
+    if (self.persistent_recorder) |rec| {
+        try rec.switchSegment(now_ns, new_branch_id, 0);
+        try rec.recordBranch(
+            .{ .position = canon_fork, .seq = router.nextSeq() },
+            .{ .id = new_branch_id, .parent = parent_branch, .fork_at = canon_fork, .reason = reason },
+        );
     }
     if (router.graph) |graph| {
         graph.active_branch = new_branch_id;
         router.active_line = new_branch_id;
     }
     try applyAction(self, action);
-    try recordActionIntervention(self, fork_pos, action);
-    if (self.net_hook) |hook| {
-        hook.closeFlowsFn(hook.context);
-    }
+    try recordActionIntervention(self, canon_fork, action);
+    if (self.net_hook) |hook| hook.closeFlowsFn(hook.context);
     _ = async_traffic.clearOnFork(self);
 }
 
@@ -235,9 +237,9 @@ pub fn forkPending(self: *const Session) ?PendingFork {
 /// Confirms the pending fork, executes it, and applies the intervention.
 pub fn confirmFork(self: *Session) anyerror!void {
     const router = self.fork_router orelse return error.NoHistory;
-    var pending = router.popPending() orelse return error.NoPendingFork;
-    defer fork_router_mod.freeAction(router.allocator, &pending.action);
+    const pending = router.pending_fork orelse return error.NoPendingFork;
     try executeFork(self, pending.reason, pending.position, pending.action);
+    router.cancel();
     router.first_fork_confirmed = true;
 }
 

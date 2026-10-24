@@ -47,12 +47,14 @@ pub fn computeTruncation(graph: *const BranchGraph, id: BranchId) Error!Truncati
     }
 
     if (latest) |fork_pos| {
+        var parent_end = fork_pos;
+        parent_end.branch = id;
         return TruncationPlan{
             .branch_id = id,
             .kind = .truncate_tail,
             .last_child_fork = fork_pos,
-            .new_recorded_end = fork_pos,
-            .discard_start = fork_pos,
+            .new_recorded_end = parent_end,
+            .discard_start = parent_end,
             .discard_end = node.recorded_end,
         };
     }

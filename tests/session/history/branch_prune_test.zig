@@ -46,8 +46,14 @@ test "parent truncation preserves every child up to latest child fork" {
     // Apply truncation
     try prune.applyTruncation(&graph, plan);
     const updated_p = graph.get(b_p).?;
+    try std.testing.expectEqual(b_p, updated_p.recorded_end.branch);
     try std.testing.expectEqual(@as(u64, 70), updated_p.recorded_end.r);
     try std.testing.expectEqual(true, updated_p.pruned_tail);
+
+    // Parent line still canonicalizes and compares its own recorded_end correctly
+    const p_canon = try graph.canonicalize(b_p, updated_p.recorded_end);
+    try std.testing.expectEqual(b_p, p_canon.branch);
+    try std.testing.expectEqual(std.math.Order.lt, try graph.compareOnLine(b_p, makePos(b_p, 40, 0), updated_p.recorded_end));
 
     // Both children lines still canonicalize and compare correctly!
     // On C1's line: r=40 belongs to P, r=50 belongs to C1
