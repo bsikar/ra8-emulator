@@ -201,14 +201,18 @@ pub const MicroCheckpoint = struct {
         };
     }
 
-    pub fn restore(self: *const MicroCheckpoint, board: anytype) !void {
-        if (self.bytes.len == 0) return;
-        var reader = try file.Reader.open(self.bytes);
-        while (try reader.next()) |section| {
-            try loadBoardSection(board, section.kind, self.bytes);
-        }
+    pub fn restore(self: MicroCheckpoint, board: anytype) !void {
+        return restoreBytes(self.bytes, board);
     }
 };
+
+pub fn restoreBytes(bytes: []const u8, board: anytype) !void {
+    if (bytes.len == 0) return;
+    var reader = try file.Reader.open(bytes);
+    while (try reader.next()) |section| {
+        try loadBoardSection(board, section.kind, bytes);
+    }
+}
 
 pub fn saveBoardSection(board: anytype, kind: file.Kind, writer: anytype) !void {
     const B = @TypeOf(board.*);

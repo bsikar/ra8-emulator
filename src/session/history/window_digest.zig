@@ -28,14 +28,16 @@ pub const DivergenceRefusal = struct {
         self: DivergenceRefusal,
         writer: anytype,
     ) !void {
+        const exp_hex = std.fmt.bytesToHex(self.expected_digest, .lower);
+        const act_hex = std.fmt.bytesToHex(self.actual_digest, .lower);
         try writer.print(
             "HistoryDivergence at round={d} phase={s} offset={d}: expected {s}, got {s}",
             .{
                 self.position.r,
                 @tagName(self.position.phase),
                 self.position.o,
-                std.fmt.fmtSliceHexLower(&self.expected_digest),
-                std.fmt.fmtSliceHexLower(&self.actual_digest),
+                &exp_hex,
+                &act_hex,
             },
         );
     }
