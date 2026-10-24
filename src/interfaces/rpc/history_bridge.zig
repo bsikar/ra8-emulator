@@ -38,12 +38,14 @@ pub const Bridge = struct {
         const self: *Bridge = @ptrCast(@alignCast(context));
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
+        var disk_buf: ?[]u8 = null;
+        defer if (disk_buf) |b| self.gpa.free(b);
         const bytes: []const u8 = blk: {
             if (self.ram) |r| break :blk r.log_bytes.items;
             if (self.disk) |d| {
                 const len = try d.log.vtable.length(d.log.context);
                 const buf = try self.gpa.alloc(u8, @intCast(len));
-                defer self.gpa.free(buf);
+                disk_buf = buf;
                 const total = try readAll(d.log, buf);
                 break :blk buf[0..total];
             }

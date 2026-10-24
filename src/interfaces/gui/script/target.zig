@@ -11,6 +11,7 @@ const shell_camera = @import("../shell/camera/camera.zig");
 const board_pane = @import("../ui/board_pane.zig");
 const board_touch = @import("../board/touch.zig");
 const shell_board = @import("../shell/board/board.zig");
+const fork_banner = @import("../ui/fork_banner.zig");
 const draw_list = @import("ra8_render").draw_list;
 
 const Rect = draw_list.Rect;
@@ -64,6 +65,12 @@ fn resolveNamed(
         },
         .bar_track => {
             return centerOf(shell_frame.toList(shell_frame.trackArea(width, height)));
+        },
+        .banner_confirm, .banner_cancel => {
+            const bar = shell_frame.barArea(width, height);
+            const banner: draw_list.Rect = .{ .x = 0, .y = bar.y - fork_banner.height, .w = width, .h = fork_banner.height };
+            const rect = if (named == .banner_confirm) fork_banner.buttonConfirm(banner) else fork_banner.buttonCancel(banner);
+            return centerOf(rect);
         },
         .camera_allow_once, .camera_always, .camera_cam, .camera_grd => {
             var solved = shell_frame.solve(layout, allocator, width, height) catch return null;

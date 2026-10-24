@@ -155,6 +155,12 @@ fn parseClick(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     if (std.mem.eql(u8, target_tok, "board:sw2")) {
         return .{ .click = .{ .named = .board_sw2 } };
     }
+    if (std.mem.eql(u8, target_tok, "banner:confirm")) {
+        return .{ .click = .{ .named = .banner_confirm } };
+    }
+    if (std.mem.eql(u8, target_tok, "banner:cancel")) {
+        return .{ .click = .{ .named = .banner_cancel } };
+    }
     if (std.mem.eql(u8, target_tok, "board:touch")) {
         const x_tok = tokens.next() orelse return error.BadCoordinates;
         const y_tok = tokens.next() orelse return error.BadCoordinates;

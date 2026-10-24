@@ -71,6 +71,7 @@ test {
     _ = @import("interfaces/cli/history_branch_cli_test.zig");
     _ = @import("interfaces/cli/session_ctl_test.zig");
     _ = @import("interfaces/cli/ctl/branch_test.zig");
+    _ = @import("interfaces/cli/ctl/write_test.zig");
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/profiles_test.zig");

@@ -115,8 +115,24 @@ pub fn switchBranch(session: *Session, transport: ?*Transport, target_id: Branch
             const outcome = cross_seek.planCrossLine(graph, facts, target_node.recorded_end);
             switch (outcome) {
                 .plan => |plan| {
-                    try bridge.restore(bridge.context, &plan.base.checkpoint.object);
+                    var obj_buf: [32]u8 = undefined;
+                    for (plan.base.checkpoint.object, 0..) |b, i| {
+                        _ = std.fmt.bufPrint(obj_buf[i * 2 ..][0..2], "{x:0>2}", .{b}) catch unreachable;
+                    }
+                    try bridge.restore(bridge.context, &obj_buf);
                     router.switchActiveLine(target_id);
+                    if (bridge.logBytes) |lb| {
+                        const raw = lb(bridge.context) catch &[_]u8{};
+                        if (raw.len > 0) try session.loadReplayInterventions(raw);
+                    }
+                    while (session.grid) |grid| {
+                        const ord = session.comparePositions(grid.at, target_node.recorded_end) catch break;
+                        if (ord != .lt) break;
+                        session.setReplaying(true);
+                        defer session.setReplaying(false);
+                        const ended = session.run(.cpu0, .cont) catch break;
+                        if (ended != .count) break;
+                    }
                 },
                 .pending => return Error.CannotPlan,
             }

@@ -90,3 +90,18 @@ test "resolve the seek field and the history track" {
     try std.testing.expect(pt_track.?.y < pt_seek.?.y);
     try std.testing.expectEqual(@divTrunc(width, 2), pt_track.?.x);
 }
+
+test "resolve fork banner confirm and cancel controls" {
+    const width: i32 = 1024;
+    const height: i32 = 768;
+    var layout = try pane_layout.twoCore(std.testing.allocator);
+    defer layout.deinit();
+
+    const pt_ok = script.target.resolve(std.testing.allocator, &layout, width, height, null, .{ .named = .banner_confirm });
+    const pt_cancel = script.target.resolve(std.testing.allocator, &layout, width, height, null, .{ .named = .banner_cancel });
+
+    try std.testing.expect(pt_ok != null);
+    try std.testing.expect(pt_cancel != null);
+    try std.testing.expect(pt_cancel.?.x < pt_ok.?.x);
+    try std.testing.expect(pt_ok.?.y >= 0 and pt_ok.?.y < height);
+}

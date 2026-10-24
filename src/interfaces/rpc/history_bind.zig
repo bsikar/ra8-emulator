@@ -54,6 +54,7 @@ pub const Bind = struct {
         /// An explicit session share cap in bytes, instead of the volume's
         /// computed share. The volume's free floor and the relief stay.
         cap: ?u64 = null,
+        kept: bool = false,
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
@@ -64,6 +65,9 @@ pub const Bind = struct {
         errdefer bind.base.close();
         bind.session = try history.session.Session.create(&bind.base, .{});
         errdefer _ = bind.session.close(null, .move) catch {};
+        if (opts.kept) {
+            try bind.session.keep();
+        }
         var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
         defer candidates.deinit(allocator);
         const rec = try branches_recover.recover(allocator, candidates.current, candidates.temp, null);
