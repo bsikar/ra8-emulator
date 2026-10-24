@@ -32,6 +32,8 @@ const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
 const history_bridge = @import("history_bridge.zig");
 const history_resources = @import("ra8_host").history.resources;
+const session_branch = @import("ra8_session").history_branch;
+const session_fork = @import("ra8_session").history_fork_router;
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -69,6 +71,8 @@ pub const Served = struct {
     /// The RAM-only history's host side, once history asked to stay off
     /// disk (RA8EMU-1196). The harness's armed checkpoints write through it.
     ram_history: ?*history_ram.RamHistory = null,
+    ram_graph: ?session_branch.BranchGraph = null,
+    ram_router: ?session_fork.ForkRouter = null,
     /// The transport's history bridge (RA8EMU-1196, slice 17), once
     /// history records: a seek plans from the committed log and restores
     /// through the checkpoint objects. Points into `self`.
@@ -137,6 +141,16 @@ pub const Served = struct {
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
         self.context.camera = .{ .context = self, .setFn = setCamera };
         self.owner.session().attachCamera(.{ .context = self, .changeFn = setCameraDirect });
+        if (self.history) |b| {
+            self.owner.session().attachForkRouter(&b.router);
+            self.owner.session().attachGraphSink(b.graph_sink);
+        } else {
+            self.ram_graph = try session_branch.BranchGraph.init(allocator);
+            self.ram_router = session_fork.ForkRouter.init(allocator, &self.ram_graph.?);
+            self.owner.session().attachForkRouter(&self.ram_router.?);
+        }
+        self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = closeC6 });
+        self.owner.session().attachConsole(.{ .context = self, .feedFn = feedConsoleDirect });
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
@@ -227,6 +241,8 @@ pub const Served = struct {
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
         self.owner.deinit();
+        if (self.ram_router) |*r| r.deinit();
+        if (self.ram_graph) |*g| g.deinit();
         if (self.history) |bind| if (bind.close()) |_| {} else |_| {};
         if (self.ram_history) |ram| ram.deinit();
     }
@@ -254,6 +270,16 @@ fn setCameraDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
     const spec = try source_spec.parse(spec_text);
     const input = try source_open.open(self.gpa, self.io, spec);
     try board_camera.install(self.owner.board(), self.gpa, input);
+}
+
+fn closeC6(context: *anyopaque) void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    self.owner.board().c6.wire.bridge.closeFlows();
+}
+
+fn feedConsoleDirect(context: *anyopaque, bytes: []const u8) anyerror!void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    self.owner.board().serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
 }
 
 fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {

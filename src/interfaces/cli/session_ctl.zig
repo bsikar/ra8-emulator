@@ -16,6 +16,7 @@ const profiles = @import("ra8_host").profiles;
 const host_spawn = @import("host/spawn.zig");
 const out = @import("ctl/print.zig");
 pub const events = @import("ctl/events.zig");
+const ctl_branch = @import("ctl/branch.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
@@ -35,7 +36,8 @@ pub const usage =
     \\            periph [BLOCK] (the peripheral blocks, or one block's registers)
     \\            folded [THREAD] [FROM_NS TO_NS] (sampled stacks; serve --profile-folded)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
-    \\
+    \\            branch ls | branch switch ID | branch rm ID [--confirm]
+    \\            fork confirm | fork cancel | fork status
 ;
 
 /// What `regs` reads when it is given no names.
@@ -82,6 +84,7 @@ pub const Command = union(enum) {
     periph: []const u8,
     /// CPU0's sampled stacks, folded, for one thread and window (RA8EMU-833).
     folded: Folded,
+    branch_cmd: ctl_branch.BranchCommand,
 };
 
 /// What `ctl folded` asks for; the defaults take every thread, all time.
@@ -105,6 +108,7 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
     const by_host = std.mem.eql(u8, argv[2], "--host");
     if (!by_host and !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
     var words: std.ArrayList([]const u8) = .empty;
+    defer words.deinit(allocator);
     var json = false;
     var hosts: ?[]const u8 = null;
     var image: ?[]const u8 = null;
@@ -142,6 +146,8 @@ fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
 
 fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
     const eql = std.mem.eql;
+    if (eql(u8, name, "branch")) return .{ .branch_cmd = try ctl_branch.parseBranch(args) };
+    if (eql(u8, name, "fork")) return .{ .branch_cmd = try ctl_branch.parseFork(args) };
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
@@ -328,6 +334,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             const report = try client.call(proto.RtcReport, proto.CoreOnly, .rtc, .{ .core = .cpu0 });
             try out.rtc(w, json, report);
         },
+        .branch_cmd => |cmd| try ctl_branch.perform(client, w, json, cmd),
     }
     return 0;
 }

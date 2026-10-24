@@ -76,10 +76,10 @@ test "the history command line sweeps a closed session's orphans and removes it"
     var session = try history.session.Session.create(&base, .{});
     const id = session.id;
     var objects = try history.paths.area(&session, .objects);
-    defer objects.close(io);
     var file = try objects.createFile(io, "deadbeef0102030405060708090a0b0c", .{ .read = true });
     try file.writeStreamingAll(io, "orphan bytes");
     file.close(io);
+    objects.close(io);
     // An abandoned session: the owner record and every byte stay, the
     // lock goes, so the catalog reports it stale and the sweep may take it.
     session.dir.close(io);
