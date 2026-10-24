@@ -55,26 +55,29 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: BranchCommand) !voi
     }
 }
 
+/// The frozen record.ForkReason value as a word; the base line reads "root".
 fn reasonName(reason: u8) []const u8 {
     return switch (reason) {
         0 => "root",
         1 => "writes",
-        2 => "inputs",
-        3 => "net",
-        4 => "camera",
-        5 => "faults",
-        6 => "skips",
-        7 => "manual",
+        2 => "taps",
+        3 => "buttons",
+        4 => "keystrokes",
+        5 => "plug_unplug_fault",
+        6 => "camera_change",
+        7 => "skip_bkpt",
+        8 => "load",
         else => "unknown",
     };
 }
 
 fn listBranches(client: *Client, w: anytype, json: bool) !void {
     const list = try client.call(proto.BranchList, proto.CoreOnly, .branch_list, .{ .core = .cpu0 });
-    const items = std.mem.bytesAsSlice(proto.BranchItem, list.bytes);
+    const n = proto.branch_wire.count(list.bytes);
     if (json) {
         try w.writeAll("{\"branches\":[");
-        for (items, 0..) |it, idx| {
+        for (0..n) |idx| {
+            const it = proto.branch_wire.get(list.bytes, idx);
             if (idx > 0) try w.writeAll(",");
             try w.print(
                 "{{\"id\":{d},\"parent\":{d},\"fork_r\":{d},\"recorded_end_r\":{d},\"child_count\":{d},\"reason\":\"{s}\",\"live\":{s},\"kept\":{s},\"pinned\":{s}}}",
@@ -95,7 +98,8 @@ fn listBranches(client: *Client, w: anytype, json: bool) !void {
         return;
     }
 
-    for (items) |it| {
+    for (0..n) |idx| {
+        const it = proto.branch_wire.get(list.bytes, idx);
         try w.print("branch {d}: parent {d}, fork {d}, end {d}, children {d} ({s})", .{
             it.id,
             it.parent,

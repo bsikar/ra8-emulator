@@ -26,9 +26,9 @@ pub const State = struct {
     }
 
     pub fn handleList(self: *State, list: proto.BranchList) void {
-        const wire_items = std.mem.bytesAsSlice(proto.BranchItem, list.bytes);
-        const count = @min(wire_items.len, self.items_buf.len);
-        for (wire_items[0..count], 0..) |it, idx| {
+        const count = @min(proto.branch_wire.count(list.bytes), self.items_buf.len);
+        for (0..count) |idx| {
+            const it = proto.branch_wire.get(list.bytes, idx);
             self.items_buf[idx] = .{
                 .id = it.id,
                 .parent = it.parent,
