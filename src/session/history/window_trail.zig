@@ -11,6 +11,8 @@ const store_mod = @import("ra8_chip").core.cpu.memory.store;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const trail_mod = @import("trail.zig");
 const slot_mod = @import("window_slot.zig");
+const digest_mod = @import("window_digest.zig");
+const micro_mod = @import("micro_checkpoint.zig");
 
 pub const Position = slot_mod.Position;
 pub const Core = slot_mod.Core;
@@ -30,6 +32,7 @@ pub const SlotPayload = struct {
     slot: WindowSlot,
     diffs: []RegDiff,
     byte_records: []ByteSwapRecord,
+    micro_bytes: []u8 = &.{},
 };
 
 pub const WindowTrail = struct {
@@ -133,6 +136,15 @@ pub const WindowTrail = struct {
     }
 
     pub fn endSlot(self: *WindowTrail, post: *const ArchState, kind: SlotKind) !void {
+        return self.endSlotWithMicro(post, kind, &.{});
+    }
+
+    pub fn endSlotWithMicro(
+        self: *WindowTrail,
+        post: *const ArchState,
+        kind: SlotKind,
+        micro_bytes: []const u8,
+    ) !void {
         if (!self.active_slot) return;
         self.active_slot = false;
 
@@ -140,7 +152,8 @@ pub const WindowTrail = struct {
 
         self.truncateFuture();
 
-        const collected = try self.collectByteRecords(kind);
+        const base_kind = if (micro_bytes.len > 0) .complex else kind;
+        const collected = try self.collectByteRecords(base_kind);
         const byte_records = collected.records;
         errdefer self.allocator.free(byte_records);
 
@@ -150,10 +163,22 @@ pub const WindowTrail = struct {
         errdefer self.allocator.free(diffs);
         @memcpy(diffs, diff_buf[0..diff_count]);
 
+        const micro_copy = if (micro_bytes.len > 0)
+            try self.allocator.dupe(u8, micro_bytes)
+        else
+            &.{};
+        errdefer if (micro_copy.len > 0) self.allocator.free(micro_copy);
+
+        const post_digest = if (collected.kind == .complex or micro_bytes.len > 0)
+            digest_mod.computeDigest(post, micro_bytes)
+        else
+            @as([16]u8, @splat(0));
+
         const honest_bytes = @sizeOf(SlotPayload) +
             diffs.len * @sizeOf(RegDiff) +
             byte_records.len * @sizeOf(ByteSwapRecord) +
-            collected.payload_bytes;
+            collected.payload_bytes +
+            micro_copy.len;
 
         while (self.count > 0 and self.used_honest_bytes + honest_bytes > self.capacity_bytes) {
             self.evictOldest();
@@ -173,9 +198,11 @@ pub const WindowTrail = struct {
                 .diff_count = @intCast(diffs.len),
                 .byte_count = @intCast(byte_records.len),
                 .honest_bytes = honest_bytes,
+                .post_digest = post_digest,
             },
             .diffs = diffs,
             .byte_records = byte_records,
+            .micro_bytes = micro_copy,
         };
         self.count += 1;
         self.cursor = self.count;
@@ -183,6 +210,10 @@ pub const WindowTrail = struct {
     }
 
     pub fn undoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu, peer: ?*cpu_mod.Cpu) !bool {
+        return self.undoOneWithBoard(cpu, peer, null);
+    }
+
+    pub fn undoOneWithBoard(self: *WindowTrail, cpu: *cpu_mod.Cpu, peer: ?*cpu_mod.Cpu, board: anytype) !bool {
         if (self.cursor == 0) return false;
         const target_idx = self.cursor - 1;
         const payload = self.slotAt(target_idx);
@@ -198,6 +229,12 @@ pub const WindowTrail = struct {
             try self.undoMemoryRecord(&payload.byte_records[i]);
         }
 
+        if (payload.micro_bytes.len > 0) {
+            if (board) |b| {
+                try micro_mod.MicroCheckpoint.restore(.{ .bytes = payload.micro_bytes, .touched_mask = 0 }, b);
+            }
+        }
+
         const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
         var arch = ArchState.capture(target);
         slot_mod.swapDiffInState(payload.diffs, &arch);
@@ -206,10 +243,38 @@ pub const WindowTrail = struct {
     }
 
     pub fn redoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu, peer: ?*cpu_mod.Cpu) !bool {
+        return self.redoOneWithBoard(cpu, peer, null, null);
+    }
+
+    pub fn redoOneWithBoard(
+        self: *WindowTrail,
+        cpu: *cpu_mod.Cpu,
+        peer: ?*cpu_mod.Cpu,
+        board: anytype,
+        re_exec_fn: ?*const fn () anyerror!void,
+    ) !bool {
         if (self.cursor >= self.count) return false;
         const payload = self.slotAt(self.cursor);
 
-        if (payload.slot.kind == .complex or payload.slot.kind == .barrier) {
+        if (payload.slot.kind == .complex) {
+            const re_exec = re_exec_fn orelse return error.RequiresReExecution;
+            if (board == null) return error.RequiresReExecution;
+            try re_exec();
+            const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
+            const post_arch = ArchState.capture(target);
+            try digest_mod.verifyRedoDigest(
+                payload.slot.post_digest,
+                &post_arch,
+                payload.micro_bytes,
+                payload.slot.position,
+                payload.slot.core,
+                null,
+            );
+            self.cursor += 1;
+            return true;
+        }
+
+        if (payload.slot.kind == .barrier) {
             return error.RequiresReExecution;
         }
 
@@ -302,6 +367,7 @@ pub const WindowTrail = struct {
         for (p.byte_records) |r| self.recording.allocator.free(r.data);
         if (p.byte_records.len > 0) self.allocator.free(p.byte_records);
         if (p.diffs.len > 0) self.allocator.free(p.diffs);
+        if (p.micro_bytes.len > 0) self.allocator.free(p.micro_bytes);
     }
 
     fn ensureCapacity(self: *WindowTrail) !void {

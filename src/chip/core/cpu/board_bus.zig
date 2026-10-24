@@ -30,6 +30,15 @@ const itm_port = @import("../../periph/itm.zig");
 /// CFSR's banked bits, UFSR and MMFSR (src/chip/periph/scb/bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;
 
+pub const TouchedHook = struct {
+    context: *anyopaque,
+    touchFn: *const fn (context: *anyopaque, address: u32, is_write: bool) void,
+
+    pub inline fn touch(self: TouchedHook, address: u32, is_write: bool) void {
+        self.touchFn(self.context, address, is_write);
+    }
+};
+
 pub const BoardBus = struct {
     memory: GuestBus,
     periph: *registry.Bus,
@@ -42,6 +51,8 @@ pub const BoardBus = struct {
     security: ?*const banked.Banked = null,
     /// The core's MPU check, asked about every access while it is armed.
     check: ?*mpu_check.Check = null,
+    /// Touched section hook for reverse window tracking. Null when disarmed (zero cost).
+    touched: ?TouchedHook = null,
 
     /// Ask `check` about every access, the direct MRAM/SRAM path included:
     /// a store that path took would land past an MPU refusal (RA8EMU-710).
@@ -79,9 +90,13 @@ pub const BoardBus = struct {
         const address = self.landing(given) orelse return @memset(into, 0);
         if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
         if (!inWindow(address, into.len)) {
-            if (self.scs.load(address, into)) return;
+            if (self.scs.load(address, into)) {
+                if (self.touched) |t| t.touch(address, false);
+                return;
+            }
             return self.memory.view().read(address, into);
         }
+        if (self.touched) |t| t.touch(address, false);
         self.periph.issuer = self.issuer;
         const value = self.periph.read(address, try width(into.len));
         var bytes: [4]u8 = undefined;
@@ -122,7 +137,13 @@ pub const BoardBus = struct {
         if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
         const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
-        if (!inWindow(address, bytes.len)) return self.scs.store(self.memory, address, bytes);
+        if (!inWindow(address, bytes.len)) {
+            if (address >= memmap.ppb_base and address < memmap.ppb_base + 0x0010_0000) {
+                if (self.touched) |t| t.touch(address, true);
+            }
+            return self.scs.store(self.memory, address, bytes);
+        }
+        if (self.touched) |t| t.touch(address, true);
         var padded = @as([4]u8, @splat(0));
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
@@ -145,6 +166,7 @@ pub const BoardBus = struct {
     /// A bit-by-bit SCB register read from its Non-secure view: the shared
     /// bits from the normal word, the banked ones from the Non-secure copy.
     fn readSplit(self: *BoardBus, halves: scs_route.Split, given: u32, into: []u8) bus.Error!void {
+        if (self.touched) |t| t.touch(given, false);
         const within = given & 3;
         if (within + into.len > 4) return bus.Error.Unmapped;
         const memory = self.memory.view();
@@ -157,6 +179,7 @@ pub const BoardBus = struct {
     /// The write twin of readSplit: the bytes land on the merged word, the
     /// shared bits go back through Scs.store and the banked ones to the copy.
     fn writeSplit(self: *BoardBus, halves: scs_route.Split, given: u32, bytes: []const u8) bus.Error!void {
+        if (self.touched) |t| t.touch(given, true);
         const within = given & 3;
         if (within + bytes.len > 4) return bus.Error.Unmapped;
         const memory = self.memory.view();
@@ -195,6 +218,7 @@ pub const BoardBus = struct {
     /// clears the bit it was asked to raise (RA8EMU-394).
     fn latch(ctx: *anyopaque, given: u32, bits: u32) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (self.touched) |t| t.touch(given, true);
         if (scs_route.wired(self.security, given)) |halves| {
             try self.raise(halves.non_secure, bits & halves.mask);
             return self.raise(halves.shared, bits & ~halves.mask);

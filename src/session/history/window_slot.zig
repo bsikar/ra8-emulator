@@ -350,4 +350,5 @@ pub const WindowSlot = struct {
     diff_count: u16 = 0,
     byte_count: u32 = 0,
     honest_bytes: usize = 0,
+    post_digest: [16]u8 = @splat(0),
 };
