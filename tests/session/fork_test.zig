@@ -241,12 +241,15 @@ test "graph sink persistence and failure rollback" {
     try std.testing.expectError(error.DiskFull, h.session.confirmFork());
     try std.testing.expectEqual(@as(u32, 0), h.router.active_line);
     try std.testing.expect(h.graph.get(1) == null);
+    // Findings 4 & 5: pending fork is preserved, persistent recorder is not desynchronized
+    try std.testing.expect(h.session.forkPending() != null);
+    try std.testing.expectEqual(@as(u32, 0), h.mock_storage.active_branch);
 
-    // Second attempt with sink working
+    // Second attempt directly confirms and retries without re-entering the input
     fake.fail = false;
-    try std.testing.expectError(error.ForkNeedsConfirmation, h.session.consoleInput(.cpu0, "retry-msg"));
     try h.session.confirmFork();
     try std.testing.expectEqual(@as(u32, 1), h.router.active_line);
+    try std.testing.expectEqual(@as(u32, 1), h.mock_storage.active_branch);
     var decoded = try branches_codec.decode(gpa, fake.last_bytes.items);
     defer decoded.deinit();
     try std.testing.expect(decoded.get(1) != null);
@@ -344,4 +347,43 @@ test "replaying keeps persistent log byte-identical across replay passes" {
     h.session.setReplaying(false);
 
     try std.testing.expectEqual(initial_len, h.mock_storage.bytes.items.len);
+}
+
+test "fork while rewound past ancestral fork points binds parent to ancestor" {
+    const gpa = std.testing.allocator;
+    const h = try MockHarness.init(gpa);
+    defer h.deinit();
+
+    var end0 = h.graph.get(0).?.recorded_end;
+    end0.r = 100;
+    try h.graph.insertNode(.{
+        .id = 0,
+        .parent = 0,
+        .fork_at = .{ .branch = 0, .r = 0, .phase = .cpu0, .o = 0, .gap = .retired },
+        .reason = .base,
+        .recorded_end = end0,
+    });
+
+    const b1 = try h.graph.addBranch(0, .{ .branch = 0, .r = 50, .phase = .cpu0, .o = 0, .gap = .retired }, .writes, 1000);
+    var end1 = h.graph.get(b1).?.recorded_end;
+    end1.r = 80;
+    try h.graph.insertNode(.{
+        .id = b1,
+        .parent = 0,
+        .fork_at = .{ .branch = b1, .r = 50, .phase = .cpu0, .o = 0, .gap = .retired },
+        .reason = .writes,
+        .recorded_end = end1,
+    });
+    h.router.active_line = b1;
+
+    // Rewind to r=20 (< 50, so belongs to ancestor branch 0)
+    h.grid_state.at.r = 20;
+
+    try std.testing.expectError(error.ForkNeedsConfirmation, h.session.consoleInput(.cpu0, "ancestor-fork"));
+    try h.session.confirmFork();
+
+    // New branch 2 must have parent = 0 (ancestor), NOT 1 (active_line)
+    const b2_node = h.graph.get(2).?;
+    try std.testing.expectEqual(@as(u32, 0), b2_node.parent);
+    try std.testing.expectEqual(@as(u64, 20), b2_node.fork_at.r);
 }

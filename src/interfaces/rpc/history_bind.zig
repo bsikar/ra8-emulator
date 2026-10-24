@@ -164,12 +164,12 @@ fn truncateLog(context: *anyopaque, len: u64) anyerror!void {
 fn switchSegmentLog(context: *anyopaque, branch: u32, seg: u32) anyerror!void {
     const sink = sinkOf(context);
     const bind = sink.bind;
-    try sink.byte.vtable.sync(sink.byte.context);
-    sink.byte.vtable.close(sink.byte.context);
     var buf: [64]u8 = undefined;
     const leaf = try segmentName(&buf, branch, seg);
     const store = history.storage.Store.from(&bind.session);
     const new_byte = try store.vtable.open(store.context, .log, leaf, .create);
+    sink.byte.vtable.sync(sink.byte.context) catch {};
+    sink.byte.vtable.close(sink.byte.context);
     sink.byte = new_byte;
     bind.log = new_byte;
 }

@@ -98,7 +98,12 @@ pub const BranchGraph = struct {
         reason: ForkReason,
         created_ns: u64,
     ) !BranchId {
-        if (!self.nodes.contains(parent_id)) return Error.NoSuchBranch;
+        const parent_node = self.nodes.get(parent_id) orelse return Error.NoSuchBranch;
+        if (parent_id != root_branch_id) {
+            if (scalarOrder(fork_at, parent_node.fork_at) == .lt) {
+                return Error.InvalidForkPosition;
+            }
+        }
         const id = self.next_branch_id;
         self.next_branch_id += 1;
         var end_pos = fork_at;

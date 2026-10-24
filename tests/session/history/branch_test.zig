@@ -157,3 +157,19 @@ test "siblings and cousins produce OtherLine" {
     try std.testing.expectError(error.OtherLine, graph.compare(p_b3, p_b4));
     try std.testing.expectError(error.OtherLine, graph.compare(p_b4, p_b3));
 }
+
+test "addBranch validates fork position against parent fork position" {
+    const gpa = std.testing.allocator;
+    var graph = try BranchGraph.init(gpa);
+    defer graph.deinit();
+
+    // Branch 1 forks from 0 at r=50
+    const b1 = try graph.addBranch(0, makePos(0, 50, 0), .writes, 1000);
+
+    // Attempting to fork a child from Branch 1 at r=20 (< 50) is refused with InvalidForkPosition
+    try std.testing.expectError(error.InvalidForkPosition, graph.addBranch(b1, makePos(b1, 20, 0), .taps, 2000));
+
+    // Valid fork at r=60 (>= 50) succeeds
+    const b2 = try graph.addBranch(b1, makePos(b1, 60, 0), .taps, 2000);
+    try std.testing.expectEqual(b1, graph.get(b2).?.parent);
+}
