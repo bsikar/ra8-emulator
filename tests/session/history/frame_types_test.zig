@@ -118,3 +118,38 @@ test "regenerate_by_replay record has zero payload" {
     try std.testing.expectEqual(types.FrameKind.regenerate_by_replay, decoded.header.kind);
     try std.testing.expectEqual(@as(usize, 0), decoded.payload.len);
 }
+
+test "FrameSink receives borrowed FrameRecord" {
+    const TestSink = struct {
+        called: bool = false,
+        received_kind: types.FrameKind = undefined,
+
+        fn write(ctx: *anyopaque, record: *const types.FrameRecord) anyerror!void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.called = true;
+            self.received_kind = record.header.kind;
+        }
+    };
+
+    var ts = TestSink{};
+    const sink = types.FrameSink{
+        .ctx = &ts,
+        .writeFrameFn = TestSink.write,
+    };
+
+    const header: types.FrameHeader = .{
+        .kind = .keyframe,
+        .position = test_pos,
+        .virtual_ns = 5_000_000,
+        .width = 10,
+        .height = 10,
+        .rect = .{ .x = 0, .y = 0, .width = 10, .height = 10 },
+        .uncompressed_len = 100,
+        .compressed_len = 0,
+        .crc32c = 0,
+    };
+    const record: types.FrameRecord = .{ .header = header, .payload = &.{} };
+    try sink.writeFrame(&record);
+    try std.testing.expect(ts.called);
+    try std.testing.expectEqual(types.FrameKind.keyframe, ts.received_kind);
+}

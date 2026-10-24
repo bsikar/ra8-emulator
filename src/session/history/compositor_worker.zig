@@ -18,13 +18,36 @@ pub const FrameRecord = frame_types.FrameRecord;
 pub const FrameSink = frame_types.FrameSink;
 pub const Rect = frame_types.Rect;
 
+const PlaneReader = struct {
+    planes: [2]PlaneMapping = undefined,
+    count: usize = 0,
+
+    const PlaneMapping = struct {
+        base: u32,
+        len: usize,
+        data: []const u8,
+    };
+
+    fn read(ctx: *anyopaque, address: u32, into: []u8) error{Unmapped}!void {
+        const self: *const PlaneReader = @ptrCast(@alignCast(ctx));
+        for (self.planes[0..self.count]) |m| {
+            if (address >= m.base and @as(u64, address) + into.len <= @as(u64, m.base) + m.len) {
+                const off = address - m.base;
+                @memcpy(into, m.data[off .. off + into.len]);
+                return;
+            }
+        }
+        return error.Unmapped;
+    }
+};
+
 pub const CompositorWorker = struct {
     allocator: std.mem.Allocator,
     queue: *Queue,
     sink: ?FrameSink = null,
     current_epoch: u64 = 0,
 
-    private_store: ?Store = null,
+    dummy_store: Store = .{},
     scratch_argb: std.ArrayListUnmanaged(u32) = .empty,
     scratch_gray: std.ArrayListUnmanaged(u8) = .empty,
 
@@ -45,7 +68,6 @@ pub const CompositorWorker = struct {
 
     pub fn deinit(self: *CompositorWorker) void {
         self.stop();
-        if (self.private_store) |*s| s.deinit();
         self.scratch_argb.deinit(self.allocator);
         self.scratch_gray.deinit(self.allocator);
         self.keyframe_gray.deinit(self.allocator);
@@ -126,7 +148,7 @@ pub const CompositorWorker = struct {
         };
         defer record.deinit(self.allocator);
 
-        if (self.sink) |s| try s.writeFrame(record);
+        if (self.sink) |s| try s.writeFrame(&record);
     }
 
     fn renderTask(self: *CompositorWorker, task: *const Task) !void {
@@ -137,12 +159,28 @@ pub const CompositorWorker = struct {
         try self.scratch_gray.resize(self.allocator, pixel_count);
 
         var source = task.source;
+        var reader = PlaneReader{};
         if (task.layer_bytes) |bytes| {
-            if (self.private_store == null) {
-                self.private_store = try Store.init(null);
+            var offset: usize = 0;
+            for (source.planes[0..source.count]) |plane| {
+                const len = @as(usize, plane.shape.height) * plane.shape.stride;
+                if (offset + len <= bytes.len) {
+                    reader.planes[reader.count] = .{
+                        .base = plane.shape.base,
+                        .len = len,
+                        .data = bytes[offset .. offset + len],
+                    };
+                    reader.count += 1;
+                }
+                offset += len;
             }
-            try loadPlanes(&self.private_store.?, source, bytes);
-            source.memory = Guest{ .store = &self.private_store.? };
+            source.memory = Guest{
+                .store = &self.dummy_store,
+                .read_fn = PlaneReader.read,
+                .read_ctx = &reader,
+            };
+        } else {
+            source.memory = Guest{ .store = &self.dummy_store };
         }
 
         const res = glcdc_mod.pure.composite(&task.glcdc, source, task.powered, self.scratch_argb.items);
@@ -190,7 +228,7 @@ pub const CompositorWorker = struct {
         };
         defer record.deinit(self.allocator);
 
-        if (self.sink) |s| try s.writeFrame(record);
+        if (self.sink) |s| try s.writeFrame(&record);
     }
 
     fn emitDelta(self: *CompositorWorker, task: *const Task) !void {
@@ -224,17 +262,6 @@ pub const CompositorWorker = struct {
         };
         defer record.deinit(self.allocator);
 
-        if (self.sink) |s| try s.writeFrame(record);
-    }
-
-    fn loadPlanes(store: *Store, source: mix.Source, bytes: []const u8) !void {
-        var offset: usize = 0;
-        for (source.planes[0..source.count]) |plane| {
-            const len = @as(usize, plane.shape.height) * plane.shape.stride;
-            if (offset + len <= bytes.len) {
-                try store.rawWrite(plane.shape.base, bytes[offset .. offset + len]);
-            }
-            offset += len;
-        }
+        if (self.sink) |s| try s.writeFrame(&record);
     }
 };

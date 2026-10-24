@@ -131,3 +131,61 @@ test "crop round trip is byte-exact on 1024x600 panel" {
     // Byte-exact assertion
     try std.testing.expectEqualSlices(u8, current, reconstructed);
 }
+
+test "reconstruct rejects out-of-bounds crop rect" {
+    const allocator = std.testing.allocator;
+    const keyframe = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }; // 4x3 frame
+    const width: u32 = 4;
+
+    // x + width > frame_width (2 + 3 = 5 > 4)
+    const bad_x = crop.Rect{ .x = 2, .y = 0, .width = 3, .height = 1 };
+    try std.testing.expectError(crop.Error.BadCropShape, crop.reconstruct(allocator, &keyframe, width, bad_x, &.{}));
+
+    // (y + height) * width > keyframe.len ((2 + 2) * 4 = 16 > 12)
+    const bad_y = crop.Rect{ .x = 0, .y = 2, .width = 2, .height = 2 };
+    try std.testing.expectError(crop.Error.BadCropShape, crop.reconstruct(allocator, &keyframe, width, bad_y, &.{}));
+
+    // frame_width == 0
+    const zero_w = crop.Rect{ .x = 0, .y = 0, .width = 1, .height = 1 };
+    try std.testing.expectError(crop.Error.BadFrameShape, crop.reconstruct(allocator, &keyframe, 0, zero_w, &.{}));
+}
+
+test "decompress handles truncated and corrupt streams" {
+    const allocator = std.testing.allocator;
+    const plain = "Testing decompression error handling budgets in frame codec";
+    const compressed = try crop.compress(allocator, plain);
+    defer allocator.free(compressed);
+
+    var out: [plain.len]u8 = undefined;
+
+    // Truncated: only first half of compressed data
+    const half = compressed[0 .. compressed.len / 2];
+    try std.testing.expectError(crop.Error.Truncated, crop.decompress(allocator, half, &out));
+
+    // Empty compressed buffer when output is non-empty
+    try std.testing.expectError(crop.Error.Truncated, crop.decompress(allocator, &.{}, &out));
+
+    // Corrupt: bit-flipped header/payload
+    var corrupt_buf: [128]u8 = undefined;
+    @memcpy(corrupt_buf[0..compressed.len], compressed);
+    corrupt_buf[1] ^= 0xFF;
+    corrupt_buf[2] ^= 0xAA;
+    try std.testing.expectError(crop.Error.Corrupt, crop.decompress(allocator, corrupt_buf[0..compressed.len], &out));
+}
+
+test "decompress rejects trailing bytes after stream" {
+    const allocator = std.testing.allocator;
+    const plain = "Valid payload before trailing garbage";
+    const compressed = try crop.compress(allocator, plain);
+    defer allocator.free(compressed);
+
+    var out: [plain.len]u8 = undefined;
+
+    // Append 4 garbage bytes
+    var with_trailing = try allocator.alloc(u8, compressed.len + 4);
+    defer allocator.free(with_trailing);
+    @memcpy(with_trailing[0..compressed.len], compressed);
+    @memcpy(with_trailing[compressed.len..], &[_]u8{ 0xDE, 0xAD, 0xBE, 0xEF });
+
+    try std.testing.expectError(crop.Error.Corrupt, crop.decompress(allocator, with_trailing, &out));
+}

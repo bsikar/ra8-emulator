@@ -10,6 +10,7 @@ const board_tap = @import("ra8_board").frame_tap;
 const glcdc_mod = @import("ra8_chip").periph.glcdc;
 const observer = @import("ra8_chip").core.cpu.memory.observer;
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
+const scheduler = @import("ra8_chip").core.scheduler;
 const frame_types = @import("frame_types.zig");
 const frame_queue = @import("frame_queue.zig");
 
@@ -17,21 +18,31 @@ pub const Position = frame_types.Position;
 pub const Glcdc = glcdc_mod.Glcdc;
 
 pub const Clock = struct {
-    context: *const anyopaque,
-    nowNsFn: *const fn (context: *const anyopaque) i96,
+    io: ?std.Io = null,
+    context: ?*const anyopaque = null,
+    nowNsFn: ?*const fn (context: *const anyopaque) i96 = null,
+
+    pub fn fromIo(io: std.Io) Clock {
+        return .{ .io = io };
+    }
+
+    pub fn custom(context: *const anyopaque, nowNsFn: *const fn (context: *const anyopaque) i96) Clock {
+        return .{ .context = context, .nowNsFn = nowNsFn };
+    }
 
     pub fn nowNs(self: Clock) i96 {
-        return self.nowNsFn(self.context);
+        if (self.io) |io| {
+            return std.Io.Timestamp.now(io, .real).toNanoseconds();
+        }
+        if (self.nowNsFn) |f| {
+            return f(self.context.?);
+        }
+        return 0;
     }
 };
 
-fn ioNow(context: *const anyopaque) i96 {
-    const io_ptr: *const std.Io = @ptrCast(@alignCast(context));
-    return std.Io.Timestamp.now(io_ptr.*, .real).toNanoseconds();
-}
-
-pub fn clockFromIo(io_ptr: *const std.Io) Clock {
-    return .{ .context = io_ptr, .nowNsFn = ioNow };
+pub fn clockFromIo(io: std.Io) Clock {
+    return Clock.fromIo(io);
 }
 
 pub const Span = struct {
@@ -57,7 +68,11 @@ pub const FrameTap = struct {
     last_glcdc_writes: u32 = 0,
     glcdc_dirty: bool = true,
     memory_dirty: bool = true,
+    force_keyframe: bool = true,
     spans: [2]?Span = .{ null, null },
+
+    grid: ?*const scheduler.State = null,
+    branch: u32 = 0,
 
     attached_store: ?*Store = null,
     prev_observer: ?*const observer.Observer = null,
@@ -88,7 +103,7 @@ pub const FrameTap = struct {
         self.disarm();
     }
 
-    pub fn arm(self: *FrameTap, store: ?*Store) void {
+    pub fn arm(self: *FrameTap, io: std.Io, store: ?*Store) void {
         self.tap_observer = .{
             .ctx = self,
             .vtable = &observer_vtable,
@@ -101,7 +116,7 @@ pub const FrameTap = struct {
         self.glcdc_dirty = true;
         self.memory_dirty = true;
         self.board_tap_hook = .{
-            .io = std.testing.io,
+            .io = io,
             .context = self,
             .captureFn = onBoundaryThunk,
             .interval_ns = 0,
@@ -122,12 +137,29 @@ pub const FrameTap = struct {
         }
     }
 
+    pub fn setPositionSource(self: *FrameTap, grid: ?*const scheduler.State, branch: u32) void {
+        self.grid = grid;
+        self.branch = branch;
+    }
+
+    pub fn forceKeyframe(self: *FrameTap) void {
+        self.force_keyframe = true;
+    }
+
+    pub fn newSegment(self: *FrameTap) void {
+        self.force_keyframe = true;
+    }
+
     fn onBoundaryThunk(context: *anyopaque, virtual_ns: u64) void {
         const self: *FrameTap = @ptrCast(@alignCast(context));
         self.onBoundary(virtual_ns);
     }
 
     pub fn onBoundary(self: *FrameTap, virtual_ns: u64) void {
+        self.onBoundaryWithPosition(virtual_ns, null);
+    }
+
+    pub fn onBoundaryWithPosition(self: *FrameTap, virtual_ns: u64, maybe_pos: ?Position) void {
         const glcdc = &self.board.display;
         if (!self.isChanged(glcdc)) return;
 
@@ -139,22 +171,18 @@ pub const FrameTap = struct {
             }
         }
 
-        self.capture(virtual_ns, glcdc) catch return;
+        self.capture(virtual_ns, glcdc, maybe_pos) catch return;
         self.last_host_ns = now_host;
         self.captures_count += 1;
     }
 
-    fn isChanged(self: *FrameTap, glcdc: *const Glcdc) bool {
+    fn isChanged(self: *const FrameTap, glcdc: *const Glcdc) bool {
         if (self.glcdc_dirty) return true;
-        if (glcdc.writes != self.last_glcdc_writes) {
-            self.updateSpans(glcdc);
-            return true;
-        }
+        if (glcdc.writes != self.last_glcdc_writes) return true;
         return self.memory_dirty;
     }
 
     fn updateSpans(self: *FrameTap, glcdc: *const Glcdc) void {
-        self.last_glcdc_writes = glcdc.writes;
         for (1..3) |layer| {
             if (glcdc.decode(@intCast(layer))) |fb| {
                 self.spans[layer - 1] = .{
@@ -167,13 +195,10 @@ pub const FrameTap = struct {
         }
     }
 
-    fn capture(self: *FrameTap, virtual_ns: u64, glcdc: *const Glcdc) !void {
+    fn capture(self: *FrameTap, virtual_ns: u64, glcdc: *const Glcdc, explicit_pos: ?Position) !void {
         const source = glcdc.compositeInputs() orelse return;
-        self.glcdc_dirty = false;
-        self.memory_dirty = false;
-        self.updateSpans(glcdc);
-
         const memory = glcdc.memory orelse return;
+
         var total_bytes: usize = 0;
         for (source.planes[0..source.count]) |plane| {
             total_bytes += @as(usize, plane.shape.height) * plane.shape.stride;
@@ -182,27 +207,29 @@ pub const FrameTap = struct {
         var layer_bytes: ?[]u8 = null;
         if (total_bytes > 0) {
             const buf = try self.allocator.alloc(u8, total_bytes);
+            errdefer self.allocator.free(buf);
             var offset: usize = 0;
             for (source.planes[0..source.count]) |plane| {
                 const len = @as(usize, plane.shape.height) * plane.shape.stride;
-                memory.read(plane.shape.base, buf[offset .. offset + len]) catch {
-                    self.allocator.free(buf);
-                    return;
-                };
+                try memory.read(plane.shape.base, buf[offset .. offset + len]);
                 offset += len;
             }
             layer_bytes = buf;
         }
 
-        const pos = Position{
-            .branch = 0,
-            .r = self.board.time.base.now() / 1_000_000,
+        const pos = explicit_pos orelse if (self.grid) |g| blk: {
+            var p = g.at;
+            p.branch = self.branch;
+            break :blk p;
+        } else Position{
+            .branch = self.branch,
+            .r = 0,
             .phase = .board,
             .o = 0,
             .gap = .retired,
         };
 
-        const is_key = (self.captures_count % 16 == 0);
+        const is_key = self.force_keyframe or (self.captures_count == 0);
         const task = frame_queue.Task{
             .kind = if (is_key) .keyframe else .delta,
             .position = pos,
@@ -218,6 +245,11 @@ pub const FrameTap = struct {
         };
 
         try self.queue.push(task);
+        self.force_keyframe = false;
+        self.glcdc_dirty = false;
+        self.memory_dirty = false;
+        self.last_glcdc_writes = glcdc.writes;
+        self.updateSpans(glcdc);
     }
 
     fn onBytes(ctx: *anyopaque, write: observer.Write) void {

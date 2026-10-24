@@ -22,7 +22,7 @@ const MockClock = struct {
     }
 
     fn clock(self: *const MockClock) frame_tap.Clock {
-        return .{ .context = self, .nowNsFn = nowNs };
+        return frame_tap.Clock.custom(self, nowNs);
     }
 };
 
@@ -51,9 +51,9 @@ const Bench = struct {
         board.display.write(glcdc.win_base + glcdc_sys.off.panel_clk, 4, glcdc_sys.clock.enable);
         board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF112233);
 
-        self.queue = frame_queue.Queue.init(allocator, cap_bytes);
+        self.queue = frame_queue.Queue.init(std.testing.io, allocator, cap_bytes);
         self.tap = frame_tap.FrameTap.init(allocator, &self.board, &self.queue, self.mock_clock.clock());
-        self.tap.arm(&self.store);
+        self.tap.arm(std.testing.io, &self.store);
         return self;
     }
 
@@ -85,6 +85,29 @@ test "rate cap limits captures to 1/60s host time" {
     try std.testing.expectEqual(@as(usize, 1), bench.queue.count());
 
     // 3rd boundary at host time 17 ms (>= 16.66 ms): captured!
+    bench.mock_clock.now = 17_000_000;
+    bench.tap.onBoundary(3_000_000);
+    try std.testing.expectEqual(@as(usize, 2), bench.queue.count());
+}
+
+test "GLCDC write during rate-capped boundary is not lost on subsequent boundary" {
+    const bench = try Bench.create(std.testing.allocator, 1024 * 1024);
+    defer bench.destroy();
+
+    // 1st boundary at host time 0: captured
+    bench.mock_clock.now = 0;
+    bench.tap.onBoundary(1_000_000);
+    try std.testing.expectEqual(@as(usize, 1), bench.queue.count());
+
+    // Host time 5 ms: firmware updates GLCDC background color
+    bench.mock_clock.now = 5_000_000;
+    bench.board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF998877);
+
+    // Boundary at 5 ms is rate-capped (< 16.66 ms)
+    bench.tap.onBoundary(2_000_000);
+    try std.testing.expectEqual(@as(usize, 1), bench.queue.count());
+
+    // Boundary at 17 ms: no new writes occurred, but the pending change must be captured!
     bench.mock_clock.now = 17_000_000;
     bench.tap.onBoundary(3_000_000);
     try std.testing.expectEqual(@as(usize, 2), bench.queue.count());
@@ -129,6 +152,53 @@ test "change trigger captures only when GLCDC or layer memory changes" {
     try std.testing.expectEqual(@as(usize, 3), bench.queue.count());
 }
 
+test "FrameTap captures authoritative Position from grid" {
+    const bench = try Bench.create(std.testing.allocator, 1024 * 1024);
+    defer bench.destroy();
+
+    var sched_state = ra8.chip.core.scheduler.State{};
+    sched_state.at = .{
+        .branch = 0,
+        .r = 345,
+        .phase = .cpu0,
+        .o = 12,
+        .gap = .retired,
+    };
+    bench.tap.setPositionSource(&sched_state, 99);
+
+    bench.tap.onBoundary(1_000_000);
+    try std.testing.expectEqual(@as(usize, 1), bench.queue.count());
+
+    const task = bench.queue.tryPop().?;
+    try std.testing.expectEqual(@as(u32, 99), task.position.branch);
+    try std.testing.expectEqual(@as(u64, 345), task.position.r);
+    try std.testing.expectEqual(@as(u32, 12), task.position.o);
+}
+
+test "FrameTap newSegment forces keyframe" {
+    const bench = try Bench.create(std.testing.allocator, 1024 * 1024);
+    defer bench.destroy();
+    bench.tap.interval_ns = 0;
+
+    // First frame is keyframe
+    bench.tap.onBoundary(1_000_000);
+    const f1 = bench.queue.tryPop().?;
+    try std.testing.expectEqual(frame_queue.FrameKind.keyframe, f1.kind);
+
+    // Second frame is delta
+    bench.board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF223344);
+    bench.tap.onBoundary(2_000_000);
+    const f2 = bench.queue.tryPop().?;
+    try std.testing.expectEqual(frame_queue.FrameKind.delta, f2.kind);
+
+    // Establish new segment -> forces keyframe!
+    bench.tap.newSegment();
+    bench.board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF334455);
+    bench.tap.onBoundary(3_000_000);
+    const f3 = bench.queue.tryPop().?;
+    try std.testing.expectEqual(frame_queue.FrameKind.keyframe, f3.kind);
+}
+
 test "tap never perturbs guest state" {
     const elf = "tests/fixtures/dfu/dfu_bootloader.elf";
     const gpa = std.testing.allocator;
@@ -136,20 +206,39 @@ test "tap never perturbs guest state" {
     // Run 1: Tap disabled (baseline)
     var h1 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf });
     defer h1.deinit();
-    for (0..50) |_| _ = try h1.session().run(.cpu0, .step);
-    const now1 = try h1.session().now();
 
     // Run 2: Tap enabled (with active queue)
-    var q = frame_queue.Queue.init(gpa, 64 * 1024 * 1024);
+    var q = frame_queue.Queue.init(std.testing.io, gpa, 64 * 1024 * 1024);
     defer q.deinit();
     var h2 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf });
     defer h2.deinit();
-    var tap = frame_tap.FrameTap.init(gpa, h2.board(), &q, frame_tap.clockFromIo(&std.testing.io));
-    defer tap.deinit();
-    tap.arm(h2.guest().store);
 
-    for (0..50) |_| _ = try h2.session().run(.cpu0, .step);
+    // Actively configure GLCDC display controller on both boards identically
+    inline for (.{ h1.board(), h2.board() }) |board| {
+        board.protection.write(prcr.win_base, 2, prcr.unlockWord(pdctr.guard));
+        board.domains.graphics.write(pdctr.Domain.graphics.base(), 1, 0);
+        board.display.write(glcdc.win_base + tcon.off.sthb1, 4, 10);
+        board.display.write(glcdc.win_base + tcon.off.stvb1, 4, 10);
+        board.display.write(glcdc.win_base + glcdc.off.bg_en, 4, glcdc.field.bg_en);
+        board.display.write(glcdc.win_base + glcdc_sys.off.panel_clk, 4, glcdc_sys.clock.enable);
+        board.display.write(glcdc.win_base + glcdc.off.bg_bgc, 4, 0xFF112233);
+    }
+
+    var tap = frame_tap.FrameTap.init(gpa, h2.board(), &q, frame_tap.clockFromIo(std.testing.io));
+    defer tap.deinit();
+    tap.arm(std.testing.io, h2.guest().store);
+
+    for (0..50) |_| _ = try h1.session().run(.cpu0, .step);
+    const now1 = try h1.session().now();
+
+    for (0..50) |i| {
+        _ = try h2.session().run(.cpu0, .step);
+        tap.onBoundary(@as(u64, i) * 20_000_000);
+    }
     const now2 = try h2.session().now();
+
+    // Assert that active frames were actually captured by the tap during the run!
+    try std.testing.expect(q.count() > 0);
 
     // Guest architectural state is 100% byte-identical
     try std.testing.expectEqual(now1, now2);

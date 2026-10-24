@@ -36,41 +36,27 @@ pub const Task = struct {
     }
 };
 
-const SpinLock = struct {
-    state: std.atomic.Value(bool) = .init(false),
-
-    fn lock(self: *SpinLock) void {
-        while (self.state.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
-            std.atomic.spinLoopHint();
-            std.Thread.yield() catch {};
-        }
-    }
-
-    fn unlock(self: *SpinLock) void {
-        self.state.store(false, .release);
-    }
-};
-
 pub const Queue = struct {
+    io: std.Io,
     allocator: std.mem.Allocator,
     capacity_bytes: usize,
     used_bytes: usize = 0,
     overflow_count: u64 = 0,
     tasks: std.ArrayListUnmanaged(Task) = .empty,
     head: usize = 0,
-    lock: SpinLock = .{},
+    mutex: std.Io.Mutex = .init,
+    cond: std.Io.Condition = .init,
     closed: bool = false,
 
-    pub fn init(allocator: std.mem.Allocator, cap_bytes: usize) Queue {
+    pub fn init(io: std.Io, allocator: std.mem.Allocator, cap_bytes: usize) Queue {
         return .{
+            .io = io,
             .allocator = allocator,
             .capacity_bytes = cap_bytes,
         };
     }
 
     pub fn deinit(self: *Queue) void {
-        self.lock.lock();
-        defer self.lock.unlock();
         for (self.tasks.items[self.head..]) |*task| {
             task.deinit(self.allocator);
         }
@@ -82,11 +68,15 @@ pub const Queue = struct {
     /// marks the task as regenerate_by_replay, drops the pixel payload,
     /// and enqueues the marker without silent drop.
     pub fn push(self: *Queue, task: Task) !void {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         if (self.closed) return error.Closed;
 
         var to_enqueue = task;
+        const task_overhead = @sizeOf(Task);
+        const payload_len = if (to_enqueue.layer_bytes) |b| b.len else 0;
+        to_enqueue.bytes_cost = task_overhead + payload_len;
+
         if (self.used_bytes + to_enqueue.bytes_cost > self.capacity_bytes) {
             // Queue full: discard pixel payload and mark regenerate_by_replay
             if (to_enqueue.layer_bytes) |bytes| {
@@ -94,37 +84,31 @@ pub const Queue = struct {
                 to_enqueue.layer_bytes = null;
             }
             to_enqueue.kind = .regenerate_by_replay;
-            to_enqueue.bytes_cost = 0;
+            to_enqueue.bytes_cost = task_overhead;
             self.overflow_count += 1;
         }
 
+        errdefer to_enqueue.deinit(self.allocator);
         try self.tasks.append(self.allocator, to_enqueue);
         self.used_bytes += to_enqueue.bytes_cost;
+        self.cond.signal(self.io);
     }
 
     /// Non-blocking pop. Returns null if empty.
     pub fn tryPop(self: *Queue) ?Task {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         return self.popLocked();
     }
 
     /// Blocking pop. Waits until a task is available or queue is closed.
     pub fn pop(self: *Queue) ?Task {
-        while (true) {
-            self.lock.lock();
-            if (self.popLocked()) |task| {
-                self.lock.unlock();
-                return task;
-            }
-            if (self.closed) {
-                self.lock.unlock();
-                return null;
-            }
-            self.lock.unlock();
-            std.atomic.spinLoopHint();
-            std.Thread.yield() catch {};
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        while (self.head >= self.tasks.items.len and !self.closed) {
+            self.cond.waitUncancelable(self.io, &self.mutex);
         }
+        return self.popLocked();
     }
 
     fn popLocked(self: *Queue) ?Task {
@@ -142,26 +126,45 @@ pub const Queue = struct {
     }
 
     pub fn close(self: *Queue) void {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         self.closed = true;
+        self.cond.broadcast(self.io);
+    }
+
+    pub fn reset(self: *Queue) void {
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        for (self.tasks.items[self.head..]) |*task| {
+            task.deinit(self.allocator);
+        }
+        self.tasks.clearRetainingCapacity();
+        self.head = 0;
+        self.used_bytes = 0;
+        self.closed = false;
+    }
+
+    pub fn reopen(self: *Queue) void {
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
+        self.closed = false;
     }
 
     pub fn count(self: *Queue) usize {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         return self.tasks.items.len - self.head;
     }
 
     pub fn bytesUsed(self: *Queue) usize {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         return self.used_bytes;
     }
 
     pub fn overflows(self: *Queue) u64 {
-        self.lock.lock();
-        defer self.lock.unlock();
+        self.mutex.lockUncancelable(self.io);
+        defer self.mutex.unlock(self.io);
         return self.overflow_count;
     }
 };

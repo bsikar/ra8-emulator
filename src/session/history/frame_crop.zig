@@ -121,14 +121,20 @@ pub fn compress(allocator: std.mem.Allocator, uncompressed: []const u8) ![]u8 {
 /// Decompress raw flate data into caller-supplied `uncompressed` buffer.
 pub fn decompress(allocator: std.mem.Allocator, compressed: []const u8, uncompressed: []u8) !void {
     if (compressed.len == 0 and uncompressed.len == 0) return;
+    if (compressed.len == 0 and uncompressed.len > 0) return Error.Truncated;
     const window = try allocator.alloc(u8, std.compress.flate.max_window_len);
     defer allocator.free(window);
     var reader: std.Io.Reader = .fixed(compressed);
     var inflater: std.compress.flate.Decompress = .init(&reader, .raw, window);
     inflater.reader.readSliceAll(uncompressed) catch |err| return switch (err) {
         error.EndOfStream => Error.Truncated,
-        error.ReadFailed => Error.Corrupt,
+        error.ReadFailed => if (inflater.err) |ie| (if (ie == error.EndOfStream) Error.Truncated else Error.Corrupt) else Error.Corrupt,
     };
+    _ = inflater.reader.takeByte() catch |err| switch (err) {
+        error.EndOfStream => {},
+        else => return Error.Corrupt,
+    };
+    if (reader.seek < reader.end) return Error.Corrupt;
 }
 
 /// Reconstruct a full frame by copying `keyframe`, decompressing delta crop,
@@ -140,6 +146,11 @@ pub fn reconstruct(
     rect: Rect,
     compressed_crop: []const u8,
 ) ![]u8 {
+    if (frame_width == 0) return Error.BadFrameShape;
+    if (@as(usize, rect.x) + rect.width > frame_width) return Error.BadCropShape;
+    const max_y = @as(usize, rect.y) + rect.height;
+    if (max_y * frame_width > keyframe.len) return Error.BadCropShape;
+
     const full = try allocator.dupe(u8, keyframe);
     errdefer allocator.free(full);
     const crop_len = @as(usize, rect.width) * rect.height;

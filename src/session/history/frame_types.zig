@@ -165,11 +165,15 @@ pub const FrameRecord = struct {
     }
 };
 
+/// Sink interface for receiving processed frame records from CompositorWorker.
+/// `writeFrame` borrows `record` and its payload for the duration of the call.
+/// The caller retains ownership of the payload buffer and frees it upon return.
+/// Sinks that retain the payload past the call must duplicate it.
 pub const FrameSink = struct {
     ctx: *anyopaque,
-    writeFrameFn: *const fn (ctx: *anyopaque, record: FrameRecord) anyerror!void,
+    writeFrameFn: *const fn (ctx: *anyopaque, record: *const FrameRecord) anyerror!void,
 
-    pub fn writeFrame(self: FrameSink, record: FrameRecord) !void {
+    pub fn writeFrame(self: FrameSink, record: *const FrameRecord) !void {
         return self.writeFrameFn(self.ctx, record);
     }
 };
