@@ -116,3 +116,33 @@ test "window slot: compact delta for realistic instruction (PC + R0 change)" {
     try testing.expectEqual(@as(u32, 0x0800_0104), current.regs.pc);
     try testing.expectEqual(@as(u32, 100), current.regs.low[0]);
 }
+
+test "window slot: slot counters round trip exactly through undo/redo" {
+    var pre: ArchState = .{};
+    pre.slots = 1000;
+    pre.retired = 950;
+    pre.sync_entries = 50;
+
+    var post = pre;
+    post.slots = 1001;
+    post.retired = 951;
+    post.sync_entries = 50;
+
+    var diff_buf: [16]RegDiff = undefined;
+    const count = slot_mod.diffArch(&pre, &post, &diff_buf);
+
+    // Only slots and retired changed (2 u64 counters = 2 lo words modified)
+    try testing.expectEqual(@as(usize, 2), count);
+
+    var current = post;
+    slot_mod.swapDiffInState(diff_buf[0..count], &current);
+    try testing.expectEqual(@as(u64, 1000), current.slots);
+    try testing.expectEqual(@as(u64, 950), current.retired);
+    try testing.expectEqual(@as(u64, 50), current.sync_entries);
+
+    // Redo
+    slot_mod.swapDiffInState(diff_buf[0..count], &current);
+    try testing.expectEqual(@as(u64, 1001), current.slots);
+    try testing.expectEqual(@as(u64, 951), current.retired);
+    try testing.expectEqual(@as(u64, 50), current.sync_entries);
+}

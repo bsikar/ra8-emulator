@@ -80,16 +80,32 @@ pub const WindowTrail = struct {
         self.active_slot = true;
     }
 
-    pub fn endSlot(self: *WindowTrail, post: *const ArchState, kind: SlotKind) !void {
-        if (!self.active_slot) return;
-        self.active_slot = false;
-        self.truncateFuture();
+    const Collected = struct {
+        records: []ByteSwapRecord,
+        payload_bytes: usize,
+        kind: SlotKind,
+    };
 
+    fn collectByteRecords(self: *WindowTrail, base_kind: SlotKind) !Collected {
         const new_records = self.recording.records[self.recording_mark..self.recording.record_count];
         var byte_count: usize = 0;
-        for (new_records) |r| if (r == .bytes) {
-            byte_count += 1;
+        var has_part: bool = false;
+        var has_barrier: bool = false;
+
+        for (new_records) |r| switch (r) {
+            .bytes => |b| {
+                byte_count += 1;
+                if (b.part != null) has_part = true;
+            },
+            .barrier => has_barrier = true,
         };
+
+        const resolved_kind: SlotKind = if (has_barrier)
+            .barrier
+        else if (has_part or base_kind == .complex)
+            .complex
+        else
+            base_kind;
 
         const byte_records = try self.allocator.alloc(ByteSwapRecord, byte_count);
         errdefer self.allocator.free(byte_records);
@@ -109,8 +125,24 @@ pub const WindowTrail = struct {
             },
             .barrier => {},
         };
-        // Reset recording count so records are not freed twice
-        self.recording.record_count = self.recording_mark;
+        return .{
+            .records = byte_records,
+            .payload_bytes = total_payload_bytes,
+            .kind = resolved_kind,
+        };
+    }
+
+    pub fn endSlot(self: *WindowTrail, post: *const ArchState, kind: SlotKind) !void {
+        if (!self.active_slot) return;
+        self.active_slot = false;
+
+        if (!self.recording.healthy()) return error.TrailPoisoned;
+
+        self.truncateFuture();
+
+        const collected = try self.collectByteRecords(kind);
+        const byte_records = collected.records;
+        errdefer self.allocator.free(byte_records);
 
         var diff_buf: [slot_mod.reg_tag_count]RegDiff = undefined;
         const diff_count = slot_mod.diffArch(&self.pre_state, post, &diff_buf);
@@ -121,18 +153,22 @@ pub const WindowTrail = struct {
         const honest_bytes = @sizeOf(SlotPayload) +
             diffs.len * @sizeOf(RegDiff) +
             byte_records.len * @sizeOf(ByteSwapRecord) +
-            total_payload_bytes;
+            collected.payload_bytes;
 
         while (self.count > 0 and self.used_honest_bytes + honest_bytes > self.capacity_bytes) {
             self.evictOldest();
         }
 
         try self.ensureCapacity();
+
+        // All allocations succeeded: safely transfer ownership of b.pre from recording
+        self.recording.record_count = self.recording_mark;
+
         const insert_idx = (self.head + self.count) % self.slots.len;
         self.slots[insert_idx] = .{
             .slot = .{
                 .position = self.active_pos,
-                .kind = kind,
+                .kind = collected.kind,
                 .core = self.active_core,
                 .diff_count = @intCast(diffs.len),
                 .byte_count = @intCast(byte_records.len),
@@ -146,30 +182,45 @@ pub const WindowTrail = struct {
         self.used_honest_bytes += honest_bytes;
     }
 
-    pub fn undoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu) !bool {
+    pub fn undoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu, peer: ?*cpu_mod.Cpu) !bool {
         if (self.cursor == 0) return false;
-        self.cursor -= 1;
-        const payload = self.slotAt(self.cursor);
+        const target_idx = self.cursor - 1;
+        const payload = self.slotAt(target_idx);
+
+        if (payload.slot.kind == .barrier) {
+            return error.BarrierReached;
+        }
+
+        self.cursor = target_idx;
         var i = payload.byte_records.len;
         while (i > 0) {
             i -= 1;
-            try self.swapMemoryRecord(&payload.byte_records[i]);
+            try self.undoMemoryRecord(&payload.byte_records[i]);
         }
-        var arch = ArchState.capture(cpu);
+
+        const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
+        var arch = ArchState.capture(target);
         slot_mod.swapDiffInState(payload.diffs, &arch);
-        arch.restore(cpu);
+        arch.restore(target);
         return true;
     }
 
-    pub fn redoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu) !bool {
+    pub fn redoOne(self: *WindowTrail, cpu: *cpu_mod.Cpu, peer: ?*cpu_mod.Cpu) !bool {
         if (self.cursor >= self.count) return false;
         const payload = self.slotAt(self.cursor);
-        for (payload.byte_records) |*rec| {
-            try self.swapMemoryRecord(rec);
+
+        if (payload.slot.kind == .complex or payload.slot.kind == .barrier) {
+            return error.RequiresReExecution;
         }
-        var arch = ArchState.capture(cpu);
+
+        for (payload.byte_records) |*rec| {
+            try self.redoMemoryRecord(rec);
+        }
+
+        const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
+        var arch = ArchState.capture(target);
         slot_mod.swapDiffInState(payload.diffs, &arch);
-        arch.restore(cpu);
+        arch.restore(target);
         self.cursor += 1;
         return true;
     }
@@ -178,31 +229,53 @@ pub const WindowTrail = struct {
         return &self.slots[(self.head + idx) % self.slots.len];
     }
 
-    fn swapMemoryRecord(self: *WindowTrail, rec: *ByteSwapRecord) !void {
-        const addr: u32 = @intCast(rec.base + rec.offset);
+    fn undoMemoryRecord(self: *WindowTrail, rec: *ByteSwapRecord) !void {
         if (rec.part) |part_idx| {
             if (part_idx < self.recording.part_count) {
                 const part = self.recording.parts[part_idx];
-                part.raw(part.ctx, @intCast(rec.offset), rec.data);
+                part.raw(part.ctx, @truncate(rec.offset), rec.data);
             }
             return;
         }
+        try self.swapMemoryChunks(rec);
+    }
+
+    fn redoMemoryRecord(self: *WindowTrail, rec: *ByteSwapRecord) !void {
+        if (rec.part != null) return error.RequiresReExecution;
+        try self.swapMemoryChunks(rec);
+    }
+
+    fn swapMemoryChunks(self: *WindowTrail, rec: *ByteSwapRecord) !void {
+        const addr: u32 = @intCast(rec.base + rec.offset);
+        var chunk_offset: usize = 0;
         var temp_buf: [256]u8 = undefined;
-        const temp = if (rec.data.len <= temp_buf.len)
-            temp_buf[0..rec.data.len]
-        else
-            try self.allocator.alloc(u8, rec.data.len);
-        defer if (rec.data.len > temp_buf.len) self.allocator.free(temp);
 
-        if (self.store.locate(addr, rec.data.len)) |loc| {
-            @memcpy(temp, loc.bytes);
-        } else {
-            try self.store.read(.none, addr, temp);
+        while (chunk_offset < rec.data.len) {
+            const chunk_len = @min(rec.data.len - chunk_offset, temp_buf.len);
+            const chunk_addr = addr + @as(u32, @intCast(chunk_offset));
+            const chunk_slice = rec.data[chunk_offset..][0..chunk_len];
+            const temp = temp_buf[0..chunk_len];
+
+            try self.pureRead(chunk_addr, temp);
+            try self.store.rawWrite(chunk_addr, chunk_slice);
+            @memcpy(chunk_slice, temp);
+            self.store.fan().notify(chunk_addr, chunk_len);
+
+            chunk_offset += chunk_len;
         }
+    }
 
-        try self.store.rawWrite(addr, rec.data);
-        @memcpy(rec.data, temp);
-        self.store.fan().notify(addr, rec.data.len);
+    fn pureRead(self: *WindowTrail, address: u32, into: []u8) !void {
+        if (into.len == 0) return;
+        if (self.store.port) |*port| if (port.geometry.locate(address, into.len)) |hit| {
+            switch (hit.kind) {
+                .ospi => if (!port.flash.read(hit.offset, into)) return error.Unmapped,
+                .sdram => @memcpy(into, port.sdram[hit.offset..][0..into.len]),
+            }
+            return;
+        };
+        const loc = self.store.locate(address, into.len) orelse return error.Unmapped;
+        @memcpy(into, loc.bytes);
     }
 
     fn truncateFuture(self: *WindowTrail) void {
@@ -226,7 +299,7 @@ pub const WindowTrail = struct {
     }
 
     fn freePayload(self: *WindowTrail, p: SlotPayload) void {
-        for (p.byte_records) |r| self.allocator.free(r.data);
+        for (p.byte_records) |r| self.recording.allocator.free(r.data);
         if (p.byte_records.len > 0) self.allocator.free(p.byte_records);
         if (p.diffs.len > 0) self.allocator.free(p.diffs);
     }
