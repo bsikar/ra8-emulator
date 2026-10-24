@@ -19,3 +19,4 @@ pub const source_line = @import("source_line.zig");
 pub const periph = @import("periph.zig");
 pub const folded = @import("folded.zig");
 pub const locals = @import("locals.zig");
+pub const branch = @import("branch.zig");

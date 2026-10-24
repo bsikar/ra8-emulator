@@ -10,6 +10,10 @@ const std = @import("std");
 const history = @import("ra8_host").history;
 const session_recorder = @import("ra8_session").history_recorder;
 const session_refs = @import("ra8_session").history_refs;
+const session_branch = @import("ra8_session").history_branch;
+const session_fork = @import("ra8_session").history_fork_router;
+const session_fork_types = @import("ra8_session").fork;
+const branches_recover = @import("ra8_session").history_branches_recover;
 
 /// Formats the segment leaf name for a given branch and segment index.
 pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
@@ -39,6 +43,10 @@ pub const Bind = struct {
     /// The checkpoints partition's bytes, what the cadence projection
     /// keeps the checkpoint objects within.
     checkpoint_cap: u64 = 0,
+    io: std.Io = undefined,
+    graph: session_branch.BranchGraph = undefined,
+    router: session_fork.ForkRouter = undefined,
+    graph_sink: session_fork_types.GraphSink = undefined,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -56,6 +64,19 @@ pub const Bind = struct {
         errdefer bind.base.close();
         bind.session = try history.session.Session.create(&bind.base, .{});
         errdefer _ = bind.session.close(null, .move) catch {};
+        var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
+        defer candidates.deinit(allocator);
+        const rec = try branches_recover.recover(allocator, candidates.current, candidates.temp, null);
+        switch (rec.action) {
+            .use_temp => history.branches_file.settle(io, bind.session.dir) catch {},
+            else => history.branches_file.cleanupTemp(io, bind.session.dir),
+        }
+        bind.io = io;
+        bind.graph = rec.graph;
+        errdefer bind.graph.deinit();
+        bind.router = session_fork.ForkRouter.init(allocator, &bind.graph);
+        errdefer bind.router.deinit();
+        bind.graph_sink = .{ .context = bind, .writeFn = &writeBranchesBin };
         const store = history.storage.Store.from(&bind.session);
         bind.log = try store.vtable.open(store.context, .log, log_leaf, .create);
         errdefer bind.log.vtable.close(bind.log.context);
@@ -95,6 +116,8 @@ pub const Bind = struct {
         self.disk = null;
         if (self.watch) |watch| gpa.destroy(watch);
         self.watch = null;
+        self.router.deinit();
+        self.graph.deinit();
         if (self.session.close(null, .move)) |outcome| {
             self.base.close();
             gpa.destroy(self.sink);
@@ -143,6 +166,11 @@ fn freeVolume(context: *anyopaque) anyerror!u64 {
 
 fn sinkOf(context: *anyopaque) *LogSink {
     return @ptrCast(@alignCast(context));
+}
+
+fn writeBranchesBin(context: *anyopaque, encoded: []const u8) anyerror!void {
+    const b: *Bind = @ptrCast(@alignCast(context));
+    try history.branches_file.writeAtomic(b.io, b.session.dir, encoded);
 }
 
 fn appendLog(context: *anyopaque, bytes: []const u8) anyerror!void {

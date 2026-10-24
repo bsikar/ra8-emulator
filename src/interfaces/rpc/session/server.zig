@@ -31,6 +31,7 @@ const session_locals = @import("locals.zig");
 const session_periph = @import("periph.zig");
 const session_folded = @import("folded.zig");
 const session_chunks = @import("load_chunks.zig");
+const session_branch = @import("branch.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -88,6 +89,12 @@ pub const routes = .{
     .{ @backingInt(M.rcont), session_rcont.rcont },
     .{ @backingInt(M.snapshot), session_files.snapshot },
     .{ @backingInt(M.restore), session_files.restore },
+    .{ @backingInt(M.branch_list), session_branch.branchList },
+    .{ @backingInt(M.branch_switch), session_branch.branchSwitch },
+    .{ @backingInt(M.branch_delete), session_branch.branchDelete },
+    .{ @backingInt(M.branch_confirm_fork), session_branch.branchConfirmFork },
+    .{ @backingInt(M.branch_cancel_fork), session_branch.branchCancelFork },
+    .{ @backingInt(M.branch_status), session_branch.branchStatus },
 };
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);

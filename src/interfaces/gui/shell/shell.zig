@@ -16,6 +16,7 @@ pub const field = @import("../ui/shell/field.zig");
 pub const frame = @import("../ui/shell/frame.zig");
 pub const first_image = @import("first_image.zig");
 pub const boot = @import("boot.zig");
+pub const branch_state = @import("branch_state.zig");
 pub const layout_store = @import("layout_store.zig");
 pub const loop = @import("loop.zig");
 pub const menu_actions = @import("menu_actions.zig");

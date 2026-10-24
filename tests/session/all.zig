@@ -43,6 +43,7 @@ test {
     _ = @import("history/async_traffic_test.zig");
     _ = @import("history/cross_seek_test.zig");
     _ = @import("history/replay_feeder_test.zig");
+    _ = @import("history/lifecycle_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
