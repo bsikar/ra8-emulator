@@ -136,6 +136,7 @@ pub const Served = struct {
         self.context.clock = board_rtc.clock(self.owner.board());
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
         self.context.camera = .{ .context = self, .setFn = setCamera };
+        self.owner.session().attachCamera(.{ .context = self, .changeFn = setCameraDirect });
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
@@ -235,6 +236,22 @@ pub const Served = struct {
 /// the board's camera source. A source that will not open changes nothing.
 fn setCamera(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
     const self: *Served = @ptrCast(@alignCast(context));
+    if (self.owner.session().fork_router != null) {
+        var buf: [256]u8 = undefined;
+        const text = if (spec.arg.len == 0)
+            @tagName(spec.kind)
+        else
+            try std.fmt.bufPrint(&buf, "{s}:{s}", .{ @tagName(spec.kind), spec.arg });
+        try self.owner.session().changeCamera(.cpu0, text);
+        return;
+    }
+    const input = try source_open.open(self.gpa, self.io, spec);
+    try board_camera.install(self.owner.board(), self.gpa, input);
+}
+
+fn setCameraDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    const spec = try source_spec.parse(spec_text);
     const input = try source_open.open(self.gpa, self.io, spec);
     try board_camera.install(self.owner.board(), self.gpa, input);
 }

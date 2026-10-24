@@ -305,3 +305,41 @@ test "reverse-continue stops at a breakpoint in the recorded window (RA8EMU-1170
     try expectReply(&target, "bc", "T05thread:1;");
     try std.testing.expectEqual(pcs[1], session.live.core.cpu.regs.pc);
 }
+
+test "GDB register and memory writes route through Session choke point" {
+    const gpa = std.testing.allocator;
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    defer opened.deinit();
+    const session = opened.session();
+    var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };
+    const stub = dispatch.Dispatch{ .zig = &target };
+    var out: [512]u8 = undefined;
+
+    var graph = try ra8.session.history_branch.BranchGraph.init(gpa);
+    defer graph.deinit();
+    var router = ra8.session.history_fork_router.ForkRouter.init(gpa, &graph);
+    defer router.deinit();
+    session.fork_router = &router;
+
+    var end = graph.get(0).?.recorded_end;
+    end.r = 10;
+    try graph.insertNode(.{
+        .id = 0,
+        .parent = 0,
+        .fork_at = .{ .branch = 0, .r = 0, .phase = .cpu0, .o = 0, .gap = .retired },
+        .reason = .base,
+        .recorded_end = end,
+    });
+
+    // 1. GDB register write in the past requires confirmation and is refused with E00
+    try std.testing.expectEqualStrings("E00", try stub.answer("P3=78563412", &out));
+    try std.testing.expect(session.forkPending() != null);
+
+    // Confirm the fork: executes fork, advances active branch, and applies register write
+    try session.confirmFork();
+    try std.testing.expect(session.forkPending() == null);
+    try std.testing.expectEqual(@as(u32, 1), router.active_line);
+
+    // Reading r3 now returns the value applied upon confirmation
+    try std.testing.expectEqualStrings("78563412", try stub.answer("p3", &out));
+}
