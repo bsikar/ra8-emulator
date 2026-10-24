@@ -24,9 +24,14 @@ const event_sources = @import("event/sources.zig");
 const session_input = @import("input.zig");
 const session_points = @import("points.zig");
 const session_fork = @import("fork.zig");
+const session_control = @import("control.zig");
 const history_recorder = @import("history/recorder.zig");
 const history_position = @import("history/position.zig");
 const history_root = @import("history/root.zig");
+const history_async = @import("history/async_queue.zig");
+const async_traffic = @import("history/async_traffic.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
+
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
@@ -40,6 +45,11 @@ pub const Frame = session_display.Frame;
 pub const Display = session_display.Display;
 pub const Widget = @import("widget_tree.zig").Widget;
 pub const TapPart = tap_part.Part;
+pub const Position = history_position.Position;
+pub const AsyncSource = history_async.Source;
+pub const AsyncQueue = history_async.AsyncQueue;
+pub const OverflowState = history_async.OverflowState;
+pub const DiscardReport = history_async.DiscardReport;
 pub const Loader = struct {
     context: *anyopaque,
     loadFn: *const fn (*anyopaque, Core, []const u8) anyerror!void,
@@ -86,6 +96,8 @@ pub const Session = struct {
     console_hook: ?ConsoleHook = null,
     camera_hook: ?CameraHook = null,
     persistent_recorder: ?*history_recorder.Recorder = null,
+    async_traffic: async_traffic.AsyncTraffic = .{},
+    replay_feeder: ?replay_feeder.ReplayFeeder = null,
     /// Set while a job replays recorded history (RA8EMU-1196): the
     /// machine's states are the past's, not new stops, so the history
     /// ring records nothing while it holds.
@@ -110,13 +122,12 @@ pub const Session = struct {
     pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
         self.board_ticks[@backingInt(core)] = .{ .tick = tick, .guest = guest };
     }
-    pub fn attachDisplay(self: *Session, display: session_display.Display) void {
-        self.display = display;
+    pub fn attachDisplay(self: *Session, d: session_display.Display) void {
+        self.display = d;
     }
     pub fn attachFaults(self: *Session, faults: *board_faults.Faults) void {
         self.faults = faults;
     }
-
     pub fn attachForkRouter(self: *Session, router: *session_fork.ForkRouter) void {
         self.fork_router = router;
     }
@@ -143,6 +154,25 @@ pub const Session = struct {
     }
     pub fn attachPersistentRecorder(self: *Session, rec: *history_recorder.Recorder) void {
         self.persistent_recorder = rec;
+    }
+    pub fn attachAsyncQueue(self: *Session, queue: history_async.AsyncQueue) void {
+        self.async_traffic.queue = queue;
+    }
+    pub fn injectAsync(self: *Session, source: history_async.Source, now_ns: u64, data: []const u8) anyerror!void {
+        return async_traffic.inject(self, source, now_ns, data);
+    }
+    pub fn asyncOverflow(self: *const Session) ?history_async.OverflowState {
+        if (self.async_traffic.queue) |*q| return q.overflowState();
+        return null;
+    }
+    pub fn lastDiscardReport(self: *const Session) ?history_async.DiscardReport {
+        return self.async_traffic.last_discard_report;
+    }
+    pub fn comparePositions(self: *const Session, a: Position, b: Position) anyerror!std.math.Order {
+        return session_fork.comparePositions(self, a, b);
+    }
+    pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!void {
+        return session_fork.loadReplayInterventions(self, log_bytes);
     }
     pub fn currentPosition(self: *const Session) history_position.Position {
         return session_fork.currentPosition(self);
@@ -192,13 +222,10 @@ pub const Session = struct {
     }
 
     pub fn waitSettled(self: *Session, timeout_ns: u64) anyerror!void {
-        const display = self.display orelse return session_display.Error.NoDisplay;
-        try display.waitSettled(timeout_ns);
+        return session_control.waitSettled(self, timeout_ns);
     }
-
     pub fn frame(self: *Session, allocator: std.mem.Allocator) anyerror!Frame {
-        const display = self.display orelse return session_display.Error.NoDisplay;
-        return display.frame(allocator);
+        return session_control.frame(self, allocator);
     }
 
     /// Load image bytes through the board-specific loader, then publish it.
@@ -250,27 +277,16 @@ pub const Session = struct {
 
     /// Puts the run back `back` recorded stops (RA8EMU-1170); forward replays.
     pub fn rewind(self: *Session, core: Core, back: u32) anyerror!void {
-        try self.select(core);
-        const h = self.history orelse return Error.NoHistory;
-        try h.restore(back);
-        self.publish(.{ .core = core, .kind = .rewound });
+        return session_control.rewind(self, core, back);
     }
-
     pub fn stepBack(self: *Session, core: Core) anyerror!void {
-        return self.rewind(core, 1);
+        return session_control.stepBack(self, core);
     }
-
     pub fn interrupt(self: *Session, core: Core) anyerror!stop_machine.Stop {
-        try self.select(core);
-        const stop = self.live.machine.interrupt();
-        self.publish(.{ .core = core, .kind = .stopped, .ended = .{ .stop = stop } });
-        return stop;
+        return session_control.interrupt(self, core);
     }
-
     pub fn pause(self: *Session, core: Core) anyerror!void {
-        try self.select(core);
-        self.live.machine.requestHalt();
-        self.publish(.{ .core = core, .kind = .paused });
+        return session_control.pause(self, core);
     }
 
     pub fn setSpeed(self: *Session, core: Core, factor: ?f64) anyerror!void {
@@ -349,42 +365,31 @@ pub const Session = struct {
     }
 
     pub fn itmPort(self: *Session, core: Core) anyerror!*itm.Itm {
-        return &(try self.machine(core)).itm;
+        return session_control.itmPort(self, core);
     }
 
     pub fn flushItm(self: *Session, core: Core, out: anytype, final: bool) anyerror!void {
-        try (try self.itmPort(core)).flush(out, final);
+        return session_control.flushItm(self, core, out, final);
     }
 
-    /// Reserve a bounded event queue while the engine is stopped.
     pub fn subscribe(self: *Session) Error!usize {
-        return self.event_stream.subscribe() orelse Error.TooManySubscribers;
+        return session_control.subscribe(self);
     }
-
-    /// Release a subscription while the engine is stopped.
     pub fn unsubscribe(self: *Session, id: usize) void {
-        self.event_stream.unsubscribe(id);
+        session_control.unsubscribe(self, id);
     }
-
-    /// Copy queued events without running subscriber code on the engine thread.
     pub fn pollEvents(self: *Session, id: usize, out: []Event) ?@import("event/stream.zig").Read {
-        return self.event_stream.read(id, out);
+        return session_control.pollEvents(self, id, out);
     }
-
     pub fn select(self: *Session, core: Core) anyerror!void {
         return self.live.switchTo(@backingInt(core));
     }
-
     pub fn dirty(self: *Session) void {
-        if (self.live.boundary) |edge| if (edge.saved) |saved| {
-            saved.stretch.dirty = true;
-        };
+        session_control.dirty(self);
     }
 
     /// Publish a board observation into bounded subscriber queues.
     pub fn publish(self: *Session, event: Event) void {
-        var stamped = event;
-        stamped.virtual_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else self.now() catch 0;
-        self.event_stream.publish(stamped);
+        session_control.publish(self, event);
     }
 };

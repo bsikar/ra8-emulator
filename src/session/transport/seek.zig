@@ -60,7 +60,11 @@ pub fn queue(self: *Transport, text: []const u8) !Ticket {
         .position => |pt| pt.position,
         else => return Error.NotReady,
     };
-    const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
     const plan = switch (seek_engine.plan(target, facts)) {
         .plan => |plan| plan,
         .pending => return Error.NotReady,
@@ -94,13 +98,24 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     switch (seek_job.base) {
         .current => {},
         .checkpoint => if (!seek_job.restored) {
+            if (self.session.fork_router) |router| {
+                if (router.active_line != seek_job.target.branch) {
+                    router.switchActiveLine(seek_job.target.branch);
+                }
+            }
             try self.restoreBase(seek_job.base);
             seek_job.restored = true;
+            if (self.history) |br| {
+                if (br.logBytes) |lb| {
+                    const raw = lb(br.context) catch &[_]u8{};
+                    if (raw.len > 0) try self.session.loadReplayInterventions(raw);
+                }
+            }
             return null;
         },
     }
     const grid = self.session.grid orelse return error.NoGrid;
-    const ord = position_mod.compare(grid.at, seek_job.target) catch return error.OtherLine;
+    const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
     if (ord != .lt) return transport_mod.reached();
     self.session.setReplaying(true);
     defer self.session.setReplaying(false);

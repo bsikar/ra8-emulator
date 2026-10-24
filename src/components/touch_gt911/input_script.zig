@@ -43,6 +43,41 @@ pub fn encodeBody(writer: anytype, event: Event) !void {
     }
 }
 
+pub fn decodeBody(body: []const u8) !Event {
+    if (body.len == 0) return error.Truncated;
+    switch (body[0]) {
+        1 => {
+            if (body.len < 5) return error.Truncated;
+            const x = std.mem.readInt(u16, body[1..3], .little);
+            const y = std.mem.readInt(u16, body[3..5], .little);
+            return .{ .tap = .{ .x = x, .y = y } };
+        },
+        2 => {
+            if (body.len < 17) return error.Truncated;
+            const fx = std.mem.readInt(u16, body[1..3], .little);
+            const fy = std.mem.readInt(u16, body[3..5], .little);
+            const tx = std.mem.readInt(u16, body[5..7], .little);
+            const ty = std.mem.readInt(u16, body[7..9], .little);
+            const dur = std.mem.readInt(u64, body[9..17], .little);
+            return .{ .swipe = .{ .from = .{ .x = fx, .y = fy }, .to = .{ .x = tx, .y = ty }, .duration_ns = dur } };
+        },
+        3 => {
+            if (body.len < 13) return error.Truncated;
+            const x = std.mem.readInt(u16, body[1..3], .little);
+            const y = std.mem.readInt(u16, body[3..5], .little);
+            const dur = std.mem.readInt(u64, body[5..13], .little);
+            return .{ .longpress = .{ .point = .{ .x = x, .y = y }, .duration_ns = dur } };
+        },
+        4 => {
+            if (body.len < 3) return error.Truncated;
+            const down = body[1] != 0;
+            const btn: Button = if (body[2] == 0) .sw1 else .sw2;
+            return .{ .button = .{ .down = down, .button_id = btn } };
+        },
+        else => return error.BadValue,
+    }
+}
+
 pub const Timed = struct { at_ns: u64, event: Event };
 pub const max_events = 256;
 pub const Button = enum { sw1, sw2 };

@@ -36,6 +36,14 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
 
 /// Drive one play or continue slice at the session's run budget.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
+    if (self.history) |br| {
+        if (br.logBytes) |lb| {
+            if (self.session.replay_feeder == null) {
+                const raw = lb(br.context) catch &[_]u8{};
+                if (raw.len > 0) try self.session.loadReplayInterventions(raw);
+            }
+        }
+    }
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) return null;
     return ended;

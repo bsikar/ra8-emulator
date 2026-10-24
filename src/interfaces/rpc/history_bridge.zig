@@ -79,6 +79,13 @@ pub const Bridge = struct {
         }
         return error.NoHistory;
     }
+
+    /// Returns the raw committed log bytes for in-RAM histories.
+    pub fn logBytes(context: *anyopaque) anyerror![]const u8 {
+        const self: *Bridge = @ptrCast(@alignCast(context));
+        if (self.ram) |r| return r.log_bytes.items;
+        return &[_]u8{};
+    }
 };
 
 /// Read the file's bytes into `buf` from its start; a short file stops

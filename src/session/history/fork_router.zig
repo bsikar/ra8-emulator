@@ -123,6 +123,14 @@ pub const ForkRouter = struct {
         self.cancel();
     }
 
+    /// Switches the active line to a different branch.
+    pub fn switchActiveLine(self: *ForkRouter, new_line: BranchId) void {
+        self.active_line = new_line;
+        if (self.graph) |g| {
+            g.active_branch = new_line;
+        }
+    }
+
     /// Returns the recorded end position of the active execution line.
     pub fn recordedEnd(self: *const ForkRouter) Position {
         if (self.graph) |g| {
