@@ -331,7 +331,7 @@ pub const WindowTrail = struct {
         }
     }
 
-    fn pureRead(self: *WindowTrail, address: u32, into: []u8) !void {
+    pub fn pureRead(self: *WindowTrail, address: u32, into: []u8) !void {
         if (into.len == 0) return;
         if (self.store.port) |*port| if (port.geometry.locate(address, into.len)) |hit| {
             switch (hit.kind) {
@@ -354,7 +354,7 @@ pub const WindowTrail = struct {
         }
     }
 
-    fn evictOldest(self: *WindowTrail) void {
+    pub fn evictOldest(self: *WindowTrail) void {
         if (self.count == 0) return;
         const oldest = &self.slots[self.head];
         self.used_honest_bytes -= oldest.slot.honest_bytes;

@@ -50,6 +50,11 @@ pub const Files = struct {
     attachments: ?attachment_snapshot.Binding = null,
 
     pub fn writeTo(self: *Files, writer: *std.Io.Writer) !void {
+        return self.writeParts(writer, .{});
+    }
+
+    /// The save stream with only `parts` (run_file.Parts) written.
+    pub fn writeParts(self: *Files, writer: *std.Io.Writer, parts: run_file.Parts) !void {
         comptime if (!complete()) @compileError("unclassified Session snapshot field");
         try self.single();
         comptime if (!attachment_snapshot.inventory.complete()) @compileError("unclassified attachment field");
@@ -58,7 +63,7 @@ pub const Files = struct {
         const count: usize = if (self.pair != null) 2 else 1;
         const stores = self.storesOf();
         const cores = self.coresOf();
-        try run_file.savePairAttached(writer, stores[0..count], cores[0..count], self.board, self.identity());
+        try run_file.savePairParts(writer, stores[0..count], cores[0..count], self.board, self.identity(), parts);
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{ .owed = self.edge.saved.stretch.carry }, writer);
         try stretch.saveGrid(self.edge.saved, writer);
@@ -73,6 +78,11 @@ pub const Files = struct {
     }
 
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
+        return self.readParts(bytes, .{});
+    }
+
+    /// Restores only `parts`; the board's attachments follow the board.
+    pub fn readParts(self: *Files, bytes: []const u8, parts: run_file.Parts) !void {
         try self.single();
         var bases = .{ self.edge.timebase, self.edge.ns_timebase };
         try systick.load(.{ &bases[0], &bases[1] }, bytes);
@@ -91,7 +101,7 @@ pub const Files = struct {
         var second: ?PairState = null;
         if (self.pair) |pair| second = try readSecond(pair, bytes);
         const stores = self.storesOf();
-        var staged = try run_file.prepareAttached(bytes, stores[0..count], cores[0..count], self.board, self.identity());
+        var staged = try run_file.prepareParts(bytes, stores[0..count], cores[0..count], self.board, self.identity(), parts);
         defer staged.deinit();
         if (grid.cut) {
             const selected = if (grid.cut_pending.bank == .secure) bases[0] else bases[1];
@@ -112,10 +122,10 @@ pub const Files = struct {
             // A closed turn in CPU1's phase is one not opened yet: slots there mean a turn was dropped.
             if (!saved.turn.open and grid.at.phase == .cpu1 and grid.lengths[1] != 0) return error.BadValue;
         } else if (grid.at.phase == .cpu1 or grid.lengths[1] != 0) return error.BadValue;
-        var attachment_state = try attachment_snapshot.prepare(self.board, self.attachments, bytes);
-        defer attachment_state.deinit();
+        var attachment_state = if (parts.board) try attachment_snapshot.prepare(self.board, self.attachments, bytes) else null;
+        defer if (attachment_state) |*held| held.deinit();
         staged.commit(stores[0..count], cores[0..count], self.board);
-        attachment_state.commit(self.board, self.attachments);
+        if (attachment_state) |*held| held.commit(self.board, self.attachments);
         self.edge.timebase = bases[0];
         self.edge.ns_timebase = bases[1];
         self.edge.saved = grid;
