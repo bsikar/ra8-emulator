@@ -82,6 +82,32 @@ pub const BranchGraph = struct {
         return self.nodes.get(id);
     }
 
+    /// Refuses a graph a reader could not walk: a node whose parent is
+    /// missing, ancestry that never reaches the root, an active branch
+    /// that does not exist, or a next id some node already holds.
+    pub fn validate(self: *const BranchGraph) Error!void {
+        const root = self.nodes.get(root_branch_id) orelse return Error.NoSuchBranch;
+        if (root.parent != root_branch_id) return Error.InvalidForkPosition;
+        if (!self.nodes.contains(self.active_branch)) return Error.NoSuchBranch;
+        var it = self.nodes.valueIterator();
+        while (it.next()) |node| {
+            if (node.id >= self.next_branch_id) return Error.BranchAlreadyExists;
+            var curr = node.id;
+            var hops: usize = 0;
+            while (curr != root_branch_id) : (hops += 1) {
+                if (hops > self.nodes.count()) return Error.InvalidForkPosition;
+                curr = (self.nodes.get(curr) orelse return Error.NoSuchBranch).parent;
+            }
+        }
+    }
+
+    /// Makes `id` the active branch: its node is the one live node.
+    pub fn setActive(self: *BranchGraph, id: BranchId) void {
+        self.active_branch = id;
+        var it = self.nodes.valueIterator();
+        while (it.next()) |node| node.is_live = (node.id == id);
+    }
+
     /// Inserts or updates an existing branch node, adjusting next_branch_id accordingly.
     pub fn insertNode(self: *BranchGraph, node: BranchNode) !void {
         try self.nodes.put(node.id, node);
@@ -157,15 +183,17 @@ pub const BranchGraph = struct {
         }
         if (p.branch != line_leaf) {
             if (self.childLeadingTo(p.branch, line_leaf)) |child_id| {
-                const child_node = self.nodes.get(child_id).?;
+                const child_node = self.nodes.get(child_id) orelse return Error.NoSuchBranch;
                 if (scalarOrder(p, child_node.fork_at) != .lt) {
                     return Error.OtherLine;
                 }
             }
         }
         var curr = line_leaf;
-        while (curr != root_branch_id) {
-            const node = self.nodes.get(curr).?;
+        var hops: usize = 0;
+        while (curr != root_branch_id) : (hops += 1) {
+            if (hops > self.nodes.count()) return Error.NoSuchBranch;
+            const node = self.nodes.get(curr) orelse return Error.NoSuchBranch;
             if (scalarOrder(p, node.fork_at) != .lt) {
                 return .{
                     .branch = curr,

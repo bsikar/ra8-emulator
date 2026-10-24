@@ -31,6 +31,7 @@ const history_root = @import("history/root.zig");
 const history_async = @import("history/async_queue.zig");
 const async_traffic = @import("history/async_traffic.zig");
 const replay_feeder = @import("history/replay_feeder.zig");
+const session_line = @import("line.zig");
 
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
@@ -173,35 +174,23 @@ pub const Session = struct {
     pub fn lastDiscardReport(self: *const Session) ?history_async.DiscardReport {
         return self.async_traffic.last_discard_report;
     }
-    pub fn comparePositions(self: *const Session, a: Position, b: Position) anyerror!std.math.Order {
-        return session_fork.comparePositions(self, a, b);
-    }
-    pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!void {
-        return session_fork.loadReplayInterventions(self, log_bytes);
-    }
-    pub fn currentPosition(self: *const Session) history_position.Position {
-        return session_fork.currentPosition(self);
-    }
-    pub fn notePosition(self: *Session, pos: history_position.Position) void {
-        session_fork.notePosition(self, pos);
-    }
-    pub fn forkPending(self: *const Session) ?session_fork.PendingFork {
-        return session_fork.forkPending(self);
-    }
-    pub fn confirmFork(self: *Session) anyerror!void {
-        return session_fork.confirmFork(self);
-    }
-    pub fn cancelFork(self: *Session) void {
-        session_fork.cancelFork(self);
-    }
-    pub fn consoleInput(self: *Session, core: Core, bytes: []const u8) anyerror!void {
-        return session_fork.consoleInput(self, core, bytes);
-    }
-    pub fn changeCamera(self: *Session, core: Core, spec: []const u8) anyerror!void {
-        return session_fork.changeCamera(self, core, spec);
-    }
-    pub fn skipBkpt(self: *Session, core: Core) anyerror!void {
-        return session_fork.skipBkpt(self, core);
+    pub const comparePositions = session_fork.comparePositions;
+    pub const loadReplayInterventions = session_fork.loadReplayInterventions;
+    pub const currentPosition = session_fork.currentPosition;
+    pub const notePosition = session_fork.notePosition;
+    /// Puts the run's scheduler position on the active line (after a restore).
+    pub const stampLine = session_line.stampLine;
+    pub const switchLine = session_line.switchLine;
+    pub const forkPending = session_fork.forkPending;
+    pub const confirmFork = session_fork.confirmFork;
+    pub const cancelFork = session_fork.cancelFork;
+    pub const consoleInput = session_fork.consoleInput;
+    pub const changeCamera = session_fork.changeCamera;
+    pub const skipBkpt = session_fork.skipBkpt;
+    /// Frees what replay holds for this session (the feeder); its owner
+    /// calls this at teardown.
+    pub fn releaseReplay(self: *Session) void {
+        replay_feeder.release(self);
     }
 
     /// Put the part on `at` into `mode` from now on, mid-run included.

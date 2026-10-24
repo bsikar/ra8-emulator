@@ -124,12 +124,11 @@ pub const ForkRouter = struct {
         self.cancel();
     }
 
-    /// Switches the active line to a different branch.
+    /// Switches the active line to a different branch; the graph's
+    /// active branch and its nodes' live flags follow.
     pub fn switchActiveLine(self: *ForkRouter, new_line: BranchId) void {
         self.active_line = new_line;
-        if (self.graph) |g| {
-            g.active_branch = new_line;
-        }
+        if (self.graph) |g| g.setActive(new_line);
     }
 
     /// Returns the recorded end position of the active execution line.

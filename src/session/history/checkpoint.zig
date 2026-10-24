@@ -37,6 +37,9 @@ pub const Checkpoint = struct {
     /// object the storage does not hold (object-before-log).
     pub fn fire(self: *Checkpoint, round: u64) anyerror!void {
         if (self.every == 0 or round == 0 or round % self.every != 0) return;
+        // A replayed round is already in the history (its checkpoint, if
+        // it took one, is in the log), and a stopped history takes none.
+        if (self.recorder.replaying or self.recorder.stopped) return;
         // The budget's relief order, the controller's share of it: the
         // orphans and frames steps belong to the host's prune (the
         // recorder cannot scan its object space), so the controller

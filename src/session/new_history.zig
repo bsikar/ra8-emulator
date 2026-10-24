@@ -8,7 +8,9 @@
 //! stops recording rather than mixing two programs into one history.
 const std = @import("std");
 const api = @import("api.zig");
-const fork = @import("fork.zig");
+const apply = @import("apply.zig");
+const line = @import("line.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
 const branch_mod = @import("history/branch.zig");
 const history_root = @import("history/root.zig");
 const async_traffic = @import("history/async_traffic.zig");
@@ -33,31 +35,52 @@ pub fn differs(self: *const Session, core: Core, image: []const u8) bool {
     return !std.mem.eql(u8, &seen, &id);
 }
 
-/// Starts a new history for `image` on `core` and loads it live.
+/// Starts a new history for `image` on `core` and loads it live. The
+/// fresh graph is made and the image loaded before anything else changes,
+/// so running out of memory or a load that fails leaves the old image's
+/// lines, identity and history as they were.
 pub fn start(self: *Session, core: Core, image: []const u8) anyerror!void {
-    try resetLines(self);
+    var fresh: ?branch_mod.BranchGraph = null;
+    if (self.fork_router) |router| if (router.graph) |graph| {
+        fresh = try branch_mod.BranchGraph.init(graph.allocator);
+    };
+    errdefer if (fresh) |*graph| graph.deinit();
+    try apply.applyAction(self, .{ .load = .{ .core = core, .image = image } });
+    resetLines(self, &fresh);
     self.root = null;
     self.image_identity = .{ null, null };
     self.image_identity[@backingInt(core)] = history_root.identity(image);
-    if (self.new_history) |hook| {
-        try hook.startFn(hook.context, core, image);
-    } else if (self.persistent_recorder != null) {
-        self.persistent_recorder = null;
-    }
-    try fork.applyAction(self, .{ .load = .{ .core = core, .image = image } });
+    const hook = self.new_history orelse return stopRecording(self);
+    hook.startFn(hook.context, core, image) catch |err| {
+        stopRecording(self);
+        return err;
+    };
 }
 
-/// Back to a single base line: no branches, no pending fork, nothing queued.
-fn resetLines(self: *Session) !void {
+/// Ends recording into the old history without touching it: the recorder
+/// stages, checkpoints and commits nothing more (its checkpoint policy
+/// shares it), and branches.bin is never rewritten for the new program.
+fn stopRecording(self: *Session) void {
+    if (self.persistent_recorder) |rec| rec.stopped = true;
+    self.persistent_recorder = null;
+    if (self.history) |h| h.recorder = null;
+    self.graph_sink = null;
+}
+
+/// Back to a single base line: no branches, no pending fork, nothing
+/// queued or replayed. `fresh` is the graph swapped in; it is spent here.
+fn resetLines(self: *Session, fresh: *?branch_mod.BranchGraph) void {
     _ = async_traffic.clearOnFork(self);
+    replay_feeder.release(self);
     const router = self.fork_router orelse return;
     router.cancel();
     router.first_fork_confirmed = false;
     router.seq = 0;
     if (router.graph) |graph| {
-        const allocator = graph.allocator;
         graph.deinit();
-        graph.* = try branch_mod.BranchGraph.init(allocator);
+        graph.* = fresh.*.?;
+        fresh.* = null;
     }
     router.switchActiveLine(branch_mod.root_branch_id);
+    line.stampLine(self);
 }

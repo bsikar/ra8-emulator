@@ -28,7 +28,16 @@ pub const Storage = struct {
     append: *const fn (context: *anyopaque, bytes: []const u8) anyerror!void,
     flush: *const fn (context: *anyopaque) anyerror!void,
     truncate: *const fn (context: *anyopaque, len: u64) anyerror!void,
-    switchSegment: ?*const fn (context: *anyopaque, branch: u32, seg: u32) anyerror!void = null,
+    /// Makes segment `seg` of `branch` the one appends reach, opened for
+    /// appending when it exists and made when it does not, and answers the
+    /// bytes it already holds. Null keeps one segment for every line.
+    switchSegment: ?*const fn (context: *anyopaque, branch: u32, seg: u32) anyerror!u64 = null,
+};
+
+/// Which log segment the recorder appends to.
+pub const Segment = struct {
+    branch: u32 = 0,
+    index: u32 = 0,
 };
 
 /// What a recovered segment answered.
@@ -107,8 +116,15 @@ pub const Recorder = struct {
     committed_bytes: u64 = 0,
     /// Total committed bytes across all segments of this history.
     history_bytes: u64 = 0,
-    /// Set while re-executing recorded history; skips staging new records.
+    /// Set while re-executing recorded history; skips staging new records
+    /// and checkpoint objects.
     replaying: bool = false,
+    /// Set once the session stops recording into this history (a different
+    /// image loaded with no new history to open): nothing more is staged,
+    /// checkpointed or committed.
+    stopped: bool = false,
+    /// The segment appends reach.
+    segment: Segment = .{},
     /// The object space checkpoints write through, as the application
     /// fills it; a recorder without one refuses checkpoints.
     objects: ?Objects = null,
@@ -157,10 +173,34 @@ pub const Recorder = struct {
     /// any pending bytes on the current segment first.
     pub fn switchSegment(self: *Recorder, now_ns: u64, branch: u32, seg: u32) anyerror!void {
         try self.commit(now_ns);
-        if (self.storage.switchSegment) |sw| {
-            try sw(self.storage.context, branch, seg);
+        const sw = self.storage.switchSegment orelse {
+            self.segment = .{ .branch = branch, .index = seg };
+            return;
+        };
+        self.committed_bytes = try sw(self.storage.context, branch, seg);
+        self.segment = .{ .branch = branch, .index = seg };
+    }
+
+    /// Drops every staged byte without committing it.
+    pub fn discardStaged(self: *Recorder) void {
+        self.staging.writer.end = 0;
+        self.log.pending_bytes = 0;
+    }
+
+    /// Undoes what a fork that did not complete wrote: the staged bytes go,
+    /// the segment is cut back to `mark` (its length when the fork opened
+    /// it), and appends return to `back`. Best effort: the fork's own
+    /// error is the one its caller reports, and bytes left behind name a
+    /// branch no graph holds, which every reader skips.
+    pub fn abandonSegment(self: *Recorder, back: Segment, mark: u64) void {
+        self.discardStaged();
+        if (self.committed_bytes > mark) {
+            self.storage.truncate(self.storage.context, mark) catch {};
+            self.history_bytes -|= self.committed_bytes - mark;
+            self.committed_bytes = mark;
         }
-        self.committed_bytes = 0;
+        if (self.segment.branch != back.branch or self.segment.index != back.index)
+            self.switchSegment(0, back.branch, back.index) catch {};
     }
 
     /// Records a host-originated mutation that crossed a dispatching
@@ -176,6 +216,9 @@ pub const Recorder = struct {
     /// storage does not hold yet. The staged record leaves at the next
     /// commit, with whatever frames share it.
     pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
+        // A replayed round's state is already in the history: neither its
+        // object nor its record is written again, nor counted again.
+        if (self.replaying or self.stopped) return;
         const objects = self.objects orelse return Error.NoObjects;
         if (self.disk) |watch| {
             _ = try self.checkDisk(watch, self.history_bytes + self.object_bytes, bytes.len);
@@ -215,7 +258,7 @@ pub const Recorder = struct {
     }
 
     fn stagePayload(self: *Recorder, kind: u16, payload: []const u8) anyerror!void {
-        if (self.replaying) return;
+        if (self.replaying or self.stopped) return;
         try format.encode(&self.staging.writer, kind, payload);
         self.log.pending_bytes += format.header_len + payload.len;
     }
@@ -257,6 +300,7 @@ pub const Recorder = struct {
     /// and its bytes staged the same way: a full device can stop the
     /// write in part, and the retry must never land on top of it.
     pub fn commit(self: *Recorder, now_ns: u64) anyerror!void {
+        if (self.stopped) return;
         if (self.disk) |watch| {
             if (self.log.pending_bytes > 0) {
                 _ = try self.checkDisk(watch, self.history_bytes + self.object_bytes, self.log.pending_bytes);

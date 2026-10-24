@@ -9,8 +9,7 @@ const position_mod = @import("position.zig");
 const record_mod = @import("record.zig");
 const replay_mod = @import("replay.zig");
 const fork_router_mod = @import("fork_router.zig");
-const input_script = @import("ra8_components").input_script;
-const core_view = @import("../core_view.zig");
+const action_codec = @import("action_codec.zig");
 
 pub const Action = fork_router_mod.Action;
 pub const Position = position_mod.Position;
@@ -20,94 +19,21 @@ pub const Intervention = record_mod.Intervention;
 
 pub const ScheduledIntervention = struct {
     position: Position,
+    /// The record's sequence number: the order among items at one position.
+    seq: u32 = 0,
     action: Action,
 };
 
-pub const EncodedAction = struct {
-    what: Intervention.What,
-    body: []const u8,
-};
+pub const EncodedAction = action_codec.EncodedAction;
 
 /// Encodes a Session Action into an intervention record payload.
-pub fn encodeAction(allocator: std.mem.Allocator, action: Action) !EncodedAction {
-    switch (action) {
-        .register => |reg| {
-            const body = try allocator.alloc(u8, 8);
-            std.mem.writeInt(u32, body[0..4], @backingInt(reg.which), .little);
-            std.mem.writeInt(u32, body[4..8], reg.value, .little);
-            return .{ .what = .register_write, .body = body };
-        },
-        .memory => |mem| {
-            const body = try allocator.alloc(u8, 4 + mem.bytes.len);
-            std.mem.writeInt(u32, body[0..4], mem.address, .little);
-            @memcpy(body[4..], mem.bytes);
-            return .{ .what = .memory_write, .body = body };
-        },
-        .input => |inp| {
-            var buf: [input_script.max_body_len]u8 = undefined;
-            var writer = std.Io.Writer.fixed(&buf);
-            try input_script.encodeBody(&writer, inp.event);
-            const what: Intervention.What = switch (inp.event) {
-                .button => .button,
-                else => .tap,
-            };
-            return .{ .what = what, .body = try allocator.dupe(u8, writer.buffered()) };
-        },
-        .console => |con| return .{ .what = .keystroke, .body = try allocator.dupe(u8, con.bytes) },
-        .plug => |p| return .{
-            .what = if (p.name != null) .plug else .unplug,
-            .body = if (p.name) |n| try allocator.dupe(u8, n) else &[_]u8{},
-        },
-        .fault => return .{ .what = .fault, .body = &[_]u8{} },
-        .camera => |cam| return .{ .what = .camera_change, .body = try allocator.dupe(u8, cam.spec) },
-        .skip_bkpt => return .{ .what = .skip_bkpt, .body = &[_]u8{} },
-        .load => |ld| return .{ .what = .load, .body = try allocator.dupe(u8, ld.image) },
-    }
-}
+pub const encodeAction = action_codec.encode;
 
 /// Frees memory allocated by encodeAction.
-pub fn freeEncodedAction(allocator: std.mem.Allocator, encoded: *EncodedAction) void {
-    if (encoded.body.len > 0) allocator.free(encoded.body);
-    encoded.* = undefined;
-}
+pub const freeEncodedAction = action_codec.free;
 
 /// Decodes an intervention record back into a Session Action.
-pub fn decodeAction(allocator: std.mem.Allocator, what: Intervention.What, body: []const u8) !Action {
-    switch (what) {
-        .register_write => {
-            if (body.len < 8) return error.Truncated;
-            const raw_reg = std.mem.readInt(u32, body[0..4], .little);
-            const val = std.mem.readInt(u32, body[4..8], .little);
-            if (raw_reg > std.math.maxInt(u6)) return error.BadValue;
-            const which: core_view.Cortex = @fromBackingInt(@intCast(@as(u6, @intCast(raw_reg))));
-            return .{ .register = .{ .core = .cpu0, .which = which, .value = val } };
-        },
-        .memory_write => {
-            if (body.len < 4) return error.Truncated;
-            const addr = std.mem.readInt(u32, body[0..4], .little);
-            const bytes = try allocator.dupe(u8, body[4..]);
-            return .{ .memory = .{ .core = .cpu0, .address = addr, .bytes = bytes } };
-        },
-        .tap, .button => {
-            const event = try input_script.decodeBody(body);
-            return .{ .input = .{ .core = .cpu0, .at_ns = 0, .event = event } };
-        },
-        .keystroke => {
-            const bytes = try allocator.dupe(u8, body);
-            return .{ .console = .{ .core = .cpu0, .bytes = bytes } };
-        },
-        .camera_change => {
-            const spec = try allocator.dupe(u8, body);
-            return .{ .camera = .{ .core = .cpu0, .spec = spec } };
-        },
-        .load => {
-            const img = try allocator.dupe(u8, body);
-            return .{ .load = .{ .core = .cpu0, .image = img } };
-        },
-        .skip_bkpt => return .{ .skip_bkpt = .{ .core = .cpu0 } },
-        else => return error.BadValue,
-    }
-}
+pub const decodeAction = action_codec.decode;
 
 pub const ReplayFeeder = struct {
     allocator: std.mem.Allocator,
@@ -151,12 +77,15 @@ pub const ReplayFeeder = struct {
         std.mem.sort(ScheduledIntervention, self.items.items, {}, sortLess);
     }
 
+    /// The next item due at `pos`: the first undelivered one whose
+    /// recorded position is at or before `pos`. A position the run never
+    /// stops on exactly still delivers its item at the first check past
+    /// it, so a missed sample never holds the queue.
     pub fn peekDue(self: *ReplayFeeder, pos: Position) ?ScheduledIntervention {
         if (self.cursor >= self.items.items.len) return null;
         const next = self.items.items[self.cursor];
-        const ord = branch_mod.scalarOrder(next.position, pos);
-        if (ord == .eq) return next;
-        return null;
+        if (branch_mod.scalarOrder(next.position, pos) == .gt) return null;
+        return next;
     }
 
     pub fn advance(self: *ReplayFeeder) void {
@@ -168,11 +97,14 @@ pub const ReplayFeeder = struct {
         return self.items.items[self.cursor].position;
     }
 
-    pub fn seekTo(self: *ReplayFeeder, pos: Position) void {
+    /// Puts the cursor on the first item still due from `pos`. A machine
+    /// restored to `pos` has none of the interventions made at `pos` yet
+    /// (`.at`); a machine that is already there live has them all (`.after`).
+    pub fn seekTo(self: *ReplayFeeder, pos: Position, from: From) void {
         self.cursor = 0;
         while (self.cursor < self.items.items.len) : (self.cursor += 1) {
             const ord = branch_mod.scalarOrder(self.items.items[self.cursor].position, pos);
-            if (ord != .lt) break;
+            if (ord == .gt or (ord == .eq and from == .at)) break;
         }
     }
 
@@ -184,27 +116,42 @@ pub const ReplayFeeder = struct {
         return self.items.items.len == 0;
     }
 
+    /// Re-applies every item due at the session's position, in recorded
+    /// order, without recording any of them again.
     pub fn checkAndApply(self: *ReplayFeeder, session: *api.Session) !void {
         const cur_pos = session.currentPosition();
         while (self.peekDue(cur_pos)) |item| {
             const prior = session.replaying;
             session.setReplaying(true);
             defer session.setReplaying(prior);
-            try @import("../fork.zig").applyAction(session, item.action);
             self.advance();
+            try apply.applyAction(session, item.action);
         }
     }
 };
 
-const api = @import("../api.zig");
+/// Where a load starts delivering, relative to the session's position.
+pub const From = enum { at, after };
 
-pub fn loadSessionInterventions(session: *api.Session, log_bytes: []const u8) !void {
+const api = @import("../api.zig");
+const apply = @import("../apply.zig");
+
+/// Loads the active line's interventions from the committed log into the
+/// session's feeder, due from the session's position.
+pub fn loadSessionInterventions(session: *api.Session, log_bytes: []const u8, from: From) !void {
     const router = session.fork_router orelse return;
     if (session.replay_feeder == null) {
         session.replay_feeder = ReplayFeeder.init(router.allocator);
     }
     try session.replay_feeder.?.loadFromLog(router.graph, router.active_line, log_bytes);
-    session.replay_feeder.?.seekTo(session.currentPosition());
+    session.replay_feeder.?.seekTo(session.currentPosition(), from);
+}
+
+/// Drops the session's feeder and everything it holds; the next replay
+/// loads the line it then runs on.
+pub fn release(session: *api.Session) void {
+    if (session.replay_feeder) |*feeder| feeder.deinit();
+    session.replay_feeder = null;
 }
 
 const ScanContext = struct {
@@ -223,9 +170,14 @@ fn visitRecord(ctx: *ScanContext, entry: replay_mod.Entry) anyerror!void {
                 if (raw_pos.branch != ctx.active_line) return;
                 break :blk raw_pos;
             };
-            const action = decodeAction(ctx.feeder.allocator, hit.intervention.what, hit.intervention.body) catch return;
+            // A kind this reader does not replay (an RPC mutation) is
+            // kept in the log and skipped here; a known kind whose body
+            // does not decode is a broken history, not a skip.
+            if (!replayable(hit.intervention.what)) return;
+            const action = try decodeAction(ctx.feeder.allocator, hit.intervention.what, hit.intervention.body);
             try ctx.feeder.items.append(ctx.feeder.allocator, .{
                 .position = canon_pos,
+                .seq = hit.header.seq,
                 .action = action,
             });
         },
@@ -233,6 +185,17 @@ fn visitRecord(ctx: *ScanContext, entry: replay_mod.Entry) anyerror!void {
     }
 }
 
+fn replayable(what: Intervention.What) bool {
+    return switch (what) {
+        .tap, .button, .keystroke, .register_write, .memory_write, .plug, .unplug, .fault, .camera_change, .skip_bkpt, .load => true,
+        else => false,
+    };
+}
+
 fn sortLess(_: void, a: ScheduledIntervention, b: ScheduledIntervention) bool {
-    return branch_mod.scalarOrder(a.position, b.position) == .lt;
+    return switch (branch_mod.scalarOrder(a.position, b.position)) {
+        .lt => true,
+        .gt => false,
+        .eq => a.seq < b.seq,
+    };
 }

@@ -8,7 +8,6 @@
 const std = @import("std");
 const api = @import("../api.zig");
 const async_queue = @import("async_queue.zig");
-const branch_mod = @import("branch.zig");
 
 pub const Source = async_queue.Source;
 pub const AsyncQueue = async_queue.AsyncQueue;
@@ -47,12 +46,7 @@ pub const AsyncTraffic = struct {
 
 /// Returns whether the machine cursor is strictly before the active line's recorded end.
 pub fn isCursorInPast(session: *const api.Session) bool {
-    const router = session.fork_router orelse return false;
-    const graph = router.graph orelse return false;
-    const cursor = session.currentPosition();
-    const recorded_end = router.recordedEnd();
-    const ord = graph.compareOnLine(router.active_line, cursor, recorded_end) catch return false;
-    return ord == .lt;
+    return @import("../line.zig").inPast(session);
 }
 
 /// Ingests asynchronous host traffic. Queues if in past; delivers immediately if live.

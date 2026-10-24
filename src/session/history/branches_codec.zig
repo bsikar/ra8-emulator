@@ -208,11 +208,16 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) Error!branch_mod.
     var i: usize = 0;
     while (i < count) : (i += 1) {
         const node = try decodeRecord(bytes[offset..][0..record_len]);
-        try graph.nodes.put(node.id, node);
+        const slot = try graph.nodes.getOrPut(node.id);
+        if (slot.found_existing) return Error.BadValue;
+        slot.value_ptr.* = node;
         offset += record_len;
     }
 
     try validateHierarchy(&graph, count);
+    // The CRC guards torn bytes only: a graph whose active branch is
+    // missing or whose next id is already taken is refused here.
+    graph.validate() catch return Error.BadValue;
     return graph;
 }
 
@@ -244,5 +249,8 @@ pub fn rebuildFromLogFrames(
             }
         }
     }
+    // Branch records name their own parents; a log whose records do not
+    // form a tree (a parent never recorded) is not a graph to adopt.
+    graph.validate() catch return Error.BadValue;
     return graph;
 }

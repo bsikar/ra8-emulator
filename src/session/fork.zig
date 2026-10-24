@@ -1,20 +1,31 @@
-//! Session-level fork routing choke point and intervention execution (Slice 20.2).
+//! Session-level fork routing choke point and intervention execution
+//! (time-travel design section 11).
+//!
+//! Every host intervention reaches the machine through routeIntervention.
+//! At or past the active line's recorded end it applies live and is
+//! recorded where it happened. Before the recorded end it forks: the first
+//! fork of a session waits for a confirmation, and a fork is all or
+//! nothing. Its steps run in the order that keeps them undoable: checks
+//! that can refuse the action, the graph node, branches.bin, the new
+//! segment with the Branch record and the fork's own intervention, the
+//! line switch, then the action itself. A step that fails puts every
+//! earlier one back.
 const std = @import("std");
 const api = @import("api.zig");
 const fork_router_mod = @import("history/fork_router.zig");
-const branch_mod = @import("history/branch.zig");
-const branches_codec = @import("history/branches_codec.zig");
-const history_root = @import("history/root.zig");
 const history_record = @import("history/record.zig");
 const history_position = @import("history/position.zig");
-const elf = @import("ra8_board").image.elf;
-const symbols = @import("symbols.zig");
-const widget_tree = @import("widget_tree.zig");
+const history_root = @import("history/root.zig");
+const recorder_mod = @import("history/recorder.zig");
 const input_script = @import("ra8_components").input_script;
-const replay_feeder = @import("history/replay_feeder.zig");
+const action_codec = @import("history/action_codec.zig");
 const async_traffic = @import("history/async_traffic.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
 const lifecycle = @import("history/lifecycle.zig");
 const new_history = @import("new_history.zig");
+const apply = @import("apply.zig");
+const line = @import("line.zig");
+const run_slice = @import("run_slice.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -35,51 +46,29 @@ pub const ConsoleHook = fork_types.ConsoleHook;
 pub const CameraHook = fork_types.CameraHook;
 pub const GraphSink = fork_types.GraphSink;
 
-/// Resolves the current session position with line-aware branch id.
-pub fn currentPosition(self: *const Session) Position {
-    if (self.grid) |grid| {
-        var p = grid.at;
-        if (self.fork_router) |router| p.branch = router.active_line;
-        return p;
-    }
-    return .{
-        .branch = if (self.fork_router) |router| router.active_line else 0,
-        .r = 0,
-        .phase = .cpu0,
-        .o = 0,
-        .gap = .retired,
-    };
+pub const applyAction = apply.applyAction;
+pub const currentPosition = line.currentPosition;
+pub const notePosition = line.notePosition;
+pub const setReplaying = line.setReplaying;
+pub const comparePositions = line.comparePositions;
+pub const run = run_slice.run;
+pub const advanceBoard = run_slice.advanceBoard;
+pub const recordStop = run_slice.recordStop;
+pub const checkAndApplyReplayIntervention = run_slice.deliverDue;
+
+/// Loads the active line's interventions for a machine just restored to
+/// its position: the ones recorded there are still to apply.
+pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!void {
+    return replay_feeder.loadSessionInterventions(self, log_bytes, .at);
 }
 
-/// Updates the recorded end position of the active branch canonically as execution advances.
-pub fn notePosition(self: *Session, pos: Position) void {
-    if (self.replaying) return;
-    const router = self.fork_router orelse return;
-    const graph = router.graph orelse return;
-    const canon_pos = graph.canonicalize(router.active_line, pos) catch pos;
-    if (graph.get(router.active_line)) |mut_node| {
-        var node = mut_node;
-        const ord = branch_mod.scalarOrder(canon_pos, node.recorded_end);
-        if (ord == .gt) {
-            node.recorded_end = canon_pos;
-            graph.insertNode(node) catch {};
-            lifecycle.persistGraph(self) catch {};
-        }
-    }
-}
-
-pub fn setReplaying(self: *Session, replaying: bool) void {
-    self.replaying = replaying;
-    if (self.history) |h| h.replaying = replaying;
-    if (self.persistent_recorder) |rec| rec.replaying = replaying;
-}
-
+/// Stages the intervention record for `action` at `pos`.
 fn recordActionIntervention(self: *Session, pos: Position, action: Action) anyerror!void {
     if (self.replaying) return;
     const router = self.fork_router;
     const allocator = if (router) |r| r.allocator else if (self.persistent_recorder) |rec| rec.gpa else return;
-    var encoded = try replay_feeder.encodeAction(allocator, action);
-    defer replay_feeder.freeEncodedAction(allocator, &encoded);
+    var encoded = try action_codec.encode(allocator, action);
+    defer action_codec.free(allocator, &encoded);
     const seq = if (router) |r| r.nextSeq() else if (self.history) |h| h.seq else 0;
     if (self.history) |h| h.seq += 1;
     if (self.persistent_recorder) |rec| {
@@ -89,130 +78,95 @@ fn recordActionIntervention(self: *Session, pos: Position, action: Action) anyer
     }
 }
 
-/// Dispatches an action onto the machine without routing checks.
-pub fn applyAction(self: *Session, action: Action) anyerror!void {
-    switch (action) {
-        .register => |reg| {
-            try (try self.view(reg.core)).setRegister(reg.which, reg.value);
-            self.dirty();
-            self.publish(.{ .core = reg.core, .kind = .register_written });
-        },
-        .memory => |mem| {
-            try (try self.view(mem.core)).write(mem.address, mem.bytes);
-            self.dirty();
-            self.publish(.{ .core = mem.core, .kind = .memory_written, .address = mem.address });
-        },
-        .input => |inp| {
-            try self.select(inp.core);
-            const script = self.input_script orelse return api.Error.NoInput;
-            try script.schedule(.{ .at_ns = inp.at_ns, .event = inp.event });
-            self.publish(.{ .core = inp.core, .kind = .input_scheduled });
-        },
-        .console => |con| {
-            try self.select(con.core);
-            if (self.console_hook) |hook| {
-                try hook.feedFn(hook.context, con.bytes);
-            }
-            self.publish(.{ .core = con.core, .kind = .console_input });
-        },
-        .plug => |p| {
-            const hook = self.plugs orelse return api.Error.NoPlugs;
-            try hook.plugFn(hook.context, p.at, p.name);
-            self.publish(.{ .core = p.core, .kind = if (p.name != null) .plugged else .unplugged });
-        },
-        .fault => |f| {
-            const faults = self.faults orelse return api.Error.NoFaults;
-            try faults.set(f.at, f.mode);
-            self.publish(.{ .core = f.core, .kind = if (f.mode != null) .fault_set else .fault_cleared });
-        },
-        .camera => |cam| {
-            try self.select(cam.core);
-            if (self.camera_hook) |hook| {
-                try hook.changeFn(hook.context, cam.spec);
-            }
-            self.publish(.{ .core = cam.core, .kind = .camera_changed });
-        },
-        .skip_bkpt => |sk| {
-            try self.select(sk.core);
-            const view = try self.view(sk.core);
-            const pc = try view.register(.pc);
-            try view.setRegister(.pc, pc + 2);
-            self.dirty();
-            self.publish(.{ .core = sk.core, .kind = .bkpt_skipped, .address = pc });
-        },
-        .load => |ld| {
-            try self.select(ld.core);
-            const loader = self.loader orelse return api.Error.NoLoader;
-            try loader.loadFn(loader.context, ld.core, ld.image);
-            self.dirty();
-            const tree_address = if (elf.Image.init(ld.image)) |parsed| symbols.addressOf(parsed, widget_tree.symbol) else |_| null;
-            self.widget_tree_addresses[@backingInt(ld.core)] = tree_address;
-            self.publish(.{ .core = ld.core, .kind = .loaded });
-        },
+/// How far a fork got; a failure undoes every step it reached.
+const Stage = enum { none, node, persisted, segment, switched };
+
+const Undo = struct {
+    stage: Stage = .none,
+    new_id: u32 = 0,
+    old_line: u32 = 0,
+    old_next: u32 = 0,
+    segment: recorder_mod.Segment = .{},
+    mark: u64 = 0,
+};
+
+fn undoFork(self: *Session, undo: Undo) void {
+    const router = self.fork_router.?;
+    const graph = router.graph.?;
+    if (@backingInt(undo.stage) >= @backingInt(Stage.switched)) {
+        router.switchActiveLine(undo.old_line);
+        line.stampLine(self);
     }
+    if (@backingInt(undo.stage) >= @backingInt(Stage.segment)) {
+        if (self.persistent_recorder) |rec| rec.abandonSegment(undo.segment, undo.mark);
+    }
+    if (@backingInt(undo.stage) >= @backingInt(Stage.node)) {
+        _ = graph.nodes.remove(undo.new_id);
+        // An id whose segment was never opened is free again; one whose
+        // segment was opened stays spent, so a later fork never opens a
+        // segment an abandoned fork wrote.
+        if (@backingInt(undo.stage) < @backingInt(Stage.segment)) graph.next_branch_id = undo.old_next;
+    }
+    // branches.bin goes back to the graph without the branch. The fork's
+    // own error is the one reported; a failed rewrite leaves a node whose
+    // segment is empty, which every reader treats as a line with no future.
+    if (@backingInt(undo.stage) >= @backingInt(Stage.persisted)) lifecycle.persistGraph(self) catch {};
 }
 
 /// Executes a branch fork from a past cursor position.
 pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, action: Action) anyerror!void {
-    const router = self.fork_router orelse return;
+    const router = self.fork_router orelse return error.NoHistory;
+    const graph = router.graph orelse return error.NoHistory;
+    try apply.preflight(self, action);
     const now_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else self.now() catch 0;
-    const canon_fork = if (router.graph) |graph|
-        try graph.canonicalize(router.active_line, fork_pos)
-    else
-        fork_pos;
-    const parent_branch = canon_fork.branch;
-    var new_branch_id: u32 = parent_branch;
-    if (router.graph) |graph| {
-        new_branch_id = try graph.addBranch(parent_branch, canon_fork, reason, now_ns);
-    }
-    errdefer if (router.graph) |graph| {
-        _ = graph.nodes.remove(new_branch_id);
-        if (graph.next_branch_id == new_branch_id + 1) graph.next_branch_id = new_branch_id;
-    };
+    const canon = try graph.canonicalize(router.active_line, fork_pos);
+    var undo: Undo = .{ .old_line = router.active_line, .old_next = graph.next_branch_id };
+    errdefer undoFork(self, undo);
+    undo.new_id = try graph.addBranch(canon.branch, canon, reason, now_ns);
+    undo.stage = .node;
     try lifecycle.persistGraph(self);
+    undo.stage = .persisted;
+    // The child owns its fork point: the Branch record, the fork's own
+    // intervention and the node all name the new branch there.
+    var at = canon;
+    at.branch = undo.new_id;
     if (self.persistent_recorder) |rec| {
-        try rec.switchSegment(now_ns, new_branch_id, 0);
+        undo.segment = rec.segment;
+        try rec.switchSegment(now_ns, undo.new_id, 0);
+        undo.mark = rec.committed_bytes;
+        undo.stage = .segment;
         try rec.recordBranch(
-            .{ .position = canon_fork, .seq = router.nextSeq() },
-            .{ .id = new_branch_id, .parent = parent_branch, .fork_at = canon_fork, .reason = reason },
+            .{ .position = at, .seq = router.nextSeq() },
+            .{ .id = undo.new_id, .parent = canon.branch, .fork_at = at, .reason = reason },
         );
+        try recordActionIntervention(self, at, action);
+        try rec.commit(now_ns);
     }
-    if (router.graph) |graph| {
-        graph.active_branch = new_branch_id;
-        router.active_line = new_branch_id;
-    }
-    try applyAction(self, action);
-    try recordActionIntervention(self, canon_fork, action);
+    router.switchActiveLine(undo.new_id);
+    line.stampLine(self);
+    undo.stage = .switched;
+    try apply.applyAction(self, action);
+    if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);
     if (self.net_hook) |hook| hook.closeFlowsFn(hook.context);
     _ = async_traffic.clearOnFork(self);
+    replay_feeder.release(self);
 }
 
 /// The single Session-level routing choke point for host interventions.
 pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action: Action) anyerror!void {
     _ = core;
-    if (self.replaying) {
-        try applyAction(self, action);
-        return;
-    }
+    if (self.replaying) return applyAction(self, action);
     const router = self.fork_router orelse {
         try applyAction(self, action);
         try recordActionIntervention(self, currentPosition(self), action);
         return;
     };
-    const cursor = self.currentPosition();
-    const recorded_end = router.recordedEnd();
-    const decision = fork_router_mod.decide(
-        router.graph,
-        router.active_line,
-        cursor,
-        recorded_end,
-        router.first_fork_confirmed,
-        reason,
-    );
+    const cursor = currentPosition(self);
+    const decision = fork_router_mod.decide(router.graph, router.active_line, cursor, router.recordedEnd(), router.first_fork_confirmed, reason);
     switch (decision) {
         .live => {
             try applyAction(self, action);
-            try recordActionIntervention(self, cursor, action);
+            try recordActionIntervention(self, line.canonicalPosition(self), action);
         },
         .needs_confirmation => {
             try router.setPending(reason, cursor, action);
@@ -224,16 +178,21 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
 
 /// Returns details of any pending fork awaiting user confirmation.
 pub fn forkPending(self: *const Session) ?PendingFork {
-    if (self.fork_router) |router| {
-        return router.pending_fork;
-    }
+    if (self.fork_router) |router| return router.pending_fork;
     return null;
 }
 
 /// Confirms the pending fork, executes it, and applies the intervention.
+/// The fork was asked for at one position on one line; a machine that has
+/// moved or changed lines since refuses with error.ForkStale and drops it.
 pub fn confirmFork(self: *Session) anyerror!void {
     const router = self.fork_router orelse return error.NoHistory;
     const pending = router.pending_fork orelse return error.NoPendingFork;
+    const at = currentPosition(self);
+    if (!std.meta.eql(at, pending.position) or !line.inPast(self)) {
+        router.cancel();
+        return error.ForkStale;
+    }
     try executeFork(self, pending.reason, pending.position, pending.action);
     router.cancel();
     router.first_fork_confirmed = true;
@@ -241,9 +200,7 @@ pub fn confirmFork(self: *Session) anyerror!void {
 
 /// Cancels the pending fork, clearing it without mutating state.
 pub fn cancelFork(self: *Session) void {
-    if (self.fork_router) |router| {
-        router.cancel();
-    }
+    if (self.fork_router) |router| router.cancel();
 }
 
 pub fn setRegister(self: *Session, core: Core, which: Register, value: u32) anyerror!void {
@@ -288,74 +245,6 @@ pub fn changeCamera(self: *Session, core: Core, spec: []const u8) anyerror!void 
 
 pub fn skipBkpt(self: *Session, core: Core) anyerror!void {
     return routeIntervention(self, core, .skip_bkpt, .{ .skip_bkpt = .{ .core = core } });
-}
-
-pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
-    try self.select(core);
-    self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
-    try checkAndApplyReplayIntervention(self);
-    const retired_before = self.live.core.cpu.retired;
-    if (self.replay_feeder) |*feeder| {
-        if (feeder.nextPosition()) |next_pos| {
-            const cur_pos = currentPosition(self);
-            if (cur_pos.r == next_pos.r and cur_pos.phase == next_pos.phase and next_pos.o > cur_pos.o) {
-                const dist = next_pos.o - cur_pos.o;
-                if (self.live.budget > dist) self.live.budget = dist;
-            }
-        }
-    }
-    const ended = try self.live.go(command);
-    if (self.live.boundary == null) try advanceBoard(self, core, self.live.core.cpu.retired - retired_before);
-    notePosition(self, self.currentPosition());
-    try checkAndApplyReplayIntervention(self);
-    _ = try async_traffic.drainIfNeeded(self);
-    const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
-    self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-    if (self.history) |h| try recordStop(self, h, core, stopped, ended);
-    if (ended == .core) {
-        const address: ?u32 = switch (ended.core) {
-            .count => null,
-            .unknown => |instruction| instruction.address,
-            inline else => |at| at,
-        };
-        self.publish(.{ .core = stopped, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
-    }
-    return ended;
-}
-
-pub fn comparePositions(self: *const Session, a: Position, b: Position) anyerror!std.math.Order {
-    if (self.fork_router) |router| {
-        if (router.graph) |graph| {
-            return graph.compareOnLine(router.active_line, a, b);
-        }
-    }
-    return history_position.compare(a, b);
-}
-
-pub fn checkAndApplyReplayIntervention(self: *Session) anyerror!void {
-    if (self.replay_feeder) |*feeder| try feeder.checkAndApply(self);
-}
-
-pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!void {
-    return replay_feeder.loadSessionInterventions(self, log_bytes);
-}
-
-pub fn advanceBoard(self: *Session, core: Core, instructions: u64) anyerror!void {
-    const board = self.board_ticks[@backingInt(core)] orelse return;
-    var left = instructions;
-    while (left > 0) {
-        const count: u32 = @intCast(@min(left, std.math.maxInt(u32)));
-        try board.tick.run(board.guest, count);
-        left -= count;
-    }
-}
-
-pub fn recordStop(self: *Session, h: *api.History, asked: Core, stopped: Core, ended: api.Ended) anyerror!void {
-    if (self.replaying) return;
-    const stopped_pc: u32 = if (stopped == asked) self.live.core.cpu.regs.pc else self.live.other.?.core.cpu.regs.pc;
-    const tag: u16 = if (ended == .core) 1 else 0;
-    const at_ns = if (self.event_clock) |clock| clock.nowFn(clock.context) else 0;
-    try h.capture(stopped_pc, tag, at_ns);
 }
 
 pub fn load(self: *Session, core: Core, image: []const u8) anyerror!void {
