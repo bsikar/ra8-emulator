@@ -172,3 +172,76 @@ test "reroot drops earlier history and correctly isolates unreachable objects" {
     try std.testing.expectEqual(@as(usize, 1), plan.unreachable_objects.len);
     try std.testing.expect(plan.unreachable_objects[0].eql(obj_unique_to_cp0));
 }
+
+test "reroot preserves child branches and their objects intact" {
+    const allocator = std.testing.allocator;
+
+    var graph = try branch_mod.BranchGraph.init(allocator);
+    defer graph.deinit();
+
+    // Branch 1 forks from Branch 0 at round 10
+    const b1_id = try graph.addBranch(0, Position{ .branch = 0, .r = 10 }, .writes, 1000);
+    var b1_node = graph.get(b1_id).?;
+    b1_node.recorded_end = Position{ .branch = b1_id, .r = 30 };
+    try graph.insertNode(b1_node);
+
+    const obj_cp0 = ObjectId.compute("unique_cp0");
+    const obj_b1 = ObjectId.compute("unique_b1");
+    const obj_cp1 = ObjectId.compute("unique_cp1");
+
+    var pages0 = [_]manifest_mod.PageRef{.{ .space = .cpu0_sram, .page_index = 0, .object = obj_cp0 }};
+    const manifest0 = manifest_mod.Manifest{
+        .position = Position{ .branch = 0, .r = 10 },
+        .checkpoint_id = 0,
+        .picture = null,
+        .pages = &pages0,
+        .blobs = &.{},
+        .root_hash = ObjectId.zero,
+    };
+
+    var pages1 = [_]manifest_mod.PageRef{.{ .space = .cpu0_sram, .page_index = 1, .object = obj_cp1 }};
+    const manifest1 = manifest_mod.Manifest{
+        .position = Position{ .branch = 0, .r = 50 },
+        .checkpoint_id = 1,
+        .picture = null,
+        .pages = &pages1,
+        .blobs = &.{},
+        .root_hash = ObjectId.zero,
+    };
+
+    var pages2 = [_]manifest_mod.PageRef{.{ .space = .cpu0_sram, .page_index = 2, .object = obj_b1 }};
+    const manifest2 = manifest_mod.Manifest{
+        .position = Position{ .branch = b1_id, .r = 20 },
+        .checkpoint_id = 2,
+        .picture = null,
+        .pages = &pages2,
+        .blobs = &.{},
+        .root_hash = ObjectId.zero,
+    };
+
+    const checkpoints = [_]CheckpointEntry{
+        .{ .id = 0, .position = Position{ .branch = 0, .r = 10 }, .manifest = &manifest0 },
+        .{ .id = 1, .position = Position{ .branch = 0, .r = 50 }, .manifest = &manifest1 },
+        .{ .id = 2, .position = Position{ .branch = b1_id, .r = 20 }, .manifest = &manifest2 },
+    };
+
+    // Re-root at Checkpoint 1 (round 50 on Branch 0)
+    var plan = try reroot.planReroot(allocator, 1, true, &checkpoints, &graph, &.{});
+    defer plan.deinit(allocator);
+
+    // Only Checkpoint 0 should be dropped
+    try std.testing.expectEqual(@as(usize, 1), plan.dropped_checkpoints.len);
+    try std.testing.expectEqual(@as(u32, 0), plan.dropped_checkpoints[0]);
+
+    // Checkpoint 2 on Branch 1 is preserved intact
+    for (plan.dropped_checkpoints) |d| {
+        try std.testing.expect(d != 2);
+    }
+
+    // Branch 1 is NOT dropped
+    try std.testing.expectEqual(@as(usize, 0), plan.dropped_branches.len);
+
+    // Branch 1's unique object is NOT unreachable
+    try std.testing.expectEqual(@as(usize, 1), plan.unreachable_objects.len);
+    try std.testing.expect(plan.unreachable_objects[0].eql(obj_cp0));
+}

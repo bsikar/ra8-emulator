@@ -78,6 +78,7 @@ pub fn markForkBases(checkpoints: []CheckpointRef, graph: *const branch_mod.Bran
         if (node.id == branch_mod.root_branch_id) continue;
         var best_idx: ?usize = null;
         for (checkpoints, 0..) |cp, i| {
+            if (cp.position.branch != node.fork_at.branch) continue;
             if (branch_mod.scalarOrder(cp.position, node.fork_at) != .gt) {
                 best_idx = i;
             }

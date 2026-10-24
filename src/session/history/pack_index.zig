@@ -46,9 +46,7 @@ pub const Index = struct {
     }
 
     /// Fast lookup by ObjectId using binary search.
-    /// Fast prefilter check is evaluated, but full 128-bit comparison is mandatory.
     pub fn lookup(self: *const Index, id: ObjectId) ?Entry {
-        const pref = id.prefilter();
         var low: usize = 0;
         var high: usize = self.entries.len;
 
@@ -58,11 +56,7 @@ pub const Index = struct {
             const ord = id.order(entry.object_id);
 
             switch (ord) {
-                .eq => {
-                    // Full 128-bit matched. Verify prefilter consistency.
-                    if (entry.xxh3_prefilter != pref) return null;
-                    return entry.*;
-                },
+                .eq => return entry.*,
                 .lt => high = mid,
                 .gt => low = mid + 1,
             }

@@ -141,11 +141,13 @@ pub fn planCompaction(
     const obsolete_packs = try allocator.alloc(u32, obsolete_count);
     errdefer allocator.free(obsolete_packs);
 
-    const copy_objects = try allocator.alloc(LiveObject, live_to_copy_count);
-    errdefer allocator.free(copy_objects);
+    var copy_list: std.ArrayList(LiveObject) = .empty;
+    defer copy_list.deinit(allocator);
+
+    var seen_live = std.AutoHashMap([16]u8, void).init(allocator);
+    defer seen_live.deinit();
 
     var obs_idx: usize = 0;
-    var copy_idx: usize = 0;
 
     for (packs, 0..) |pack, i| {
         if (!stats_slice[i].needs_compaction) continue;
@@ -155,17 +157,28 @@ pub fn planCompaction(
 
         for (pack.entries) |entry| {
             if (live_set.contains(entry.object_id.bytes)) {
-                copy_objects[copy_idx] = .{
-                    .object_id = entry.object_id,
-                    .pack_id = pack.pack_id,
-                    .pack_offset = entry.pack_offset,
-                    .compressed_len = entry.compressed_len,
-                    .uncompressed_len = entry.uncompressed_len,
-                };
-                copy_idx += 1;
+                const gop = try seen_live.getOrPut(entry.object_id.bytes);
+                if (!gop.found_existing) {
+                    try copy_list.append(allocator, .{
+                        .object_id = entry.object_id,
+                        .pack_id = pack.pack_id,
+                        .pack_offset = entry.pack_offset,
+                        .compressed_len = entry.compressed_len,
+                        .uncompressed_len = entry.uncompressed_len,
+                    });
+                }
             }
         }
     }
+
+    std.mem.sort(LiveObject, copy_list.items, {}, struct {
+        fn lessThan(_: void, a: LiveObject, b: LiveObject) bool {
+            return a.object_id.order(b.object_id) == .lt;
+        }
+    }.lessThan);
+
+    const copy_objects = try copy_list.toOwnedSlice(allocator);
+    errdefer allocator.free(copy_objects);
 
     return .{
         .new_pack_id = new_pack_id,

@@ -122,3 +122,40 @@ test "compaction cross-line liveness keeps objects referenced only by non-active
     // Both live objects from Branch 0 and Branch 1 must be preserved in copy_objects
     try std.testing.expectEqual(@as(usize, 2), plan.copy_objects.len);
 }
+
+test "compaction deduplicates live objects present in multiple obsolete packs" {
+    const allocator = std.testing.allocator;
+
+    var live_set = compaction.LiveSet.init(allocator);
+    defer live_set.deinit();
+
+    const obj_live1 = ObjectId.compute("live_object_1");
+    const obj_dead1 = ObjectId.compute("dead_object_1");
+    const obj_dead2 = ObjectId.compute("dead_object_2");
+
+    try live_set.put(obj_live1.bytes, {});
+
+    // Pack 1: contains obj_live1 and obj_dead1 (50% dead -> compacts)
+    var entries_pack1 = [_]pack_index.Entry{
+        .{ .object_id = obj_live1, .xxh3_prefilter = 0, .pack_offset = 0, .compressed_len = 100, .uncompressed_len = 200 },
+        .{ .object_id = obj_dead1, .xxh3_prefilter = 0, .pack_offset = 132, .compressed_len = 100, .uncompressed_len = 200 },
+    };
+    const pack1 = pack_index.Index{ .pack_id = 1, .entries = &entries_pack1 };
+
+    // Pack 2: ALSO contains obj_live1 and obj_dead2 (50% dead -> compacts)
+    var entries_pack2 = [_]pack_index.Entry{
+        .{ .object_id = obj_live1, .xxh3_prefilter = 0, .pack_offset = 0, .compressed_len = 100, .uncompressed_len = 200 },
+        .{ .object_id = obj_dead2, .xxh3_prefilter = 0, .pack_offset = 132, .compressed_len = 100, .uncompressed_len = 200 },
+    };
+    const pack2 = pack_index.Index{ .pack_id = 2, .entries = &entries_pack2 };
+
+    const packs = [_]pack_index.Index{ pack1, pack2 };
+    var plan = try compaction.planCompaction(allocator, &packs, &live_set, 20);
+    defer plan.deinit(allocator);
+
+    // Both packs are obsolete
+    try std.testing.expectEqual(@as(usize, 2), plan.obsolete_packs.len);
+    // obj_live1 must appear in copy_objects EXACTLY ONCE (no duplicates)
+    try std.testing.expectEqual(@as(usize, 1), plan.copy_objects.len);
+    try std.testing.expect(plan.copy_objects[0].object_id.eql(obj_live1));
+}

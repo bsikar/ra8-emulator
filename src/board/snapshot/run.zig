@@ -31,6 +31,17 @@ pub fn savePairAttached(writer: anytype, stores: []const *const Store, cores: []
     return savePairMode(writer, stores, cores, board, identity, true);
 }
 
+pub fn savePairNonMemory(writer: anytype, cores: []const *const Cpu, board: anytype, identity: Identity) !void {
+    if (cores.len == 0 or cores.len > 2) return error.BadValue;
+    try file.writeHeader(writer);
+    try board_snap.saveAttached(board, writer);
+    for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try fields.write(&counter.writer, identity);
+    try file.writeSectionHeader(writer, .image, counter.fullCount());
+    try fields.write(writer, identity);
+}
+
 fn savePairMode(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity, owned: bool) !void {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return error.BadValue;
     try file.writeHeader(writer);
@@ -102,6 +113,40 @@ fn prepareMode(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, b
     var prepared = Prepared(@TypeOf(board.*)){
         .board = if (owned) try board_snap.prepareAttached(board, bytes) else try board_snap.prepare(board, bytes),
         .memories = memories,
+        .count = cores.len,
+    };
+    errdefer prepared.board.deinit();
+    for (cores, 0..) |core, index| prepared.cores[index] = try cpu.prepare(core, @intCast(index), bytes);
+    return prepared;
+}
+
+pub fn PreparedNonMemory(comptime B: type) type {
+    return struct {
+        board: board_snap.Prepared(B),
+        cores: [2]Cpu = undefined,
+        count: usize = 0,
+
+        pub fn deinit(self: *@This()) void {
+            self.board.deinit();
+        }
+
+        pub fn commit(self: *@This(), stores: []const *Store, cores: []const *Cpu, board: *B) void {
+            _ = stores;
+            self.board.commit(board);
+            for (cores, 0..) |core, index| {
+                core.* = self.cores[index];
+                cpu.afterRestore(core);
+            }
+        }
+    };
+}
+
+pub fn prepareNonMemory(bytes: []const u8, cores: []const *Cpu, board: anytype, identity: Identity) !PreparedNonMemory(@TypeOf(board.*)) {
+    if (cores.len == 0 or cores.len > 2) return Error.BadValue;
+    try board_snap.partOf(board.part, bytes);
+    try checkImage(bytes, identity);
+    var prepared = PreparedNonMemory(@TypeOf(board.*)){
+        .board = try board_snap.prepareAttached(board, bytes),
         .count = cores.len,
     };
     errdefer prepared.board.deinit();

@@ -294,7 +294,16 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) Error!Manifest {
     };
 }
 
+pub fn pageOrder(a: PageRef, b: PageRef) std.math.Order {
+    const sa = @backingInt(a.space);
+    const sb = @backingInt(b.space);
+    if (sa < sb) return .lt;
+    if (sa > sb) return .gt;
+    return std.math.order(a.page_index, b.page_index);
+}
+
 /// Diffs two manifests, returning the list of differing pages and blobs in target.
+/// Exploits the canonical sorting of PageRef to achieve strictly O(N) merge diffing.
 pub fn diff(
     allocator: std.mem.Allocator,
     current: ?*const Manifest,
@@ -303,13 +312,39 @@ pub fn diff(
     var p_list: std.ArrayList(PageRef) = .empty;
     defer p_list.deinit(allocator);
 
-    for (target.pages) |t_page| {
-        const differs = if (current) |cur| blk: {
-            const cur_page = findPage(cur.pages, t_page.space, t_page.page_index);
-            break :blk cur_page == null or !cur_page.?.object.eql(t_page.object);
-        } else true;
-
-        if (differs) try p_list.append(allocator, t_page);
+    if (current) |cur| {
+        var c_idx: usize = 0;
+        var t_idx: usize = 0;
+        while (t_idx < target.pages.len) {
+            const t_page = target.pages[t_idx];
+            if (c_idx >= cur.pages.len) {
+                try p_list.append(allocator, t_page);
+                t_idx += 1;
+                continue;
+            }
+            const c_page = cur.pages[c_idx];
+            const ord = pageOrder(t_page, c_page);
+            switch (ord) {
+                .lt => {
+                    try p_list.append(allocator, t_page);
+                    t_idx += 1;
+                },
+                .gt => {
+                    c_idx += 1;
+                },
+                .eq => {
+                    if (!t_page.object.eql(c_page.object)) {
+                        try p_list.append(allocator, t_page);
+                    }
+                    t_idx += 1;
+                    c_idx += 1;
+                },
+            }
+        }
+    } else {
+        for (target.pages) |t_page| {
+            try p_list.append(allocator, t_page);
+        }
     }
 
     var b_list: std.ArrayList(BlobRef) = .empty;
@@ -328,13 +363,6 @@ pub fn diff(
         .pages = try p_list.toOwnedSlice(allocator),
         .blobs = try b_list.toOwnedSlice(allocator),
     };
-}
-
-fn findPage(pages: []const PageRef, space: SpaceId, page_index: u32) ?PageRef {
-    for (pages) |p| {
-        if (p.space == space and p.page_index == page_index) return p;
-    }
-    return null;
 }
 
 fn findBlob(blobs: []const BlobRef, space: SpaceId) ?BlobRef {

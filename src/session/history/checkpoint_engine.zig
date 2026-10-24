@@ -10,9 +10,11 @@ const ObjectId = @import("object_id.zig").ObjectId;
 const Position = @import("position.zig").Position;
 const DirtyPages = @import("dirty_pages.zig").DirtyPages;
 const page_size = @import("dirty_pages.zig").page_size;
-const snap_state = @import("../board/state.zig");
+const snap_state = @import("../root.zig").board.state;
 const Files = snap_state.Files;
-const getSpaceSlice = @import("incremental_restore.zig").getSpaceSlice;
+const inc_restore = @import("incremental_restore.zig");
+const getSpaceSlice = inc_restore.getSpaceSlice;
+const SpaceAccessor = inc_restore.SpaceAccessor;
 
 pub const SpaceSpan = struct {
     space: manifest_mod.SpaceId,
@@ -42,6 +44,11 @@ pub const CaptureStats = struct {
 pub const CaptureResult = struct {
     manifest: manifest_mod.Manifest,
     stats: CaptureStats,
+};
+
+const DirtyCoord = struct {
+    space: manifest_mod.SpaceId,
+    page_index: u32,
 };
 
 pub const CheckpointEngine = struct {
@@ -93,7 +100,8 @@ pub const CheckpointEngine = struct {
 
     fn resolvePage(
         self: *CheckpointEngine,
-        dirty: *DirtyPages,
+        dirty: *const DirtyPages,
+        dirty_clears: *std.ArrayList(DirtyCoord),
         prev_manifest: ?*const manifest_mod.Manifest,
         prev_pages: []const manifest_mod.PageRef,
         prev_cursor: *usize,
@@ -103,7 +111,7 @@ pub const CheckpointEngine = struct {
         stats: *CaptureStats,
     ) !ObjectId {
         const is_dirty = if (prev_manifest != null)
-            dirty.testAndClear(span.space, @intCast(p_idx))
+            dirty.isDirty(span.space, @intCast(p_idx))
         else
             true;
 
@@ -122,6 +130,10 @@ pub const CheckpointEngine = struct {
             }
         }
 
+        if (prev_manifest != null) {
+            try dirty_clears.append(self.allocator, .{ .space = span.space, .page_index = @intCast(p_idx) });
+        }
+
         const start = p_idx * page_size;
         const end = @min(span.bytes.len, start + page_size);
         const page_data = span.bytes[start..end];
@@ -133,7 +145,8 @@ pub const CheckpointEngine = struct {
 
     fn collectPages(
         self: *CheckpointEngine,
-        dirty: *DirtyPages,
+        dirty: *const DirtyPages,
+        dirty_clears: *std.ArrayList(DirtyCoord),
         prev_manifest: ?*const manifest_mod.Manifest,
         spaces: []const SpaceSpan,
         sink: ?ObjectSink,
@@ -155,6 +168,7 @@ pub const CheckpointEngine = struct {
             for (0..count) |p_idx| {
                 const obj_id = try self.resolvePage(
                     dirty,
+                    dirty_clears,
                     prev_manifest,
                     prev_pages,
                     &prev_cursor,
@@ -170,10 +184,6 @@ pub const CheckpointEngine = struct {
                 };
                 out_idx += 1;
             }
-        }
-
-        if (prev_manifest == null) {
-            dirty.clearAll();
         }
 
         std.mem.sort(manifest_mod.PageRef, page_refs, {}, pageLessThan);
@@ -219,13 +229,26 @@ pub const CheckpointEngine = struct {
         }
 
         var stats: CaptureStats = .{};
-        const pages = try self.collectPages(dirty, prev_manifest, spaces, sink, &stats);
+        var dirty_clears: std.ArrayList(DirtyCoord) = .empty;
+        defer dirty_clears.deinit(self.allocator);
+
+        const pages = try self.collectPages(dirty, &dirty_clears, prev_manifest, spaces, sink, &stats);
         errdefer self.allocator.free(pages);
 
         const blob_refs = try self.collectBlobs(blobs, sink, &stats);
         errdefer self.allocator.free(blob_refs);
 
         const root = manifest_mod.computeMerkleRoot(pos, checkpoint_id, picture, pages, blob_refs);
+
+        // Atomic dirty clearing: only upon full capture success
+        if (prev_manifest == null) {
+            dirty.clearAll();
+        } else {
+            for (dirty_clears.items) |coord| {
+                dirty.clearDirty(coord.space, coord.page_index);
+            }
+        }
+
         self.last_stats = stats;
 
         return .{
@@ -250,22 +273,24 @@ pub const CheckpointEngine = struct {
         checkpoint_id: u32,
         picture: ?ObjectId,
         sink: ?ObjectSink,
+        accessor: ?SpaceAccessor,
     ) !CaptureResult {
-        var spans: [8]SpaceSpan = undefined;
+        var spans: [12]SpaceSpan = undefined;
         var count: usize = 0;
         const tracked_spaces = [_]manifest_mod.SpaceId{
-            .cpu0_mram, .cpu0_dtcm, .cpu0_sram, .cpu0_sdram, .cpu0_ppb,
-            .cpu1_mram, .cpu1_dtcm, .cpu1_ppb,
+            .cpu0_mram,   .cpu0_dtcm, .cpu0_sram, .cpu0_sdram,
+            .cpu0_ppb,    .cpu1_mram, .cpu1_dtcm, .cpu1_ppb,
+            .store_extra, .nor_flash, .sd_card,   .eink_buffer,
         };
         for (tracked_spaces) |space| {
-            if (getSpaceSlice(files, space)) |slice| {
+            if (getSpaceSlice(files, space, accessor)) |slice| {
                 spans[count] = .{ .space = space, .bytes = slice };
                 count += 1;
             }
         }
         var full_snap: std.Io.Writer.Allocating = try .initCapacity(self.allocator, 1024);
         defer full_snap.deinit();
-        try files.writeTo(&full_snap.writer);
+        try files.writeNonMemoryTo(&full_snap.writer);
         const blob_spans = [_]BlobSpan{.{
             .space = .run_state,
             .bytes = full_snap.written(),

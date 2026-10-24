@@ -199,3 +199,52 @@ test "CheckpointEngine incremental manifest matches from-scratch after writes an
         try std.testing.expect(p.eql(m_scratch2.manifest.pages[i]));
     }
 }
+
+const FailingSink = struct {
+    fail_on_count: usize,
+    count: usize = 0,
+
+    pub fn sink(self: *FailingSink) ObjectSink {
+        return .{ .context = self, .putFn = &putImpl };
+    }
+
+    fn putImpl(ctx: *anyopaque, id: ObjectId, bytes: []const u8) anyerror!void {
+        _ = id;
+        _ = bytes;
+        const self: *FailingSink = @ptrCast(@alignCast(ctx));
+        self.count += 1;
+        if (self.count >= self.fail_on_count) return error.DiskFull;
+    }
+};
+
+test "CheckpointEngine atomic dirty clearing preserves dirty bits on capture failure" {
+    const allocator = std.testing.allocator;
+    var dirty = try DirtyPages.init(allocator);
+    defer dirty.deinit();
+
+    var engine = CheckpointEngine.init(allocator);
+    defer engine.deinit();
+
+    var mram_buf: [2 * 4096]u8 = undefined;
+    @memset(&mram_buf, 0x11);
+
+    const spaces = [_]SpaceSpan{
+        .{ .space = .cpu0_mram, .bytes = &mram_buf },
+    };
+    const pos = Position{ .r = 10, .phase = .cpu0 };
+
+    var res1 = try engine.capture(&dirty, null, pos, 1, null, &spaces, &.{}, null);
+    defer res1.manifest.deinit(allocator);
+
+    mram_buf[10] ^= 0x55;
+    mram_buf[4096 + 10] ^= 0xAA;
+    dirty.markDirty(.cpu0_mram, 0);
+    dirty.markDirty(.cpu0_mram, 1);
+
+    var failing = FailingSink{ .fail_on_count = 1 };
+    const err = engine.capture(&dirty, &res1.manifest, pos, 2, null, &spaces, &.{}, failing.sink());
+    try std.testing.expectError(error.DiskFull, err);
+
+    try std.testing.expect(dirty.isDirty(.cpu0_mram, 0));
+    try std.testing.expect(dirty.isDirty(.cpu0_mram, 1));
+}

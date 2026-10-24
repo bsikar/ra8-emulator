@@ -1,8 +1,9 @@
 //! Explicit confirmed history re-rooting.
 //!
 //! Re-roots the history graph at a selected checkpoint: history strictly
-//! before the new root is dropped, and objects referenced solely by the
-//! discarded history are identified as unreachable for reclamation.
+//! before the new root along the target lineage is dropped, and objects
+//! referenced solely by the discarded history are identified as unreachable
+//! for reclamation.
 //!
 //! Protections & Refusals:
 //!  - Refuses without explicit confirmation flag (Error.NotConfirmed).
@@ -44,13 +45,26 @@ pub const RerootPlan = struct {
     }
 };
 
+fn isPriorToTarget(graph: ?*const branch_mod.BranchGraph, p: Position, target: Position) bool {
+    const g = graph orelse {
+        if (p.branch != target.branch) return false;
+        return branch_mod.scalarOrder(p, target) == .lt;
+    };
+    if (p.branch == target.branch) {
+        return branch_mod.scalarOrder(p, target) == .lt;
+    }
+    if (!g.isAncestorOrSelf(p.branch, target.branch)) return false;
+    const order = g.compareOnLine(target.branch, p, target) catch return false;
+    return order == .lt;
+}
+
 fn checkPinProtections(
     target_pos: Position,
     checkpoints: []const CheckpointEntry,
     graph: ?*const branch_mod.BranchGraph,
 ) Error!void {
     for (checkpoints) |cp| {
-        if (branch_mod.scalarOrder(cp.position, target_pos) == .lt) {
+        if (isPriorToTarget(graph, cp.position, target_pos)) {
             if (cp.pinned) return Error.PinnedHistory;
         }
     }
@@ -59,8 +73,8 @@ fn checkPinProtections(
         var it = g.nodes.valueIterator();
         while (it.next()) |node| {
             if (node.pins > 0) {
-                if (branch_mod.scalarOrder(node.recorded_end, target_pos) == .lt or
-                    branch_mod.scalarOrder(node.fork_at, target_pos) == .lt)
+                if (isPriorToTarget(graph, node.fork_at, target_pos) or
+                    isPriorToTarget(graph, node.recorded_end, target_pos))
                 {
                     return Error.PinnedHistory;
                 }
@@ -73,13 +87,14 @@ fn collectUnreachableObjects(
     allocator: std.mem.Allocator,
     target_pos: Position,
     checkpoints: []const CheckpointEntry,
+    graph: ?*const branch_mod.BranchGraph,
     extra_live_objects: []const ObjectId,
 ) ![]ObjectId {
     var kept_set = std.AutoHashMap([16]u8, void).init(allocator);
     defer kept_set.deinit();
 
     for (checkpoints) |cp| {
-        if (branch_mod.scalarOrder(cp.position, target_pos) != .lt) {
+        if (!isPriorToTarget(graph, cp.position, target_pos)) {
             for (cp.manifest.pages) |p| try kept_set.put(p.object.bytes, {});
             for (cp.manifest.blobs) |b| try kept_set.put(b.object.bytes, {});
             if (cp.manifest.picture) |pic| try kept_set.put(pic.bytes, {});
@@ -93,7 +108,7 @@ fn collectUnreachableObjects(
     defer dead_map.deinit();
 
     for (checkpoints) |cp| {
-        if (branch_mod.scalarOrder(cp.position, target_pos) == .lt) {
+        if (isPriorToTarget(graph, cp.position, target_pos)) {
             for (cp.manifest.pages) |p| {
                 if (!kept_set.contains(p.object.bytes)) {
                     try dead_map.put(p.object.bytes, p.object);
@@ -122,6 +137,40 @@ fn collectUnreachableObjects(
     return dead_list;
 }
 
+fn collectDroppedBranches(
+    allocator: std.mem.Allocator,
+    target_pos: Position,
+    graph: ?*const branch_mod.BranchGraph,
+) ![]branch_mod.BranchId {
+    var dropped_branches_list: std.ArrayList(branch_mod.BranchId) = .empty;
+    defer dropped_branches_list.deinit(allocator);
+
+    const g = graph orelse return allocator.alloc(branch_mod.BranchId, 0);
+    var it = g.nodes.valueIterator();
+    while (it.next()) |node| {
+        if (node.id != branch_mod.root_branch_id) {
+            if (isPriorToTarget(graph, node.recorded_end, target_pos) and
+                !g.isAncestorOrSelf(node.id, target_pos.branch))
+            {
+                var has_surviving_child = false;
+                var cit = g.nodes.valueIterator();
+                while (cit.next()) |other| {
+                    if (other.id != node.id and g.isAncestorOrSelf(node.id, other.id)) {
+                        if (!isPriorToTarget(graph, other.recorded_end, target_pos)) {
+                            has_surviving_child = true;
+                            break;
+                        }
+                    }
+                }
+                if (!has_surviving_child) {
+                    try dropped_branches_list.append(allocator, node.id);
+                }
+            }
+        }
+    }
+    return try dropped_branches_list.toOwnedSlice(allocator);
+}
+
 /// Computes the re-root plan, validating confirmations and pin protections.
 pub fn planReroot(
     allocator: std.mem.Allocator,
@@ -147,7 +196,7 @@ pub fn planReroot(
 
     var drop_cp_count: usize = 0;
     for (checkpoints) |cp| {
-        if (branch_mod.scalarOrder(cp.position, target_cp.position) == .lt) {
+        if (isPriorToTarget(graph, cp.position, target_cp.position)) {
             drop_cp_count += 1;
         }
     }
@@ -156,32 +205,20 @@ pub fn planReroot(
     errdefer allocator.free(dropped_cps);
     var d_idx: usize = 0;
     for (checkpoints) |cp| {
-        if (branch_mod.scalarOrder(cp.position, target_cp.position) == .lt) {
+        if (isPriorToTarget(graph, cp.position, target_cp.position)) {
             dropped_cps[d_idx] = cp.id;
             d_idx += 1;
         }
     }
 
-    var dropped_branches_list: std.ArrayList(branch_mod.BranchId) = .empty;
-    defer dropped_branches_list.deinit(allocator);
-
-    if (graph) |g| {
-        var it = g.nodes.valueIterator();
-        while (it.next()) |node| {
-            if (node.id != branch_mod.root_branch_id) {
-                if (branch_mod.scalarOrder(node.recorded_end, target_cp.position) == .lt) {
-                    try dropped_branches_list.append(allocator, node.id);
-                }
-            }
-        }
-    }
-    const dropped_branches = try dropped_branches_list.toOwnedSlice(allocator);
+    const dropped_branches = try collectDroppedBranches(allocator, target_cp.position, graph);
     errdefer allocator.free(dropped_branches);
 
     const unreachable_list = try collectUnreachableObjects(
         allocator,
         target_cp.position,
         checkpoints,
+        graph,
         extra_live_objects,
     );
 

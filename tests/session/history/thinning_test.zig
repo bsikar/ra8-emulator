@@ -129,21 +129,47 @@ test "thinning never exceeds max_replay_gap between surviving checkpoints" {
     }
 }
 
-test "thinning never drops branch fork-point base checkpoint" {
+test "thinning markForkBases marks parent line and ignores unrelated branch forks" {
     const allocator = std.testing.allocator;
+
+    var graph = try branch_mod.BranchGraph.init(allocator);
+    defer graph.deinit();
+
+    // Branch 1 forks from root Branch 0 at round 50
+    const b1_fork = Position{ .branch = 0, .r = 50 };
+    const b1 = try graph.addBranch(0, b1_fork, .writes, 1000);
+
+    // Branch 2 forks from Branch 1 at round 500 (unrelated to Branch 0 points)
+    const b2_fork = Position{ .branch = b1, .r = 500 };
+    _ = try graph.addBranch(b1, b2_fork, .writes, 2000);
 
     var checkpoints: [30]CheckpointRef = undefined;
     for (0..30) |i| {
         checkpoints[i] = .{
             .id = @intCast(i),
-            .position = Position{ .r = @intCast(i * 10) },
+            .position = Position{ .branch = 0, .r = @intCast(i * 10) },
         };
     }
 
-    // Set checkpoint 5 (round 50) as child line fork base
-    checkpoints[5].fork_base = true;
+    // Call markForkBases directly
+    thinning.markForkBases(&checkpoints, &graph);
 
-    const cursor = Position{ .r = 250 };
+    // Checkpoint 5 (r = 50 on Branch 0) must be marked as fork_base for Branch 1
+    try std.testing.expect(checkpoints[5].fork_base);
+
+    // Checkpoint 29 (r = 290 on Branch 0) must NOT be marked for Branch 2's fork at 500
+    try std.testing.expect(!checkpoints[29].fork_base);
+
+    // Assert only checkpoint 5 was marked
+    for (checkpoints, 0..) |cp, idx| {
+        if (idx == 5) {
+            try std.testing.expect(cp.fork_base);
+        } else {
+            try std.testing.expect(!cp.fork_base);
+        }
+    }
+
+    const cursor = Position{ .branch = 0, .r = 250 };
     const options = ThinningOptions{
         .max_replay_gap = 100,
         .dense_window_rounds = 20,

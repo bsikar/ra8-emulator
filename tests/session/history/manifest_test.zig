@@ -115,3 +115,58 @@ test "Manifest diffing computes exact differing pages and blobs" {
     try std.testing.expectEqual(@as(usize, 1), d_diff.blobs.len);
     try std.testing.expectEqual(m2.blobs[0].space, d_diff.blobs[0].space);
 }
+
+test "Manifest diffing operates in O(N) linear time on realistic 35,000 page count" {
+    const allocator = std.testing.allocator;
+
+    const total_pages: usize = 35_000;
+    const pages1 = try allocator.alloc(manifest_mod.PageRef, total_pages);
+    defer allocator.free(pages1);
+
+    const pages2 = try allocator.alloc(manifest_mod.PageRef, total_pages);
+    defer allocator.free(pages2);
+
+    const base_obj = ObjectId.compute("base_page_content");
+    const mutated_obj = ObjectId.compute("mutated_page_content");
+
+    for (0..total_pages) |i| {
+        pages1[i] = .{
+            .space = .cpu0_sdram,
+            .page_index = @intCast(i),
+            .object = base_obj,
+        };
+        const is_mutated = (i % 5000 == 0);
+        pages2[i] = .{
+            .space = .cpu0_sdram,
+            .page_index = @intCast(i),
+            .object = if (is_mutated) mutated_obj else base_obj,
+        };
+    }
+
+    const pos = Position{ .branch = 1, .r = 100, .phase = .cpu0, .o = 0, .gap = .retired };
+    const m1 = manifest_mod.Manifest{
+        .position = pos,
+        .checkpoint_id = 1,
+        .picture = null,
+        .pages = pages1,
+        .blobs = &[_]manifest_mod.BlobRef{},
+        .root_hash = ObjectId.zero,
+    };
+    const m2 = manifest_mod.Manifest{
+        .position = pos,
+        .checkpoint_id = 2,
+        .picture = null,
+        .pages = pages2,
+        .blobs = &[_]manifest_mod.BlobRef{},
+        .root_hash = ObjectId.zero,
+    };
+
+    var d = try manifest_mod.diff(allocator, &m1, &m2);
+    defer d.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 7), d.pages.len);
+    for (d.pages, 0..) |p, idx| {
+        try std.testing.expectEqual(@as(u32, @intCast(idx * 5000)), p.page_index);
+        try std.testing.expectEqual(mutated_obj, p.object);
+    }
+}

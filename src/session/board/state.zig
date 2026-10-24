@@ -50,15 +50,24 @@ pub const Files = struct {
     attachments: ?attachment_snapshot.Binding = null,
 
     pub fn writeTo(self: *Files, writer: *std.Io.Writer) !void {
+        return self.writeMode(writer, false);
+    }
+
+    pub fn writeNonMemoryTo(self: *Files, writer: *std.Io.Writer) !void {
+        return self.writeMode(writer, true);
+    }
+
+    fn writeMode(self: *Files, writer: *std.Io.Writer, non_memory: bool) !void {
         comptime if (!complete()) @compileError("unclassified Session snapshot field");
         try self.single();
         comptime if (!attachment_snapshot.inventory.complete()) @compileError("unclassified attachment field");
         var attachment_graph: attachment_snapshot.graph.Graph = .{};
         _ = try attachment_snapshot.capture(self.board, self.attachments, &attachment_graph);
         const count: usize = if (self.pair != null) 2 else 1;
-        const stores = self.storesOf();
         const cores = self.coresOf();
-        try run_file.savePairAttached(writer, stores[0..count], cores[0..count], self.board, self.identity());
+        if (non_memory) {
+            try run_file.savePairNonMemory(writer, cores[0..count], self.board, self.identity());
+        } else try run_file.savePairAttached(writer, self.storesOf()[0..count], cores[0..count], self.board, self.identity());
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{ .owed = self.edge.saved.stretch.carry }, writer);
         try stretch.saveGrid(self.edge.saved, writer);
@@ -73,6 +82,14 @@ pub const Files = struct {
     }
 
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
+        return self.readMode(bytes, false);
+    }
+
+    pub fn readNonMemoryFrom(self: *Files, bytes: []const u8) !void {
+        return self.readMode(bytes, true);
+    }
+
+    fn readMode(self: *Files, bytes: []const u8, comptime non_memory: bool) !void {
         try self.single();
         var bases = .{ self.edge.timebase, self.edge.ns_timebase };
         try systick.load(.{ &bases[0], &bases[1] }, bytes);
@@ -90,8 +107,10 @@ pub const Files = struct {
         if (!cursor.done() or (mark != null) != (self.edge.chunk != null)) return error.BadValue;
         var second: ?PairState = null;
         if (self.pair) |pair| second = try readSecond(pair, bytes);
-        const stores = self.storesOf();
-        var staged = try run_file.prepareAttached(bytes, stores[0..count], cores[0..count], self.board, self.identity());
+        var staged = if (non_memory)
+            try run_file.prepareNonMemory(bytes, cores[0..count], self.board, self.identity())
+        else
+            try run_file.prepareAttached(bytes, self.storesOf()[0..count], cores[0..count], self.board, self.identity());
         defer staged.deinit();
         if (grid.cut) {
             const selected = if (grid.cut_pending.bank == .secure) bases[0] else bases[1];
@@ -114,7 +133,7 @@ pub const Files = struct {
         } else if (grid.at.phase == .cpu1 or grid.lengths[1] != 0) return error.BadValue;
         var attachment_state = try attachment_snapshot.prepare(self.board, self.attachments, bytes);
         defer attachment_state.deinit();
-        staged.commit(stores[0..count], cores[0..count], self.board);
+        staged.commit(self.storesOf()[0..count], cores[0..count], self.board);
         attachment_state.commit(self.board, self.attachments);
         self.edge.timebase = bases[0];
         self.edge.ns_timebase = bases[1];
@@ -229,12 +248,10 @@ pub fn complete() bool {
     const points = "Debugger points stay with the attached debugger";
     const derived = "Derived cache invalidated after restore";
     return fields.complete(Machine, unit_fields, .{
-        .{ .name = "breaks", .reason = points },           .{ .name = "watches", .reason = points },
-        .{ .name = "next_id", .reason = points },          .{ .name = "mode", .reason = transient },
-        .{ .name = "resumed", .reason = transient },       .{ .name = "halt_pending", .reason = transient },
-        .{ .name = "target", .reason = transient },        .{ .name = "hits", .reason = transient },
-        .{ .name = "hits_len", .reason = transient },      .{ .name = "hits_overflow", .reason = transient },
-        .{ .name = "unit_held", .reason = transient },     .{ .name = "unit_taken", .reason = transient },
+        .{ .name = "breaks", .reason = points },           .{ .name = "watches", .reason = points },      .{ .name = "next_id", .reason = points },
+        .{ .name = "mode", .reason = transient },          .{ .name = "resumed", .reason = transient },   .{ .name = "halt_pending", .reason = transient },
+        .{ .name = "target", .reason = transient },        .{ .name = "hits", .reason = transient },      .{ .name = "hits_len", .reason = transient },
+        .{ .name = "hits_overflow", .reason = transient }, .{ .name = "unit_held", .reason = transient }, .{ .name = "unit_taken", .reason = transient },
         .{ .name = "monitor_extra", .reason = transient },
     }) and fields.complete(Driver, .{"cycles"}, .{
         .{ .name = "machine", .reason = "Session wiring" }, .{ .name = "last", .reason = transient },
@@ -244,16 +261,13 @@ pub fn complete() bool {
     }) and fields.complete(chip.core.scheduler.State, .{ "at", "stretch", "base", "lengths", "cut", "cut_pending" }, .{}) and
         fields.complete(@FieldType(Pair, "turn_state"), .{ "open", "share", "elapsed", "slots", "hz" }, .{}) and
         fields.complete(CycleClock, .{ "count", "slots" }, .{}) and fields.complete(BoardBoundary, .{ "timebase", "ns_timebase", "saved" }, .{
-        .{ .name = "board", .reason = "Saved board wiring" },                           .{ .name = "core", .reason = "Saved guest store wiring" },
-        .{ .name = "cpu", .reason = "Saved core wiring" },                              .{ .name = "reboot", .reason = "Saved board reboot wiring" },
-        .{ .name = "selected", .reason = "Debugger view selection outside execution" }, .{ .name = "second", .reason = "Saved second-core wiring" },
-        .{ .name = "second_memory", .reason = "Saved second store wiring" },            .{ .name = "pair", .reason = "Saved pair wiring" },
-        .{ .name = "chunk", .reason = "Mark saved in session_runtime" },                .{ .name = "cut", .reason = "Clock pointers retained; consumed cut carried by saved.cut" },
-        .{ .name = "idle_skip", .reason = "Immutable root grid configuration" },
+        .{ .name = "board", .reason = "Saved board wiring" },                                       .{ .name = "core", .reason = "Saved guest store wiring" },                      .{ .name = "cpu", .reason = "Saved core wiring" },
+        .{ .name = "reboot", .reason = "Saved board reboot wiring" },                               .{ .name = "selected", .reason = "Debugger view selection outside execution" }, .{ .name = "second", .reason = "Saved second-core wiring" },
+        .{ .name = "second_memory", .reason = "Saved second store wiring" },                        .{ .name = "pair", .reason = "Saved pair wiring" },                             .{ .name = "chunk", .reason = "Mark saved in session_runtime" },
+        .{ .name = "cut", .reason = "Clock pointers retained; consumed cut carried by saved.cut" }, .{ .name = "idle_skip", .reason = "Immutable root grid configuration" },
     }) and fields.complete(@FieldType(Pair, "core"), .{ "pending", "cpu" }, .{
-        .{ .name = "memory", .reason = "Guest memory wiring" },    .{ .name = "board", .reason = "Board bus wiring" },
-        .{ .name = "quiet", .reason = derived },                   .{ .name = "decoded", .reason = derived },
-        .{ .name = "check", .reason = "Stable MPU-model wiring" }, .{ .name = "formed", .reason = derived },
+        .{ .name = "memory", .reason = "Guest memory wiring" }, .{ .name = "board", .reason = "Board bus wiring" },        .{ .name = "quiet", .reason = derived },
+        .{ .name = "decoded", .reason = derived },              .{ .name = "check", .reason = "Stable MPU-model wiring" }, .{ .name = "formed", .reason = derived },
     });
 }
 
