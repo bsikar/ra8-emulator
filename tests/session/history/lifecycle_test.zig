@@ -239,3 +239,63 @@ test "crash simulation between log operations and branches.bin commit recovers c
     try std.testing.expect(graph_b.get(0) != null);
     try std.testing.expect(graph_b.get(1) == null);
 }
+
+test "recorded end of active line advances canonically per line and is reported by list" {
+    const gpa = std.testing.allocator;
+    var graph = try branch_mod.BranchGraph.init(gpa);
+    defer graph.deinit();
+
+    var router = fork_router_mod.ForkRouter.init(gpa, &graph);
+    defer router.deinit();
+
+    var session: lifecycle.Session = .{
+        .live = undefined,
+        .fork_router = &router,
+    };
+
+    // 1. Advance branch 0 from r=0 to r=2
+    session.notePosition(pos(0, 2));
+    try std.testing.expectEqual(@as(u64, 2), graph.get(0).?.recorded_end.r);
+
+    const list0 = try lifecycle.list(gpa, &graph, router.active_line);
+    defer gpa.free(list0);
+    try std.testing.expectEqual(@as(usize, 1), list0.len);
+    try std.testing.expectEqual(@as(u64, 2), list0[0].recorded_end.r);
+
+    // 2. Fork branch 1 from branch 0 at r=1
+    const b1 = try graph.addBranch(0, pos(0, 1), .writes, 1000);
+    try std.testing.expectEqual(@as(u32, 1), b1);
+    router.active_line = b1;
+    graph.active_branch = b1;
+
+    try std.testing.expectEqual(@as(u64, 1), graph.get(1).?.fork_at.r);
+    try std.testing.expectEqual(@as(u64, 1), graph.get(1).?.recorded_end.r);
+
+    // 3. Advance execution on branch 1 to r=5
+    session.notePosition(pos(1, 5));
+
+    try std.testing.expectEqual(@as(u64, 5), graph.get(1).?.recorded_end.r);
+    try std.testing.expectEqual(@as(u64, 2), graph.get(0).?.recorded_end.r);
+
+    // 4. Verify list reports the advanced recorded end for both branches
+    const list1 = try lifecycle.list(gpa, &graph, router.active_line);
+    defer gpa.free(list1);
+    try std.testing.expectEqual(@as(usize, 2), list1.len);
+    try std.testing.expectEqual(@as(u64, 2), list1[0].recorded_end.r);
+    try std.testing.expectEqual(@as(u64, 5), list1[1].recorded_end.r);
+    try std.testing.expect(list1[1].is_live);
+    try std.testing.expect(!list1[0].is_live);
+
+    // 5. Switch back to branch 0 and advance it to r=8
+    router.active_line = 0;
+    graph.active_branch = 0;
+    session.notePosition(pos(0, 8));
+
+    try std.testing.expectEqual(@as(u64, 8), graph.get(0).?.recorded_end.r);
+    try std.testing.expectEqual(@as(u64, 5), graph.get(1).?.recorded_end.r);
+
+    const list2 = try lifecycle.list(gpa, &graph, router.active_line);
+    defer gpa.free(list2);
+    try std.testing.expectEqual(@as(u64, 8), list2[0].recorded_end.r);
+    try std.testing.expectEqual(@as(u64, 5), list2[1].recorded_end.r);
+}

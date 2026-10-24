@@ -13,6 +13,7 @@ const session_refs = @import("ra8_session").history_refs;
 const session_branch = @import("ra8_session").history_branch;
 const session_fork = @import("ra8_session").history_fork_router;
 const session_fork_types = @import("ra8_session").fork;
+const session_branches_codec = @import("ra8_session").history_branches_codec;
 const branches_recover = @import("ra8_session").history_branches_recover;
 
 /// Formats the segment leaf name for a given branch and segment index.
@@ -120,6 +121,13 @@ pub const Bind = struct {
         self.disk = null;
         if (self.watch) |watch| gpa.destroy(watch);
         self.watch = null;
+        var allocating = std.Io.Writer.Allocating.initCapacity(gpa, 1024) catch null;
+        if (allocating) |*alloc| {
+            defer alloc.deinit();
+            if (session_branches_codec.encode(&self.graph, &alloc.writer)) {
+                history.branches_file.writeAtomic(self.io, self.session.dir, alloc.written()) catch {};
+            } else |_| {}
+        }
         self.router.deinit();
         self.graph.deinit();
         if (self.session.close(null, .move)) |outcome| {
