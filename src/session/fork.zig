@@ -13,6 +13,7 @@ const widget_tree = @import("widget_tree.zig");
 const input_script = @import("ra8_components").input_script;
 const replay_feeder = @import("history/replay_feeder.zig");
 const async_traffic = @import("history/async_traffic.zig");
+const lifecycle = @import("history/lifecycle.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -61,6 +62,7 @@ pub fn notePosition(self: *Session, pos: Position) void {
         if (ord == .gt) {
             node.recorded_end = canon_pos;
             graph.insertNode(node) catch {};
+            lifecycle.persistGraph(self) catch {};
         }
     }
 }
@@ -166,14 +168,7 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
         _ = graph.nodes.remove(new_branch_id);
         if (graph.next_branch_id == new_branch_id + 1) graph.next_branch_id = new_branch_id;
     };
-    if (self.graph_sink) |sink| {
-        if (router.graph) |graph| {
-            var allocating = try std.Io.Writer.Allocating.initCapacity(router.allocator, 1024);
-            defer allocating.deinit();
-            try branches_codec.encode(graph, &allocating.writer);
-            try sink.writeFn(sink.context, allocating.written());
-        }
-    }
+    try lifecycle.persistGraph(self);
     if (self.persistent_recorder) |rec| {
         try rec.switchSegment(now_ns, new_branch_id, 0);
         try rec.recordBranch(
