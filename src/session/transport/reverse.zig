@@ -73,7 +73,11 @@ pub fn queue(self: *Transport) !Ticket {
         const cpu1 = self.session.machine(.cpu1) catch return Error.HistoryBroken;
         for (cpu1.watches.entries()) |slot| if (slot.enabled) return Error.WatchArmed;
     }
-    const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
     const core = self.session.currentCore();
     const prior = transport_mod.budgetOf(self.session, core);
     if (self.session.grid == null) {
@@ -141,11 +145,11 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         // A base that itself sits at an armed breakpoint is a hit at
         // the base's position: the replay's first resume executes
         // through it, so ask the state before running.
-        const before = position_mod.compare(grid.at, rc.cursor) catch return error.OtherLine;
+        const before = self.session.comparePositions(grid.at, rc.cursor) catch return error.OtherLine;
         if (before == .lt and rcBaseHit(self, grid.at)) rc.note(grid.at);
         return null;
     }
-    const before = position_mod.compare(grid.at, rc.upper) catch return error.OtherLine;
+    const before = self.session.comparePositions(grid.at, rc.upper) catch return error.OtherLine;
     if (before != .lt) {
         if (rc.found != null) {
             rc.landing = true;
@@ -160,7 +164,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     }
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) return null;
-    const at = position_mod.compare(grid.at, rc.cursor) catch return error.OtherLine;
+    const at = self.session.comparePositions(grid.at, rc.cursor) catch return error.OtherLine;
     if (at == .lt) rc.note(grid.at);
     return null;
 }
@@ -172,12 +176,12 @@ fn landingSlice(self: *Transport, job: *Job, rc: *Rc, grid: anytype) !?api.Ended
         return null;
     }
     const found = rc.found orelse return error.NoHit;
-    const at = position_mod.compare(grid.at, found) catch return error.OtherLine;
+    const at = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
     if (at == .gt) return error.OtherLine;
     if (at == .eq) return try rcHitStop(self, found.phase);
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) {
-        const after = position_mod.compare(grid.at, found) catch return error.OtherLine;
+        const after = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
         if (after == .lt) return null;
         return error.OtherLine;
     }

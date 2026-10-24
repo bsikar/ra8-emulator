@@ -47,7 +47,11 @@ pub const Back = struct {
 pub fn queue(self: *Transport, step: command_mod.Step) !Ticket {
     if (step.count == 0) return Error.InvalidArgs;
     const bridge = self.history orelse return Error.NotReady;
-    const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
     const prior = transport_mod.budgetOf(self.session, step.core);
     if (self.session.grid == null) {
         return queueAtStart(self, step, facts, prior);
@@ -156,7 +160,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
 }
 
 fn discoverPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.Ended {
-    const before = position_mod.compare(grid.at, back.cursor) catch return error.OtherLine;
+    const before = self.session.comparePositions(grid.at, back.cursor) catch return error.OtherLine;
     if (before == .gt) {
         const target = back.seen orelse {
             // The log's beginning: no earlier canonical stop on
@@ -171,7 +175,7 @@ fn discoverPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.E
     }
     if (before == .lt and grid.at.phase == corePhase(job.core)) back.seen = grid.at;
     const ended = try self.session.run(job.core, .cont);
-    const after = position_mod.compare(grid.at, back.cursor) catch return error.OtherLine;
+    const after = self.session.comparePositions(grid.at, back.cursor) catch return error.OtherLine;
     if (after == .lt and grid.at.phase == corePhase(job.core)) back.seen = grid.at;
     // A one-instruction slice that used its budget made
     // progress; anything else is a stop the replay met on the
@@ -182,7 +186,7 @@ fn discoverPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.E
 }
 
 fn landPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.Ended {
-    const ord = position_mod.compare(grid.at, back.target.?) catch return error.OtherLine;
+    const ord = self.session.comparePositions(grid.at, back.target.?) catch return error.OtherLine;
     if (ord == .eq) {
         job.left -= 1;
         if (back.start) return .{ .stop = .history_start };

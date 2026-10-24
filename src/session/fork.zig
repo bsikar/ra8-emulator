@@ -11,6 +11,8 @@ const elf = @import("ra8_board").image.elf;
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const input_script = @import("ra8_components").input_script;
+const replay_feeder = @import("history/replay_feeder.zig");
+const async_traffic = @import("history/async_traffic.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -25,22 +27,11 @@ pub const RouteDecision = fork_router_mod.RouteDecision;
 pub const ForkReason = history_record.ForkReason;
 pub const Position = history_position.Position;
 
-pub const NetHook = struct {
-    context: *anyopaque,
-    closeFlowsFn: *const fn (*anyopaque) void,
-};
-pub const ConsoleHook = struct {
-    context: *anyopaque,
-    feedFn: *const fn (*anyopaque, []const u8) anyerror!void,
-};
-pub const CameraHook = struct {
-    context: *anyopaque,
-    changeFn: *const fn (*anyopaque, []const u8) anyerror!void,
-};
-pub const GraphSink = struct {
-    context: *anyopaque,
-    writeFn: *const fn (context: *anyopaque, encoded: []const u8) anyerror!void,
-};
+pub const fork_types = @import("fork_types.zig");
+pub const NetHook = fork_types.NetHook;
+pub const ConsoleHook = fork_types.ConsoleHook;
+pub const CameraHook = fork_types.CameraHook;
+pub const GraphSink = fork_types.GraphSink;
 
 /// Resolves the current session position with line-aware branch id.
 pub fn currentPosition(self: *const Session) Position {
@@ -82,47 +73,16 @@ pub fn setReplaying(self: *Session, replaying: bool) void {
 
 fn recordActionIntervention(self: *Session, pos: Position, action: Action) anyerror!void {
     if (self.replaying) return;
-    const rec = self.persistent_recorder orelse {
-        if (self.history) |h| {
-            var buf: [input_script.max_body_len]u8 = undefined;
-            const wb = actionWhatBody(action, &buf);
-            try h.recordIntervention(pos, wb.what, wb.body);
-        }
-        return;
-    };
-    var buf: [input_script.max_body_len]u8 = undefined;
-    const wb = actionWhatBody(action, &buf);
     const router = self.fork_router;
+    const allocator = if (router) |r| r.allocator else if (self.persistent_recorder) |rec| rec.gpa else return;
+    var encoded = try replay_feeder.encodeAction(allocator, action);
+    defer replay_feeder.freeEncodedAction(allocator, &encoded);
     const seq = if (router) |r| r.nextSeq() else if (self.history) |h| h.seq else 0;
     if (self.history) |h| h.seq += 1;
-    try rec.recordIntervention(.{ .position = pos, .seq = seq }, .{ .what = wb.what, .body = wb.body });
-}
-
-const WhatBody = struct { what: history_record.Intervention.What, body: []const u8 };
-
-fn actionWhatBody(action: Action, scratch: *[input_script.max_body_len]u8) WhatBody {
-    switch (action) {
-        .register => |reg| {
-            std.mem.writeInt(u32, scratch[0..4], @backingInt(reg.which), .little);
-            std.mem.writeInt(u32, scratch[4..8], reg.value, .little);
-            return .{ .what = .register_write, .body = scratch[0..8] };
-        },
-        .memory => |mem| return .{ .what = .memory_write, .body = mem.bytes },
-        .input => |inp| {
-            var writer = std.Io.Writer.fixed(scratch);
-            input_script.encodeBody(&writer, inp.event) catch {};
-            const what: history_record.Intervention.What = switch (inp.event) {
-                .button => .button,
-                else => .tap,
-            };
-            return .{ .what = what, .body = writer.buffered() };
-        },
-        .console => |con| return .{ .what = .keystroke, .body = con.bytes },
-        .plug => |p| return .{ .what = if (p.name != null) .plug else .unplug, .body = p.name orelse "" },
-        .fault => return .{ .what = .fault, .body = "" },
-        .camera => |cam| return .{ .what = .camera_change, .body = cam.spec },
-        .skip_bkpt => return .{ .what = .skip_bkpt, .body = "" },
-        .load => |ld| return .{ .what = .load, .body = ld.image },
+    if (self.persistent_recorder) |rec| {
+        try rec.recordIntervention(.{ .position = pos, .seq = seq }, .{ .what = encoded.what, .body = encoded.body });
+    } else if (self.history) |h| {
+        try h.recordIntervention(pos, encoded.what, encoded.body);
     }
 }
 
@@ -226,6 +186,7 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     if (self.net_hook) |hook| {
         hook.closeFlowsFn(hook.context);
     }
+    _ = async_traffic.clearOnFork(self);
 }
 
 /// The single Session-level routing choke point for host interventions.
@@ -334,10 +295,22 @@ pub fn skipBkpt(self: *Session, core: Core) anyerror!void {
 pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     try self.select(core);
     self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
+    try checkAndApplyReplayIntervention(self);
     const retired_before = self.live.core.cpu.retired;
+    if (self.replay_feeder) |*feeder| {
+        if (feeder.nextPosition()) |next_pos| {
+            const cur_pos = currentPosition(self);
+            if (cur_pos.r == next_pos.r and cur_pos.phase == next_pos.phase and next_pos.o > cur_pos.o) {
+                const dist = next_pos.o - cur_pos.o;
+                if (self.live.budget > dist) self.live.budget = dist;
+            }
+        }
+    }
     const ended = try self.live.go(command);
     if (self.live.boundary == null) try advanceBoard(self, core, self.live.core.cpu.retired - retired_before);
     notePosition(self, self.currentPosition());
+    try checkAndApplyReplayIntervention(self);
+    _ = try async_traffic.drainIfNeeded(self);
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
     self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
     if (self.history) |h| try recordStop(self, h, core, stopped, ended);
@@ -350,6 +323,23 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
         self.publish(.{ .core = stopped, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
     }
     return ended;
+}
+
+pub fn comparePositions(self: *const Session, a: Position, b: Position) anyerror!std.math.Order {
+    if (self.fork_router) |router| {
+        if (router.graph) |graph| {
+            return graph.compareOnLine(router.active_line, a, b);
+        }
+    }
+    return history_position.compare(a, b);
+}
+
+pub fn checkAndApplyReplayIntervention(self: *Session) anyerror!void {
+    if (self.replay_feeder) |*feeder| try feeder.checkAndApply(self);
+}
+
+pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!void {
+    return replay_feeder.loadSessionInterventions(self, log_bytes);
 }
 
 pub fn advanceBoard(self: *Session, core: Core, instructions: u64) anyerror!void {

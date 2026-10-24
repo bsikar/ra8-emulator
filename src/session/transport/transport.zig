@@ -59,6 +59,8 @@ pub const Bridge = struct {
     /// Put the machine back at a checkpoint's saved state. The name is
     /// the checkpoint record's 128-bit digest as its 32-hex object name.
     restore: *const fn (*anyopaque, object: []const u8) anyerror!void,
+    /// Returns the committed log's raw bytes, when available.
+    logBytes: ?*const fn (*anyopaque) anyerror![]const u8 = null,
 };
 
 pub const Job = struct {

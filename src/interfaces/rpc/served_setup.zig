@@ -126,6 +126,7 @@ pub const Served = struct {
                 .context = &self.bridge.?,
                 .facts = &history_bridge.Bridge.facts,
                 .restore = &history_bridge.Bridge.restore,
+                .logBytes = &history_bridge.Bridge.logBytes,
             };
         }
         self.context.wall = .{ .context = self, .nowFn = hostClock };
