@@ -312,6 +312,10 @@ pub const Transport = struct {
                 var name: [32]u8 = undefined;
                 objectName(checkpoint.object, &name);
                 try bridge.restore(bridge.context, &name);
+                // The restored position names the line it is replayed on,
+                // and the line's interventions from there on are due again.
+                self.session.stampLine();
+                if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
             },
         }
     }

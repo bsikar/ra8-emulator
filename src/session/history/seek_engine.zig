@@ -150,12 +150,14 @@ fn nearestOnLine(
     checkpoints: []const Checkpoint,
 ) ?Checkpoint {
     var best: ?Checkpoint = null;
+    var best_at: Position = .{};
     const target_canon = graph.canonicalize(active_line, target) catch return null;
     for (checkpoints) |c| {
         const c_canon = graph.canonicalize(active_line, c.position) catch continue;
         if (branch_mod.scalarOrder(c_canon, target_canon) == .gt) continue;
-        if (best == null or branch_mod.scalarOrder(c_canon, best.?.position) == .gt) {
+        if (best == null or branch_mod.scalarOrder(c_canon, best_at) == .gt) {
             best = c;
+            best_at = c_canon;
         }
     }
     return best;

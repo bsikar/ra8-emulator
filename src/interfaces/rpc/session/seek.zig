@@ -19,14 +19,11 @@ const Outcome = rpc.Outcome(proto.Ack);
 
 pub fn seek(context: *handlers.Context, args: proto.Seek) Outcome {
     const plane = context.transport orelse return refuse();
-    const ticket = plane.command(.{ .seek = .{ .target = args.target } }) catch |err| switch (err) {
+    _ = plane.command(.{ .seek = .{ .target = args.target } }) catch |err| switch (err) {
         error.InvalidArgs => return .{ .err = .bad_args },
         error.HistoryBroken => return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) },
         else => return refuse(),
     };
-    if (context.wall) |wall| {
-        _ = plane.finish(ticket, wall, null) catch return refuse();
-    }
     return .{ .ok = .{ .accepted = 1 } };
 }
 

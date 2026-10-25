@@ -71,6 +71,15 @@ pub const History = struct {
         self.seq += 1;
     }
 
+    /// Records where a scripted input landed, as a boundary record: an
+    /// observation, never replayed, so an input is applied once on replay.
+    pub fn recordLanding(self: *History, position: history_position.Position, what: history_record.Boundary.What, body: []const u8) anyerror!void {
+        if (self.replaying) return;
+        const rec = self.recorder orelse return;
+        try rec.recordBoundary(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
+        self.seq += 1;
+    }
+
     pub fn deinit(self: *History) void {
         for (self.ring.items) |entry| {
             if (entry.bytes.len > 0) self.gpa.free(entry.bytes);
@@ -163,11 +172,11 @@ pub const Landing = struct {
             self.failed = err;
             return;
         };
-        const what: history_record.Intervention.What = switch (event) {
-            .button => .button,
-            .tap, .swipe, .longpress => .tap,
+        const what: history_record.Boundary.What = switch (event) {
+            .button => .button_landed,
+            .tap, .swipe, .longpress => .tap_landed,
         };
-        self.history.recordIntervention(self.grid.at, what, writer.buffered()) catch |err| {
+        self.history.recordLanding(self.grid.at, what, writer.buffered()) catch |err| {
             if (self.failed == null) self.failed = err;
         };
     }

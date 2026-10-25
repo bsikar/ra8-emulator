@@ -34,6 +34,9 @@ const history_bridge = @import("history_bridge.zig");
 const history_resources = @import("ra8_host").history.resources;
 const session_branch = @import("ra8_session").history_branch;
 const session_fork = @import("ra8_session").history_fork_router;
+const session_async = @import("ra8_session").history_async_queue;
+const session_async_traffic = @import("ra8_session").history_async_traffic;
+const history_root = @import("ra8_session").history_root;
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -150,10 +153,21 @@ pub const Served = struct {
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
     }
 
+    /// Binds the recording session's lines (time-travel design section
+    /// 11): the router and branches.bin's sink, the opened image's
+    /// identity a different image is told apart by, the bounded queue
+    /// pushed host traffic waits in while the cursor is in the past, and
+    /// the C6's hold, which keeps host sockets off a rewound machine.
+    /// The persistent recorder is the harness's own (checkpoints.arm).
     fn attachHistoryRouter(self: *Served, allocator: std.mem.Allocator) !void {
+        if (self.history == null and self.ram_history == null) return;
+        const session = self.owner.session();
+        session.attachImageIdentity(.cpu0, history_root.identity(self.owner.image().bytes));
+        session.attachAsyncQueue(session_async.AsyncQueue.init(allocator, 0));
+        self.owner.board().c6.wire.bridge.hold = .{ .context = session, .heldFn = hostHeld };
         if (self.history) |b| {
-            self.owner.session().attachForkRouter(&b.router);
-            self.owner.session().attachGraphSink(b.graph_sink);
+            session.attachForkRouter(&b.router);
+            session.attachGraphSink(b.graph_sink);
         } else {
             const graph = try allocator.create(session_branch.BranchGraph);
             errdefer allocator.destroy(graph);
@@ -252,6 +266,10 @@ pub const Served = struct {
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
+        // A session that stopped recording into its history (a different
+        // image loaded) leaves that history's branches.bin as it was.
+        if (self.history) |b| b.detached = self.owner.session().graph_sink == null;
+        if (self.owner.session().async_traffic.queue) |*q| q.deinit();
         self.owner.deinit();
         if (self.ram_router) |r| {
             r.deinit();
@@ -288,6 +306,13 @@ fn setCameraDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
     const spec = try source_spec.parse(spec_text);
     const input = try source_open.open(self.gpa, self.io, spec);
     try board_camera.install(self.owner.board(), self.gpa, input);
+}
+
+/// The C6 hold: host traffic waits while the session replays or stands
+/// before the active line's recorded end.
+fn hostHeld(context: *anyopaque) bool {
+    const session: *session_api.Session = @ptrCast(@alignCast(context));
+    return session.replaying or session_async_traffic.isCursorInPast(session);
 }
 
 fn closeC6(context: *anyopaque) void {

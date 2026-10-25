@@ -82,6 +82,8 @@ pub const Method = enum(u16) {
     branch_confirm_fork = 0x0133,
     branch_cancel_fork = 0x0134,
     branch_status = 0x0135,
+    console_input = 0x0136,
+    skip_bkpt = 0x0137,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };

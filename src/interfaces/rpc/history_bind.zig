@@ -15,6 +15,7 @@ const session_fork = @import("ra8_session").history_fork_router;
 const session_fork_types = @import("ra8_session").fork;
 const session_branches_codec = @import("ra8_session").history_branches_codec;
 const branches_recover = @import("ra8_session").history_branches_recover;
+const history_segments = @import("history_segments.zig");
 
 /// Formats the segment leaf name for a given branch and segment index.
 pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
@@ -48,6 +49,10 @@ pub const Bind = struct {
     graph: session_branch.BranchGraph = undefined,
     router: session_fork.ForkRouter = undefined,
     graph_sink: session_fork_types.GraphSink = undefined,
+    /// Set when the session stopped recording into this history (a
+    /// different image loaded): close leaves its branches.bin as it was,
+    /// since the in-memory graph then describes the new program.
+    detached: bool = false,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -71,7 +76,11 @@ pub const Bind = struct {
         }
         var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
         defer candidates.deinit(allocator);
-        const rec = try branches_recover.recover(allocator, candidates.current, candidates.temp, null);
+        // The log is the last source: a graph rebuilt from its Branch
+        // records when neither file decodes, recorded ends raised from it.
+        const log_bytes = try history_segments.readAll(allocator, history.storage.Store.from(&bind.session));
+        defer allocator.free(log_bytes);
+        const rec = try branches_recover.recoverWithLog(allocator, candidates.current, candidates.temp, log_bytes);
         switch (rec.action) {
             .use_temp => history.branches_file.settle(io, bind.session.dir) catch {},
             else => history.branches_file.cleanupTemp(io, bind.session.dir),
@@ -121,26 +130,26 @@ pub const Bind = struct {
         self.disk = null;
         if (self.watch) |watch| gpa.destroy(watch);
         self.watch = null;
-        var allocating = std.Io.Writer.Allocating.initCapacity(gpa, 1024) catch null;
-        if (allocating) |*alloc| {
-            defer alloc.deinit();
-            if (session_branches_codec.encode(&self.graph, &alloc.writer)) {
-                history.branches_file.writeAtomic(self.io, self.session.dir, alloc.written()) catch {};
-            } else |_| {}
-        }
+        // The graph's last state, recorded ends included, reaches
+        // branches.bin; a write that fails is reported once the session
+        // and the root are closed, not dropped.
+        const saved: anyerror!void = if (self.detached) {} else self.saveGraph();
         self.router.deinit();
         self.graph.deinit();
-        if (self.session.close(null, .move)) |outcome| {
+        defer {
             self.base.close();
             gpa.destroy(self.sink);
             gpa.destroy(self);
-            return outcome;
-        } else |err| {
-            self.base.close();
-            gpa.destroy(self.sink);
-            gpa.destroy(self);
-            return err;
         }
+        const outcome = try self.session.close(null, .move);
+        try saved;
+        return outcome;
+    }
+
+    fn saveGraph(self: *Bind) anyerror!void {
+        const encoded = try session_branches_codec.encodeAlloc(&self.graph, self.gpa);
+        defer self.gpa.free(encoded);
+        try history.branches_file.writeAtomic(self.io, self.session.dir, encoded);
     }
 
     /// The log segment's length, where a reader's tail sits.
@@ -201,17 +210,27 @@ fn truncateLog(context: *anyopaque, len: u64) anyerror!void {
     try byte.vtable.truncate(byte.context, len);
 }
 
-fn switchSegmentLog(context: *anyopaque, branch: u32, seg: u32) anyerror!void {
+/// Moves appends to segment `seg` of `branch`: the current segment is
+/// made durable first (a failure leaves appends where they were), then
+/// the target opens for update when it exists and is made when it does
+/// not. Answers the bytes the target already holds.
+fn switchSegmentLog(context: *anyopaque, branch: u32, seg: u32) anyerror!u64 {
     const sink = sinkOf(context);
     const bind = sink.bind;
     var buf: [64]u8 = undefined;
     const leaf = try segmentName(&buf, branch, seg);
     const store = history.storage.Store.from(&bind.session);
-    const new_byte = try store.vtable.open(store.context, .log, leaf, .create);
-    sink.byte.vtable.sync(sink.byte.context) catch {};
+    try sink.byte.vtable.sync(sink.byte.context);
+    const new_byte = store.vtable.open(store.context, .log, leaf, .create) catch |err| switch (err) {
+        error.PathAlreadyExists => try store.vtable.open(store.context, .log, leaf, .update),
+        else => return err,
+    };
+    errdefer new_byte.vtable.close(new_byte.context);
+    const length = try new_byte.vtable.length(new_byte.context);
     sink.byte.vtable.close(sink.byte.context);
     sink.byte = new_byte;
     bind.log = new_byte;
+    return length;
 }
 
 fn bindOf(context: *anyopaque) *Bind {

@@ -51,10 +51,11 @@ const MockStorage = struct {
         self.seg_bytes.shrinkRetainingCapacity(@intCast(len));
     }
 
-    fn switchSegment(context: *anyopaque, branch: u32, _: u32) anyerror!void {
+    fn switchSegment(context: *anyopaque, branch: u32, _: u32) anyerror!u64 {
         const self: *MockStorage = @ptrCast(@alignCast(context));
         self.active_branch = branch;
         self.seg_bytes.clearRetainingCapacity();
+        return 0;
     }
 
     fn storage(self: *MockStorage) recorder_mod.Storage {

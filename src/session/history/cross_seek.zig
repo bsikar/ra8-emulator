@@ -66,12 +66,14 @@ pub fn nearestOnCommonPrefix(
     div_pos: Position,
 ) ?Checkpoint {
     var best: ?Checkpoint = null;
+    var best_at: Position = .{};
     for (checkpoints) |c| {
         const c_canon = graph.canonicalize(target_line, c.position) catch continue;
         if (branch_mod.scalarOrder(c_canon, div_pos) == .gt) continue;
         if (branch_mod.scalarOrder(c_canon, target) == .gt) continue;
-        if (best == null or branch_mod.scalarOrder(c_canon, best.?.position) == .gt) {
+        if (best == null or branch_mod.scalarOrder(c_canon, best_at) == .gt) {
             best = c;
+            best_at = c_canon;
         }
     }
     return best;

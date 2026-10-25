@@ -39,7 +39,7 @@ pub const usage =
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
     \\            branch ls | branch switch ID | branch rm ID [--confirm]
     \\            fork confirm | fork cancel | fork status
-    \\            write-reg NAME VALUE | write-mem ADDRESS HEXBYTES
+    \\            write-reg NAME VALUE | write-mem ADDRESS HEXBYTES | console TEXT | skip-bkpt
 ;
 
 /// What `regs` reads when it is given no names.
@@ -151,8 +151,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     const eql = std.mem.eql;
     if (eql(u8, name, "branch")) return .{ .branch_cmd = try ctl_branch.parseBranch(args) };
     if (eql(u8, name, "fork")) return .{ .branch_cmd = try ctl_branch.parseFork(args) };
-    if (eql(u8, name, "write-reg") or (eql(u8, name, "reg") and args.len == 2)) return .{ .write_cmd = try ctl_write.parseReg(args) };
-    if (eql(u8, name, "write-mem") or (eql(u8, name, "poke") and args.len == 2)) return .{ .write_cmd = try ctl_write.parseMem(allocator, args) };
+    if (try ctl_write.parseWord(allocator, name, args)) |cmd| return .{ .write_cmd = cmd };
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;

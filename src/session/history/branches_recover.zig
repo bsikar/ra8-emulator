@@ -66,3 +66,56 @@ pub fn recover(
         .action = .use_base,
     };
 }
+
+const replay_mod = @import("replay.zig");
+
+/// Raises each branch's recorded end to the newest record its own segment
+/// holds. branches.bin is rewritten on structural changes only, so the
+/// ends it carries can trail the log; the log's canonical positions are
+/// where the ends are recovered from.
+pub fn raiseEnds(graph: *branch_mod.BranchGraph, log_bytes: []const u8) !void {
+    _ = try replay_mod.replay(log_bytes, graph, raiseOne);
+}
+
+fn raiseOne(graph: *branch_mod.BranchGraph, entry: replay_mod.Entry) anyerror!void {
+    const at = switch (entry) {
+        .root => return,
+        inline else => |hit| hit.header.position,
+    };
+    const node = graph.nodes.getPtr(at.branch) orelse return;
+    if (branch_mod.scalarOrder(at, node.recorded_end) == .gt) node.recorded_end = at;
+}
+
+/// The frames of a committed log stream, decoded up to its torn tail; the
+/// payloads borrow `log_bytes`.
+pub fn framesOf(allocator: std.mem.Allocator, log_bytes: []const u8) ![]history_format.Frame {
+    var frames: std.ArrayList(history_format.Frame) = .empty;
+    errdefer frames.deinit(allocator);
+    var at: usize = 0;
+    while (at < log_bytes.len) {
+        const hit = history_format.decode(log_bytes[at..]) catch |err| switch (err) {
+            error.Truncated => break,
+            else => return err,
+        };
+        try frames.append(allocator, hit.frame);
+        at += hit.consumed;
+    }
+    return frames.toOwnedSlice(allocator);
+}
+
+/// Recovery over branches.bin's two candidates with the log as the last
+/// source: a graph rebuilt from the log's Branch records when neither file
+/// decodes, and every branch's recorded end raised from the log.
+pub fn recoverWithLog(
+    allocator: std.mem.Allocator,
+    current_bytes: ?[]const u8,
+    temp_bytes: ?[]const u8,
+    log_bytes: []const u8,
+) !RecoveryResult {
+    const frames = try framesOf(allocator, log_bytes);
+    defer allocator.free(frames);
+    var result = try recover(allocator, current_bytes, temp_bytes, frames);
+    errdefer result.graph.deinit();
+    try raiseEnds(&result.graph, log_bytes);
+    return result;
+}

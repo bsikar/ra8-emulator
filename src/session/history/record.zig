@@ -224,6 +224,11 @@ pub const Boundary = struct {
         fault = 6,
         skip_bkpt = 7,
         load = 8,
+        /// A scripted tap, swipe or long press reached the panel. The
+        /// intervention that scheduled it is what replay re-applies; the
+        /// landing is the observation of where it took effect.
+        tap_landed = 9,
+        button_landed = 10,
         _,
     };
     what: What,

@@ -109,7 +109,7 @@ pub fn queue(self: *Transport) !Ticket {
     // The checkpoint strictly before the base's, for the previous-interval fallback.
     var earlier: ?seek_engine.Base = null;
     for (facts.checkpoints) |c| {
-        const before = position_mod.compare(c.position, checkpoint.position) catch continue;
+        const before = self.session.comparePositions(c.position, checkpoint.position) catch continue;
         if (before != .lt) continue;
         const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
         if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
@@ -185,7 +185,7 @@ fn landingSlice(self: *Transport, job: *Job, rc: *Rc, grid: anytype) !?api.Ended
         if (after == .lt) return null;
         return error.OtherLine;
     }
-    const landed = position_mod.compare(grid.at, found) catch return error.OtherLine;
+    const landed = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
     if (landed == .lt) return null;
     return ended;
 }
@@ -199,7 +199,7 @@ fn fallback(self: *Transport, rc: *Rc, earlier: seek_engine.Base) !?api.Ended {
     const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
     var next: ?seek_engine.Base = null;
     for (facts.checkpoints) |c| {
-        const order = position_mod.compare(c.position, earlier.checkpoint.position) catch continue;
+        const order = self.session.comparePositions(c.position, earlier.checkpoint.position) catch continue;
         if (order != .lt) continue;
         const better = next == null or c.position.r > next.?.checkpoint.position.r;
         if (better) next = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };

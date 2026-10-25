@@ -8,6 +8,7 @@ const ra8_session = @import("ra8_session");
 const history = @import("ra8_host").history;
 const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
+const history_segments = @import("history_segments.zig");
 
 const seek_engine = ra8_session.history_seek_engine;
 const seek_facts = ra8_session.history_seek_facts;
@@ -24,11 +25,16 @@ pub const Bridge = struct {
     /// The facts the last gather returned; the bridge owns their memory
     /// until the next gather (the transport's bridge contract).
     facts_scratch: ?seek_facts.Facts = null,
+    /// The disk log's bytes the last logBytes read, owned until the next
+    /// read or teardown.
+    log_scratch: ?[]u8 = null,
 
-    /// Drop the facts memory still owned at teardown.
+    /// Drop the facts and log memory still owned at teardown.
     pub fn deinit(self: *Bridge) void {
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
+        if (self.log_scratch) |old| self.gpa.free(old);
+        self.log_scratch = null;
     }
 
     /// The committed log's facts for the transport's planner: the
@@ -43,11 +49,10 @@ pub const Bridge = struct {
         const bytes: []const u8 = blk: {
             if (self.ram) |r| break :blk r.log_bytes.items;
             if (self.disk) |d| {
-                const len = try d.log.vtable.length(d.log.context);
-                const buf = try self.gpa.alloc(u8, @intCast(len));
-                disk_buf = buf;
-                const total = try readAll(d.log, buf);
-                break :blk buf[0..total];
+                // Every line's segments: a line's prefix checkpoints sit in
+                // its ancestors' segments.
+                disk_buf = try history_segments.readAll(self.gpa, history.storage.Store.from(&d.session));
+                break :blk disk_buf.?;
             }
             return error.NoHistory;
         };
@@ -82,11 +87,19 @@ pub const Bridge = struct {
         return error.NoHistory;
     }
 
-    /// Returns the raw committed log bytes for in-RAM histories.
+    /// The committed log's bytes across every segment, for the replay
+    /// feeder; the bridge owns them until the next call.
     pub fn logBytes(context: *anyopaque) anyerror![]const u8 {
         const self: *Bridge = @ptrCast(@alignCast(context));
+        // Interventions stage between commits; a replay needs every one
+        // the line holds, so the staged ones commit before the read.
+        if (self.session.persistent_recorder) |rec| try rec.commit(0);
         if (self.ram) |r| return r.log_bytes.items;
-        return &[_]u8{};
+        const d = self.disk orelse return error.NoHistory;
+        const bytes = try history_segments.readAll(self.gpa, history.storage.Store.from(&d.session));
+        if (self.log_scratch) |old| self.gpa.free(old);
+        self.log_scratch = bytes;
+        return bytes;
     }
 };
 
