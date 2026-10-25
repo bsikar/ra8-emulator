@@ -160,28 +160,29 @@ test "the input landing adapter records an intervention at the grid position" {
     try std.testing.expectEqual(@as(?anyerror, null), landing.failed);
     try rec.commit(1);
 
-    // Two intervention frames in order: the tap at the grid position with
-    // the tap's own bytes, then the button press.
+    // Two boundary frames in order: the tap's landing at the grid position
+    // with the tap's own bytes, then the button's. A landing is an
+    // observation; the intervention that scheduled it is what replay applies.
     var index: usize = 0;
     var cursor: usize = 0;
     var positions: [2]record.Position = undefined;
-    var whats: [2]record.Intervention.What = undefined;
+    var whats: [2]record.Boundary.What = undefined;
     var bodies: [2]?[]const u8 = .{ null, null };
     while (cursor < sink.bytes.items.len) {
         const hit = try format.decode(sink.bytes.items[cursor..]);
-        try std.testing.expectEqual(@backingInt(record.Kind.intervention), hit.frame.kind);
-        const intervention = try record.decodeIntervention(hit.frame.payload);
-        positions[index] = intervention.header.position;
-        whats[index] = intervention.intervention.what;
-        bodies[index] = intervention.intervention.body;
+        try std.testing.expectEqual(@backingInt(record.Kind.boundary), hit.frame.kind);
+        const landed = try record.decodeBoundary(hit.frame.payload);
+        positions[index] = landed.header.position;
+        whats[index] = landed.boundary.what;
+        bodies[index] = landed.boundary.body;
         cursor += hit.consumed;
         index += 1;
     }
     try std.testing.expectEqual(@as(usize, 2), index);
     try std.testing.expect(std.meta.eql(positions[0], grid.at));
-    try std.testing.expectEqual(record.Intervention.What.tap, whats[0]);
+    try std.testing.expectEqual(record.Boundary.What.tap_landed, whats[0]);
     try std.testing.expectEqualStrings(&.{ 1, 0x34, 0x12, 0x78, 0x56 }, bodies[0].?);
-    try std.testing.expectEqual(record.Intervention.What.button, whats[1]);
+    try std.testing.expectEqual(record.Boundary.What.button_landed, whats[1]);
     try std.testing.expectEqualStrings(&.{ 4, 1, 1 }, bodies[1].?);
 }
 

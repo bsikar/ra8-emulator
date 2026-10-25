@@ -224,3 +224,44 @@ test "a checkpoint alone past the cap refuses the run" {
     try std.testing.expectEqual(@as(u32, 1), cp.next_id);
     try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
 }
+
+test "a replayed or stopped history takes no checkpoint, object or count" {
+    const gpa = std.testing.allocator;
+    var sink: Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+
+    var rec = try recorder_mod.Recorder.init(gpa, sink.storage(), .{});
+    defer rec.deinit();
+    rec.observe(0);
+    rec.objects = objects.objects();
+    var saved: scheduler.State = .{};
+    var cp = controller(&rec, &saved, &objects, 2);
+    try cp.fire(2);
+    const bytes_before = sink.bytes.items.len;
+    const object_bytes = rec.object_bytes;
+    const history_bytes = rec.history_bytes;
+
+    // A seek or a forward play over the recorded past passes the same rounds.
+    rec.replaying = true;
+    try cp.fire(4);
+    try cp.fire(6);
+    try rec.checkpoint(.{ .position = position, .seq = 0 }, 9, "ckpt");
+    try rec.commit(1);
+    try std.testing.expectEqual(@as(usize, 1), objects.items.items.len);
+    try std.testing.expectEqual(@as(u32, 1), cp.next_id);
+    try std.testing.expectEqual(object_bytes, rec.object_bytes);
+    try std.testing.expectEqual(history_bytes, rec.history_bytes);
+    try std.testing.expectEqual(bytes_before, sink.bytes.items.len);
+
+    // Live again, the next round is checkpointed as before.
+    rec.replaying = false;
+    try cp.fire(8);
+    try std.testing.expectEqual(@as(u32, 2), cp.next_id);
+
+    rec.stopped = true;
+    try cp.fire(10);
+    try std.testing.expectEqual(@as(u32, 2), cp.next_id);
+    try std.testing.expectEqual(@as(usize, 2), objects.items.items.len);
+}

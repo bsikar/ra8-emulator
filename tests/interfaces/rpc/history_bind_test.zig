@@ -84,7 +84,7 @@ test "switchSegment creates events-<branch>-<seg> preserving parent segment byte
     try std.testing.expectEqual(@as(u64, parent_bytes.len), try bind.logLength());
 
     const sw = bind.storage.switchSegment orelse return error.NoSwitchSegment;
-    try sw(bind.storage.context, 1, 0);
+    try std.testing.expectEqual(@as(u64, 0), try sw(bind.storage.context, 1, 0));
 
     const child_bytes = "child-branch-1-content";
     try bind.storage.append(bind.storage.context, child_bytes);

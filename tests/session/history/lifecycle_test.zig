@@ -299,3 +299,18 @@ test "recorded end of active line advances canonically per line and is reported 
     try std.testing.expectEqual(@as(u64, 8), list2[0].recorded_end.r);
     try std.testing.expectEqual(@as(u64, 5), list2[1].recorded_end.r);
 }
+
+test "a switch on a machine that has run, with no bridge to restore through, leaves the line alone" {
+    const gpa = std.testing.allocator;
+    var graph = try branch_mod.BranchGraph.init(gpa);
+    defer graph.deinit();
+    try graph.insertNode(.{ .id = 1, .parent = 0, .fork_at = pos(0, 50), .reason = .writes, .recorded_end = pos(1, 150) });
+    var router = fork_router_mod.ForkRouter.init(gpa, &graph);
+    defer router.deinit();
+    const grid: ra8.chip.core.scheduler.State = .{ .at = pos(0, 60) };
+    var session: lifecycle.Session = .{ .live = undefined, .fork_router = &router, .grid = &grid };
+
+    try std.testing.expectError(lifecycle.Error.NoHistory, lifecycle.switchBranch(&session, null, 1));
+    try std.testing.expectEqual(@as(u32, 0), router.active_line);
+    try std.testing.expectEqual(@as(u32, 0), graph.active_branch);
+}

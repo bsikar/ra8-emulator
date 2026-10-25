@@ -74,3 +74,32 @@ test "a planned seek is accepted on the transport" {
         },
     }
 }
+
+const FakeWall = struct {
+    now_ns: u64 = 0,
+    fn now(context: *anyopaque) u64 {
+        const self: *FakeWall = @ptrCast(@alignCast(context));
+        self.now_ns += 1_000_000;
+        return self.now_ns;
+    }
+};
+
+test "the seek request answers at once and leaves the seek running for the client to wait on" {
+    var rig = Rig{};
+    try rig.open();
+    defer rig.close();
+    _ = try rig.session.run(.cpu0, .step);
+    var bridge = MinBridge{};
+    var plane = ra8.session.transport.Transport{
+        .session = &rig.session,
+        .history = .{ .context = &bridge, .facts = &MinBridge.facts, .restore = &MinBridge.restore },
+    };
+    var wall: FakeWall = .{};
+    rig.context.transport = &plane;
+    rig.context.wall = .{ .context = &wall, .nowFn = FakeWall.now };
+    // A round no run reaches in the handler's time: a blocking handler
+    // would hold the server here until it did.
+    const outcome = seek.seek(&rig.context, .{ .target = "100000000:cpu0:0:retired" });
+    try std.testing.expect(outcome == .ok);
+    try std.testing.expect(plane.job != null);
+}

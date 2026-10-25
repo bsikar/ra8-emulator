@@ -84,6 +84,11 @@ pub fn removeBranch(
     var rec = try branches_recover.recover(allocator, candidates.current, candidates.temp, null);
     defer rec.graph.deinit();
 
+    // A branches.bin that is there but decodes to nothing is not an empty
+    // history: writing the base-only graph back would drop every branch
+    // while reporting a removal, so the removal refuses and the file stays.
+    if (rec.action == .use_base and (candidates.current != null or candidates.temp != null))
+        return error.BranchesUnreadable;
     switch (rec.action) {
         .use_temp => try branches_file.settle(base.io, dir),
         .use_current, .use_base => branches_file.cleanupTemp(base.io, dir),

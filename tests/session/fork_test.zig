@@ -20,156 +20,9 @@ const ForkReason = record_mod.ForkReason;
 const BranchGraph = branch_mod.BranchGraph;
 const ForkRouter = fork_router_mod.ForkRouter;
 
-const MockStorage = struct {
-    bytes: std.ArrayList(u8),
-    seg_bytes: std.ArrayList(u8),
-    active_branch: u32 = 0,
-
-    fn init(allocator: std.mem.Allocator) MockStorage {
-        return .{
-            .bytes = std.ArrayList(u8).initCapacity(allocator, 1024) catch unreachable,
-            .seg_bytes = std.ArrayList(u8).initCapacity(allocator, 1024) catch unreachable,
-        };
-    }
-
-    fn deinit(self: *MockStorage) void {
-        self.bytes.deinit(std.testing.allocator);
-        self.seg_bytes.deinit(std.testing.allocator);
-    }
-
-    fn append(context: *anyopaque, b: []const u8) anyerror!void {
-        const self: *MockStorage = @ptrCast(@alignCast(context));
-        try self.bytes.appendSlice(std.testing.allocator, b);
-        try self.seg_bytes.appendSlice(std.testing.allocator, b);
-    }
-
-    fn flush(_: *anyopaque) anyerror!void {}
-
-    fn truncate(context: *anyopaque, len: u64) anyerror!void {
-        const self: *MockStorage = @ptrCast(@alignCast(context));
-        self.bytes.shrinkRetainingCapacity(@intCast(len));
-        self.seg_bytes.shrinkRetainingCapacity(@intCast(len));
-    }
-
-    fn switchSegment(context: *anyopaque, branch: u32, _: u32) anyerror!u64 {
-        const self: *MockStorage = @ptrCast(@alignCast(context));
-        self.active_branch = branch;
-        self.seg_bytes.clearRetainingCapacity();
-        return 0;
-    }
-
-    fn storage(self: *MockStorage) recorder_mod.Storage {
-        return .{
-            .context = self,
-            .append = &append,
-            .flush = &flush,
-            .truncate = &truncate,
-            .switchSegment = &switchSegment,
-        };
-    }
-};
-
-const FakeSink = struct {
-    called: usize = 0,
-    fail: bool = false,
-    last_bytes: std.ArrayList(u8),
-
-    fn init(allocator: std.mem.Allocator) FakeSink {
-        return .{ .last_bytes = std.ArrayList(u8).initCapacity(allocator, 1024) catch unreachable };
-    }
-    fn deinit(self: *FakeSink) void {
-        self.last_bytes.deinit(std.testing.allocator);
-    }
-    fn write(context: *anyopaque, bytes: []const u8) anyerror!void {
-        const self: *FakeSink = @ptrCast(@alignCast(context));
-        self.called += 1;
-        if (self.fail) return error.DiskFull;
-        self.last_bytes.clearRetainingCapacity();
-        try self.last_bytes.appendSlice(std.testing.allocator, bytes);
-    }
-    fn sink(self: *FakeSink) session_api.GraphSink {
-        return .{ .context = self, .writeFn = &write };
-    }
-};
-
-const MockHarness = struct {
-    gpa: std.mem.Allocator,
-    session: Session,
-    graph: BranchGraph,
-    router: ForkRouter,
-    mock_storage: MockStorage,
-    recorder: recorder_mod.Recorder,
-    net_closed: bool = false,
-    console_buf: [256]u8 = undefined,
-    console_fed: ?[]const u8 = null,
-    camera_spec: ?[]const u8 = null,
-    plug_endpoint: ?session_api.Endpoint = null,
-    plug_name: ?[]const u8 = null,
-    loaded_image: ?[]const u8 = null,
-    grid_state: ra8.chip.core.scheduler.State,
-
-    fn init(allocator: std.mem.Allocator) !*MockHarness {
-        const h = try allocator.create(MockHarness);
-        h.gpa = allocator;
-        h.graph = try BranchGraph.init(allocator);
-        h.router = ForkRouter.init(allocator, &h.graph);
-        h.mock_storage = MockStorage.init(allocator);
-        h.recorder = try recorder_mod.Recorder.init(allocator, h.mock_storage.storage(), .{});
-        h.net_closed = false;
-        h.console_fed = null;
-        h.camera_spec = null;
-        h.plug_endpoint = null;
-        h.plug_name = null;
-        h.loaded_image = null;
-        h.grid_state = .{
-            .at = .{ .branch = 0, .r = 0, .phase = .cpu0, .o = 0, .gap = .retired },
-        };
-        h.session = .{
-            .live = .{ .core = undefined, .machine = undefined, .index = 0, .boundary = null, .budget = 1000 },
-            .grid = &h.grid_state,
-        };
-        h.session.attachForkRouter(&h.router);
-        h.session.attachPersistentRecorder(&h.recorder);
-        h.session.attachNet(.{ .context = h, .closeFlowsFn = closeFlows });
-        h.session.attachConsole(.{ .context = h, .feedFn = feedConsole });
-        h.session.attachCamera(.{ .context = h, .changeFn = setCamera });
-        h.session.attachPlugs(.{ .context = h, .plugFn = plugHook });
-        h.session.loader = .{ .context = h, .loadFn = loadHook };
-        return h;
-    }
-
-    fn deinit(self: *MockHarness) void {
-        self.router.deinit();
-        self.recorder.deinit();
-        self.mock_storage.deinit();
-        self.graph.deinit();
-        self.gpa.destroy(self);
-    }
-
-    fn closeFlows(ctx: *anyopaque) void {
-        const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        self.net_closed = true;
-    }
-    fn feedConsole(ctx: *anyopaque, bytes: []const u8) anyerror!void {
-        const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        const len = @min(bytes.len, self.console_buf.len);
-        @memcpy(self.console_buf[0..len], bytes[0..len]);
-        self.console_fed = self.console_buf[0..len];
-    }
-    fn setCamera(ctx: *anyopaque, spec: []const u8) anyerror!void {
-        const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        self.camera_spec = spec;
-    }
-    fn plugHook(ctx: *anyopaque, at: session_api.Endpoint, name: ?[]const u8) anyerror!void {
-        const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        self.plug_endpoint = at;
-        self.plug_name = name;
-    }
-    fn loadHook(ctx: *anyopaque, _: session_api.Core, img: []const u8) anyerror!void {
-        const self: *MockHarness = @ptrCast(@alignCast(ctx));
-        self.loaded_image = img;
-    }
-};
+const fixture = @import("fork_fixture.zig");
+const MockHarness = fixture.MockHarness;
+const FakeSink = fixture.FakeSink;
 
 test "confirmation flow and record ordering: branch record then intervention record" {
     const gpa = std.testing.allocator;
@@ -269,7 +122,7 @@ test "recorder budget accounting retains parent bytes across fork" {
     h.recorder.disk = .{
         .context = h,
         .free = &FreeFn.free,
-        .cap = 150, // budget cap of 150 bytes across whole history
+        .cap = 400, // budget cap of 400 bytes across whole history
         .floor = 0,
     };
 
@@ -294,12 +147,13 @@ test "recorder budget accounting retains parent bytes across fork" {
     try std.testing.expectError(error.ForkNeedsConfirmation, h.session.consoleInput(.cpu0, "forking-input"));
     try h.session.confirmFork();
 
-    // After fork, committed_bytes on child segment reset, but history_bytes retained parent
-    try std.testing.expectEqual(@as(u64, 0), h.recorder.committed_bytes);
-    try std.testing.expectEqual(parent_bytes, h.recorder.history_bytes);
+    // After fork, the child segment holds only its own Branch record and
+    // the fork's intervention, and history_bytes retains the parent's
+    try std.testing.expect(h.recorder.committed_bytes > 0);
+    try std.testing.expectEqual(parent_bytes + h.recorder.committed_bytes, h.recorder.history_bytes);
 
-    // Staging bytes that exceed 150 total cap refuses with HistoryFull
-    h.recorder.log.pending_bytes = 150;
+    // Staging bytes that exceed the 400 total cap refuses with HistoryFull
+    h.recorder.log.pending_bytes = 400;
     try std.testing.expectError(error.HistoryFull, h.recorder.commit(20));
 }
 

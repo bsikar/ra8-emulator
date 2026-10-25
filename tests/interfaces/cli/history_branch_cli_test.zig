@@ -82,3 +82,31 @@ test "history branch ls and rm operate offline on session branches.bin" {
     try std.testing.expect(std.mem.indexOf(u8, list_out2, "branch 0") != null);
     try std.testing.expect(std.mem.indexOf(u8, list_out2, "branch 1") == null);
 }
+
+test "an unreadable branches.bin refuses a removal and is left as it was" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+    var base = try history.base.Base.open(allocator, io, root, .cache);
+    defer base.close();
+    var session = try history.session.Session.create(&base, .{});
+    const id = session.id;
+    try branches_file.writeAtomic(io, session.dir, "not a branch list at all");
+    session.dir.close(io);
+    session.lock.close(io);
+    const session_name = try std.fmt.allocPrint(allocator, "{s}", .{&id});
+    defer allocator.free(session_name);
+
+    var out_buf: [512]u8 = undefined;
+    var out: std.Io.Writer = .fixed(&out_buf);
+    try std.testing.expectError(error.BranchesUnreadable, branch_cli.removeBranch(allocator, &base, session_name, 1, true, &out));
+
+    var dir = try base.dir.openDir(io, session_name, .{});
+    defer dir.close(io);
+    const kept = (try branches_file.readAlloc(io, dir, "branches.bin", allocator)).?;
+    defer allocator.free(kept);
+    try std.testing.expectEqualStrings("not a branch list at all", kept);
+}

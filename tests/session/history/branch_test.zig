@@ -173,3 +173,25 @@ test "addBranch validates fork position against parent fork position" {
     const b2 = try graph.addBranch(b1, makePos(b1, 60, 0), .taps, 2000);
     try std.testing.expectEqual(b1, graph.get(b2).?.parent);
 }
+
+test "making a branch active moves the live flag with it" {
+    const gpa = std.testing.allocator;
+    var graph = try BranchGraph.init(gpa);
+    defer graph.deinit();
+    const b1 = try graph.addBranch(0, makePos(0, 50, 0), .writes, 1);
+    try std.testing.expect(graph.get(0).?.is_live);
+
+    graph.setActive(b1);
+    try std.testing.expect(!graph.get(0).?.is_live);
+    try std.testing.expect(graph.get(b1).?.is_live);
+    try std.testing.expectEqual(b1, graph.active_branch);
+}
+
+test "a node whose parent is missing is an error to canonicalize through, not a crash" {
+    const gpa = std.testing.allocator;
+    var graph = try BranchGraph.init(gpa);
+    defer graph.deinit();
+    try graph.insertNode(.{ .id = 3, .parent = 8, .fork_at = makePos(8, 10, 0), .reason = .writes, .recorded_end = makePos(3, 20, 0) });
+    try std.testing.expectError(error.NoSuchBranch, graph.canonicalize(3, makePos(3, 5, 0)));
+    try std.testing.expectError(error.NoSuchBranch, graph.validate());
+}

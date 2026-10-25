@@ -228,3 +228,21 @@ test "rebuilding branch graph from log frames" {
     try std.testing.expectEqual(record.ForkReason.camera_change, r2.reason);
     try std.testing.expectEqual(@as(u64, 80), r2.fork_at.r);
 }
+
+test "a graph whose active branch or next id the nodes contradict is refused" {
+    const gpa = std.testing.allocator;
+    var graph = try BranchGraph.init(gpa);
+    defer graph.deinit();
+    const b1 = try graph.addBranch(0, makePos(0, 50, 0), .writes, 1);
+
+    graph.active_branch = 9;
+    const lost_active = try codec.encodeAlloc(&graph, gpa);
+    defer gpa.free(lost_active);
+    try std.testing.expectError(error.BadValue, codec.decode(gpa, lost_active));
+
+    graph.active_branch = 0;
+    graph.next_branch_id = b1;
+    const reused_id = try codec.encodeAlloc(&graph, gpa);
+    defer gpa.free(reused_id);
+    try std.testing.expectError(error.BadValue, codec.decode(gpa, reused_id));
+}

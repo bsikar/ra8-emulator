@@ -345,6 +345,7 @@ test {
     _ = @import("interfaces/rpc/session/branch_wire_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");
     _ = @import("interfaces/rpc/history_bind_test.zig");
+    _ = @import("interfaces/rpc/served_fork_test.zig");
     _ = @import("interfaces/rpc/history_ram_test.zig");
     _ = @import("interfaces/rpc/recorder_acceptance_test.zig");
 }

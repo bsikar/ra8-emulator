@@ -2,6 +2,7 @@
 //! and cross-line seek execution (Slice 20.3).
 const std = @import("std");
 const ra8 = @import("ra8");
+const fork_fixture = @import("../fork_fixture.zig");
 
 const branch_mod = ra8.session.history_branch;
 const position_mod = ra8.session.history_position;
@@ -272,4 +273,63 @@ test "rewind then play follows recorded line: re-applies memory write and tap wi
     try std.testing.expectEqual(@as(usize, 1), h.graph.nodes.count());
     // Log bytes unchanged
     try std.testing.expectEqual(recorded_log_len, h.sink.bytes.items.len);
+}
+
+fn consoleItem(feeder: *ReplayFeeder, at_pos: Position, seq: u32, bytes: []const u8) !void {
+    const action: fork_router_mod.Action = .{ .console = .{ .core = .cpu0, .bytes = try feeder.allocator.dupe(u8, bytes) } };
+    try feeder.items.append(feeder.allocator, .{ .position = at_pos, .seq = seq, .action = action });
+}
+
+test "an item whose exact position is never sampled is delivered at the first check past it" {
+    const gpa = std.testing.allocator;
+    var feeder = ReplayFeeder.init(gpa);
+    defer feeder.deinit();
+    try consoleItem(&feeder, pos(0, 5, 3), 1, "first");
+    try consoleItem(&feeder, pos(0, 9, 0), 2, "second");
+
+    // Round 5 is run past without a stop at offset 3.
+    try std.testing.expect(feeder.peekDue(pos(0, 4, 0)) == null);
+    try std.testing.expectEqualStrings("first", feeder.peekDue(pos(0, 7, 0)).?.action.console.bytes);
+    feeder.advance();
+    // The queue moved on: the later item is not blocked behind the missed one.
+    try std.testing.expect(feeder.peekDue(pos(0, 8, 0)) == null);
+    try std.testing.expectEqualStrings("second", feeder.peekDue(pos(0, 9, 0)).?.action.console.bytes);
+}
+
+test "a load from a position delivers the items there only when the machine was restored to it" {
+    const gpa = std.testing.allocator;
+    var feeder = ReplayFeeder.init(gpa);
+    defer feeder.deinit();
+    try consoleItem(&feeder, pos(0, 5, 0), 1, "a");
+    try consoleItem(&feeder, pos(0, 5, 0), 2, "b");
+    try consoleItem(&feeder, pos(0, 8, 0), 3, "c");
+
+    feeder.seekTo(pos(0, 5, 0), .at);
+    try std.testing.expectEqualStrings("a", feeder.peekDue(pos(0, 5, 0)).?.action.console.bytes);
+    feeder.seekTo(pos(0, 5, 0), .after);
+    try std.testing.expectEqual(@as(u64, 8), feeder.nextPosition().?.r);
+}
+
+test "checkAndApply re-applies due items in recorded order and records nothing" {
+    const gpa = std.testing.allocator;
+    const h = try fork_fixture.MockHarness.init(gpa);
+    defer h.deinit();
+    var feeder = ReplayFeeder.init(gpa);
+    try consoleItem(&feeder, pos(0, 5, 0), 2, "second");
+    try consoleItem(&feeder, pos(0, 5, 0), 1, "first");
+    std.mem.sort(replay_feeder.ScheduledIntervention, feeder.items.items, {}, struct {
+        fn less(_: void, a: replay_feeder.ScheduledIntervention, b: replay_feeder.ScheduledIntervention) bool {
+            return a.seq < b.seq;
+        }
+    }.less);
+    h.session.replay_feeder = feeder;
+    defer h.session.releaseReplay();
+
+    h.grid_state.at = pos(0, 6, 0);
+    try h.session.replay_feeder.?.checkAndApply(&h.session);
+    try std.testing.expectEqualStrings("second", h.console_fed.?);
+    try std.testing.expect(h.session.replay_feeder.?.nextPosition() == null);
+    try std.testing.expect(!h.session.replaying);
+    try h.recorder.commit(1);
+    try std.testing.expectEqual(@as(usize, 0), h.mock_storage.bytes.items.len);
 }

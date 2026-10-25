@@ -22,6 +22,8 @@ const Rig = struct {
     root: root_mod.Root,
     loaded: ?[]const u8 = null,
     started: ?[]const u8 = null,
+    fail_load: bool = false,
+    sink_writes: usize = 0,
 
     fn create(gpa: std.mem.Allocator) !*Rig {
         const rig = try gpa.create(Rig);
@@ -52,7 +54,13 @@ const Rig = struct {
 
     fn load(context: *anyopaque, _: session_api.Core, image: []const u8) anyerror!void {
         const rig: *Rig = @ptrCast(@alignCast(context));
+        if (rig.fail_load) return error.LoadRefused;
         rig.loaded = image;
+    }
+
+    fn write(context: *anyopaque, _: []const u8) anyerror!void {
+        const rig: *Rig = @ptrCast(@alignCast(context));
+        rig.sink_writes += 1;
     }
 
     fn start(context: *anyopaque, _: session_api.Core, image: []const u8) anyerror!void {
@@ -115,4 +123,38 @@ test "a session with no history never treats an image as different" {
         .live = .{ .core = undefined, .machine = undefined, .index = 0, .boundary = null, .budget = 1000 },
     };
     try std.testing.expect(!new_history.differs(&session, .cpu0, other_image));
+}
+
+test "a load that fails leaves the old image's lines and identity as they were" {
+    const rig = try Rig.create(std.testing.allocator);
+    defer rig.destroy();
+    rig.session.attachNewHistory(.{ .context = rig, .startFn = Rig.start });
+    _ = try rig.graph.addBranch(0, .{ .branch = 0, .r = 2 }, .writes, 0);
+    rig.router.switchActiveLine(1);
+    rig.fail_load = true;
+
+    try std.testing.expectError(error.LoadRefused, rig.session.load(.cpu0, other_image));
+
+    try std.testing.expect(rig.graph.get(1) != null);
+    try std.testing.expectEqual(@as(u32, 1), rig.router.active_line);
+    try std.testing.expect(rig.session.root != null);
+    try std.testing.expect(rig.started == null);
+    try std.testing.expect(!new_history.differs(&rig.session, .cpu0, root_image));
+}
+
+test "a session that stops recording leaves the old history's branches.bin alone" {
+    const rig = try Rig.create(std.testing.allocator);
+    defer rig.destroy();
+    var recorder: recorder_mod.Recorder = undefined;
+    recorder.stopped = false;
+    rig.session.persistent_recorder = &recorder;
+    rig.session.attachGraphSink(.{ .context = rig, .writeFn = Rig.write });
+
+    try rig.session.load(.cpu0, other_image);
+
+    try std.testing.expect(recorder.stopped);
+    try std.testing.expect(rig.session.graph_sink == null);
+    // The fresh graph is the new program's; no later change reaches the file.
+    try ra8.session.history_lifecycle.persistGraph(&rig.session);
+    try std.testing.expectEqual(@as(usize, 0), rig.sink_writes);
 }

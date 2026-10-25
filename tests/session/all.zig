@@ -39,11 +39,13 @@ test {
     _ = @import("history/branches_recover_test.zig");
     _ = @import("history/fork_router_test.zig");
     _ = @import("fork_test.zig");
+    _ = @import("fork_branch_test.zig");
     _ = @import("new_history_test.zig");
     _ = @import("history/async_queue_test.zig");
     _ = @import("history/async_traffic_test.zig");
     _ = @import("history/cross_seek_test.zig");
     _ = @import("history/replay_feeder_test.zig");
+    _ = @import("history/action_codec_test.zig");
     _ = @import("history/lifecycle_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
