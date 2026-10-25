@@ -69,6 +69,7 @@ pub const history_window_port = @import("history/window_port.zig");
 pub const history_window_engine = @import("history/window_engine.zig");
 pub const history_window_record = @import("history/window_record.zig");
 pub const history_window_rebuild = @import("history/window_rebuild.zig");
+pub const history_canonical_step = @import("history/canonical_step.zig");
 pub const mem_dump = @import("mem_dump.zig");
 pub const pc_hits = @import("pc_hits.zig");
 pub const place = @import("place/place.zig");

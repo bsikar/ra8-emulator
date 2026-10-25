@@ -58,6 +58,7 @@ test {
     _ = @import("history/window_engine_test.zig");
     _ = @import("history/window_record_test.zig");
     _ = @import("history/window_rebuild_test.zig");
+    _ = @import("history/canonical_step_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
