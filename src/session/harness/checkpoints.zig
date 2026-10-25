@@ -81,6 +81,8 @@ pub fn armSession(
     const armed = try arm(allocator, &session.live, files, saved, storage, objects, disk, checkpoint_cap, every);
     session.attachPersistentRecorder(&armed.recorder);
     history.attachRecorder(&armed.recorder);
+    if (session.console_hook == null) session.attachConsole(.{ .context = files.board, .feedFn = feedBoardConsole });
+    files.board.console_input.hook = .{ .context = session, .feedFn = routeConsoleStdin };
     return armed;
 }
 
@@ -89,6 +91,16 @@ pub fn disarmSession(allocator: std.mem.Allocator, session: *session_api.Session
     if (session.persistent_recorder == &armed.recorder) session.persistent_recorder = null;
     if (history.recorder == &armed.recorder) history.recorder = null;
     disarm(allocator, armed);
+}
+
+fn feedBoardConsole(context: *anyopaque, bytes: []const u8) anyerror!void {
+    const board: *@import("ra8_board").board.Board = @ptrCast(@alignCast(context));
+    board.serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
+}
+
+fn routeConsoleStdin(context: *anyopaque, bytes: []const u8) void {
+    const session: *session_api.Session = @ptrCast(@alignCast(context));
+    session.consoleInput(.cpu0, bytes) catch {};
 }
 
 const session_api = @import("../api.zig");

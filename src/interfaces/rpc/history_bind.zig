@@ -15,6 +15,7 @@ const session_fork = @import("ra8_session").history_fork_router;
 const session_fork_types = @import("ra8_session").fork;
 const session_branches_codec = @import("ra8_session").history_branches_codec;
 const branches_recover = @import("ra8_session").history_branches_recover;
+const history_root = @import("ra8_session").history_root;
 const history_segments = @import("history_segments.zig");
 
 /// Formats the segment leaf name for a given branch and segment index.
@@ -49,6 +50,7 @@ pub const Bind = struct {
     graph: session_branch.BranchGraph = undefined,
     router: session_fork.ForkRouter = undefined,
     graph_sink: session_fork_types.GraphSink = undefined,
+    root: ?history_root.Root = null,
     /// Set when the session stopped recording into this history (a
     /// different image loaded): close leaves its branches.bin as it was,
     /// since the in-memory graph then describes the new program.
@@ -91,6 +93,12 @@ pub const Bind = struct {
         bind.router = session_fork.ForkRouter.init(allocator, &bind.graph);
         errdefer bind.router.deinit();
         bind.graph_sink = .{ .context = bind, .writeFn = &writeBranchesBin };
+        if (history.branches_file.readAlloc(io, bind.session.dir, history.layout.files.root, allocator)) |bytes_opt| {
+            if (bytes_opt) |bytes| {
+                defer allocator.free(bytes);
+                bind.root = history_root.decode(bytes) catch null;
+            }
+        } else |_| {}
         const store = history.storage.Store.from(&bind.session);
         bind.log = try store.vtable.open(store.context, .log, log_leaf, .create);
         errdefer bind.log.vtable.close(bind.log.context);

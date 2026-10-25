@@ -37,6 +37,7 @@ const session_fork = @import("ra8_session").history_fork_router;
 const session_async = @import("ra8_session").history_async_queue;
 const session_async_traffic = @import("ra8_session").history_async_traffic;
 const history_root = @import("ra8_session").history_root;
+const served_history = @import("served_history.zig");
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -77,6 +78,7 @@ pub const Served = struct {
     ram_history: ?*history_ram.RamHistory = null,
     ram_graph: ?*session_branch.BranchGraph = null,
     ram_router: ?*session_fork.ForkRouter = null,
+    root: history_root.Root = undefined,
     /// The transport's history bridge (RA8EMU-1196, slice 17), once
     /// history records: a seek plans from the committed log and restores
     /// through the checkpoint objects. Points into `self`.
@@ -145,41 +147,12 @@ pub const Served = struct {
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
         self.context.camera = .{ .context = self, .setFn = setCamera };
         self.owner.session().attachCamera(.{ .context = self, .changeFn = setCameraDirect });
-        try self.attachHistoryRouter(allocator);
+        try served_history.attach(self, allocator);
         self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = closeC6 });
         self.owner.session().attachConsole(.{ .context = self, .feedFn = feedConsoleDirect });
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
-    }
-
-    /// Binds the recording session's lines (time-travel design section
-    /// 11): the router and branches.bin's sink, the opened image's
-    /// identity a different image is told apart by, the bounded queue
-    /// pushed host traffic waits in while the cursor is in the past, and
-    /// the C6's hold, which keeps host sockets off a rewound machine.
-    /// The persistent recorder is the harness's own (checkpoints.arm).
-    fn attachHistoryRouter(self: *Served, allocator: std.mem.Allocator) !void {
-        if (self.history == null and self.ram_history == null) return;
-        const session = self.owner.session();
-        session.attachImageIdentity(.cpu0, history_root.identity(self.owner.image().bytes));
-        session.attachAsyncQueue(session_async.AsyncQueue.init(allocator, 0));
-        self.owner.board().c6.wire.bridge.hold = .{ .context = session, .heldFn = hostHeld };
-        if (self.history) |b| {
-            session.attachForkRouter(&b.router);
-            session.attachGraphSink(b.graph_sink);
-        } else {
-            const graph = try allocator.create(session_branch.BranchGraph);
-            errdefer allocator.destroy(graph);
-            graph.* = try session_branch.BranchGraph.init(allocator);
-            errdefer graph.deinit();
-            const router = try allocator.create(session_fork.ForkRouter);
-            errdefer allocator.destroy(router);
-            router.* = session_fork.ForkRouter.init(allocator, graph);
-            self.ram_graph = graph;
-            self.ram_router = router;
-            self.owner.session().attachForkRouter(router);
-        }
     }
 
     /// Sample CPU0's call stacks every `every` instructions and answer
@@ -223,6 +196,7 @@ pub const Served = struct {
         cpu1.* = .{};
         try cpu1.open(self.gpa, self.io, std.Io.Dir.cwd(), &self.owner, path);
         self.second = cpu1;
+        served_history.attachSecond(self, cpu1);
     }
 
     /// RA8EMU-832: turn RTOS tracing on; safe to call when it already is.
@@ -306,13 +280,6 @@ fn setCameraDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
     const spec = try source_spec.parse(spec_text);
     const input = try source_open.open(self.gpa, self.io, spec);
     try board_camera.install(self.owner.board(), self.gpa, input);
-}
-
-/// The C6 hold: host traffic waits while the session replays or stands
-/// before the active line's recorded end.
-fn hostHeld(context: *anyopaque) bool {
-    const session: *session_api.Session = @ptrCast(@alignCast(context));
-    return session.replaying or session_async_traffic.isCursorInPast(session);
 }
 
 fn closeC6(context: *anyopaque) void {

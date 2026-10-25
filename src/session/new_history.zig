@@ -55,6 +55,7 @@ pub fn start(self: *Session, core: Core, image: []const u8) anyerror!void {
         stopRecording(self);
         return err;
     };
+    if (self.root == null) stopRecording(self);
 }
 
 /// Ends recording into the old history without touching it: the recorder

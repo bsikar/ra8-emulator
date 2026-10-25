@@ -11,6 +11,7 @@ pub const card_apps = @import("card_apps.zig");
 pub const child_transport = @import("child_transport.zig");
 pub const host_listener = @import("host_listener.zig");
 pub const served_setup = @import("served_setup.zig");
+pub const served_history = @import("served_history.zig");
 pub const history_bind = @import("history_bind.zig");
 pub const history_ram = @import("history_ram.zig");
 pub const session = @import("session/session.zig");

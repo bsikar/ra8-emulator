@@ -83,6 +83,9 @@ test "a served disk history attaches its recording parts and a past write forks 
     try std.testing.expect(session.async_traffic.queue != null);
     try std.testing.expect(session.image_identity[0] != null);
     try std.testing.expect(served.owner.board().c6.wire.bridge.hold != null);
+    try std.testing.expect(session.root != null);
+    try std.testing.expect(session.new_history != null);
+    try std.testing.expect(served.owner.board().console_input.hook != null);
 
     _ = try session.run(.cpu0, .run);
     const end = session.fork_router.?.recordedEnd();
@@ -184,4 +187,56 @@ test "a seek to a point on the shared prefix keeps the session on its child line
     try std.testing.expectEqual(@as(u32, 1), session.fork_router.?.active_line);
     try std.testing.expectEqual(earlier.checkpoints[0].position.r, session.grid.?.at.r);
     try std.testing.expectEqual(@as(u32, 1), session.fork_router.?.graph.?.active_branch);
+}
+
+test "console input and skip bkpt route through the fork router choke point in served setup" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+
+    var served: setup.Served = undefined;
+    try served.open(gpa, std.testing.io, image, null, .{ .root = root, .checkpoint_every = 1 });
+    defer served.deinit();
+    const session = served.owner.session();
+    _ = try session.run(.cpu0, .run);
+    const facts = try rewind(gpa, &served, 1);
+    defer gpa.free(facts.checkpoints);
+
+    // Console keystrokes via stdin hook while in the past require confirmation
+    const hook = served.owner.board().console_input.hook.?;
+    hook.feedFn(hook.context, "test\n");
+    try std.testing.expect(session.forkPending() != null);
+    try std.testing.expectEqual(record.ForkReason.keystrokes, session.forkPending().?.reason);
+    try session.confirmFork();
+    try std.testing.expectEqual(@as(u32, 1), session.fork_router.?.active_line);
+
+    // Rewind to prefix checkpoint 0 and test skip bkpt
+    const facts2 = try rewind(gpa, &served, 0);
+    defer gpa.free(facts2.checkpoints);
+    try session.skipBkpt(.cpu0);
+    try std.testing.expectEqual(@as(u32, 2), session.fork_router.?.active_line);
+}
+
+test "loading a different image in served setup starts new history and detaches old" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+
+    var served: setup.Served = undefined;
+    try served.open(gpa, std.testing.io, image, null, .{ .root = root, .checkpoint_every = 1 });
+    defer served.deinit();
+    const session = served.owner.session();
+
+    const other_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "tests/fixtures/audio/tone.elf", gpa, .limited(16 * 1024 * 1024));
+    defer gpa.free(other_bytes);
+
+    try std.testing.expect(session.root != null);
+    try std.testing.expect(ra8.session.new_history.differs(session, .cpu0, other_bytes));
+    try session.load(.cpu0, other_bytes);
+    try std.testing.expect(served.history.?.detached);
+    try std.testing.expect(session.persistent_recorder == null);
 }
