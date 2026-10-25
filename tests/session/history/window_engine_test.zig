@@ -8,7 +8,9 @@ const rig_mod = @import("window_rig.zig");
 const engine = ra8.session.history_window_engine;
 const rebuild = ra8.session.history_window_rebuild;
 
-const slots: usize = 40;
+/// Enough slots to cross two board ticks at round ends (complex slots)
+/// among the loop's RAM/CPU slots.
+const slots: usize = 160;
 
 fn built(rig: *rig_mod.Rig, straight: *const rig_mod.Straight, budget: usize) !engine.ReverseWindow {
     try rig.port().restoreFull(straight.base);

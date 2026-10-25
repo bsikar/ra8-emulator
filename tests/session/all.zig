@@ -53,7 +53,11 @@ test {
     _ = @import("history/micro_checkpoint_test.zig");
     _ = @import("history/window_digest_test.zig");
     _ = @import("history/shadow_oracle_test.zig");
-    _ = @import("history/zz_probe_test.zig");
+    _ = @import("history/window_delta_test.zig");
+    _ = @import("history/window_port_test.zig");
+    _ = @import("history/window_engine_test.zig");
+    _ = @import("history/window_record_test.zig");
+    _ = @import("history/window_rebuild_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");

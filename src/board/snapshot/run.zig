@@ -46,7 +46,9 @@ fn savePairMode(writer: anytype, stores: []const *const Store, cores: []const *c
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return error.BadValue;
     try file.writeHeader(writer);
     if (owned) try board_snap.saveAttached(board, writer) else try board_snap.save(board, writer);
-    if (parts.memory) for (stores, 0..) |store, index| try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
+    if (parts.memory) {
+        for (stores, 0..) |store, index| try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
+    } else try memory.saveFabric(stores[0], writer);
     for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
     var counter: std.Io.Writer.Discarding = .init(&.{});
     try fields.write(&counter.writer, identity);
@@ -73,6 +75,8 @@ pub fn Prepared(comptime B: type) type {
     return struct {
         board: ?board_snap.Prepared(B),
         memories: [2]?memory.Prepared = @splat(null),
+        /// The fabric state a preparation without memory puts back.
+        fabric: ?memory.FabricState = null,
         cores: [2]Cpu = undefined,
         count: usize = 0,
 
@@ -84,6 +88,7 @@ pub fn Prepared(comptime B: type) type {
         pub fn commit(self: *@This(), stores: []const *Store, cores: []const *Cpu, board: *B) void {
             if (self.board) |*held| held.commit(board);
             for (stores, 0..) |store, index| if (self.memories[index]) |*one| one.commit(store);
+            if (self.fabric) |state| memory.commitFabric(stores[0], state);
             for (cores, 0..) |core, index| {
                 core.* = self.cores[index];
                 cpu.afterRestore(core);
@@ -119,6 +124,7 @@ fn prepareMode(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, b
     var prepared = Prepared(@TypeOf(board.*)){
         .board = if (!parts.board) null else if (owned) try board_snap.prepareAttached(board, bytes) else try board_snap.prepare(board, bytes),
         .memories = memories,
+        .fabric = if (parts.memory) null else try memory.prepareFabric(stores[0], bytes),
         .count = cores.len,
     };
     errdefer if (prepared.board) |*held| held.deinit();

@@ -32,11 +32,17 @@ pub const Rig = struct {
     recording: trail.Recording,
     /// Added to the live line, so a test can move the machine to another.
     line_shift: u32 = 0,
+    /// Slots the port has stepped, and the one that raises a structural
+    /// barrier on the machine store, if any.
+    steps: usize = 0,
+    barrier_at: ?usize = null,
 
     /// Opens the machine in place: the recording points at itself.
     pub fn open(self: *Rig, gpa: std.mem.Allocator) !void {
         self.gpa = gpa;
         self.line_shift = 0;
+        self.steps = 0;
+        self.barrier_at = null;
         self.opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile });
         errdefer self.opened.deinit();
         try countFixture(&self.opened);
@@ -131,6 +137,8 @@ pub const Rig = struct {
             .cpu1 => .cpu1,
         }, .cont);
         if (ended != .count) return error.UnexpectedStop;
+        self.steps += 1;
+        if (self.barrier_at == self.steps) self.opened.state.cpu0.store.?.barrier(.wipe);
     }
 
     fn saveFull(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {

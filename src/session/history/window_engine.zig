@@ -231,8 +231,8 @@ pub const ReverseWindow = struct {
         try self.checkWalk();
         if (self.cursor() == 0) return false;
         const slot = self.slotAt(self.cursor() - 1);
-        const cpus = self.cpus();
-        _ = try self.trail.undoOne(cpus[0] orelse return Error.CoreMissing, cpus[1]);
+        const pair = self.cpus();
+        _ = try self.trail.undoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, false);
         try self.port.loadSide(self.image.items, slot.kind == .complex);
         return true;
@@ -253,8 +253,8 @@ pub const ReverseWindow = struct {
             };
             return true;
         }
-        const cpus = self.cpus();
-        _ = try self.trail.redoOne(cpus[0] orelse return Error.CoreMissing, cpus[1]);
+        const pair = self.cpus();
+        _ = try self.trail.redoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, true);
         try self.port.loadSide(self.image.items, false);
         return true;

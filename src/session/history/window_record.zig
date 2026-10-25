@@ -53,6 +53,8 @@ pub fn recordSlot(w: *ReverseWindow, core: engine.Core) !void {
         delta.deinit(w.allocator);
         delta = .{};
         while (w.count() > 0) w.evictOldest();
+        // The barrier's own trail slot has no window slot beside it.
+        while (w.trail.count > 0) w.trail.evictOldest();
         try w.plant();
         return;
     }
