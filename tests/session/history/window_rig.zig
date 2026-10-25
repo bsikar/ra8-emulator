@@ -36,6 +36,17 @@ pub const Rig = struct {
     /// barrier on the machine store, if any.
     steps: usize = 0,
     barrier_at: ?usize = null,
+    /// Failure injection: the side save that fails (1-based, counted from
+    /// `armSideFailure`), and whether the side load fails.
+    fail_side_at: ?usize = null,
+    side_calls: usize = 0,
+    fail_load_side: bool = false,
+
+    /// The `n`th side save from now on fails.
+    pub fn armSideFailure(self: *Rig, n: usize) void {
+        self.side_calls = 0;
+        self.fail_side_at = n;
+    }
 
     /// Opens the machine in place: the recording points at itself.
     pub fn open(self: *Rig, gpa: std.mem.Allocator) !void {
@@ -43,6 +54,9 @@ pub const Rig = struct {
         self.line_shift = 0;
         self.steps = 0;
         self.barrier_at = null;
+        self.fail_side_at = null;
+        self.side_calls = 0;
+        self.fail_load_side = false;
         self.opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile });
         errdefer self.opened.deinit();
         try countFixture(&self.opened);
@@ -150,10 +164,14 @@ pub const Rig = struct {
     }
 
     fn saveSide(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
-        try of(context).opened.state.files.writeParts(writer, .{ .memory = false });
+        const self = of(context);
+        self.side_calls += 1;
+        if (self.fail_side_at == self.side_calls) return error.Injected;
+        try self.opened.state.files.writeParts(writer, .{ .memory = false });
     }
 
     fn loadSide(context: *anyopaque, bytes: []const u8, board: bool) anyerror!void {
+        if (of(context).fail_load_side) return error.Injected;
         try of(context).opened.state.files.readParts(bytes, .{ .memory = false, .board = board });
     }
 };

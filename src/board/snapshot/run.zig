@@ -121,10 +121,12 @@ fn prepareMode(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, b
         const section = try file.Reader.find(bytes, if (index == 0) .memory else .second_memory) orelse return Error.Missing;
         memories[index] = try memory.prepare(store, section.payload);
     };
+    // The fabric check can refuse, so it runs before the board is staged.
+    const fabric = if (parts.memory) null else try memory.prepareFabric(stores[0], bytes);
     var prepared = Prepared(@TypeOf(board.*)){
         .board = if (!parts.board) null else if (owned) try board_snap.prepareAttached(board, bytes) else try board_snap.prepare(board, bytes),
         .memories = memories,
-        .fabric = if (parts.memory) null else try memory.prepareFabric(stores[0], bytes),
+        .fabric = fabric,
         .count = cores.len,
     };
     errdefer if (prepared.board) |*held| held.deinit();

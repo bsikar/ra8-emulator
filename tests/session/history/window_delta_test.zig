@@ -50,7 +50,7 @@ test "a change outside the core sections marks the board" {
     var delta = try delta_mod.encode(gpa, pre, post);
     defer delta.deinit(gpa);
     try std.testing.expect(delta.board);
-    try std.testing.expect(delta.bytes() > @sizeOf(delta_mod.Delta));
+    try std.testing.expect(delta.bytes() >= delta.runs.len * @sizeOf(delta_mod.Run) + delta.xor.len and delta.bytes() > 0);
 }
 
 test "identical images need no run" {
@@ -89,4 +89,23 @@ test "core sections are the cores, clocks, grid and debug units" {
     try std.testing.expect(!delta_mod.coreSection(.timers));
     try std.testing.expect(!delta_mod.coreSection(.fabric));
     try std.testing.expect(!delta_mod.coreSection(.attachments));
+}
+
+test "a malformed image fails the encode without leaking its runs" {
+    // Equal lengths with a changed byte, but no section header to parse:
+    // the board check fails after the runs were taken as an owned slice.
+    const pre = [_]u8{ 1, 2, 3, 4, 5, 6, 7, 8 };
+    var post = pre;
+    post[3] = 9;
+    try std.testing.expect(std.meta.isError(delta_mod.encode(gpa, &pre, &post)));
+}
+
+test "the delta's byte count is its heap and nothing for the struct" {
+    const pre = try stream(1, 2);
+    defer gpa.free(pre);
+    const post = try stream(1, 3);
+    defer gpa.free(post);
+    var d = try delta_mod.encode(gpa, pre, post);
+    defer d.deinit(gpa);
+    try std.testing.expectEqual(d.runs.len * @sizeOf(delta_mod.Run) + d.xor.len, d.bytes());
 }

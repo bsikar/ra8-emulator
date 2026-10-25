@@ -110,3 +110,19 @@ test "a sliced rebuild reports rebuilding with progress and can be cancelled" {
     try std.testing.expectEqual(@as(usize, 20), w.count());
     try std.testing.expectEqualSlices(u8, &straight.digests[30], &try rig.digest());
 }
+
+test "slicing a window with no job leaves a ready window alone" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, 12);
+    defer straight.deinit();
+    try rig.port().restoreFull(straight.base);
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try rebuild.run(&w, .{ .base = .{ .bytes = straight.base }, .end = straight.positions[12] });
+    try std.testing.expectError(engine.Error.NoWindow, rebuild.slice(&w, 4));
+    try std.testing.expect(w.ready());
+    try std.testing.expectEqual(@as(usize, 12), w.count());
+    try std.testing.expect(w.hot.len > 0);
+}

@@ -79,3 +79,47 @@ test "a structural barrier drops the slots before it and replants the window" {
     while (try w.undo()) {}
     try std.testing.expectEqualSlices(u8, &straight.digests[5], &try rig.digest());
 }
+
+test "a redo whose re-execution fails after the step rolls the machine back" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, slots);
+    defer straight.deinit();
+    try rig.port().restoreFull(straight.base);
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try rebuild.run(&w, .{ .base = .{ .bytes = straight.base }, .end = straight.positions[slots] });
+    const c = firstComplex(&w) orelse return error.NoComplexSlot;
+
+    try w.walkTo(c);
+    const records = rig.recording.record_count;
+    rig.armSideFailure(1);
+    try std.testing.expectError(error.Injected, w.redo());
+    try std.testing.expectEqual(c, w.cursor());
+    try std.testing.expectEqual(records, rig.recording.record_count);
+    try std.testing.expectEqualSlices(u8, &straight.digests[c], &try rig.digest());
+    // The window survives the failed redo and walks on exactly.
+    try std.testing.expect(w.ready());
+    try std.testing.expect(try w.redo());
+    try std.testing.expectEqualSlices(u8, &straight.digests[c + 1], &try rig.digest());
+}
+
+test "a barrier whose replant fails leaves no window describing the machine" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try w.plant();
+    rig.steps = 0;
+    rig.barrier_at = 5;
+    // Each recorded slot saves the side state once; the fifth slot's
+    // replant saves it a sixth time, and that one fails.
+    rig.armSideFailure(6);
+    for (0..4) |_| try w.extend(.cpu0);
+    try std.testing.expectError(error.Injected, w.extend(.cpu0));
+    try std.testing.expect(!w.ready());
+    try std.testing.expectEqual(@as(usize, 0), w.count());
+    try std.testing.expectEqual(@as(?engine.Position, null), w.start());
+}

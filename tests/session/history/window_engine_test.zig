@@ -137,3 +137,74 @@ test "the window drops when the machine moves to another line or forks" {
     try std.testing.expectEqual(engine.State.empty, w.status().state);
     try std.testing.expectEqual(@as(usize, 0), w.usedBytes());
 }
+
+test "extend refuses while a rebuild is in progress" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, 8);
+    defer straight.deinit();
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try rebuild.begin(&w, .{ .base = .{ .bytes = straight.base }, .end = straight.positions[8] });
+    try std.testing.expectError(engine.Error.Rebuilding, w.extend(.cpu0));
+    try std.testing.expectEqual(engine.State.rebuilding, w.status().state);
+}
+
+test "an extend that fails after its step drops the window instead of describing a stale machine" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try w.plant();
+    try w.extend(.cpu0);
+    try std.testing.expectEqual(@as(usize, 1), w.count());
+
+    rig.armSideFailure(1);
+    try std.testing.expectError(error.Injected, w.extend(.cpu0));
+    try std.testing.expectEqual(engine.State.empty, w.status().state);
+    try std.testing.expect(!w.ready());
+    try std.testing.expectEqual(@as(usize, 0), w.count());
+    try std.testing.expectError(engine.Error.NoWindow, w.undo());
+}
+
+test "an undo or redo that fails part way drops the window" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, 40);
+    defer straight.deinit();
+    try rig.port().restoreFull(straight.base);
+    var w = rig.window(64 * 1024 * 1024);
+    defer w.deinit();
+    try rebuild.run(&w, .{ .base = .{ .bytes = straight.base }, .end = straight.positions[40] });
+
+    rig.fail_load_side = true;
+    try std.testing.expectError(error.Injected, w.undo());
+    try std.testing.expectEqual(engine.State.empty, w.status().state);
+    rig.fail_load_side = false;
+
+    try rig.port().restoreFull(straight.base);
+    try rebuild.run(&w, .{ .base = .{ .bytes = straight.base }, .end = straight.positions[40] });
+    var first: usize = 0;
+    while (w.slotAt(first).kind != .ram_cpu) first += 1;
+    try w.walkTo(first);
+    rig.fail_load_side = true;
+    try std.testing.expectError(error.Injected, w.redo());
+    try std.testing.expectEqual(engine.State.empty, w.status().state);
+    rig.fail_load_side = false;
+}
+
+test "the reported size counts the hot checkpoint and the side image" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, slots);
+    defer straight.deinit();
+    var w = try built(&rig, &straight, 64 * 1024 * 1024);
+    defer w.deinit();
+    const held = w.status().used_bytes;
+    try std.testing.expect(w.hot.len > 0 and w.image.items.len > 0);
+    try std.testing.expect(held >= w.usedBytes() + w.hot.len + w.image.items.len);
+}

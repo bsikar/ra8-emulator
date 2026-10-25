@@ -42,9 +42,10 @@ pub const Delta = struct {
         self.* = undefined;
     }
 
-    /// The bytes the delta holds, for the window's byte budget.
+    /// The heap bytes the delta holds, for the window's byte budget. The
+    /// struct itself is counted with the slot that embeds it.
     pub fn bytes(self: *const Delta) usize {
-        return @sizeOf(Delta) + self.runs.len * @sizeOf(Run) + self.xor.len + self.pre.len + self.post.len;
+        return self.runs.len * @sizeOf(Run) + self.xor.len + self.pre.len + self.post.len;
     }
 
     /// Turns `image` from one side of the delta into the other. `forward`
@@ -98,6 +99,7 @@ pub fn encode(allocator: Allocator, pre: []const u8, post: []const u8) !Delta {
         at += run.len;
     }
     const owned = try runs.toOwnedSlice(allocator);
+    errdefer allocator.free(owned);
     return .{ .runs = owned, .xor = xor, .board = try touchesBoard(post, owned) };
 }
 

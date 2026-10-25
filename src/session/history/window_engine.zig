@@ -160,6 +160,13 @@ pub const ReverseWindow = struct {
         return self.trail.used_honest_bytes + self.slot_bytes;
     }
 
+    /// Everything the window holds in memory: the budgeted trail and slots
+    /// plus the hot checkpoint and the side image, which the byte budget
+    /// does not bound.
+    pub fn heldBytes(self: *const ReverseWindow) usize {
+        return self.usedBytes() + self.hot.len + self.image.items.len;
+    }
+
     pub fn ready(self: *const ReverseWindow) bool {
         return self.line != null and self.rebuild == null;
     }
@@ -199,7 +206,7 @@ pub const ReverseWindow = struct {
             .state = state,
             .slots = self.count(),
             .cursor = self.cursor(),
-            .used_bytes = self.usedBytes(),
+            .used_bytes = self.heldBytes(),
             .budget_bytes = self.budget,
             .start = self.start(),
             .end = self.end(),
@@ -211,18 +218,27 @@ pub const ReverseWindow = struct {
     /// Plants the hot checkpoint and an empty window at the live state.
     pub fn plant(self: *ReverseWindow) !void {
         const bytes = try self.port.fullBytes(self.allocator);
+        errdefer self.allocator.free(bytes);
+        var side: std.ArrayList(u8) = .empty;
+        errdefer side.deinit(self.allocator);
+        try self.port.sideInto(self.allocator, &side);
         self.allocator.free(self.hot);
+        self.image.deinit(self.allocator);
         self.hot = bytes;
+        self.image = side;
         self.hot_at = self.port.position();
         self.planted_at = self.hot_at;
         self.line = self.port.line();
-        try self.port.sideInto(self.allocator, &self.image);
     }
 
     /// Records one more slot at the window's end on `core`'s turn.
     pub fn extend(self: *ReverseWindow, core: Core) !void {
+        if (self.rebuild != null) return Error.Rebuilding;
         try self.checkLine();
         if (self.cursor() != self.count()) return Error.NoWindow;
+        // The step has moved the machine by the time a later stage fails,
+        // so the window no longer describes it: it drops.
+        errdefer self.drop();
         try record.recordSlot(self, core);
     }
 
@@ -232,6 +248,8 @@ pub const ReverseWindow = struct {
         if (self.cursor() == 0) return false;
         const slot = self.slotAt(self.cursor() - 1);
         const pair = self.cpus();
+        // A failure part way leaves cursor, image and machine apart.
+        errdefer self.drop();
         _ = try self.trail.undoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, false);
         try self.port.loadSide(self.image.items, slot.kind == .complex);
@@ -254,6 +272,7 @@ pub const ReverseWindow = struct {
             return true;
         }
         const pair = self.cpus();
+        errdefer self.drop();
         _ = try self.trail.redoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, true);
         try self.port.loadSide(self.image.items, false);

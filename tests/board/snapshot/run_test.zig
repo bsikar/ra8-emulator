@@ -104,3 +104,70 @@ test "a file without a core it is asked for is refused" {
     var fresh_one = try fixture.boot(&ram);
     try std.testing.expectError(error.Missing, run.load(bytes.written(), &fresh.store, &.{ &fresh_zero, &fresh_one }, &fresh.board));
 }
+
+test "a save with every part is the attached whole-run save, byte for byte" {
+    var ram: fixture.Ram = .{};
+    var rig: Rig = undefined;
+    try rig.build();
+    defer rig.deinit();
+    var zero = try fixture.boot(&ram);
+    var whole = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer whole.deinit();
+    try run.savePairAttached(&whole.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null));
+    var parts = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer parts.deinit();
+    try run.savePairParts(&parts.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{});
+    try std.testing.expectEqualSlices(u8, whole.written(), parts.written());
+}
+
+test "a save without memory carries the fabric section and no memory section" {
+    var ram: fixture.Ram = .{};
+    var rig: Rig = undefined;
+    try rig.build();
+    defer rig.deinit();
+    var zero = try fixture.boot(&ram);
+    var side = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer side.deinit();
+    try run.savePairParts(&side.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{ .memory = false });
+    try std.testing.expect(try run.file.Reader.find(side.written(), .memory) == null);
+    try std.testing.expect(try run.file.Reader.find(side.written(), .fabric) != null);
+    try std.testing.expect(try run.file.Reader.find(side.written(), .cpu) != null);
+}
+
+test "loading without memory or board changes the cores alone" {
+    var ram: fixture.Ram = .{};
+    var rig: Rig = undefined;
+    try rig.build();
+    defer rig.deinit();
+    try rig.store.write(.none, word_at, &.{0x7E});
+    rig.board.c6.reply = .{0x5A};
+    var zero = try fixture.boot(&ram);
+    zero.regs.low[4] = 0x1234_5678;
+    var side = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer side.deinit();
+    try run.savePairParts(&side.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{ .memory = false });
+
+    var fresh: Rig = undefined;
+    try fresh.build();
+    defer fresh.deinit();
+    fresh.board.c6.reply = .{0x11};
+    var fresh_zero = try fixture.boot(&ram);
+    var staged = try run.prepareParts(side.written(), &.{&fresh.store}, &.{&fresh_zero}, &fresh.board, @splat(null), .{ .memory = false, .board = false });
+    defer staged.deinit();
+    staged.commit(&.{&fresh.store}, &.{&fresh_zero}, &fresh.board);
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), fresh_zero.regs.low[4]);
+    try std.testing.expectEqual(@as(u8, 0), fresh.store.span(word_at, 4).?[0]);
+    try std.testing.expectEqual(@as(u8, 0x11), fresh.board.c6.reply[0]);
+}
+
+test "a whole file without a fabric section is refused for a memory-less load" {
+    var ram: fixture.Ram = .{};
+    var rig: Rig = undefined;
+    try rig.build();
+    defer rig.deinit();
+    var zero = try fixture.boot(&ram);
+    var whole = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer whole.deinit();
+    try run.savePairAttached(&whole.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null));
+    try std.testing.expectError(error.Missing, run.prepareParts(whole.written(), &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{ .memory = false }));
+}

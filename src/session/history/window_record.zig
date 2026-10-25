@@ -55,6 +55,8 @@ pub fn recordSlot(w: *ReverseWindow, core: engine.Core) !void {
         while (w.count() > 0) w.evictOldest();
         // The barrier's own trail slot has no window slot beside it.
         while (w.trail.count > 0) w.trail.evictOldest();
+        // A failed replant leaves no slot to describe the machine.
+        errdefer w.drop();
         try w.plant();
         return;
     }
@@ -72,17 +74,14 @@ pub fn recordSlot(w: *ReverseWindow, core: engine.Core) !void {
 pub fn reexecute(w: *ReverseWindow, slot: *engine.Slot) !void {
     const payload = w.trail.slotAt(w.cursor());
     const mark = w.recording.record_count;
-    w.port.step(slot.core) catch |err| {
-        try rollback(w, mark);
-        return err;
-    };
+    errdefer rollback(w, mark) catch w.drop();
+    try w.port.step(slot.core);
     var post_image: std.ArrayList(u8) = .empty;
     defer post_image.deinit(w.allocator);
     try w.port.sideInto(w.allocator, &post_image);
     const fresh = w.recording.records[mark..w.recording.record_count];
     const actual = try slotDigest(w, post_image.items, fresh);
     if (!std.mem.eql(u8, &actual, &slot.digest) or !sameShape(payload.byte_records, fresh)) {
-        try rollback(w, mark);
         w.refusal = .{ .position = slot.pre, .expected_digest = slot.digest, .actual_digest = actual, .core = slot.core };
         return digest_mod.RedoError.HistoryDivergence;
     }

@@ -113,3 +113,38 @@ test "a step that needs a slot outside the window refuses and moves nothing" {
     try std.testing.expectError(step.Error.OutsideWindow, step.stepBack(&w, .cpu0));
     try std.testing.expectEqual(@as(usize, 0), w.cursor());
 }
+
+test "a step crosses a board tick and the other core's turn behind it as one stop" {
+    var rig: rig_mod.Rig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+    var straight = try rig_mod.Straight.record(&rig, slots);
+    defer straight.deinit();
+    var w = try built(&rig, &straight);
+    defer w.deinit();
+
+    // The round end is the tick slot (complex); CPU1's turn follows it
+    // before CPU0's next slot: the gap the canonical stop must span.
+    var gaps: usize = 0;
+    for (0..w.count() - 3) |i| {
+        if (w.slotAt(i).kind != .complex) continue;
+        for (i + 1..i + 3) |k| {
+            if (w.slotAt(k).kind == .ram_cpu) w.slotAt(k).core = .cpu1;
+        }
+    }
+    try w.walkTo(0);
+    _ = try step.stepForward(&w, .cpu0);
+    while (w.cursor() < w.count()) {
+        const before = w.cursor();
+        const forward = try step.stepForward(&w, .cpu0);
+        try std.testing.expectEqualSlices(u8, &straight.digests[w.cursor()], &try rig.digest());
+        if (forward.complex_slots > 0 and forward.other_core_slots > 0) gaps += 1;
+        if (forward.at_window_end) break;
+        const back = try step.stepBack(&w, .cpu0);
+        try std.testing.expectEqual(before, w.cursor());
+        try std.testing.expectEqual(forward.complex_slots, back.complex_slots);
+        try std.testing.expectEqual(forward.other_core_slots, back.other_core_slots);
+        _ = try step.stepForward(&w, .cpu0);
+    }
+    try std.testing.expect(gaps > 0);
+}

@@ -75,8 +75,8 @@ pub fn begin(w: *ReverseWindow, plan: Plan) !void {
 /// Advances the rebuild by at most `max_slots` replayed slots. True once
 /// the window is built; an error drops the half-built window.
 pub fn slice(w: *ReverseWindow, max_slots: usize) !bool {
-    errdefer w.drop();
     const job = if (w.rebuild) |*held| held else return engine.Error.NoWindow;
+    errdefer w.drop();
     switch (job.phase) {
         .restore => {
             if (job.base) |bytes| try w.port.restoreFull(bytes);
