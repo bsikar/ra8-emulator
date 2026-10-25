@@ -114,7 +114,7 @@ test "a step that needs a slot outside the window refuses and moves nothing" {
     try std.testing.expectEqual(@as(usize, 0), w.cursor());
 }
 
-test "a step crosses a board tick and the other core's turn behind it as one stop" {
+test "a step crosses a SysTick/board-tick gap and the other core's turn behind it as one stop" {
     var rig: rig_mod.Rig = undefined;
     try rig.open(std.testing.allocator);
     defer rig.deinit();
@@ -123,8 +123,9 @@ test "a step crosses a board tick and the other core's turn behind it as one sto
     var w = try built(&rig, &straight);
     defer w.deinit();
 
-    // The round end is the tick slot (complex); CPU1's turn follows it
-    // before CPU0's next slot: the gap the canonical stop must span.
+    // The round end is the tick slot (complex, where SysTick and the board
+    // tick); CPU1's turn follows it before CPU0's next slot: the gap the
+    // canonical stop must span.
     var gaps: usize = 0;
     for (0..w.count() - 3) |i| {
         if (w.slotAt(i).kind != .complex) continue;
