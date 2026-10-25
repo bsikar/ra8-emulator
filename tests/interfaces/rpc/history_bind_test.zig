@@ -68,3 +68,41 @@ test "the bind appends the log, puts objects and deletes its session on close" {
     try std.testing.expect(try bind.disk.?.free(bind.disk.?.context) > 0);
     try std.testing.expectEqual(history.session.Outcome.deleted, try bind.close());
 }
+
+test "switchSegment creates events-<branch>-<seg> preserving parent segment byte-for-byte" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
+    defer _ = bind.close() catch {};
+
+    const parent_bytes = "parent-future-preserved";
+    try bind.storage.append(bind.storage.context, parent_bytes);
+    try bind.storage.flush(bind.storage.context);
+    try std.testing.expectEqual(@as(u64, parent_bytes.len), try bind.logLength());
+
+    const sw = bind.storage.switchSegment orelse return error.NoSwitchSegment;
+    try std.testing.expectEqual(@as(u64, 0), try sw(bind.storage.context, 1, 0));
+
+    const child_bytes = "child-branch-1-content";
+    try bind.storage.append(bind.storage.context, child_bytes);
+    try bind.storage.flush(bind.storage.context);
+    try std.testing.expectEqual(@as(u64, child_bytes.len), try bind.logLength());
+
+    const store = history.storage.Store.from(&bind.session);
+    const parent_file = try store.vtable.open(store.context, .log, "events-0", .read);
+    defer parent_file.vtable.close(parent_file.context);
+    var read_parent: [64]u8 = undefined;
+    const parent_len = try parent_file.vtable.read(parent_file.context, 0, &read_parent);
+    try std.testing.expectEqual(parent_bytes.len, parent_len);
+    try std.testing.expectEqualStrings(parent_bytes, read_parent[0..parent_len]);
+
+    const child_file = try store.vtable.open(store.context, .log, "events-1-0", .read);
+    defer child_file.vtable.close(child_file.context);
+    var read_child: [64]u8 = undefined;
+    const child_len = try child_file.vtable.read(child_file.context, 0, &read_child);
+    try std.testing.expectEqual(child_bytes.len, child_len);
+    try std.testing.expectEqualStrings(child_bytes, read_child[0..child_len]);
+}

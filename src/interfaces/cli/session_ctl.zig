@@ -16,6 +16,8 @@ const profiles = @import("ra8_host").profiles;
 const host_spawn = @import("host/spawn.zig");
 const out = @import("ctl/print.zig");
 pub const events = @import("ctl/events.zig");
+const ctl_branch = @import("ctl/branch.zig");
+const ctl_write = @import("ctl/write.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
@@ -35,7 +37,9 @@ pub const usage =
     \\            periph [BLOCK] (the peripheral blocks, or one block's registers)
     \\            folded [THREAD] [FROM_NS TO_NS] (sampled stacks; serve --profile-folded)
     \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
-    \\
+    \\            branch ls | branch switch ID | branch rm ID [--confirm]
+    \\            fork confirm | fork cancel | fork status
+    \\            write-reg NAME VALUE | write-mem ADDRESS HEXBYTES | console TEXT | skip-bkpt
 ;
 
 /// What `regs` reads when it is given no names.
@@ -82,6 +86,8 @@ pub const Command = union(enum) {
     periph: []const u8,
     /// CPU0's sampled stacks, folded, for one thread and window (RA8EMU-833).
     folded: Folded,
+    branch_cmd: ctl_branch.BranchCommand,
+    write_cmd: ctl_write.WriteCommand,
 };
 
 /// What `ctl folded` asks for; the defaults take every thread, all time.
@@ -105,6 +111,7 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
     const by_host = std.mem.eql(u8, argv[2], "--host");
     if (!by_host and !std.mem.eql(u8, argv[2], "--connect")) return error.BadArguments;
     var words: std.ArrayList([]const u8) = .empty;
+    defer words.deinit(allocator);
     var json = false;
     var hosts: ?[]const u8 = null;
     var image: ?[]const u8 = null;
@@ -142,6 +149,9 @@ fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
 
 fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
     const eql = std.mem.eql;
+    if (eql(u8, name, "branch")) return .{ .branch_cmd = try ctl_branch.parseBranch(args) };
+    if (eql(u8, name, "fork")) return .{ .branch_cmd = try ctl_branch.parseFork(args) };
+    if (try ctl_write.parseWord(allocator, name, args)) |cmd| return .{ .write_cmd = cmd };
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
@@ -274,11 +284,8 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             try out.advanced(w, json, moved);
         },
         .seek => |text| {
-            // The ack carries no printed shape yet: today the door
-            // refuses every well-formed seek while the position-stop
-            // primitive is pending, so the refusal below is the live
-            // path and the drive lands with the execution ticket.
             _ = try client.call(proto.Ack, proto.Seek, .seek, .{ .target = text });
+            if (json) try w.print("{{\"seek\":{f}}}\n", .{std.json.fmt(text, .{})}) else try w.print("seek to {s} accepted\n", .{text});
         },
         .rc => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .rcont, .{ .core = .cpu0 });
@@ -328,6 +335,8 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             const report = try client.call(proto.RtcReport, proto.CoreOnly, .rtc, .{ .core = .cpu0 });
             try out.rtc(w, json, report);
         },
+        .branch_cmd => |cmd| try ctl_branch.perform(client, w, json, cmd),
+        .write_cmd => |cmd| try ctl_write.perform(client, w, json, cmd),
     }
     return 0;
 }

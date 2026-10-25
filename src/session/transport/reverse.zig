@@ -73,7 +73,11 @@ pub fn queue(self: *Transport) !Ticket {
         const cpu1 = self.session.machine(.cpu1) catch return Error.HistoryBroken;
         for (cpu1.watches.entries()) |slot| if (slot.enabled) return Error.WatchArmed;
     }
-    const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
     const core = self.session.currentCore();
     const prior = transport_mod.budgetOf(self.session, core);
     if (self.session.grid == null) {
@@ -105,7 +109,7 @@ pub fn queue(self: *Transport) !Ticket {
     // The checkpoint strictly before the base's, for the previous-interval fallback.
     var earlier: ?seek_engine.Base = null;
     for (facts.checkpoints) |c| {
-        const before = position_mod.compare(c.position, checkpoint.position) catch continue;
+        const before = self.session.comparePositions(c.position, checkpoint.position) catch continue;
         if (before != .lt) continue;
         const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
         if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
@@ -127,8 +131,8 @@ pub fn queue(self: *Transport) !Ticket {
 
 /// Drive one reverse-continue in two passes over the committed log.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
-    defer self.session.replaying = false;
-    self.session.replaying = true;
+    defer self.session.setReplaying(false);
+    self.session.setReplaying(true);
     const rc = &job.rc.?;
     if (rc.start) return .{ .stop = .history_start };
     const grid = self.session.grid orelse return error.NoGrid;
@@ -141,11 +145,11 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         // A base that itself sits at an armed breakpoint is a hit at
         // the base's position: the replay's first resume executes
         // through it, so ask the state before running.
-        const before = position_mod.compare(grid.at, rc.cursor) catch return error.OtherLine;
+        const before = self.session.comparePositions(grid.at, rc.cursor) catch return error.OtherLine;
         if (before == .lt and rcBaseHit(self, grid.at)) rc.note(grid.at);
         return null;
     }
-    const before = position_mod.compare(grid.at, rc.upper) catch return error.OtherLine;
+    const before = self.session.comparePositions(grid.at, rc.upper) catch return error.OtherLine;
     if (before != .lt) {
         if (rc.found != null) {
             rc.landing = true;
@@ -160,7 +164,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     }
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) return null;
-    const at = position_mod.compare(grid.at, rc.cursor) catch return error.OtherLine;
+    const at = self.session.comparePositions(grid.at, rc.cursor) catch return error.OtherLine;
     if (at == .lt) rc.note(grid.at);
     return null;
 }
@@ -172,16 +176,16 @@ fn landingSlice(self: *Transport, job: *Job, rc: *Rc, grid: anytype) !?api.Ended
         return null;
     }
     const found = rc.found orelse return error.NoHit;
-    const at = position_mod.compare(grid.at, found) catch return error.OtherLine;
+    const at = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
     if (at == .gt) return error.OtherLine;
     if (at == .eq) return try rcHitStop(self, found.phase);
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) {
-        const after = position_mod.compare(grid.at, found) catch return error.OtherLine;
+        const after = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
         if (after == .lt) return null;
         return error.OtherLine;
     }
-    const landed = position_mod.compare(grid.at, found) catch return error.OtherLine;
+    const landed = self.session.comparePositions(grid.at, found) catch return error.OtherLine;
     if (landed == .lt) return null;
     return ended;
 }
@@ -195,7 +199,7 @@ fn fallback(self: *Transport, rc: *Rc, earlier: seek_engine.Base) !?api.Ended {
     const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
     var next: ?seek_engine.Base = null;
     for (facts.checkpoints) |c| {
-        const order = position_mod.compare(c.position, earlier.checkpoint.position) catch continue;
+        const order = self.session.comparePositions(c.position, earlier.checkpoint.position) catch continue;
         if (order != .lt) continue;
         const better = next == null or c.position.r > next.?.checkpoint.position.r;
         if (better) next = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };

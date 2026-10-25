@@ -32,6 +32,12 @@ const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
 const history_bridge = @import("history_bridge.zig");
 const history_resources = @import("ra8_host").history.resources;
+const session_branch = @import("ra8_session").history_branch;
+const session_fork = @import("ra8_session").history_fork_router;
+const session_async = @import("ra8_session").history_async_queue;
+const session_async_traffic = @import("ra8_session").history_async_traffic;
+const history_root = @import("ra8_session").history_root;
+const served_history = @import("served_history.zig");
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -48,6 +54,7 @@ pub const HistoryOpts = struct {
     /// An explicit cap on the RAM-only history's share, in bytes; only
     /// without a root. Null sizes the share from the host's RAM.
     ram_budget: ?u64 = null,
+    kept: bool = false,
 };
 
 pub const Served = struct {
@@ -69,6 +76,9 @@ pub const Served = struct {
     /// The RAM-only history's host side, once history asked to stay off
     /// disk (RA8EMU-1196). The harness's armed checkpoints write through it.
     ram_history: ?*history_ram.RamHistory = null,
+    ram_graph: ?*session_branch.BranchGraph = null,
+    ram_router: ?*session_fork.ForkRouter = null,
+    root: history_root.Root = undefined,
     /// The transport's history bridge (RA8EMU-1196, slice 17), once
     /// history records: a seek plans from the committed log and restores
     /// through the checkpoint objects. Points into `self`.
@@ -89,7 +99,7 @@ pub const Served = struct {
         errdefer if (ram) |r| r.deinit();
         if (history_opts) |opts| {
             if (opts.root) |root| {
-                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget });
+                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget, .kept = opts.kept });
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
@@ -126,6 +136,7 @@ pub const Served = struct {
                 .context = &self.bridge.?,
                 .facts = &history_bridge.Bridge.facts,
                 .restore = &history_bridge.Bridge.restore,
+                .logBytes = &history_bridge.Bridge.logBytes,
             };
         }
         self.context.wall = .{ .context = self, .nowFn = hostClock };
@@ -135,6 +146,10 @@ pub const Served = struct {
         self.context.clock = board_rtc.clock(self.owner.board());
         self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
         self.context.camera = .{ .context = self, .setFn = setCamera };
+        self.owner.session().attachCamera(.{ .context = self, .changeFn = setCameraDirect });
+        try served_history.attach(self, allocator);
+        self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = closeC6 });
+        self.owner.session().attachConsole(.{ .context = self, .feedFn = feedConsoleDirect });
         self.context.trace_on = .{ .context = self, .onFn = traceOn };
         self.context.thread_names = .{ .context = self, .nameFn = threadName };
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
@@ -181,6 +196,7 @@ pub const Served = struct {
         cpu1.* = .{};
         try cpu1.open(self.gpa, self.io, std.Io.Dir.cwd(), &self.owner, path);
         self.second = cpu1;
+        served_history.attachSecond(self, cpu1);
     }
 
     /// RA8EMU-832: turn RTOS tracing on; safe to call when it already is.
@@ -224,7 +240,19 @@ pub const Served = struct {
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
+        // A session that stopped recording into its history (a different
+        // image loaded) leaves that history's branches.bin as it was.
+        if (self.history) |b| b.detached = self.owner.session().graph_sink == null;
+        if (self.owner.session().async_traffic.queue) |*q| q.deinit();
         self.owner.deinit();
+        if (self.ram_router) |r| {
+            r.deinit();
+            self.gpa.destroy(r);
+        }
+        if (self.ram_graph) |g| {
+            g.deinit();
+            self.gpa.destroy(g);
+        }
         if (self.history) |bind| if (bind.close()) |_| {} else |_| {};
         if (self.ram_history) |ram| ram.deinit();
     }
@@ -234,8 +262,34 @@ pub const Served = struct {
 /// the board's camera source. A source that will not open changes nothing.
 fn setCamera(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
     const self: *Served = @ptrCast(@alignCast(context));
+    if (self.owner.session().fork_router != null) {
+        var buf: [256]u8 = undefined;
+        const text = if (spec.arg.len == 0)
+            @tagName(spec.kind)
+        else
+            try std.fmt.bufPrint(&buf, "{s}:{s}", .{ @tagName(spec.kind), spec.arg });
+        try self.owner.session().changeCamera(.cpu0, text);
+        return;
+    }
     const input = try source_open.open(self.gpa, self.io, spec);
     try board_camera.install(self.owner.board(), self.gpa, input);
+}
+
+fn setCameraDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    const spec = try source_spec.parse(spec_text);
+    const input = try source_open.open(self.gpa, self.io, spec);
+    try board_camera.install(self.owner.board(), self.gpa, input);
+}
+
+fn closeC6(context: *anyopaque) void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    self.owner.board().c6.wire.bridge.closeFlows();
+}
+
+fn feedConsoleDirect(context: *anyopaque, bytes: []const u8) anyerror!void {
+    const self: *Served = @ptrCast(@alignCast(context));
+    self.owner.board().serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
 }
 
 fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {

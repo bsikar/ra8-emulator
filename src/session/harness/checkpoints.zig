@@ -61,3 +61,47 @@ fn saveMachine(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
     const self: *session_state.Files = @ptrCast(@alignCast(context));
     try self.writeTo(writer);
 }
+
+/// Arms the checkpoints on the session's boundary and makes their recorder
+/// the session's persistent recorder and the rewind history's too, so
+/// interventions, landings, forks' Branch records and segment switches
+/// reach the one log the checkpoints write.
+pub fn armSession(
+    allocator: std.mem.Allocator,
+    session: *session_api.Session,
+    history: *session_history.History,
+    files: *session_state.Files,
+    saved: *const scheduler.State,
+    storage: history_recorder.Storage,
+    objects: history_recorder.Objects,
+    disk: ?history_recorder.Budget,
+    checkpoint_cap: u64,
+    every: u32,
+) !*Armed {
+    const armed = try arm(allocator, &session.live, files, saved, storage, objects, disk, checkpoint_cap, every);
+    session.attachPersistentRecorder(&armed.recorder);
+    history.attachRecorder(&armed.recorder);
+    if (session.console_hook == null) session.attachConsole(.{ .context = files.board, .feedFn = feedBoardConsole });
+    files.board.console_input.hook = .{ .context = session, .feedFn = routeConsoleStdin };
+    return armed;
+}
+
+/// Disarms what armSession armed, detaching the recorder first.
+pub fn disarmSession(allocator: std.mem.Allocator, session: *session_api.Session, history: *session_history.History, armed: *Armed) void {
+    if (session.persistent_recorder == &armed.recorder) session.persistent_recorder = null;
+    if (history.recorder == &armed.recorder) history.recorder = null;
+    disarm(allocator, armed);
+}
+
+fn feedBoardConsole(context: *anyopaque, bytes: []const u8) anyerror!void {
+    const board: *@import("ra8_board").board.Board = @ptrCast(@alignCast(context));
+    board.serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
+}
+
+fn routeConsoleStdin(context: *anyopaque, bytes: []const u8) void {
+    const session: *session_api.Session = @ptrCast(@alignCast(context));
+    session.consoleInput(.cpu0, bytes) catch {};
+}
+
+const session_api = @import("../api.zig");
+const session_history = @import("../history.zig");

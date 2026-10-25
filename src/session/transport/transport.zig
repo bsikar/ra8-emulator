@@ -59,6 +59,8 @@ pub const Bridge = struct {
     /// Put the machine back at a checkpoint's saved state. The name is
     /// the checkpoint record's 128-bit digest as its 32-hex object name.
     restore: *const fn (*anyopaque, object: []const u8) anyerror!void,
+    /// Returns the committed log's raw bytes, when available.
+    logBytes: ?*const fn (*anyopaque) anyerror![]const u8 = null,
 };
 
 pub const Job = struct {
@@ -310,6 +312,10 @@ pub const Transport = struct {
                 var name: [32]u8 = undefined;
                 objectName(checkpoint.object, &name);
                 try bridge.restore(bridge.context, &name);
+                // The restored position names the line it is replayed on,
+                // and the line's interventions from there on are due again.
+                self.session.stampLine();
+                if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
             },
         }
     }

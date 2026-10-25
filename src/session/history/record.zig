@@ -184,6 +184,14 @@ pub const Intervention = struct {
         button = 2,
         keystroke = 3,
         rpc_mutation = 4,
+        register_write = 5,
+        memory_write = 6,
+        plug = 7,
+        unplug = 8,
+        fault = 9,
+        camera_change = 10,
+        skip_bkpt = 11,
+        load = 12,
         _,
     };
     what: What,
@@ -216,6 +224,11 @@ pub const Boundary = struct {
         fault = 6,
         skip_bkpt = 7,
         load = 8,
+        /// A scripted tap, swipe or long press reached the panel. The
+        /// intervention that scheduled it is what replay re-applies; the
+        /// landing is the observation of where it took effect.
+        tap_landed = 9,
+        button_landed = 10,
         _,
     };
     what: What,

@@ -56,12 +56,23 @@ pub fn queue(self: *Transport, text: []const u8) !Ticket {
     // Only a position target executes today: the other kinds' plans
     // name the index their resolution still waits for, so they stay
     // refused until it lands.
-    const pos: seek_engine.Position = switch (target) {
+    var pos: seek_engine.Position = switch (target) {
         .position => |pt| pt.position,
         else => return Error.NotReady,
     };
-    const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
-    const plan = switch (seek_engine.plan(target, facts)) {
+    // A position without a branch names a point on the line the session
+    // is on, never the root's line.
+    const unnamed = switch (target) {
+        .position => |pt| !pt.branch_named,
+        else => false,
+    };
+    if (unnamed) pos.branch = self.session.currentPosition().branch;
+    var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
+    const plan = switch (seek_engine.plan(.{ .position = .{ .position = pos, .branch_named = true } }, facts)) {
         .plan => |plan| plan,
         .pending => return Error.NotReady,
     };
@@ -94,17 +105,35 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     switch (seek_job.base) {
         .current => {},
         .checkpoint => if (!seek_job.restored) {
+            // The line changes only for a target that is not on the
+            // session's line (a prefix point an ancestor owns is), and
+            // only once the restore has landed.
             try self.restoreBase(seek_job.base);
             seek_job.restored = true;
+            if (otherLine(self, seek_job.target)) {
+                try self.session.switchLine(seek_job.target.branch);
+                const bridge = self.history orelse return Error.NotReady;
+                if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
+            }
             return null;
         },
     }
     const grid = self.session.grid orelse return error.NoGrid;
-    const ord = position_mod.compare(grid.at, seek_job.target) catch return error.OtherLine;
+    const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
     if (ord != .lt) return transport_mod.reached();
+    self.session.setReplaying(true);
+    defer self.session.setReplaying(false);
     const ended = try self.session.run(job.core, .cont);
     if (ended != .count) return ended;
     return null;
+}
+
+/// Whether `target` lies off the session's active line.
+fn otherLine(self: *const Transport, target: seek_engine.Position) bool {
+    const router = self.session.fork_router orelse return false;
+    const graph = router.graph orelse return false;
+    _ = graph.canonicalize(router.active_line, target) catch return true;
+    return false;
 }
 
 /// Fold one seek slice into the job's rate window: the slice's

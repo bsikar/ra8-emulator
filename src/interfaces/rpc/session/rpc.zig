@@ -76,6 +76,14 @@ pub const Method = enum(u16) {
     advance_async = 0x012B,
     seek = 0x012C,
     rcont = 0x012D,
+    branch_list = 0x0130,
+    branch_switch = 0x0131,
+    branch_delete = 0x0132,
+    branch_confirm_fork = 0x0133,
+    branch_cancel_fork = 0x0134,
+    branch_status = 0x0135,
+    console_input = 0x0136,
+    skip_bkpt = 0x0137,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -370,6 +378,15 @@ pub const ScheduleInput = struct {
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
 pub const TraceEvent = @import("trace_wire.zig").TraceEvent;
 pub const Trace = @import("trace_wire.zig").Trace;
+
+pub const branch_wire = @import("branch_wire.zig");
+pub const BranchItem = branch_wire.BranchItem;
+pub const BranchList = branch_wire.BranchList;
+pub const BranchSwitch = branch_wire.BranchSwitch;
+pub const BranchDelete = branch_wire.BranchDelete;
+pub const BranchConfirmFork = branch_wire.BranchConfirmFork;
+pub const BranchCancelFork = branch_wire.BranchCancelFork;
+pub const ForkStatus = branch_wire.ForkStatus;
 /// Calls a client can hold unanswered at once; a leaf with more reads than
 /// this sends the rest as answers free slots.
 pub const pending_slots = 32;

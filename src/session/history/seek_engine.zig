@@ -17,8 +17,12 @@
 const std = @import("std");
 const seek_target = @import("seek_target.zig");
 const position_mod = @import("position.zig");
+const branch_mod = @import("branch.zig");
+const cross_seek = @import("cross_seek.zig");
 
 pub const Position = position_mod.Position;
+pub const BranchGraph = branch_mod.BranchGraph;
+pub const BranchId = branch_mod.BranchId;
 
 /// One checkpoint the committed log names, as the base-selection index
 /// reads it: where it sits on its line, which checkpoint id it carries,
@@ -35,6 +39,8 @@ pub const Checkpoint = struct {
 pub const Facts = struct {
     current: Position,
     checkpoints: []const Checkpoint,
+    graph: ?*const BranchGraph = null,
+    active_line: BranchId = branch_mod.root_branch_id,
 };
 
 /// A target this engine cannot plan yet, and why. The transport reports
@@ -85,6 +91,24 @@ pub fn plan(target: seek_target.Target, facts: Facts) Outcome {
 }
 
 fn planPosition(target: Position, facts: Facts) Outcome {
+    if (facts.graph) |graph| {
+        if (graph.canonicalize(facts.active_line, target)) |target_canon| {
+            const canon_current = graph.canonicalize(facts.active_line, facts.current) catch facts.current;
+            const order = branch_mod.scalarOrder(target_canon, canon_current);
+            if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
+            const best = nearestOnLine(graph, facts.active_line, target, facts.checkpoints);
+            if (order == .gt) {
+                const live_rounds = target.r -| facts.current.r;
+                if (best == null or live_rounds <= target.r -| best.?.position.r)
+                    return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds } };
+                return checkpointPlan(best.?, target);
+            }
+            const chosen = best orelse return .{ .pending = .{ .what = "the reverse window's undo base" } };
+            return checkpointPlan(chosen, target);
+        } else |_| {
+            return cross_seek.planCrossLine(graph, facts, target);
+        }
+    }
     const order = position_mod.compare(target, facts.current) catch
         return .{ .pending = .{ .what = "another line's seek" } };
     if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
@@ -110,9 +134,33 @@ fn planPosition(target: Position, facts: Facts) Outcome {
 /// base, so with no checkpoint there the outcome stays pending naming
 /// the reverse window's undo base (unit 21).
 pub fn backBase(cursor: Position, facts: Facts) Outcome {
-    const best = nearestAtOrBefore(cursor, facts.checkpoints) orelse
+    const best = if (facts.graph) |graph|
+        nearestOnLine(graph, facts.active_line, cursor, facts.checkpoints)
+    else
+        nearestAtOrBefore(cursor, facts.checkpoints);
+    const chosen = best orelse
         return .{ .pending = .{ .what = "the reverse window's undo base" } };
-    return checkpointPlan(best, cursor);
+    return checkpointPlan(chosen, cursor);
+}
+
+fn nearestOnLine(
+    graph: *const branch_mod.BranchGraph,
+    active_line: branch_mod.BranchId,
+    target: Position,
+    checkpoints: []const Checkpoint,
+) ?Checkpoint {
+    var best: ?Checkpoint = null;
+    var best_at: Position = .{};
+    const target_canon = graph.canonicalize(active_line, target) catch return null;
+    for (checkpoints) |c| {
+        const c_canon = graph.canonicalize(active_line, c.position) catch continue;
+        if (branch_mod.scalarOrder(c_canon, target_canon) == .gt) continue;
+        if (best == null or branch_mod.scalarOrder(c_canon, best_at) == .gt) {
+            best = c;
+            best_at = c_canon;
+        }
+    }
+    return best;
 }
 
 /// Plans a backward step's base when the machine has never stopped:

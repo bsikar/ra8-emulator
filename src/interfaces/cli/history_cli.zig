@@ -7,55 +7,101 @@
 const std = @import("std");
 const history = @import("ra8_host").history;
 const bind = @import("ra8_rpc").history_bind;
+const history_branch_cli = @import("history_branch_cli.zig");
 
 pub const usage =
     \\usage: ra8_emulator history --root DIR ls
     \\       ra8_emulator history --root DIR du [SESSION]
     \\       ra8_emulator history --root DIR rm [--kept] SESSION
     \\       ra8_emulator history --root DIR prune
+    \\       ra8_emulator history --root DIR branch ls [SESSION]
+    \\       ra8_emulator history --root DIR branch rm [--confirm] SESSION BRANCH_ID
     \\       ls lists the root's entries with their state; du reports bytes,
     \\       all sessions or one; rm removes a session, --kept for a kept
     \\       one; prune sweeps each closed session's orphaned objects and
     \\       leftover frame cache, and never opens a session whose lock
-    \\       another host still holds.
+    \\       another host still holds; branch ls lists branches of a session
+    \\       or all sessions; branch rm removes a branch with --confirm.
     \\
 ;
 
-pub const Op = enum { ls, du, rm, prune };
+pub const BranchSub = union(enum) {
+    ls: ?[]const u8,
+    rm: struct { session: []const u8, branch_id: u32, confirm: bool },
+};
+
+pub const Op = enum { ls, du, rm, prune, branch };
 
 const Command = struct {
     op: Op,
     root: []const u8,
     entry: ?[]const u8 = null,
     kept: bool = false,
+    branch_sub: ?BranchSub = null,
 };
 
-/// The flags come first in any order, each at most once; a bare word is
-/// the session `du` measures or `rm` removes. `--kept` belongs to `rm`
-/// alone: a kept session survives an automatic sweep, so removing one is
-/// a decision the command line says out loud.
+/// The flags come in any order; words name the operation and its target.
 pub fn parse(argv: []const []const u8) !Command {
     if (argv.len < 3) return error.Usage;
-    const op = std.meta.stringToEnum(Op, argv[2]) orelse return error.Usage;
-    var command = Command{ .op = op, .root = "" };
-    var i: usize = 3;
+    var root: []const u8 = "";
+    var kept = false;
+    var confirm = false;
+    var words_buf: [8][]const u8 = undefined;
+    var words_len: usize = 0;
+
+    var i: usize = 2;
     while (i < argv.len) : (i += 1) {
-        if (std.mem.eql(u8, argv[i], "--root")) {
+        const arg = argv[i];
+        if (std.mem.eql(u8, arg, "--root")) {
             i += 1;
-            if (i >= argv.len or command.root.len != 0) return error.Usage;
-            command.root = argv[i];
-        } else if (std.mem.eql(u8, argv[i], "--kept")) {
-            if (op != .rm or command.kept) return error.Usage;
-            command.kept = true;
+            if (i >= argv.len or root.len != 0) return error.Usage;
+            root = argv[i];
+        } else if (std.mem.eql(u8, arg, "--kept")) {
+            if (kept) return error.Usage;
+            kept = true;
+        } else if (std.mem.eql(u8, arg, "--confirm")) {
+            if (confirm) return error.Usage;
+            confirm = true;
         } else {
-            if (command.entry != null) return error.Usage;
-            command.entry = argv[i];
+            if (words_len >= words_buf.len) return error.Usage;
+            words_buf[words_len] = arg;
+            words_len += 1;
         }
     }
-    if (command.root.len == 0) return error.Usage;
-    if (command.entry) |_| {
-        if (op == .ls or op == .prune) return error.Usage;
-    } else if (op == .rm) return error.Usage;
+    if (root.len == 0 or words_len == 0) return error.Usage;
+
+    const words = words_buf[0..words_len];
+    const op = std.meta.stringToEnum(Op, words[0]) orelse return error.Usage;
+    var command = Command{ .op = op, .root = root, .kept = kept };
+
+    switch (op) {
+        .ls => {
+            if (kept or confirm or words.len > 1) return error.Usage;
+        },
+        .du => {
+            if (kept or confirm or words.len > 2) return error.Usage;
+            if (words.len == 2) command.entry = words[1];
+        },
+        .rm => {
+            if (confirm or words.len != 2) return error.Usage;
+            command.entry = words[1];
+        },
+        .prune => {
+            if (kept or confirm or words.len > 1) return error.Usage;
+        },
+        .branch => {
+            if (kept or words.len < 2) return error.Usage;
+            const sub = words[1];
+            if (std.mem.eql(u8, sub, "ls")) {
+                if (words.len > 3 or confirm) return error.Usage;
+                command.branch_sub = .{ .ls = if (words.len == 3) words[2] else null };
+            } else if (std.mem.eql(u8, sub, "rm")) {
+                if (words.len != 4) return error.Usage;
+                const b_id = std.fmt.parseInt(u32, words[3], 0) catch return error.Usage;
+                command.branch_sub = .{ .rm = .{ .session = words[2], .branch_id = b_id, .confirm = confirm } };
+            } else return error.Usage;
+        },
+    }
     return command;
 }
 
@@ -100,6 +146,10 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         .du => reportBytes(&base, &stdout.interface, command.entry),
         .rm => removeOne(&base, &stdout.interface, command.entry.?, command.kept),
         .prune => sweepClosed(allocator, &base, &stdout.interface),
+        .branch => switch (command.branch_sub.?) {
+            .ls => |session_name| history_branch_cli.listBranches(allocator, &base, session_name, &stdout.interface),
+            .rm => |b_rm| history_branch_cli.removeBranch(allocator, &base, b_rm.session, b_rm.branch_id, b_rm.confirm, &stdout.interface),
+        },
     };
     try stdout.interface.flush();
     return outcome catch |err| {

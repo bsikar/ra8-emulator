@@ -34,6 +34,8 @@ pub const History = struct {
     recorder: ?*recorder_mod.Recorder = null,
     /// The next event log record's sequence number.
     seq: u32 = 0,
+    /// Set while re-executing recorded history; skips recording interventions.
+    replaying: bool = false,
 
     /// One recorded stop: the serialized run plus what the caller read off
     /// it. `tag` is the stop's own kind (stop, count, fault), for a rewind
@@ -63,8 +65,18 @@ pub const History = struct {
     /// Records one intervention frame through the attached recorder at the
     /// given position; no recorder attached keeps this a no-op.
     pub fn recordIntervention(self: *History, position: history_position.Position, what: history_record.Intervention.What, body: []const u8) anyerror!void {
+        if (self.replaying) return;
         const rec = self.recorder orelse return;
         try rec.recordIntervention(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
+        self.seq += 1;
+    }
+
+    /// Records where a scripted input landed, as a boundary record: an
+    /// observation, never replayed, so an input is applied once on replay.
+    pub fn recordLanding(self: *History, position: history_position.Position, what: history_record.Boundary.What, body: []const u8) anyerror!void {
+        if (self.replaying) return;
+        const rec = self.recorder orelse return;
+        try rec.recordBoundary(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
         self.seq += 1;
     }
 
@@ -153,17 +165,18 @@ pub const Landing = struct {
     fn notify(context: *anyopaque, event: input_script.Event, at_ns: u64) void {
         _ = at_ns;
         const self: *Landing = @ptrCast(@alignCast(context));
+        if (self.history.replaying) return;
         var body: [input_script.max_body_len]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&body);
         input_script.encodeBody(&writer, event) catch |err| {
             self.failed = err;
             return;
         };
-        const what: history_record.Intervention.What = switch (event) {
-            .button => .button,
-            .tap, .swipe, .longpress => .tap,
+        const what: history_record.Boundary.What = switch (event) {
+            .button => .button_landed,
+            .tap, .swipe, .longpress => .tap_landed,
         };
-        self.history.recordIntervention(self.grid.at, what, writer.buffered()) catch |err| {
+        self.history.recordLanding(self.grid.at, what, writer.buffered()) catch |err| {
             if (self.failed == null) self.failed = err;
         };
     }

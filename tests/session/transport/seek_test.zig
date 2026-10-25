@@ -38,7 +38,12 @@ const TestBridge = struct {
     prior: ?seek_facts_mod.Facts = null,
 
     fn bridge(self: *TestBridge) transport.Bridge {
-        return .{ .context = self, .facts = facts, .restore = restore };
+        return .{ .context = self, .facts = facts, .restore = restore, .logBytes = logBytes };
+    }
+
+    fn logBytes(context: *anyopaque) anyerror![]const u8 {
+        const self: *TestBridge = @ptrCast(@alignCast(context));
+        return self.sink.bytes.items;
     }
 
     fn facts(context: *anyopaque) anyerror!seek_engine_mod.Facts {

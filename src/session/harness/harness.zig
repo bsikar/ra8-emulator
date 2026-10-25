@@ -237,7 +237,6 @@ pub const Harness = struct {
         return &self.state.modules;
     }
 
-    /// Snapshot and restore of this run's file (RA8EMU-768).
     /// The board's plug hook, which also keeps what is fitted where.
     pub fn plugs(self: *Harness) *session_plug.Plugs {
         return &self.state.plugs;
@@ -292,7 +291,8 @@ pub const Harness = struct {
         state.plugs_arena.deinit();
         block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
         if (state.recording) |*held| held.deinit();
-        if (state.persistent) |held| checkpoints.disarm(state.allocator, held);
+        if (state.persistent) |held| checkpoints.disarmSession(state.allocator, &state.session, &state.history, held);
+        state.session.releaseReplay();
         state.cpu0.close();
         state.board.deinit();
         state.loading.deinit();
@@ -396,5 +396,5 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
     if (options.history_storage != null and options.history_objects != null and options.checkpoint_every != 0)
-        state.persistent = try checkpoints.arm(allocator, &state.session.live, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.history_disk, options.history_checkpoint_cap, options.checkpoint_every);
+        state.persistent = try checkpoints.armSession(allocator, &state.session, &state.history, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.history_disk, options.history_checkpoint_cap, options.checkpoint_every);
 }

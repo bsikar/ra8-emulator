@@ -30,6 +30,7 @@ pub const poll = @import("poll.zig");
 /// ITM text sent to gdb as `O` packets.
 pub const console = @import("console.zig");
 const core_view = @import("ra8_session").core_view;
+const session_api = @import("ra8_session").api;
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]Cortex{
@@ -56,6 +57,8 @@ pub const Dispatch = struct {
     /// Where registers and memory are read. Without one, the requests that
     /// need a core get the empty reply.
     view: ?core_view.View = null,
+    session: ?*session_api.Session = null,
+    core: session_api.Core = .cpu0,
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
@@ -76,7 +79,12 @@ pub const Dispatch = struct {
             const core = live.session.currentCore();
             const machine = live.session.machine(core) catch return copy(out, request_error);
             const view = live.session.view(core) catch return copy(out, request_error);
-            const selected = Dispatch{ .machine = machine, .view = view };
+            const selected = Dispatch{
+                .machine = machine,
+                .view = view,
+                .session = live.session,
+                .core = core,
+            };
             return selected.answer(request, out);
         }
         if (request.len == 0) return out[0..0];
@@ -151,7 +159,11 @@ pub const Dispatch = struct {
         if (args.len != registers.len * 8) return copy(out, request_error);
         for (registers, 0..) |which, index| {
             const value = parseWord(args[index * 8 ..][0..8]) orelse return copy(out, request_error);
-            self.target().setRegister(which, value) catch return copy(out, request_error);
+            if (self.session) |s| {
+                s.setRegister(self.core, which, value) catch return copy(out, request_error);
+            } else {
+                self.target().setRegister(which, value) catch return copy(out, request_error);
+            }
         }
         return copy(out, "OK");
     }
@@ -162,7 +174,11 @@ pub const Dispatch = struct {
         const text = args[equals + 1 ..];
         if (index >= registers.len or text.len != 8) return copy(out, request_error);
         const value = parseWord(text[0..8]) orelse return copy(out, request_error);
-        self.target().setRegister(registers[index], value) catch return copy(out, request_error);
+        if (self.session) |s| {
+            s.setRegister(self.core, registers[index], value) catch return copy(out, request_error);
+        } else {
+            self.target().setRegister(registers[index], value) catch return copy(out, request_error);
+        }
         return copy(out, "OK");
     }
 
@@ -186,7 +202,11 @@ pub const Dispatch = struct {
                 .hex => std.fmt.hexToBytes(chunk[0..take], data[done * 2 ..][0 .. take * 2]) catch return copy(out, request_error),
             };
             const where = address +% @as(u32, @intCast(done));
-            self.target().write(where, bytes) catch return copy(out, memory_error);
+            if (self.session) |s| {
+                s.write(self.core, where, bytes) catch return copy(out, memory_error);
+            } else {
+                self.target().write(where, bytes) catch return copy(out, memory_error);
+            }
             done += take;
         }
         if (self.machine) |machine| units.forward(self.target(), machine, address, length);

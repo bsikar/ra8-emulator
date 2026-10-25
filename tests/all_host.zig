@@ -9,6 +9,7 @@ test {
     _ = @import("host/history/base_test.zig");
     _ = @import("host/history/budget_test.zig");
     _ = @import("host/history/readback_test.zig");
+    _ = @import("host/history/branches_file_test.zig");
     _ = @import("host/history/crash_test.zig");
     _ = @import("host/history/enospc_test.zig");
     _ = @import("host/history/lifecycle_exact_test.zig");
@@ -67,7 +68,10 @@ test {
     _ = @import("interfaces/cli/serve/listen_test.zig");
     _ = @import("interfaces/cli/serve/loop_test.zig");
     _ = @import("interfaces/cli/history_test.zig");
+    _ = @import("interfaces/cli/history_branch_cli_test.zig");
     _ = @import("interfaces/cli/session_ctl_test.zig");
+    _ = @import("interfaces/cli/ctl/branch_test.zig");
+    _ = @import("interfaces/cli/ctl/write_test.zig");
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/profiles_test.zig");
@@ -166,6 +170,8 @@ test {
     _ = @import("interfaces/gui/ui/hex_entry_test.zig");
     _ = @import("interfaces/gui/ui/colors_test.zig");
     _ = @import("interfaces/gui/ui/theme_picker_test.zig");
+    _ = @import("interfaces/gui/ui/fork_banner_test.zig");
+    _ = @import("interfaces/gui/ui/branch_list_test.zig");
     _ = @import("interfaces/gui/ui/contrast_test.zig");
     _ = @import("interfaces/gui/pane_edit_test.zig");
     _ = @import("interfaces/gui/window/still_test.zig");
@@ -242,6 +248,7 @@ test {
     _ = @import("interfaces/gui/shell_run_live_test.zig");
     _ = @import("interfaces/gui/shell_apart_live_test.zig");
     _ = @import("interfaces/gui/shell/open_test.zig");
+    _ = @import("interfaces/gui/shell/branch_state_test.zig");
     _ = @import("interfaces/gui/shell_open_live_test.zig");
     _ = @import("interfaces/gui/shell/panes_test.zig");
     _ = @import("interfaces/gui/shell/console_test.zig");
@@ -334,8 +341,11 @@ test {
     _ = @import("interfaces/rpc/locals_wire_test.zig");
     _ = @import("interfaces/rpc/session/periph_test.zig");
     _ = @import("interfaces/rpc/session/folded_test.zig");
+    _ = @import("interfaces/rpc/session/branch_test.zig");
+    _ = @import("interfaces/rpc/session/branch_wire_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");
     _ = @import("interfaces/rpc/history_bind_test.zig");
+    _ = @import("interfaces/rpc/served_fork_test.zig");
     _ = @import("interfaces/rpc/history_ram_test.zig");
     _ = @import("interfaces/rpc/recorder_acceptance_test.zig");
 }

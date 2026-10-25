@@ -6,6 +6,8 @@ const tap_part = @import("tap_part.zig");
 const input_script = @import("ra8_components").input_script;
 const gt911 = @import("ra8_components").gt911;
 
+const session_fork = @import("fork.zig");
+
 const Session = api.Session;
 const Core = api.Core;
 const Widget = api.Widget;
@@ -45,8 +47,5 @@ pub fn button(self: *Session, core: Core, at_ns: u64, which: Button) anyerror!vo
 }
 
 pub fn scheduleInput(self: *Session, core: Core, at_ns: u64, event: input_script.Event) anyerror!void {
-    try self.select(core);
-    const script = self.input_script orelse return api.Error.NoInput;
-    try script.schedule(.{ .at_ns = at_ns, .event = event });
-    self.publish(.{ .core = core, .kind = .input_scheduled });
+    return session_fork.scheduleInput(self, core, at_ns, event);
 }

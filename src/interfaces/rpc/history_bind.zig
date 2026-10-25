@@ -10,6 +10,19 @@ const std = @import("std");
 const history = @import("ra8_host").history;
 const session_recorder = @import("ra8_session").history_recorder;
 const session_refs = @import("ra8_session").history_refs;
+const session_branch = @import("ra8_session").history_branch;
+const session_fork = @import("ra8_session").history_fork_router;
+const session_fork_types = @import("ra8_session").fork;
+const session_branches_codec = @import("ra8_session").history_branches_codec;
+const branches_recover = @import("ra8_session").history_branches_recover;
+const history_root = @import("ra8_session").history_root;
+const history_segments = @import("history_segments.zig");
+
+/// Formats the segment leaf name for a given branch and segment index.
+pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
+    if (branch == 0 and seg == 0) return "events-0";
+    return std.fmt.bufPrint(buf, "events-{d}-{d}", .{ branch, seg });
+}
 
 /// The run's first log segment. Segments number upward when the store
 /// grows one; a bind opens segment zero.
@@ -33,6 +46,15 @@ pub const Bind = struct {
     /// The checkpoints partition's bytes, what the cadence projection
     /// keeps the checkpoint objects within.
     checkpoint_cap: u64 = 0,
+    io: std.Io = undefined,
+    graph: session_branch.BranchGraph = undefined,
+    router: session_fork.ForkRouter = undefined,
+    graph_sink: session_fork_types.GraphSink = undefined,
+    root: ?history_root.Root = null,
+    /// Set when the session stopped recording into this history (a
+    /// different image loaded): close leaves its branches.bin as it was,
+    /// since the in-memory graph then describes the new program.
+    detached: bool = false,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -40,6 +62,7 @@ pub const Bind = struct {
         /// An explicit session share cap in bytes, instead of the volume's
         /// computed share. The volume's free floor and the relief stay.
         cap: ?u64 = null,
+        kept: bool = false,
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
@@ -50,13 +73,45 @@ pub const Bind = struct {
         errdefer bind.base.close();
         bind.session = try history.session.Session.create(&bind.base, .{});
         errdefer _ = bind.session.close(null, .move) catch {};
+        if (opts.kept) {
+            try bind.session.keep();
+        }
+        var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
+        defer candidates.deinit(allocator);
+        // The log is the last source: a graph rebuilt from its Branch
+        // records when neither file decodes, recorded ends raised from it.
+        const log_bytes = try history_segments.readAll(allocator, history.storage.Store.from(&bind.session));
+        defer allocator.free(log_bytes);
+        const rec = try branches_recover.recoverWithLog(allocator, candidates.current, candidates.temp, log_bytes);
+        switch (rec.action) {
+            .use_temp => history.branches_file.settle(io, bind.session.dir) catch {},
+            else => history.branches_file.cleanupTemp(io, bind.session.dir),
+        }
+        bind.io = io;
+        bind.graph = rec.graph;
+        errdefer bind.graph.deinit();
+        bind.router = session_fork.ForkRouter.init(allocator, &bind.graph);
+        errdefer bind.router.deinit();
+        bind.graph_sink = .{ .context = bind, .writeFn = &writeBranchesBin };
+        if (history.branches_file.readAlloc(io, bind.session.dir, history.layout.files.root, allocator)) |bytes_opt| {
+            if (bytes_opt) |bytes| {
+                defer allocator.free(bytes);
+                bind.root = history_root.decode(bytes) catch null;
+            }
+        } else |_| {}
         const store = history.storage.Store.from(&bind.session);
         bind.log = try store.vtable.open(store.context, .log, log_leaf, .create);
         errdefer bind.log.vtable.close(bind.log.context);
         bind.sink = try allocator.create(LogSink);
         errdefer allocator.destroy(bind.sink);
-        bind.sink.* = .{ .byte = bind.log };
-        bind.storage = .{ .context = bind.sink, .append = &appendLog, .flush = &flushLog, .truncate = &truncateLog };
+        bind.sink.* = .{ .bind = bind, .byte = bind.log };
+        bind.storage = .{
+            .context = bind.sink,
+            .append = &appendLog,
+            .flush = &flushLog,
+            .truncate = &truncateLog,
+            .switchSegment = &switchSegmentLog,
+        };
         bind.objects = .{ .context = bind, .put = &putObject, .sync = &syncObjects };
         // The budget: one read at open sizes the share this history
         // takes, and every check reads the volume fresh.
@@ -83,17 +138,26 @@ pub const Bind = struct {
         self.disk = null;
         if (self.watch) |watch| gpa.destroy(watch);
         self.watch = null;
-        if (self.session.close(null, .move)) |outcome| {
+        // The graph's last state, recorded ends included, reaches
+        // branches.bin; a write that fails is reported once the session
+        // and the root are closed, not dropped.
+        const saved: anyerror!void = if (self.detached) {} else self.saveGraph();
+        self.router.deinit();
+        self.graph.deinit();
+        defer {
             self.base.close();
             gpa.destroy(self.sink);
             gpa.destroy(self);
-            return outcome;
-        } else |err| {
-            self.base.close();
-            gpa.destroy(self.sink);
-            gpa.destroy(self);
-            return err;
         }
+        const outcome = try self.session.close(null, .move);
+        try saved;
+        return outcome;
+    }
+
+    fn saveGraph(self: *Bind) anyerror!void {
+        const encoded = try session_branches_codec.encodeAlloc(&self.graph, self.gpa);
+        defer self.gpa.free(encoded);
+        try history.branches_file.writeAtomic(self.io, self.session.dir, encoded);
     }
 
     /// The log segment's length, where a reader's tail sits.
@@ -102,7 +166,10 @@ pub const Bind = struct {
     }
 };
 
-const LogSink = struct { byte: history.storage.ByteFile };
+const LogSink = struct {
+    bind: *Bind,
+    byte: history.storage.ByteFile,
+};
 
 /// Reads the volume fresh for every budget check; the history root's
 /// directory is the handle the read goes through. The store rides along
@@ -130,6 +197,11 @@ fn sinkOf(context: *anyopaque) *LogSink {
     return @ptrCast(@alignCast(context));
 }
 
+fn writeBranchesBin(context: *anyopaque, encoded: []const u8) anyerror!void {
+    const b: *Bind = @ptrCast(@alignCast(context));
+    try history.branches_file.writeAtomic(b.io, b.session.dir, encoded);
+}
+
 fn appendLog(context: *anyopaque, bytes: []const u8) anyerror!void {
     const byte = sinkOf(context).byte;
     const end = try byte.vtable.length(byte.context);
@@ -144,6 +216,29 @@ fn flushLog(context: *anyopaque) anyerror!void {
 fn truncateLog(context: *anyopaque, len: u64) anyerror!void {
     const byte = sinkOf(context).byte;
     try byte.vtable.truncate(byte.context, len);
+}
+
+/// Moves appends to segment `seg` of `branch`: the current segment is
+/// made durable first (a failure leaves appends where they were), then
+/// the target opens for update when it exists and is made when it does
+/// not. Answers the bytes the target already holds.
+fn switchSegmentLog(context: *anyopaque, branch: u32, seg: u32) anyerror!u64 {
+    const sink = sinkOf(context);
+    const bind = sink.bind;
+    var buf: [64]u8 = undefined;
+    const leaf = try segmentName(&buf, branch, seg);
+    const store = history.storage.Store.from(&bind.session);
+    try sink.byte.vtable.sync(sink.byte.context);
+    const new_byte = store.vtable.open(store.context, .log, leaf, .create) catch |err| switch (err) {
+        error.PathAlreadyExists => try store.vtable.open(store.context, .log, leaf, .update),
+        else => return err,
+    };
+    errdefer new_byte.vtable.close(new_byte.context);
+    const length = try new_byte.vtable.length(new_byte.context);
+    sink.byte.vtable.close(sink.byte.context);
+    sink.byte = new_byte;
+    bind.log = new_byte;
+    return length;
 }
 
 fn bindOf(context: *anyopaque) *Bind {

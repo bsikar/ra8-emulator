@@ -17,6 +17,7 @@ const guest_window: u16 = eth.tcp_payload_max;
 pub const network_queue_limit: usize = 2;
 
 pub const Result = enum { unhandled, handled };
+pub const Hold = @import("hold.zig").Hold;
 
 const Key = struct {
     src_ip: [4]u8,
@@ -69,6 +70,8 @@ pub const Bridge = struct {
     net: ?host_net.Net = null,
     /// The background worker DNS lookups run on; none resolves inline.
     worker: ?worker.Worker = null,
+    /// The application's hold on host traffic (hold.zig); none never holds.
+    hold: ?Hold = null,
 
     pub fn deinit(self: *Bridge) void {
         self.closeFlows();
@@ -91,6 +94,7 @@ pub const Bridge = struct {
     /// Consumes supported station IPv4 traffic. Synthetic DHCP/ARP/ICMP run first.
     pub fn forward(self: *Bridge, queue: *Queue, ethernet: []const u8) Result {
         const ip = eth.ipv4(ethernet) orelse return .unhandled;
+        if (self.hold) |h| if (h.heldFn(h.context)) return .handled;
         if (ip.protocol == eth.proto_udp) {
             const datagram = eth.udp(ethernet) orelse return .handled;
             if (datagram.dst_port == dns.port and std.mem.eql(u8, &ip.dst_ip, &dhcp.server_ip)) {
@@ -108,6 +112,7 @@ pub const Bridge = struct {
 
     /// Advances every live nonblocking socket without waiting.
     pub fn poll(self: *Bridge, queue: *Queue) void {
+        if (self.hold) |h| if (h.heldFn(h.context)) return;
         self.dns_bridge.poll(&self.tape, queue, network_queue_limit);
         for (0..tcp_capacity) |step| {
             if (queue.len >= network_queue_limit) break;
