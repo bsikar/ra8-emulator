@@ -12,6 +12,7 @@ const api = @import("api.zig");
 const branch_mod = @import("history/branch.zig");
 const history_position = @import("history/position.zig");
 const replay_feeder = @import("history/replay_feeder.zig");
+const window_fork = @import("history/window_fork.zig");
 
 const Session = api.Session;
 pub const Position = history_position.Position;
@@ -54,6 +55,7 @@ pub fn switchLine(self: *Session, id: BranchId) !void {
     router.switchActiveLine(id);
     stampLine(self);
     replay_feeder.release(self);
+    window_fork.noteBranchSwitch(self, id) catch {};
 }
 
 /// Advances the active line's recorded end to `pos` in memory. The end is

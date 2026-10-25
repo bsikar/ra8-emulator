@@ -31,6 +31,7 @@ test {
     _ = @import("history/refs_test.zig");
     _ = @import("history/seek_target_test.zig");
     _ = @import("history/seek_engine_test.zig");
+    _ = @import("history/seek_engine_window_test.zig");
     _ = @import("history/seek_facts_test.zig");
     _ = @import("history/budget_test.zig");
     _ = @import("history/branch_test.zig");
@@ -59,6 +60,7 @@ test {
     _ = @import("history/window_record_test.zig");
     _ = @import("history/window_rebuild_test.zig");
     _ = @import("history/canonical_step_test.zig");
+    _ = @import("history/window_fork_test.zig");
     _ = @import("harness_checkpoints_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
@@ -70,12 +72,12 @@ test {
     _ = @import("stack/sampler_test.zig");
     _ = @import("zig/session_test.zig");
     _ = @import("api_test.zig");
+    _ = @import("api_window_test.zig");
     _ = @import("tap_part_test.zig");
     _ = @import("widget_tree_test.zig");
     _ = @import("event/stream_test.zig");
     _ = @import("zig/cycles_test.zig");
     _ = @import("report_test.zig");
-    _ = @import("api_test.zig");
     _ = @import("tap_part_test.zig");
     _ = @import("display_test.zig");
     _ = @import("panel/diff_test.zig");
@@ -84,6 +86,7 @@ test {
     _ = @import("transport/transport_test.zig");
     _ = @import("transport/seek_test.zig");
     _ = @import("transport/back_test.zig");
+    _ = @import("transport/window_transport_test.zig");
     _ = @import("zig/script_test.zig");
     _ = @import("watch/bus_test.zig");
     _ = @import("unit_view_test.zig");

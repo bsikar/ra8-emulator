@@ -26,6 +26,7 @@ const new_history = @import("new_history.zig");
 const apply = @import("apply.zig");
 const line = @import("line.zig");
 const run_slice = @import("run_slice.zig");
+const window_fork = @import("history/window_fork.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -144,6 +145,7 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     }
     router.switchActiveLine(undo.new_id);
     line.stampLine(self);
+    window_fork.noteFork(self, undo.new_id);
     undo.stage = .switched;
     try apply.applyAction(self, action);
     if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);

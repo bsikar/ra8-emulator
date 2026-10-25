@@ -344,7 +344,7 @@ pub const WindowTrail = struct {
         @memcpy(into, loc.bytes);
     }
 
-    fn truncateFuture(self: *WindowTrail) void {
+    pub fn truncateFuture(self: *WindowTrail) void {
         while (self.count > self.cursor) {
             const last_idx = (self.head + self.count - 1) % self.slots.len;
             const last = &self.slots[last_idx];

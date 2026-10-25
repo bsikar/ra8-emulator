@@ -41,6 +41,21 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
 /// line's interventions, which load once, due after the position the
 /// machine already stands at.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
+    if (self.session.window) |w| {
+        if (w.cursor() < w.count()) {
+            const count = @min(w.count() - w.cursor(), if (job.budget > 0) job.budget else 1000);
+            var i: usize = 0;
+            while (i < count) : (i += 1) {
+                if (!try w.redo()) break;
+                const pc = self.session.register(job.core, .pc) catch break;
+                const m = self.session.machine(job.core) catch break;
+                if (m.breaks.hit(pc)) |hit| {
+                    return api.Ended{ .stop = .{ .breakpoint = hit } };
+                }
+            }
+            if (w.cursor() < w.count()) return null;
+        }
+    }
     if (self.session.replay_feeder == null and line.inPast(self.session)) {
         if (self.history) |br| if (br.logBytes) |read| {
             try replay_feeder.loadSessionInterventions(self.session, try read(br.context), .after);

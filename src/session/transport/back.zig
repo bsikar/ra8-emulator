@@ -147,6 +147,23 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     // stands at the history's beginning already: nothing to
     // restore, no earlier slot, so the step settles at once.
     if (back.target == null and back.start) return .{ .stop = .history_start };
+    if (back.base == .window) {
+        const w = self.session.window orelse return Error.NotReady;
+        const canonical = @import("../history/canonical_step.zig");
+        const core: @import("../history/trail.zig").Core = switch (job.core) {
+            .cpu0 => .cpu0,
+            .cpu1 => .cpu1,
+        };
+        _ = canonical.stepBack(w, core) catch |err| {
+            if (err == canonical.Error.OutsideWindow) {
+                return .{ .stop = .history_start };
+            }
+            return err;
+        };
+        job.left -= 1;
+        if (job.left == 0) return .{ .stop = .stepped };
+        return null;
+    }
     if (!back.restored) {
         try self.restoreBase(back.base);
         back.restored = true;

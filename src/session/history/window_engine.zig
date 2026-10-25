@@ -139,9 +139,31 @@ pub const ReverseWindow = struct {
         if (self.line) |own| if (own != line) self.drop();
     }
 
-    /// A fork changed the future the window describes: it drops.
+    /// Drops any future slots past the cursor: their deltas are freed,
+    /// and the window's end retreats to the cursor's position.
+    pub fn truncateFuture(self: *ReverseWindow) void {
+        while (self.count() > self.cursor()) {
+            const last_idx = self.slots.items.len - 1;
+            const last = &self.slots.items[last_idx];
+            self.slot_bytes -= last.bytes();
+            last.delta.deinit(self.allocator);
+            _ = self.slots.pop();
+        }
+        self.trail.truncateFuture();
+    }
+
+    /// Cuts the window at the fork point: drops future slots after cursor,
+    /// and assigns the window to the new child branch.
+    pub fn cutAtFork(self: *ReverseWindow, new_branch: u32) void {
+        self.truncateFuture();
+        self.line = new_branch;
+        self.refusal = null;
+        self.refused_slot = null;
+    }
+
+    /// A fork changed the future the window describes: cut future slots.
     pub fn noteFork(self: *ReverseWindow) void {
-        self.drop();
+        self.truncateFuture();
     }
 
     pub fn count(self: *const ReverseWindow) usize {

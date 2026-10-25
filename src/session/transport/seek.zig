@@ -117,10 +117,46 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
             }
             return null;
         },
+        .window => |win| {
+            const w = self.session.window orelse return Error.NotReady;
+            const grid = self.session.grid orelse return error.NoGrid;
+            const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
+            if (ord == .eq) return transport_mod.reached();
+            if (win.dir == .undo or ord == .gt) {
+                while (true) {
+                    const at = self.session.grid orelse return error.NoGrid;
+                    const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
+                    if (cmp != .gt) break;
+                    if (!try w.undo()) break;
+                }
+                return transport_mod.reached();
+            } else {
+                while (true) {
+                    const at = self.session.grid orelse return error.NoGrid;
+                    const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
+                    if (cmp != .lt) break;
+                    if (!try w.redo()) break;
+                }
+                return transport_mod.reached();
+            }
+        },
     }
     const grid = self.session.grid orelse return error.NoGrid;
     const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
     if (ord != .lt) return transport_mod.reached();
+    if (self.session.window) |w| {
+        if (w.cursor() < w.count()) {
+            while (w.cursor() < w.count()) {
+                const at = self.session.grid orelse return error.NoGrid;
+                const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
+                if (cmp != .lt) return transport_mod.reached();
+                if (!try w.redo()) break;
+            }
+            const at = self.session.grid orelse return error.NoGrid;
+            const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
+            if (cmp != .lt) return transport_mod.reached();
+        }
+    }
     self.session.setReplaying(true);
     defer self.session.setReplaying(false);
     const ended = try self.session.run(job.core, .cont);
