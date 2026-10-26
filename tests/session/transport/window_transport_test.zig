@@ -238,6 +238,7 @@ test "stepSlice propagates canonical stepForward errors and falls back on Outsid
         h2.w.slotAt(i).core = .cpu1;
     }
     try std.testing.expect(h2.w.cursor() < h2.w.count());
+    try std.testing.expectError(error.OutsideWindow, ra8.session.history_canonical_step.stepForward(&h2.w, .cpu0));
     const ticket_live = try h2.t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .fwd } });
     const ended_live = try h2.t.finish(ticket_live, h2.wall.wall(), null);
     try std.testing.expectEqual(api.Ended{ .stop = .stepped }, ended_live);
