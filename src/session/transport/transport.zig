@@ -287,7 +287,7 @@ pub const Transport = struct {
                     job.left -= 1;
                     return if (job.left == 0) .{ .stop = .stepped } else null;
                 } else |err| switch (err) {
-                    error.OutsideWindow => {},
+                    error.OutsideWindow => try w.walkTo(w.count()),
                     else => return err,
                 }
             }

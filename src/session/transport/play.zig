@@ -8,6 +8,8 @@ const session_speed = @import("../speed.zig");
 const transport_mod = @import("transport.zig");
 const line = @import("../line.zig");
 const replay_feeder = @import("../history/replay_feeder.zig");
+const watch_table = @import("../watch/table.zig");
+const window_trail = @import("../history/window_trail.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -36,6 +38,20 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
     return ticket;
 }
 
+/// Evaluates memory write watchpoints against byte swap records during redo.
+/// Records targeting peripheral component parts (part != null) are skipped
+/// before calculating guest addresses, and arithmetic is overflow-safe.
+pub fn checkWatchHit(watches: *watch_table.Table, records: []const window_trail.ByteSwapRecord) ?watch_table.Hit {
+    for (records) |rec| {
+        if (rec.part != null) continue;
+        const full_addr = std.math.add(u64, rec.base, rec.offset) catch continue;
+        const addr = std.math.cast(u32, full_addr) orelse continue;
+        const w_len: u8 = @intCast(@min(rec.data.len, 255));
+        if (watches.hit(addr, w_len, .write)) |hit| return hit;
+    }
+    return null;
+}
+
 /// Drive one play or continue slice at the session's run budget. Inside
 /// the recorded past the run replays (run_slice.zig) and re-applies the
 /// line's interventions, which load once, due after the position the
@@ -51,16 +67,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
                 const m = self.session.machine(job.core) catch break;
                 if (m.watches.len > 0) {
                     const payload = w.trail.slotAt(cur);
-                    var tripped: ?@import("../watch/table.zig").Hit = null;
-                    for (payload.byte_records) |rec| {
-                        const addr: u32 = @intCast(rec.base + rec.offset);
-                        const w_len: u8 = @intCast(@min(rec.data.len, 255));
-                        if (m.watches.hit(addr, w_len, .write)) |hit| {
-                            tripped = hit;
-                            break;
-                        }
-                    }
-                    if (tripped) |hit| {
+                    if (checkWatchHit(&m.watches, payload.byte_records)) |hit| {
                         return api.Ended{ .stop = .{ .watchpoint = hit } };
                     }
                 }

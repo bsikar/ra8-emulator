@@ -301,3 +301,66 @@ test "live dual-core window stepi and reverse-stepi exactness across other core 
         try std.testing.expect(crossed_other);
     }
 }
+
+const FakeWall = struct {
+    now_ns: u64 = 0,
+    fn now(context: *anyopaque) u64 {
+        const self: *FakeWall = @ptrCast(@alignCast(context));
+        self.now_ns += 1_000_000;
+        return self.now_ns;
+    }
+    fn wall(self: *FakeWall) ra8.session.transport.Wall {
+        return .{ .context = self, .nowFn = now };
+    }
+};
+
+test "dual-core stepping from last few slots inside window over its end lands on same stop and state as straight live run" {
+    var rig: DualRig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+
+    var w = engine.ReverseWindow.init(std.testing.allocator, rig.port(), &rig.recording, &rig.opened.state.cpu0.store.?, 64 * 1024 * 1024);
+    defer w.deinit();
+    try w.plant();
+
+    // Record 20 slots across both cores: slot 18 is cpu0, slot 19 is cpu1
+    for (0..20) |i| {
+        const core: engine.Core = if (i % 2 == 0) .cpu0 else .cpu1;
+        try ra8.session.history_window_record.recordSlot(&w, core);
+    }
+    try std.testing.expectEqual(@as(usize, 20), w.count());
+
+    // 1. Capture serialized state at window end (slot 20)
+    var writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer writer.deinit();
+    try rig.opened.state.files.writeTo(&writer.writer);
+
+    // 2. Straight live run: take a live step on cpu0 from slot 20
+    _ = try rig.opened.session().run(.cpu0, .step);
+    const expected_pos = rig.position();
+    const expected_digest = try rig.digest();
+
+    // 3. Restore state back to slot 20
+    try rig.opened.history().restoreBytes(writer.written());
+
+    // 4. Attach window to session and set up transport
+    const session = rig.opened.session();
+    session.attachWindow(&w);
+    var t = ra8.session.transport.Transport{ .session = session };
+
+    // 5. Walk to slot 19 (< 20). Slot 19 is cpu1, so cpu0 has no slots remaining in window.
+    try w.walkTo(19);
+    try std.testing.expectEqual(@as(usize, 19), w.cursor());
+
+    // 6. Step cpu0: InsideWindow OutsideWindow triggers walkTo(20), redoing slot 19,
+    // and then executes live session.run(.cpu0, .step).
+    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .fwd } });
+    var fake = FakeWall{};
+    const ended = try t.finish(ticket, fake.wall(), null);
+    try std.testing.expectEqual(ra8.session.api.Ended{ .stop = .stepped }, ended);
+
+    // 7. Verify machine lands on exact same canonical stop and digest as straight live run
+    try std.testing.expectEqual(expected_pos, rig.position());
+    try std.testing.expectEqualSlices(u8, &expected_digest, &try rig.digest());
+    try std.testing.expectEqual(@as(usize, 20), w.cursor());
+}

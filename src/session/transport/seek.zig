@@ -191,22 +191,25 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         },
         .window => |win| {
             if (try seekWindowBase(self, seek_job, win)) |ended| return ended;
+            if (seek_job.base != .window) return null;
         },
     }
     const grid = self.session.grid orelse return error.NoGrid;
     const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
     if (ord != .lt) return transport_mod.reached();
-    if (self.session.window) |w| {
-        if (w.cursor() < w.count()) {
-            while (w.cursor() < w.count()) {
+    if (seek_job.base == .window) {
+        if (self.session.window) |w| {
+            if (w.cursor() < w.count()) {
+                while (w.cursor() < w.count()) {
+                    const at = self.session.grid orelse return error.NoGrid;
+                    const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
+                    if (cmp != .lt) return transport_mod.reached();
+                    if (!try w.redo()) break;
+                }
                 const at = self.session.grid orelse return error.NoGrid;
                 const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
                 if (cmp != .lt) return transport_mod.reached();
-                if (!try w.redo()) break;
             }
-            const at = self.session.grid orelse return error.NoGrid;
-            const cmp = self.session.comparePositions(at.at, seek_job.target) catch return error.OtherLine;
-            if (cmp != .lt) return transport_mod.reached();
         }
     }
     self.session.setReplaying(true);

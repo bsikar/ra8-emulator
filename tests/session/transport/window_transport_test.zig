@@ -233,10 +233,33 @@ test "stepSlice propagates canonical stepForward errors and falls back on Outsid
     var h2: Harness = undefined;
     try h2.open();
     defer h2.deinit();
-    try std.testing.expectEqual(slots, h2.w.cursor());
+    try h2.w.walkTo(slots - 2);
+    for ((slots - 2)..slots) |i| {
+        h2.w.slotAt(i).core = .cpu1;
+    }
+    try std.testing.expect(h2.w.cursor() < h2.w.count());
     const ticket_live = try h2.t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .fwd } });
     const ended_live = try h2.t.finish(ticket_live, h2.wall.wall(), null);
     try std.testing.expectEqual(api.Ended{ .stop = .stepped }, ended_live);
+    try std.testing.expectEqual(slots, h2.w.cursor());
+}
+
+test "redo watchpoint check skips component part records and handles overflow safely" {
+    var table = ra8.session.watch.table.Table{};
+    const watch = try table.add(try ra8.session.watch.table.Watch.span(0x2000_1000, 4, .write));
+
+    var dummy: [4]u8 = @splat(0);
+    const records = [_]ra8.session.history_window_trail.ByteSwapRecord{
+        .{ .base = 0x2000_0000, .offset = 0x1_0000_2000, .part = 1, .data = &dummy },
+        .{ .base = 0xFFFF_FFF0, .offset = 0x20, .part = null, .data = &dummy },
+        .{ .base = std.math.maxInt(u32), .offset = std.math.maxInt(u64), .part = null, .data = &dummy },
+        .{ .base = 0x2000_0000, .offset = 0x1000, .part = null, .data = &dummy },
+    };
+
+    const hit = ra8.session.transport_play.checkWatchHit(&table, &records);
+    try std.testing.expect(hit != null);
+    try std.testing.expectEqual(watch, hit.?.id);
+    try std.testing.expectEqual(@as(u32, 0x2000_1000), hit.?.address);
 }
 
 test "randomized interleavings of step and seek checked against straight digests" {
