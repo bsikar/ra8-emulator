@@ -46,6 +46,8 @@ pub const stacks = @import("stacks.zig");
 const load_input = @import("load_input.zig");
 const block_cache = @import("block_cache.zig");
 pub const checkpoints = @import("checkpoints.zig");
+const window_box = @import("window.zig");
+const advance_mod = @import("advance.zig");
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;
@@ -96,6 +98,8 @@ const State = struct {
     landing_observer: input_script.Script.Landing,
     /// The undo trail while a run records, null until `record` starts it.
     recording: ?history_trail.Recording = null,
+    /// The reverse window recording the live run, once `openWindow` built it.
+    window: ?*window_box.Window = null,
     /// The armed checkpoint pair when the application bound a host history root.
     persistent: ?*checkpoints.Armed = null,
     reboot: Reboot,
@@ -109,19 +113,7 @@ const State = struct {
 
     fn advance(context: *anyopaque, max_ns: u64) anyerror!void {
         const self: *State = @ptrCast(@alignCast(context));
-        const selected = self.session.currentCore();
-        try self.session.switchTo(.cpu0);
-        defer self.session.switchTo(selected) catch {};
-        const deadline = (try self.session.now()) +| max_ns;
-        const budget = self.session.live.budget;
-        defer self.session.live.budget = budget;
-        while ((try self.session.now()) < deadline) {
-            const remaining = self.board.time.base.cyclesUntil(deadline) -| self.edge.saved.stretch.carry;
-            self.session.live.budget = @max(1, @min(budget, remaining));
-            const before = try self.session.now();
-            _ = try self.session.run(.cpu0, .cont);
-            if ((try self.session.now()) <= before) return error.NoVirtualProgress;
-        }
+        try advance_mod.run(&self.session, &self.board, &self.edge, max_ns);
     }
 };
 
@@ -195,8 +187,7 @@ pub const Harness = struct {
         return true;
     }
 
-    /// Turn RTOS tracing on unless it already is; false when the image
-    /// has no ThreadX current-thread pointer to trace.
+    /// Turn RTOS tracing on unless it already is; false without ThreadX.
     pub fn traceIfRtos(self: *Harness) bool {
         if (self.state.tracer != null) return true;
         return self.traceRtos();
@@ -263,14 +254,12 @@ pub const Harness = struct {
         self.state.edge.second = &pair.second;
         self.state.edge.second_memory = pair.guest();
         self.state.files.pair = pair;
+        if (self.state.window) |held| held.attachSecond(&pair.core.cpu.slots);
     }
 
-    /// Starts recording the undo trail: one tap on the machine's store,
-    /// the round facts read live (RA8EMU-D1). The store's writes and the
-    /// core's fast path feed the trail through that one hook; a borrower
-    /// store follows its lender's. Both cores and the machine store must
-    /// be attached, because the trail attributes every write by the
-    /// writing core's live slot count.
+    /// Starts recording the undo trail on the machine's store, the round
+    /// facts read live (RA8EMU-D1). Both cores and the store must be
+    /// attached, since the trail attributes a write by its core's slot count.
     pub fn record(self: *Harness) !void {
         const state = self.state;
         const cpu0 = state.loading.cpu[0] orelse return error.CoreNotAttached;
@@ -284,8 +273,16 @@ pub const Harness = struct {
         state.recording.?.arm();
     }
 
+    /// Builds the reverse window of `bytes` budget, plants it at the loaded
+    /// machine and records the live run into it from here on. Call once.
+    pub fn openWindow(self: *Harness, bytes: usize) !void {
+        const state = self.state;
+        state.window = try window_box.Window.create(state.allocator, &state.session, &state.files, &state.cpu0.store.?, &state.cpu.slots, bytes);
+    }
+
     pub fn deinit(self: *Harness) void {
         const state = self.state;
+        if (state.window) |held| held.destroy();
         state.display.deinit();
         state.plugs.deinit();
         state.plugs_arena.deinit();
@@ -310,6 +307,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer allocator.destroy(state);
     state.allocator = allocator;
     state.recording = null;
+    state.window = null;
     state.persistent = null;
     state.bytes = try options.host().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
     errdefer allocator.free(state.bytes);

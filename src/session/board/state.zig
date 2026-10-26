@@ -77,8 +77,11 @@ pub const Files = struct {
         try attachment_snapshot.save(self.board, self.attachments, writer);
     }
 
+    /// Puts the whole saved run back. A reverse window described the run
+    /// before it, so it is dropped; the window's own restore reads parts.
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
-        return self.readParts(bytes, .{});
+        try self.readParts(bytes, .{});
+        if (self.session) |session| session.dropWindow();
     }
 
     /// Restores only `parts`; the board's attachments follow the board.

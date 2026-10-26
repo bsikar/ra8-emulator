@@ -382,7 +382,7 @@ pub const ReverseWindow = struct {
         self.refused_slot = null;
     }
 
-    fn checkLine(self: *ReverseWindow) !void {
+    pub fn checkLine(self: *ReverseWindow) !void {
         const own = self.line orelse return Error.NoWindow;
         if (self.port.line() != own) {
             self.drop();

@@ -86,10 +86,22 @@ pub const ZigSession = struct {
             .next => self.machine.stepOver(),
             .finish => self.machine.stepOut(self.core.register(.lr), self.core.register(.sp)),
         }
+        return self.launch(command == .step);
+    }
+
+    /// Carries on a run `go(.cont)` left at its budget, with the stop
+    /// machine as it stands: no resume grace, so a break on the next
+    /// instruction still stops. A run that stopped does not carry on.
+    pub fn goOn(self: *ZigSession) Error!zig_drive.Ended {
+        if (self.boundary) |edge| if (self.index == 1 and edge.pair == null) return Error.CoreNotAttached;
+        return self.launch(false);
+    }
+
+    fn launch(self: *ZigSession, stepping: bool) Error!zig_drive.Ended {
         self.started = true;
         self.ended_index = self.index;
         const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
-        const target: ?round.Target = if (command == .step) .{ .core = @intCast(self.index), .slots = self.core.cpu.slots + 1 } else null;
+        const target: ?round.Target = if (stepping) .{ .core = @intCast(self.index), .slots = self.core.cpu.slots + 1 } else null;
         if (self.other) |*other| {
             if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
             other.started = true;

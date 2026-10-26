@@ -313,6 +313,9 @@ pub const Transport = struct {
                 // The restored position names the line it is replayed on,
                 // and the line's interventions from there on are due again.
                 self.session.stampLine();
+                // The window described the run before the restore: it
+                // starts over at the restored state, on the stamped line.
+                self.session.replantWindow();
                 if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
             },
         }

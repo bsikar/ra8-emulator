@@ -17,6 +17,7 @@ const slot_mod = @import("window_slot.zig");
 const delta_mod = @import("window_delta.zig");
 const digest_mod = @import("window_digest.zig");
 const engine = @import("window_engine.zig");
+const port_mod = @import("window_port.zig");
 
 const ReverseWindow = engine.ReverseWindow;
 const Core = engine.Core;
@@ -24,6 +25,24 @@ const Digest = engine.Digest;
 
 /// Runs and records one slot at the window's end.
 pub fn recordSlot(w: *ReverseWindow, core: engine.Core) !void {
+    return recordSlotWith(w, core, false);
+}
+
+/// Records the slot the live run executes at the window's end, on `core`'s
+/// turn. A run that stopped before any slot leaves the window as it was
+/// (StepError.NoSlot); any other failure drops it, since the machine has
+/// moved on.
+pub fn extendLive(w: *ReverseWindow, core: engine.Core) !void {
+    if (w.rebuild != null) return engine.Error.Rebuilding;
+    try w.checkLine();
+    if (w.cursor() != w.count()) return engine.Error.NoWindow;
+    recordSlotWith(w, core, true) catch |err| {
+        if (err != port_mod.StepError.NoSlot) w.drop();
+        return err;
+    };
+}
+
+fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     if (!w.recording.attached) return engine.Error.TrailDisarmed;
     const cpu = w.port.cpu(core) orelse return engine.Error.CoreMissing;
     const pre_pos = w.port.position();
@@ -34,7 +53,7 @@ pub fn recordSlot(w: *ReverseWindow, core: engine.Core) !void {
         w.trail.active_slot = false;
         discardFrom(w.recording, mark);
     }
-    try w.port.step(core);
+    if (live) try w.port.stepLive(core) else try w.port.step(core);
     const post_pos = w.port.position();
     if ((engine.Position.order(post_pos, pre_pos) orelse return engine.Error.OtherLine) != .gt) return engine.Error.NoProgress;
 

@@ -16,6 +16,12 @@ pub const Position = position_mod.Position;
 pub const Core = trail_mod.Core;
 pub const Cpu = cpu_mod.Cpu;
 
+/// What a live step can refuse with besides the machine's own errors.
+pub const StepError = error{
+    /// The run stopped before executing a slot: nothing happened to record.
+    NoSlot,
+};
+
 pub const Port = struct {
     context: *anyopaque,
     vtable: *const VTable,
@@ -38,6 +44,10 @@ pub const Port = struct {
         /// Puts the state beside guest memory back; without `board` only
         /// the core and clock sections are restored.
         loadSide: *const fn (context: *anyopaque, bytes: []const u8, board: bool) anyerror!void,
+        /// Runs one slot as the live run itself, unmuted and recording what
+        /// a live run records; null for a port that only replays. A stop
+        /// before any slot ran answers StepError.NoSlot.
+        liveStep: ?*const fn (context: *anyopaque, core: Core) anyerror!void = null,
     };
 
     pub fn position(self: Port) Position {
@@ -54,6 +64,12 @@ pub const Port = struct {
 
     pub fn step(self: Port, core: Core) !void {
         return self.vtable.step(self.context, core);
+    }
+
+    /// One live slot: the live step when the port has one, else the replay's.
+    pub fn stepLive(self: Port, core: Core) !void {
+        const live = self.vtable.liveStep orelse return self.vtable.step(self.context, core);
+        return live(self.context, core);
     }
 
     pub fn saveFull(self: Port, writer: *std.Io.Writer) !void {

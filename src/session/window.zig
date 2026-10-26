@@ -7,9 +7,41 @@ const canonical_step = @import("history/canonical_step.zig");
 
 pub const Status = window_engine.Status;
 
+/// How a run slice reaches the window that records the live run: `enter`
+/// brings the machine to the window's end before the slice starts,
+/// `go` runs the command (slot by slot while the window records) and
+/// `settle` drops a window the slice left behind.
+pub const Driver = struct {
+    context: *anyopaque,
+    enterFn: *const fn (context: *anyopaque, session: *api.Session) void,
+    goFn: *const fn (context: *anyopaque, session: *api.Session, command: api.Run) anyerror!api.Ended,
+    settleFn: *const fn (context: *anyopaque, session: *api.Session) void,
+};
+
 /// Attaches an active reverse window to the session.
 pub fn attachWindow(self: *api.Session, window: *window_engine.ReverseWindow) void {
     self.window = window;
+}
+
+/// Attaches the driver that records the live run into the window.
+pub fn attachWindowDriver(self: *api.Session, driver: Driver) void {
+    self.window_driver = driver;
+}
+
+/// The machine was put back from a saved state: the window described the
+/// run before it, so it forgets that run. A rebuild's own restore keeps it.
+pub fn dropWindow(self: *api.Session) void {
+    const w = self.window orelse return;
+    if (w.rebuild == null) w.drop();
+}
+
+/// Drops the window, then plants it again at the state the machine stands
+/// at, so recording goes on from there. A plant that fails leaves it empty.
+pub fn replantWindow(self: *api.Session) void {
+    const w = self.window orelse return;
+    if (w.rebuild != null) return;
+    w.drop();
+    w.plant() catch w.drop();
 }
 
 /// Returns the current reverse window status, or null if no window is attached.

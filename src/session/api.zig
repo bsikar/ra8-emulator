@@ -92,6 +92,7 @@ pub const Session = struct {
     /// The rewind history (RA8EMU-1170), when the harness attached one.
     history: ?*history_mod.History = null,
     window: ?*window_engine.ReverseWindow = null,
+    window_driver: ?session_window.Driver = null,
     fork_router: ?*session_fork.ForkRouter = null,
     image_identity: [2]?[16]u8 = .{ null, null },
     root: ?*const history_root.Root = null,
@@ -276,6 +277,9 @@ pub const Session = struct {
     pub const rewind = session_window.rewind;
     pub const stepBack = session_window.stepBack;
     pub const attachWindow = session_window.attachWindow;
+    pub const attachWindowDriver = session_window.attachWindowDriver;
+    pub const dropWindow = session_window.dropWindow;
+    pub const replantWindow = session_window.replantWindow;
     pub const windowStatus = session_window.windowStatus;
     pub fn interrupt(self: *Session, core: Core) anyerror!stop_machine.Stop {
         return session_control.interrupt(self, core);

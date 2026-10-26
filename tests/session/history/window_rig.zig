@@ -14,7 +14,7 @@ const memmap = ra8.chip.core.memmap;
 
 pub const image_path = "tests/fixtures/display/ra8_ui.elf";
 
-const profile =
+pub const profile =
     \\# Window test board, profile format version 1.
     \\version=1
     \\ospi=size:16777216,width:8,clock_hz:166666667,latency_cycles:8,burst:incrementing16
@@ -179,7 +179,7 @@ pub const Rig = struct {
 /// The display image's entry becomes `ldr r0,[r1]; adds r0,#1; str
 /// r0,[r1]; b` back: every iteration writes guest memory and retires four
 /// instructions, and the board ticks every 64 cycles.
-fn countFixture(opened: *harness_mod.Harness) !void {
+pub fn countFixture(opened: *harness_mod.Harness) !void {
     opened.state.edge.idle_skip = false;
     opened.state.edge.timebase.per_chunk = 64;
     opened.session().live.boundary.?.chunk = 64;
@@ -224,3 +224,35 @@ pub const Straight = struct {
         self.gpa.free(self.positions);
     }
 };
+
+/// The whole machine's save stream of a harness, hashed.
+pub fn digestOf(gpa: std.mem.Allocator, opened: *harness_mod.Harness) ![32]u8 {
+    var out: std.Io.Writer.Allocating = .init(gpa);
+    defer out.deinit();
+    try opened.state.files.writeTo(&out.writer);
+    var hash: [32]u8 = undefined;
+    std.crypto.hash.Blake3.hash(out.written(), &hash, .{});
+    return hash;
+}
+
+/// The counting-loop machine of the window tests, past its first step so
+/// the run has a grid; with `window` it also records into a reverse
+/// window of `budget` bytes, planted at that state.
+pub fn openCounting(gpa: std.mem.Allocator, window: ?usize) !harness_mod.Harness {
+    var opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile });
+    errdefer opened.deinit();
+    try countFixture(&opened);
+    const session = opened.session();
+    try session.setRunBudget(.cpu0, 1);
+    _ = try session.run(.cpu0, .cont);
+    if (window) |budget| try opened.openWindow(budget);
+    return opened;
+}
+
+/// Runs `count` instructions of the session's CPU0 in one command.
+pub fn runCount(opened: *harness_mod.Harness, count: u64) !void {
+    const session = opened.session();
+    try session.setRunBudget(.cpu0, count);
+    const ended = try session.run(.cpu0, .cont);
+    if (ended != .count) return error.UnexpectedStop;
+}
