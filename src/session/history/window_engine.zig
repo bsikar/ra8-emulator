@@ -259,24 +259,34 @@ pub const ReverseWindow = struct {
         try record.recordSlot(self, core);
     }
 
-    /// One slot back. False at the window start.
-    pub fn undo(self: *ReverseWindow) !bool {
+    /// Applies delta and trail undo for one slot without calling loadSide.
+    pub fn undoStep(self: *ReverseWindow) !bool {
         try self.checkWalk();
         if (self.cursor() == 0) return false;
         const slot = self.slotAt(self.cursor() - 1);
         const pair = self.cpus();
-        // A failure part way leaves cursor, image and machine apart.
         errdefer self.drop();
         _ = try self.trail.undoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, false);
-        try self.port.loadSide(self.image.items, slot.kind == .complex);
         return true;
     }
 
-    /// One slot forward. False at the window end. A complex slot whose
-    /// re-execution misses its digest refuses with HistoryDivergence,
-    /// leaves the machine at the slot's pre-state and keeps the refusal.
-    pub fn redo(self: *ReverseWindow) !bool {
+    /// Loads the side image into the machine.
+    pub fn flushSide(self: *ReverseWindow, board: bool) !void {
+        errdefer self.drop();
+        try self.port.loadSide(self.image.items, board);
+    }
+
+    /// One slot back. False at the window start.
+    pub fn undo(self: *ReverseWindow) !bool {
+        if (!try self.undoStep()) return false;
+        const slot = self.slotAt(self.cursor());
+        try self.flushSide(slot.kind == .complex);
+        return true;
+    }
+
+    /// Applies delta and trail redo for one pure RAM/CPU slot without calling loadSide.
+    pub fn redoStep(self: *ReverseWindow) !bool {
         try self.checkWalk();
         if (self.cursor() == self.count()) return false;
         const index = self.cursor();
@@ -292,15 +302,55 @@ pub const ReverseWindow = struct {
         errdefer self.drop();
         _ = try self.trail.redoOne(pair[0] orelse return Error.CoreMissing, pair[1]);
         try slot.delta.flip(self.allocator, &self.image, true);
-        try self.port.loadSide(self.image.items, false);
+        return true;
+    }
+
+    /// One slot forward. False at the window end. A complex slot whose
+    /// re-execution misses its digest refuses with HistoryDivergence,
+    /// leaves the machine at the slot's pre-state and keeps the refusal.
+    pub fn redo(self: *ReverseWindow) !bool {
+        const index = self.cursor();
+        if (index == self.count()) return false;
+        const slot = self.slotAt(index);
+        if (slot.kind == .complex) {
+            try self.flushSide(true);
+            record.reexecute(self, slot) catch |err| {
+                if (err == error.HistoryDivergence) self.refused_slot = index;
+                return err;
+            };
+            return true;
+        }
+        if (!try self.redoStep()) return false;
+        try self.flushSide(false);
         return true;
     }
 
     /// Walks the cursor to slot `index` (0 is the start, count the end).
     pub fn walkTo(self: *ReverseWindow, index: usize) !void {
         if (index > self.count()) return Error.NoWindow;
-        while (self.cursor() > index) _ = try self.undo();
-        while (self.cursor() < index) _ = try self.redo();
+        var moved = false;
+        var had_complex = false;
+        while (self.cursor() > index) {
+            moved = true;
+            const slot = self.slotAt(self.cursor() - 1);
+            if (slot.kind == .complex) had_complex = true;
+            _ = try self.undoStep();
+        }
+        while (self.cursor() < index) {
+            const slot = self.slotAt(self.cursor());
+            if (slot.kind == .complex) {
+                if (moved) {
+                    try self.flushSide(had_complex);
+                    moved = false;
+                    had_complex = false;
+                }
+                _ = try self.redo();
+            } else {
+                moved = true;
+                _ = try self.redoStep();
+            }
+        }
+        if (moved) try self.flushSide(had_complex);
     }
 
     /// Drops the oldest slot: the start moves forward, the hot checkpoint stays.

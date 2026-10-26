@@ -149,3 +149,155 @@ test "a step crosses a SysTick/board-tick gap and the other core's turn behind i
     }
     try std.testing.expect(gaps > 0);
 }
+
+const DualRig = struct {
+    gpa: std.mem.Allocator,
+    opened: ra8.session.harness.Harness,
+    second: ra8.session.cpu1.bringup.Cpu1,
+    recording: ra8.session.history_trail.Recording,
+
+    pub fn open(self: *DualRig, gpa: std.mem.Allocator) !void {
+        self.gpa = gpa;
+        self.opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+            .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
+        });
+        errdefer self.opened.deinit();
+        self.second = .{};
+        try self.second.open(gpa, std.testing.io, std.Io.Dir.cwd(), &self.opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+        self.opened.state.edge.idle_skip = false;
+        self.opened.state.edge.timebase.per_chunk = 64;
+        self.opened.session().live.boundary.?.chunk = 64;
+
+        const session = self.opened.session();
+        try session.setRunBudget(.cpu0, 1);
+        try session.setRunBudget(.cpu1, 1);
+        _ = try session.run(.cpu0, .cont);
+
+        const cpu0 = self.opened.primaryCpu();
+        const cpu1 = self.second.cpu();
+        self.recording = ra8.session.history_trail.Recording.init(gpa, .{ &cpu0.slots, &cpu1.slots }, &self.opened.state.cpu0.store.?);
+        self.recording.arm();
+    }
+
+    pub fn deinit(self: *DualRig) void {
+        self.recording.deinit();
+        self.second.close(self.gpa);
+        self.opened.deinit();
+    }
+
+    pub fn port(self: *DualRig) ra8.session.history_window_port.Port {
+        return .{ .context = self, .vtable = &vtable };
+    }
+
+    pub fn position(self: *DualRig) ra8.session.history_window_port.Position {
+        return self.opened.session().grid.?.at;
+    }
+
+    pub fn digest(self: *DualRig) ![32]u8 {
+        var writer = std.Io.Writer.Allocating.init(self.gpa);
+        defer writer.deinit();
+        try self.opened.state.files.writeTo(&writer.writer);
+        var out: [32]u8 = undefined;
+        std.crypto.hash.Blake3.hash(writer.written(), &out, .{});
+        return out;
+    }
+
+    const vtable: ra8.session.history_window_port.Port.VTable = .{
+        .position = vPosition,
+        .line = vLine,
+        .cpu = vCpu,
+        .step = vStep,
+        .saveFull = saveFull,
+        .restoreFull = restoreFull,
+        .saveSide = saveSide,
+        .loadSide = loadSide,
+    };
+
+    fn of(context: *anyopaque) *DualRig {
+        return @ptrCast(@alignCast(context));
+    }
+
+    fn vPosition(context: *anyopaque) ra8.session.history_window_port.Position {
+        return of(context).position();
+    }
+
+    fn vLine(context: *anyopaque) u32 {
+        return of(context).position().branch;
+    }
+
+    fn vCpu(context: *anyopaque, core: ra8.session.history_window_port.Core) ?*ra8.session.history_window_port.Cpu {
+        const self = of(context);
+        return switch (core) {
+            .cpu0 => self.opened.primaryCpu(),
+            .cpu1 => self.second.cpu(),
+        };
+    }
+
+    fn vStep(context: *anyopaque, core: ra8.session.history_window_port.Core) anyerror!void {
+        const self = of(context);
+        const session = self.opened.session();
+        session.setReplaying(true);
+        defer session.setReplaying(false);
+        const ended = try session.run(switch (core) {
+            .cpu0 => .cpu0,
+            .cpu1 => .cpu1,
+        }, .cont);
+        if (ended != .count) return error.UnexpectedStop;
+    }
+
+    fn saveFull(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+        try of(context).opened.state.files.writeTo(writer);
+    }
+
+    fn restoreFull(context: *anyopaque, bytes: []const u8) anyerror!void {
+        try of(context).opened.history().restoreBytes(bytes);
+    }
+
+    fn saveSide(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+        try of(context).opened.state.files.writeParts(writer, .{ .memory = false });
+    }
+
+    fn loadSide(context: *anyopaque, bytes: []const u8, board: bool) anyerror!void {
+        try of(context).opened.state.files.readParts(bytes, .{ .memory = false, .board = board });
+    }
+};
+
+test "live dual-core window stepi and reverse-stepi exactness across other core turn and board tick" {
+    var rig: DualRig = undefined;
+    try rig.open(std.testing.allocator);
+    defer rig.deinit();
+
+    var w = engine.ReverseWindow.init(std.testing.allocator, rig.port(), &rig.recording, &rig.opened.state.cpu0.store.?, 64 * 1024 * 1024);
+    defer w.deinit();
+    try w.plant();
+
+    // Record slots across both cores
+    for (0..40) |i| {
+        const core: engine.Core = if (i % 3 == 0) .cpu1 else .cpu0;
+        try ra8.session.history_window_record.recordSlot(&w, core);
+    }
+
+    // Verify both cores step forward and back with exact inverses
+    for ([_]engine.Core{ .cpu0, .cpu1 }) |core| {
+        try w.walkTo(0);
+        _ = try step.stepForward(&w, core);
+        var crossed_other = false;
+        var crossed_complex = false;
+        while (w.cursor() < w.count()) {
+            const before = w.cursor();
+            const digest_before = try rig.digest();
+            const forward = try step.stepForward(&w, core);
+            try std.testing.expect(w.cursor() > before);
+            crossed_other = crossed_other or forward.other_core_slots > 0;
+            crossed_complex = crossed_complex or forward.complex_slots > 0;
+            if (forward.at_window_end) break;
+            const back = try step.stepBack(&w, core);
+            try std.testing.expectEqual(before, w.cursor());
+            try std.testing.expectEqual(forward.other_core_slots, back.other_core_slots);
+            try std.testing.expectEqual(forward.complex_slots, back.complex_slots);
+            try std.testing.expectEqualSlices(u8, &digest_before, &try rig.digest());
+            _ = try step.stepForward(&w, core);
+        }
+        try std.testing.expect(crossed_other);
+    }
+}

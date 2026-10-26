@@ -11,7 +11,7 @@ const rebuild = ra8.session.history_window_rebuild;
 const seek_engine = ra8.session.history_seek_engine;
 const api = ra8.session.api;
 
-const slots: usize = 100;
+const slots: usize = 200;
 
 const FakeWall = struct {
     now_ns: u64 = 0,
@@ -61,238 +61,221 @@ const BridgeCtx = struct {
     }
 };
 
+const Harness = struct {
+    rig: rig_mod.Rig,
+    straight: rig_mod.Straight,
+    w: engine.ReverseWindow,
+    bridge_ctx: BridgeCtx,
+    t: transport.Transport,
+    wall: FakeWall = .{},
+
+    fn open(self: *Harness) !void {
+        try self.rig.open(std.testing.allocator);
+        errdefer self.rig.deinit();
+        self.straight = try rig_mod.Straight.record(&self.rig, slots);
+        errdefer self.straight.deinit();
+        self.w = try buildWindow(&self.rig, &self.straight);
+        const session = self.rig.opened.session();
+        session.attachWindow(&self.w);
+        self.bridge_ctx = .{ .session = session };
+        self.t = .{
+            .session = session,
+            .history = .{
+                .context = &self.bridge_ctx,
+                .facts = BridgeCtx.factsFn,
+                .restore = BridgeCtx.restoreFn,
+            },
+        };
+        self.wall = .{};
+    }
+
+    fn deinit(self: *Harness) void {
+        self.w.deinit();
+        self.straight.deinit();
+        self.rig.deinit();
+    }
+};
+
 test "transport backward step inside window uses undo and measures latency" {
-    var rig: rig_mod.Rig = undefined;
-    try rig.open(std.testing.allocator);
-    defer rig.deinit();
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
 
-    var straight = try rig_mod.Straight.record(&rig, slots);
-    defer straight.deinit();
-
-    var w = try buildWindow(&rig, &straight);
-    defer w.deinit();
-
-    const session = rig.opened.session();
-    session.attachWindow(&w);
-
-    var bridge_ctx: BridgeCtx = .{ .session = session };
-    var t = transport.Transport{
-        .session = session,
-        .history = .{
-            .context = &bridge_ctx,
-            .facts = BridgeCtx.factsFn,
-            .restore = BridgeCtx.restoreFn,
-        },
-    };
-
-    var wall = FakeWall{};
     const t0 = std.Io.Timestamp.now(std.testing.io, .awake);
-    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .back } });
-    const ended = try t.finish(ticket, wall.wall(), null);
+    const ticket = try h.t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .back } });
+    const ended = try h.t.finish(ticket, h.wall.wall(), null);
     const elapsed_ns: u64 = @intCast(@max(0, t0.untilNow(std.testing.io, .awake).nanoseconds));
     std.debug.print("\n[evidence] reverse-step latency: {d} ns ({d:.3} ms)\n", .{ elapsed_ns, @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0 });
 
     try std.testing.expectEqual(api.Ended{ .stop = .stepped }, ended);
-    try std.testing.expectEqual(slots - 1, w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[slots - 1], &try rig.digest());
+    try std.testing.expectEqual(slots - 1, h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[slots - 1], &try h.rig.digest());
 }
 
 test "transport forward step inside window uses redo" {
-    var rig: rig_mod.Rig = undefined;
-    try rig.open(std.testing.allocator);
-    defer rig.deinit();
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
 
-    var straight = try rig_mod.Straight.record(&rig, slots);
-    defer straight.deinit();
+    try h.w.walkTo(slots - 5);
+    try std.testing.expectEqual(slots - 5, h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[slots - 5], &try h.rig.digest());
 
-    var w = try buildWindow(&rig, &straight);
-    defer w.deinit();
-
-    const session = rig.opened.session();
-    session.attachWindow(&w);
-
-    var bridge_ctx: BridgeCtx = .{ .session = session };
-    var t = transport.Transport{
-        .session = session,
-        .history = .{
-            .context = &bridge_ctx,
-            .facts = BridgeCtx.factsFn,
-            .restore = BridgeCtx.restoreFn,
-        },
-    };
-
-    var wall = FakeWall{};
-    // Walk back 5 slots
-    try w.walkTo(slots - 5);
-    try std.testing.expectEqual(slots - 5, w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[slots - 5], &try rig.digest());
-
-    // Step forward 2 slots via transport
-    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .count = 2, .dir = .fwd } });
-    const ended = try t.finish(ticket, wall.wall(), null);
+    const ticket = try h.t.command(.{ .step = .{ .core = .cpu0, .count = 2, .dir = .fwd } });
+    const ended = try h.t.finish(ticket, h.wall.wall(), null);
 
     try std.testing.expectEqual(api.Ended{ .stop = .stepped }, ended);
-    try std.testing.expectEqual(slots - 3, w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[slots - 3], &try rig.digest());
+    try std.testing.expectEqual(slots - 3, h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[slots - 3], &try h.rig.digest());
 }
 
 test "transport seek inside window uses window base and measures nearby seek latency" {
-    var rig: rig_mod.Rig = undefined;
-    try rig.open(std.testing.allocator);
-    defer rig.deinit();
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
 
-    var straight = try rig_mod.Straight.record(&rig, slots);
-    defer straight.deinit();
-
-    var w = try buildWindow(&rig, &straight);
-    defer w.deinit();
-
-    const session = rig.opened.session();
-    session.attachWindow(&w);
-
-    var bridge_ctx: BridgeCtx = .{ .session = session };
-    var t = transport.Transport{
-        .session = session,
-        .history = .{
-            .context = &bridge_ctx,
-            .facts = BridgeCtx.factsFn,
-            .restore = BridgeCtx.restoreFn,
-        },
-    };
-
-    var wall = FakeWall{};
-    // Seek backward to slot 40
-    const target_backward = straight.positions[40];
+    // Seek backward 60 slots from 200 to 140
+    const target_60 = h.straight.positions[140];
     var seek_buf: [64]u8 = undefined;
-    const target_text = try std.fmt.bufPrint(&seek_buf, "{d}:{d}:{s}:{d}:{s}", .{
-        target_backward.branch,
-        target_backward.r,
-        @tagName(target_backward.phase),
-        target_backward.o,
-        @tagName(target_backward.gap),
+    const text_60 = try std.fmt.bufPrint(&seek_buf, "{d}:{d}:{s}:{d}:{s}", .{
+        target_60.branch,
+        target_60.r,
+        @tagName(target_60.phase),
+        target_60.o,
+        @tagName(target_60.gap),
     });
 
     const t0 = std.Io.Timestamp.now(std.testing.io, .awake);
-    const ticket = try t.command(.{ .seek = .{ .target = target_text } });
-    const ended = try t.finish(ticket, wall.wall(), null);
-    const elapsed_ns: u64 = @intCast(@max(0, t0.untilNow(std.testing.io, .awake).nanoseconds));
-    std.debug.print("\n[evidence] nearby seek latency (60 slots): {d} ns ({d:.3} ms)\n", .{ elapsed_ns, @as(f64, @floatFromInt(elapsed_ns)) / 1_000_000.0 });
+    const ticket_60 = try h.t.command(.{ .seek = .{ .target = text_60 } });
+    _ = try h.t.finish(ticket_60, h.wall.wall(), null);
+    const ns_60: u64 = @intCast(@max(0, t0.untilNow(std.testing.io, .awake).nanoseconds));
+    std.debug.print("\n[evidence] nearby seek latency (60 slots): {d} ns ({d:.3} ms)\n", .{ ns_60, @as(f64, @floatFromInt(ns_60)) / 1_000_000.0 });
+    try std.testing.expectEqual(@as(usize, 140), h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[140], &try h.rig.digest());
 
-    try std.testing.expectEqual(api.Ended.count, ended);
-    try std.testing.expectEqual(@as(usize, 40), w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[40], &try rig.digest());
-
-    // Now seek forward to slot 70 (uses redo)
-    const target_forward = straight.positions[70];
-    const forward_text = try std.fmt.bufPrint(&seek_buf, "{d}:{d}:{s}:{d}:{s}", .{
-        target_forward.branch,
-        target_forward.r,
-        @tagName(target_forward.phase),
-        target_forward.o,
-        @tagName(target_forward.gap),
+    // Seek backward 140 slots from 140 to 0 (large seek)
+    const target_large = h.straight.positions[0];
+    const text_large = try std.fmt.bufPrint(&seek_buf, "{d}:{d}:{s}:{d}:{s}", .{
+        target_large.branch,
+        target_large.r,
+        @tagName(target_large.phase),
+        target_large.o,
+        @tagName(target_large.gap),
     });
 
-    const fwd_ticket = try t.command(.{ .seek = .{ .target = forward_text } });
-    const fwd_ended = try t.finish(fwd_ticket, wall.wall(), null);
-    try std.testing.expectEqual(api.Ended.count, fwd_ended);
-    try std.testing.expectEqual(@as(usize, 70), w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[70], &try rig.digest());
+    const t1 = std.Io.Timestamp.now(std.testing.io, .awake);
+    const ticket_large = try h.t.command(.{ .seek = .{ .target = text_large } });
+    _ = try h.t.finish(ticket_large, h.wall.wall(), null);
+    const ns_large: u64 = @intCast(@max(0, t1.untilNow(std.testing.io, .awake).nanoseconds));
+    std.debug.print("\n[evidence] large seek latency (140 slots): {d} ns ({d:.3} ms)\n", .{ ns_large, @as(f64, @floatFromInt(ns_large)) / 1_000_000.0 });
+    try std.testing.expectEqual(@as(usize, 0), h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[0], &try h.rig.digest());
 }
 
 test "transport reverse-continue inside window uses undo and stops on armed breakpoint" {
-    var rig: rig_mod.Rig = undefined;
-    try rig.open(std.testing.allocator);
-    defer rig.deinit();
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
 
-    var straight = try rig_mod.Straight.record(&rig, slots);
-    defer straight.deinit();
-
-    var w = try buildWindow(&rig, &straight);
-    defer w.deinit();
-
-    const session = rig.opened.session();
-    session.attachWindow(&w);
-
-    var bridge_ctx: BridgeCtx = .{ .session = session };
-    var t = transport.Transport{
-        .session = session,
-        .history = .{
-            .context = &bridge_ctx,
-            .facts = BridgeCtx.factsFn,
-            .restore = BridgeCtx.restoreFn,
-        },
-    };
-
-    var wall = FakeWall{};
-    // Walk to slot 30 to discover the PC at that slot
-    try w.walkTo(30);
+    try h.w.walkTo(30);
+    const session = h.rig.opened.session();
     const hit_pc = try session.register(.cpu0, .pc);
     const point = try session.setBreakpoint(.cpu0, .{ .address = hit_pc });
 
-    // Move forward to slot 33 (within same 4-instruction iteration)
-    try w.walkTo(33);
+    try h.w.walkTo(33);
 
-    // Reverse-continue: undoes backwards until hit_pc is reached at slot 30
-    const rc_ticket = try t.command(.rcont);
-    const ended = try t.finish(rc_ticket, wall.wall(), null);
+    const rc_ticket = try h.t.command(.rcont);
+    const ended = try h.t.finish(rc_ticket, h.wall.wall(), null);
 
     try std.testing.expectEqual(api.Ended{ .stop = .{ .breakpoint = point } }, ended);
-    try std.testing.expectEqual(@as(usize, 30), w.cursor());
-    try std.testing.expectEqualSlices(u8, &straight.digests[30], &try rig.digest());
+    try std.testing.expectEqual(@as(usize, 30), h.w.cursor());
+    try std.testing.expectEqualSlices(u8, &h.straight.digests[30], &try h.rig.digest());
+}
+
+test "transport forward continue redo inside window stops on armed data watchpoint" {
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
+
+    try h.w.walkTo(20);
+    const session = h.rig.opened.session();
+    const watch = try session.setWatchpoint(.cpu0, .{
+        .first = rig_mod.counter_addr,
+        .last = rig_mod.counter_addr + 3,
+        .kind = .write,
+    });
+
+    const cont_ticket = try h.t.command(.cont);
+    const ended = try h.t.finish(cont_ticket, h.wall.wall(), null);
+
+    switch (ended) {
+        .stop => |s| switch (s) {
+            .watchpoint => |hit| try std.testing.expectEqual(watch, hit.id),
+            else => return error.TestExpectedWatchpointStop,
+        },
+        else => return error.TestExpectedStop,
+    }
+    try std.testing.expect(h.w.cursor() > 20);
+}
+
+test "stepSlice propagates canonical stepForward errors and falls back on OutsideWindow" {
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
+
+    try h.w.walkTo(30);
+    h.w.slotAt(30).kind = .complex;
+    h.w.slotAt(30).digest[0] ^= 0x5a;
+
+    const ticket_err = try h.t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .fwd } });
+    try std.testing.expectError(error.HistoryDivergence, h.t.finish(ticket_err, h.wall.wall(), null));
+
+    var h2: Harness = undefined;
+    try h2.open();
+    defer h2.deinit();
+    try std.testing.expectEqual(slots, h2.w.cursor());
+    const ticket_live = try h2.t.command(.{ .step = .{ .core = .cpu0, .count = 1, .dir = .fwd } });
+    const ended_live = try h2.t.finish(ticket_live, h2.wall.wall(), null);
+    try std.testing.expectEqual(api.Ended{ .stop = .stepped }, ended_live);
 }
 
 test "randomized interleavings of step and seek checked against straight digests" {
-    var rig: rig_mod.Rig = undefined;
-    try rig.open(std.testing.allocator);
-    defer rig.deinit();
+    var h: Harness = undefined;
+    try h.open();
+    defer h.deinit();
 
-    var straight = try rig_mod.Straight.record(&rig, slots);
-    defer straight.deinit();
-
-    var w = try buildWindow(&rig, &straight);
-    defer w.deinit();
-
-    const session = rig.opened.session();
-    session.attachWindow(&w);
-
-    var bridge_ctx: BridgeCtx = .{ .session = session };
-    var t = transport.Transport{
-        .session = session,
-        .history = .{
-            .context = &bridge_ctx,
-            .facts = BridgeCtx.factsFn,
-            .restore = BridgeCtx.restoreFn,
-        },
-    };
-
-    var wall = FakeWall{};
     var prng = std.Random.DefaultPrng.init(0xCAFE_BABE);
     const rand = prng.random();
+
+    var oracle = ra8.session.history_shadow_oracle.ShadowOracle.init(std.testing.allocator);
+    defer oracle.deinit();
+    try oracle.trackStore(&h.rig.opened.state.cpu0.store.?);
 
     var cur: usize = slots;
 
     for (0..25) |_| {
+        const prev_cur = cur;
         const op = rand.uintLessThan(u8, 3);
         switch (op) {
             0 => {
                 if (cur > 0) {
                     const count = @min(cur, 1 + rand.uintLessThan(usize, 4));
-                    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .count = count, .dir = .back } });
-                    _ = try t.finish(ticket, wall.wall(), null);
+                    const ticket = try h.t.command(.{ .step = .{ .core = .cpu0, .count = count, .dir = .back } });
+                    _ = try h.t.finish(ticket, h.wall.wall(), null);
                     cur -= count;
                 }
             },
             1 => {
                 if (cur < slots) {
                     const count = @min(slots - cur, 1 + rand.uintLessThan(usize, 4));
-                    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .count = count, .dir = .fwd } });
-                    _ = try t.finish(ticket, wall.wall(), null);
+                    const ticket = try h.t.command(.{ .step = .{ .core = .cpu0, .count = count, .dir = .fwd } });
+                    _ = try h.t.finish(ticket, h.wall.wall(), null);
                     cur += count;
                 }
             },
             2 => {
                 const target_idx = rand.uintLessThan(usize, slots + 1);
-                const target_pos = straight.positions[target_idx];
+                const target_pos = h.straight.positions[target_idx];
                 var seek_buf: [64]u8 = undefined;
                 const target_text = try std.fmt.bufPrint(&seek_buf, "{d}:{d}:{s}:{d}:{s}", .{
                     target_pos.branch,
@@ -301,13 +284,29 @@ test "randomized interleavings of step and seek checked against straight digests
                     target_pos.o,
                     @tagName(target_pos.gap),
                 });
-                const ticket = try t.command(.{ .seek = .{ .target = target_text } });
-                _ = try t.finish(ticket, wall.wall(), null);
+                const ticket = try h.t.command(.{ .seek = .{ .target = target_text } });
+                _ = try h.t.finish(ticket, h.wall.wall(), null);
                 cur = target_idx;
             },
             else => unreachable,
         }
-        try std.testing.expectEqual(cur, w.cursor());
-        try std.testing.expectEqualSlices(u8, &straight.digests[cur], &try rig.digest());
+        try std.testing.expectEqual(cur, h.w.cursor());
+        try std.testing.expectEqualSlices(u8, &h.straight.digests[cur], &try h.rig.digest());
+
+        const lo = @min(prev_cur, cur);
+        const hi = @max(prev_cur, cur);
+        var ranges: std.ArrayList(ra8.session.history_shadow_oracle.MemoryRange) = .empty;
+        defer ranges.deinit(std.testing.allocator);
+        var s = lo;
+        while (s < hi) : (s += 1) {
+            for (h.w.trail.slotAt(s).byte_records) |rec| {
+                try ranges.append(std.testing.allocator, .{
+                    .base = rec.base,
+                    .offset = rec.offset,
+                    .len = rec.data.len,
+                });
+            }
+        }
+        try oracle.verifySlot(ranges.items);
     }
 }

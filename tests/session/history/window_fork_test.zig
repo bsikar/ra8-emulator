@@ -117,7 +117,7 @@ test "intervention inside window creates fork and cuts window future" {
     // Walk window back to slot 20
     const fork_slot: usize = 20;
     try w.walkTo(fork_slot);
-    @constCast(session.grid.?).at = straight.positions[fork_slot];
+    // @constCast(session.grid.?).at = straight.positions[fork_slot];
 
     try std.testing.expectEqual(@as(usize, 20), w.cursor());
     try std.testing.expectEqual(@as(usize, 50), w.count());

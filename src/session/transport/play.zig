@@ -46,9 +46,25 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
             const count = @min(w.count() - w.cursor(), if (job.budget > 0) job.budget else 1000);
             var i: usize = 0;
             while (i < count) : (i += 1) {
+                const cur = w.cursor();
                 if (!try w.redo()) break;
-                const pc = self.session.register(job.core, .pc) catch break;
                 const m = self.session.machine(job.core) catch break;
+                if (m.watches.len > 0) {
+                    const payload = w.trail.slotAt(cur);
+                    var tripped: ?@import("../watch/table.zig").Hit = null;
+                    for (payload.byte_records) |rec| {
+                        const addr: u32 = @intCast(rec.base + rec.offset);
+                        const w_len: u8 = @intCast(@min(rec.data.len, 255));
+                        if (m.watches.hit(addr, w_len, .write)) |hit| {
+                            tripped = hit;
+                            break;
+                        }
+                    }
+                    if (tripped) |hit| {
+                        return api.Ended{ .stop = .{ .watchpoint = hit } };
+                    }
+                }
+                const pc = self.session.register(job.core, .pc) catch break;
                 if (m.breaks.hit(pc)) |hit| {
                     return api.Ended{ .stop = .{ .breakpoint = hit } };
                 }

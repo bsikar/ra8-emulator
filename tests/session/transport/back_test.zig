@@ -80,10 +80,15 @@ const TestBridge = struct {
         if (self.prior) |old| self.gpa.free(old.checkpoints);
         const gathered = try seek_facts_mod.gather(self.gpa, self.sink.bytes.items);
         self.prior = gathered;
-        // A never-run machine has no grid: its cursor sits at or before
-        // every checkpoint, which a zeroed position says.
-        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
-        return .{ .current = .{}, .checkpoints = gathered.checkpoints };
+        const win_facts: ?seek_engine_mod.WindowFacts = if (self.opened.session().window) |w| .{
+            .start = w.start() orelse .{},
+            .end = w.end() orelse .{},
+            .at = if (self.opened.session().grid) |g| g.at else .{},
+            .line = w.line,
+            .slots = w.count(),
+        } else null;
+        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints, .window = win_facts };
+        return .{ .current = .{}, .checkpoints = gathered.checkpoints, .window = win_facts };
     }
 
     fn restore(context: *anyopaque, object: []const u8) anyerror!void {
@@ -336,4 +341,58 @@ test "cancelling a reverse-continue restores the origin checkpoint" {
     };
     const landed = session.grid.?.at;
     try std.testing.expect((try position_mod.compare(landed, plan.base.checkpoint.position)) == .eq);
+}
+
+test "a backward step outside window falls back to checkpoint replay and reports history_start only at real start" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = history_elf,
+        .checkpoint_every = 1,
+        .history_storage = sink.storage(),
+        .history_objects = objects.objects(),
+    });
+    defer opened.deinit();
+    const session = opened.session();
+    _ = try session.run(.cpu0, .run);
+
+    const dummy_slot = ra8.session.history_window_engine.Slot{
+        .pre = .{ .r = 0 },
+        .post = session.grid.?.at,
+        .core = .cpu0,
+        .kind = .ram_cpu,
+        .delta = .{},
+        .digest = @splat(0),
+    };
+    var dummy_w: ra8.session.history_window_engine.ReverseWindow = undefined;
+    dummy_w.trail.cursor = 0;
+    dummy_w.slots = .empty;
+    try dummy_w.slots.append(gpa, dummy_slot);
+    defer dummy_w.slots.deinit(gpa);
+    dummy_w.head = 0;
+    dummy_w.image = .empty;
+    dummy_w.hot = &.{};
+    dummy_w.hot_at = null;
+    dummy_w.planted_at = null;
+    dummy_w.line = session.grid.?.at.branch;
+    session.attachWindow(&dummy_w);
+
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = session };
+    t.history = state.bridge();
+
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .step = .{ .core = .cpu0, .dir = .back } });
+    var pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    var rounds: usize = 0;
+    while (pumped.finished == null) : (rounds += 1) {
+        try std.testing.expect(rounds < 1_000_000);
+        pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    }
+    try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
+    try std.testing.expectEqualStrings("stepped", @tagName(pumped.finished.?.ended.stop));
 }

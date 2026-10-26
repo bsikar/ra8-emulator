@@ -156,11 +156,34 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         };
         _ = canonical.stepBack(w, core) catch |err| {
             if (err == canonical.Error.OutsideWindow) {
+                const bridge = self.history orelse return .{ .stop = .history_start };
+                var facts = bridge.facts(bridge.context) catch return .{ .stop = .history_start };
+                if (self.session.fork_router) |router| {
+                    facts.graph = router.graph;
+                    facts.active_line = router.active_line;
+                }
+                const cur_pos = if (self.session.grid) |g| g.at else back.cursor;
+                var earlier: ?seek_engine.Base = null;
+                for (facts.checkpoints) |c| {
+                    const before = self.session.comparePositions(c.position, cur_pos) catch continue;
+                    if (before != .lt) continue;
+                    const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
+                    if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+                }
+                if (earlier) |base| {
+                    back.base = base;
+                    back.cursor = cur_pos;
+                    back.restored = false;
+                    back.target = null;
+                    back.seen = null;
+                    return null;
+                }
                 return .{ .stop = .history_start };
             }
             return err;
         };
         job.left -= 1;
+        if (self.session.grid) |g| back.cursor = g.at;
         if (job.left == 0) return .{ .stop = .stepped };
         return null;
     }

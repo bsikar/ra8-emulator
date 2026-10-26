@@ -286,7 +286,10 @@ pub const Transport = struct {
                 if (canonical.stepForward(w, tc)) |_| {
                     job.left -= 1;
                     return if (job.left == 0) .{ .stop = .stepped } else null;
-                } else |_| {}
+                } else |err| switch (err) {
+                    error.OutsideWindow => {},
+                    else => return err,
+                }
             }
         }
         const ended = try self.session.run(job.core, .step);
