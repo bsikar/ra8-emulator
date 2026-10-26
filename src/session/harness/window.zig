@@ -41,7 +41,7 @@ pub const Window = struct {
         errdefer self.window.deinit();
         try self.window.plant();
         session.attachWindow(&self.window);
-        session.attachWindowDriver(.{ .context = self, .enterFn = enter, .goFn = go, .settleFn = settle });
+        session.attachWindowDriver(.{ .context = self, .enterFn = enter, .goFn = go, .settleFn = settle, .resetFn = reset });
         return self;
     }
 
@@ -133,6 +133,20 @@ pub const Window = struct {
             left -= 1;
         }
         return .count;
+    }
+
+    /// The machine was put back from a saved state: the window forgets the
+    /// run before it, and plants again when asked. Its own restore (a
+    /// rebuild's) keeps it.
+    fn reset(context: *anyopaque, session: *api.Session, plant: bool) void {
+        _ = session;
+        const self = of(context);
+        const w = &self.window;
+        if (w.rebuild != null) return;
+        record.discardFrom(&self.recording, 0);
+        self.recording.poisoned = false;
+        w.drop();
+        if (plant) w.plant() catch w.drop();
     }
 
     /// Ends a run slice: a window the machine moved away from, or one a

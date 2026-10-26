@@ -16,6 +16,8 @@ pub const Driver = struct {
     enterFn: *const fn (context: *anyopaque, session: *api.Session) void,
     goFn: *const fn (context: *anyopaque, session: *api.Session, command: api.Run) anyerror!api.Ended,
     settleFn: *const fn (context: *anyopaque, session: *api.Session) void,
+    /// Starts the window over after a restore, planted when asked.
+    resetFn: *const fn (context: *anyopaque, session: *api.Session, plant: bool) void,
 };
 
 /// Attaches an active reverse window to the session.
@@ -28,20 +30,18 @@ pub fn attachWindowDriver(self: *api.Session, driver: Driver) void {
     self.window_driver = driver;
 }
 
-/// The machine was put back from a saved state: the window described the
-/// run before it, so it forgets that run. A rebuild's own restore keeps it.
+/// The machine was put back from a saved state: the window the driver
+/// records into described the run before it, so it forgets that run. A
+/// window attached without a driver is its owner's to keep consistent.
 pub fn dropWindow(self: *api.Session) void {
-    const w = self.window orelse return;
-    if (w.rebuild == null) w.drop();
+    if (self.window_driver) |driver| driver.resetFn(driver.context, self, false);
 }
 
-/// Drops the window, then plants it again at the state the machine stands
-/// at, so recording goes on from there. A plant that fails leaves it empty.
+/// As `dropWindow`, then plants the window again at the state the machine
+/// stands at, so recording goes on from there. A plant that fails leaves
+/// it empty.
 pub fn replantWindow(self: *api.Session) void {
-    const w = self.window orelse return;
-    if (w.rebuild != null) return;
-    w.drop();
-    w.plant() catch w.drop();
+    if (self.window_driver) |driver| driver.resetFn(driver.context, self, true);
 }
 
 /// Returns the current reverse window status, or null if no window is attached.

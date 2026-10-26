@@ -23,7 +23,7 @@ test "the bridge's facts carry the window's span, cursor, line and slot count" {
     const facts = try bridge_mod.Bridge.facts(&served.bridge.?);
     const window = facts.window orelse return error.TestExpectedWindow;
     const w = session.window.?;
-    try std.testing.expectEqual(@as(u64, 40), window.slots);
+    try std.testing.expectEqual(@as(u64, 41), window.slots);
     try std.testing.expect(std.meta.eql(window.start, w.start().?));
     try std.testing.expect(std.meta.eql(window.end, w.end().?));
     try std.testing.expect(std.meta.eql(window.at, session.grid.?.at));
