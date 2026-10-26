@@ -104,7 +104,7 @@ test "eviction keeps the window under its byte bound and moves the start" {
     try std.testing.expectEqualSlices(u8, &straight.digests[slots], &try rig.digest());
 }
 
-test "the window drops when the machine moves to another line or forks" {
+test "the window drops when the machine moves to another line and is cut at a fork" {
     var rig: rig_mod.Rig = undefined;
     try rig.open(std.testing.allocator);
     defer rig.deinit();
@@ -129,13 +129,24 @@ test "the window drops when the machine moves to another line or forks" {
     try std.testing.expectEqual(engine.State.empty, w.status().state);
     rig.line_shift = 0;
 
-    // A fork drops it.
+    // A fork cuts the future past the cursor and hands the past to the child line.
     try rig.port().restoreFull(straight.base);
     try rebuild.run(&w, .{ .base = .current, .end = straight.positions[8] });
     try std.testing.expectEqual(@as(usize, 8), w.count());
-    w.noteFork();
-    try std.testing.expectEqual(engine.State.empty, w.status().state);
-    try std.testing.expectEqual(@as(usize, 0), w.usedBytes());
+    for (0..3) |_| try std.testing.expect(try w.undo());
+    const before = w.usedBytes();
+    const child = straight.positions[0].branch + 1;
+    w.cutAtFork(child);
+    try std.testing.expectEqual(engine.State.ready, w.status().state);
+    try std.testing.expectEqual(@as(usize, 5), w.count());
+    try std.testing.expectEqual(@as(usize, 5), w.cursor());
+    try std.testing.expectEqual(@as(?u32, child), w.line);
+    try std.testing.expect(w.usedBytes() < before);
+    // The machine is on the child line now: nothing lies ahead, the past undoes.
+    rig.line_shift = 1;
+    defer rig.line_shift = 0;
+    try std.testing.expect(!try w.redo());
+    try std.testing.expect(try w.undo());
 }
 
 test "extend refuses while a rebuild is in progress" {

@@ -161,11 +161,6 @@ pub const ReverseWindow = struct {
         self.refused_slot = null;
     }
 
-    /// A fork changed the future the window describes: cut future slots.
-    pub fn noteFork(self: *ReverseWindow) void {
-        self.truncateFuture();
-    }
-
     pub fn count(self: *const ReverseWindow) usize {
         return self.slots.items.len - self.head;
     }
