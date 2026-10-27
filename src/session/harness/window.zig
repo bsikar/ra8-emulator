@@ -3,8 +3,10 @@
 //! port over the live session, and the driver that records the live run.
 //!
 //! While the machine runs live, past the line's recorded end, every slot
-//! of a continue or a step is run through the window, so the window grows
-//! at its end and the oldest slots leave as its byte budget fills. A run
+//! of a step, or of a continue of at most `live_slots_max` slots, is run
+//! through the window, so the window grows at its end and the oldest
+//! slots leave as its byte budget fills. A longer continue is not
+//! recorded, and a reverse step then builds the window by replay. A run
 //! the window cannot follow (replaying, a sleeping core, step-over,
 //! finish, a seek's replay, a restore, a load, a write made outside a
 //! run) leaves it stale, and it starts over at the next live slot with a
@@ -19,6 +21,12 @@ const machine_mod = @import("window_machine.zig");
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 
 const Machine = machine_mod.Machine;
+
+/// The most slots one continue may run and still be recorded live. Recording
+/// costs a save and diff of the machine per slot, so a longer run goes at
+/// full speed and the window is built by replay when a reverse step asks
+/// for it (transport/back_window.zig).
+pub const live_slots_max: u64 = 4096;
 
 pub const Window = struct {
     gpa: std.mem.Allocator,
@@ -113,7 +121,7 @@ pub const Window = struct {
     fn go(context: *anyopaque, session: *api.Session, command: api.Run) anyerror!api.Ended {
         const self = of(context);
         const live = &session.live;
-        const recorded = command == .cont or command == .step;
+        const recorded = command == .step or (command == .cont and live.budget <= live_slots_max);
         if (self.machine.muted or session.replaying or !recorded) return live.go(command);
         if (self.asleep(self.machine.coreAt()) or !self.current()) return live.go(command);
         self.machine.begin(command);

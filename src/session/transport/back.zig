@@ -11,6 +11,7 @@ const command_mod = @import("command.zig");
 const position_mod = @import("../history/position.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
+const back_window = @import("back_window.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -37,6 +38,8 @@ pub const Back = struct {
     /// Whether the landing is the log's beginning, settled as
     /// history_start instead of a finished step.
     start: bool = false,
+    /// Whether a window build was tried for this job (back_window.zig).
+    windowed: bool = false,
     /// The base the machine queued at, fixed once: a cancel returns
     /// the machine to this checkpoint exactly, whatever the replay
     /// later rebased to.
@@ -190,6 +193,13 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     if (!back.restored) {
         try self.restoreBase(back.base);
         back.restored = true;
+        return null;
+    }
+    if (!back.windowed and back.base == .checkpoint) {
+        // The machine stands at the checkpoint: a window built from it
+        // serves this step; one that cannot be built leaves the replay.
+        if (back_window.build(self, job, back)) return null;
+        back.restored = false;
         return null;
     }
     const grid = self.session.grid orelse return error.NoGrid;

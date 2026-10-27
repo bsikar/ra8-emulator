@@ -92,3 +92,41 @@ test "a served session sizes its window from the budget table and steps back and
     try std.testing.expectEqual(engine.State.ready, after.state);
     try std.testing.expect(after.used_bytes <= after.budget_bytes);
 }
+
+test "a run too long to record leaves no window and the first reverse step builds it by replay" {
+    // A multiple of the board's 64-cycle rounds: a run in one command and the
+    // same run one slot at a time agree there, and only there.
+    const long: usize = 5120;
+    const tail: usize = 12;
+    var straight = try rig.openCounting(gpa, null);
+    defer straight.deinit();
+    for (0..long - tail) |_| try rig.runCount(&straight, 1);
+    var digests: [tail + 1][32]u8 = undefined;
+    digests[0] = try rig.digestOf(gpa, &straight);
+    for (1..tail + 1) |i| {
+        try rig.runCount(&straight, 1);
+        digests[i] = try rig.digestOf(gpa, &straight);
+    }
+
+    var served: setup.Served = undefined;
+    try openServed(&served, 256 * budget.bytes.mib);
+    defer served.deinit();
+    const session = served.owner.session();
+    try rig.runCount(&served.owner, long);
+    try expectTail(&served, &digests, tail);
+    try std.testing.expectEqual(engine.State.empty, session.windowStatus().?.state);
+
+    const t = served.owner.transport();
+    var wall: FakeWall = .{};
+    for (1..tail + 1) |back| {
+        try step(t, true, &wall);
+        try expectTail(&served, &digests, tail - back);
+        const status = session.windowStatus().?;
+        try std.testing.expectEqual(engine.State.ready, status.state);
+        try std.testing.expect(status.slots > 0 and status.used_bytes <= status.budget_bytes);
+    }
+}
+
+fn expectTail(served: *setup.Served, digests: []const [32]u8, index: usize) !void {
+    try std.testing.expectEqualSlices(u8, &digests[index], &try rig.digestOf(gpa, &served.owner));
+}
