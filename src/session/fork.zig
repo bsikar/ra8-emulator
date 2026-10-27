@@ -149,6 +149,8 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     window_fork.noteFork(self, undo.new_id);
     undo.stage = .switched;
     try apply.applyAction(self, action);
+    // The cut window still holds the state before the write.
+    session_window.replantWindow(self);
     if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);
     if (self.net_hook) |hook| hook.closeFlowsFn(hook.context);
     _ = async_traffic.clearOnFork(self);

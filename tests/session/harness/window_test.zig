@@ -205,3 +205,27 @@ test "a register write at the live head starts the window over so a step back st
     try std.testing.expectEqualSlices(u8, &poked, &try rig.digestOf(gpa, &live));
     try std.testing.expectEqual(@as(u32, 0x5A5A_1234), try session.register(.cpu0, .r7));
 }
+
+test "a register write that forks inside the window starts it over so a step back stops at the write" {
+    var live = try rig.openCounting(gpa, budget);
+    defer live.deinit();
+    const session = live.session();
+    var graph = try ra8.session.history_branch.BranchGraph.init(gpa);
+    defer graph.deinit();
+    var router = ra8.session.history_fork_router.ForkRouter.init(gpa, &graph);
+    defer router.deinit();
+    router.first_fork_confirmed = true;
+    session.attachForkRouter(&router);
+
+    try rig.runCount(&live, 40);
+    try session.rewind(.cpu0, 5);
+    try session.setRegister(.cpu0, .r7, 0x0BAD_F00D);
+    try std.testing.expect(router.active_line != 0);
+    const poked = try rig.digestOf(gpa, &live);
+    try std.testing.expectEqual(@as(usize, 0), session.windowStatus().?.slots);
+
+    try rig.runCount(&live, 1);
+    try session.rewind(.cpu0, 1);
+    try std.testing.expectEqualSlices(u8, &poked, &try rig.digestOf(gpa, &live));
+    try std.testing.expectEqual(@as(u32, 0x0BAD_F00D), try session.register(.cpu0, .r7));
+}
