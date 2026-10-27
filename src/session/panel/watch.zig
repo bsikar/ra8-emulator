@@ -88,7 +88,7 @@ pub const Watch = struct {
             if (clock.sink == null) clock.sink = .{ .context = self, .frame = onFrame };
             return;
         }
-        if (self.tapped) self.board.frame_tap = &self.tap;
+        if (self.tapped) self.board.addFrameTap(&self.tap);
     }
 
     fn disarm(self: *Watch) void {
@@ -98,7 +98,7 @@ pub const Watch = struct {
                 clock.sink = null;
             };
         }
-        if (self.board.frame_tap == &self.tap) self.board.frame_tap = null;
+        self.board.removeFrameTap(&self.tap);
     }
 
     fn drop(self: *Watch) void {

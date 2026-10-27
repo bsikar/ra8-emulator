@@ -30,6 +30,7 @@ const Tags = struct {
             .checkpoint => 2,
             .intervention => 3,
             .boundary => 4,
+            .checkpoint_picture => 5,
         };
         try self.tags.append(self.gpa, tag);
     }

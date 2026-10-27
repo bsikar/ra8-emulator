@@ -135,6 +135,7 @@ pub const Context = struct {
     advance_target_ns: u64 = 0,
     advance_core: proto.Core = .cpu0,
     transport_epoch: u64 = 0, // epoch last reported on the transport topic
+    nav: @import("nav_hooks.zig").Hooks = .{}, // application hooks of the navigation requests
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@backingInt(of)] & bit(topic) != 0;

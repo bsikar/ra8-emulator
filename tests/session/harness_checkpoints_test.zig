@@ -50,4 +50,6 @@ test "arming binds the controller to the session's boundary" {
     try std.testing.expectEqual(@as(u64, 10), armed.recorder.disk.?.floor);
     try std.testing.expectEqual(@as(u64, 600), armed.checkpoints.object_cap);
     try std.testing.expectEqual(@as(u32, 64), armed.checkpoints.every);
+    // Every armed checkpoint pins the panel's picture.
+    try std.testing.expect(armed.checkpoints.picture != null);
 }

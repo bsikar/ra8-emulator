@@ -6,6 +6,7 @@ const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
 const mpu_check = @import("ra8_chip").core.cpu.board_bus.mpu_check;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const scheduler = @import("ra8_chip").core.scheduler;
 const NvicSource = @import("ra8_chip").core.cpu.exception.nvic_source.NvicSource;
 const QuietSource = @import("ra8_chip").core.cpu.exception.quiet_source.QuietSource;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
@@ -48,6 +49,7 @@ const block_cache = @import("block_cache.zig");
 pub const checkpoints = @import("checkpoints.zig");
 const window_box = @import("window.zig");
 const advance_mod = @import("advance.zig");
+const rtos_trace = @import("rtos_trace.zig");
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;
@@ -169,28 +171,14 @@ pub const Harness = struct {
         self.state.session.attachBoard(core, self.state.board.ticker(), core_guest);
     }
 
-    /// Publish CPU0's ThreadX switches and exception entry and return on the
-    /// session's event stream (RA8EMU-346): the tracer sits in front of the
-    /// core, drained at each chunk boundary; stamps are CPU0's retired
-    /// instructions, one cycle each. False with no ThreadX; call once.
-    pub fn traceRtos(self: *Harness) bool {
-        const state = self.state;
-        state.tracer = rtos_hook.resolve(state.image, .{}) orelse return false;
-        const tracer = &state.tracer.?;
-        tracer.now = &state.board.time.base.retired;
-        tracer.trace.fine = &state.cpu.retired;
-        state.listener = .{ .tracer = tracer };
-        state.cpu.bus = state.listener.onBus(state.cpu.bus);
-        if (state.cpu.source) |inner| state.cpu.source = state.listener.onSource(inner);
-        state.publisher = .{ .trace = &tracer.trace, .stream = &state.session.event_stream, .inner = state.session.live.boundary, .time = &state.board.time.base };
-        state.session.live.boundary = state.publisher.hook();
-        return true;
-    }
+    pub const traceRtos = rtos_trace.traceRtos;
+    pub const observeRtos = rtos_trace.observeRtos;
+    pub const traceIfRtos = rtos_trace.traceIfRtos;
 
-    /// Turn RTOS tracing on unless it already is; false without ThreadX.
-    pub fn traceIfRtos(self: *Harness) bool {
-        if (self.state.tracer != null) return true;
-        return self.traceRtos();
+    /// The scheduler state the run's positions are read from, and the
+    /// retired-slot counter of CPU0 that moves through it.
+    pub fn grid(self: *Harness) *const scheduler.State {
+        return &self.state.edge.saved;
     }
 
     /// Sample CPU0's call stacks into `into` (RA8EMU-833), named by the

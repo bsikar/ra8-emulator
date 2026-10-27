@@ -55,6 +55,8 @@ pub const Bind = struct {
     /// different image loaded): close leaves its branches.bin as it was,
     /// since the in-memory graph then describes the new program.
     detached: bool = false,
+    /// Set when this bind took over a session an earlier run recorded.
+    reopened: bool = false,
 
     /// Open a history root at `path`, made and marked when it is new,
     /// and make the run's session in it with the lease held.
@@ -63,6 +65,10 @@ pub const Bind = struct {
         /// computed share. The volume's free floor and the relief stay.
         cap: ?u64 = null,
         kept: bool = false,
+        /// Take over this kept session instead of making a new one: its
+        /// log, objects and caches are served again, and recording
+        /// continues past the line's recorded end.
+        reopen: ?history.name.Id = null,
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
@@ -71,7 +77,10 @@ pub const Bind = struct {
         bind.* = .{ .gpa = allocator, .base = undefined, .session = undefined, .log = undefined, .sink = undefined, .storage = undefined, .objects = undefined };
         bind.base = try history.base.Base.openConfigured(allocator, io, path, .cache, .{});
         errdefer bind.base.close();
-        bind.session = try history.session.Session.create(&bind.base, .{});
+        bind.session = if (opts.reopen) |id|
+            try history.session.Session.reopen(&bind.base, id)
+        else
+            try history.session.Session.create(&bind.base, .{});
         errdefer _ = bind.session.close(null, .move) catch {};
         if (opts.kept) {
             try bind.session.keep();
@@ -100,7 +109,8 @@ pub const Bind = struct {
             }
         } else |_| {}
         const store = history.storage.Store.from(&bind.session);
-        bind.log = try store.vtable.open(store.context, .log, log_leaf, .create);
+        bind.reopened = opts.reopen != null;
+        bind.log = try store.vtable.open(store.context, .log, log_leaf, if (bind.reopened) .update else .create);
         errdefer bind.log.vtable.close(bind.log.context);
         bind.sink = try allocator.create(LogSink);
         errdefer allocator.destroy(bind.sink);
@@ -184,7 +194,7 @@ const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir
 /// stays a quiescent prune rather than live relief.
 fn relieveVolume(context: *anyopaque) anyerror!void {
     const watch: *VolumeWatch = @ptrCast(@alignCast(context));
-    _ = try history.prune.frames(watch.store);
+    _ = try history.prune.relief(watch.store, watch.gpa, prune_referrer);
 }
 
 fn freeVolume(context: *anyopaque) anyerror!u64 {
@@ -268,7 +278,7 @@ fn syncObjects(context: *anyopaque) anyerror!void {
 /// names. Reads the store's log segments and walks each one's committed
 /// frames through the session library's scan; a segment the walk cannot
 /// finish is a hard error, so the sweep never deletes past it.
-pub const prune_referrer: history.prune.Referrer = .{ .collect = &collectReferenced };
+pub const prune_referrer: history.prune.Referrer = .{ .collect = &collectReferenced, .pictures = &collectPictures };
 
 const PruneGather = struct {
     allocator: std.mem.Allocator,
@@ -293,6 +303,8 @@ const PruneGather = struct {
 const PruneSegments = struct {
     store: history.storage.Store,
     gather: *PruneGather,
+    /// Name only the checkpoint pictures, not every committed object.
+    pictures_only: bool = false,
 
     fn visit(context: *anyopaque, name: []const u8, size: u64) anyerror!void {
         _ = size;
@@ -308,15 +320,29 @@ const PruneSegments = struct {
             if (read == 0) break;
             got += read;
         }
-        session_refs.scanCheckpointObjects(bytes[0..got], self.gather, PruneGather.add) catch |err| {
+        const walked = if (self.pictures_only)
+            session_refs.scanPictureObjects(bytes[0..got], self.gather, PruneGather.add)
+        else
+            session_refs.scanCheckpointObjects(bytes[0..got], self.gather, PruneGather.add);
+        walked catch |err| {
             self.gather.failed = err;
         };
     }
 };
 
 fn collectReferenced(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void {
+    return collect(store, allocator, names, false);
+}
+
+/// The checkpoint pictures' object names alone, which relief protects
+/// by name and counts.
+fn collectPictures(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void {
+    return collect(store, allocator, names, true);
+}
+
+fn collect(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void), pictures_only: bool) anyerror!void {
     var gather = PruneGather{ .allocator = allocator, .names = names };
-    var segments = PruneSegments{ .store = store, .gather = &gather };
+    var segments = PruneSegments{ .store = store, .gather = &gather, .pictures_only = pictures_only };
     try store.vtable.list(store.context, .log, .{ .context = &segments, .visit = &PruneSegments.visit });
     if (gather.failed) |err| return err;
 }

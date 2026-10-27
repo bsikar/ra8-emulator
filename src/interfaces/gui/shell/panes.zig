@@ -104,6 +104,8 @@ pub const Panes = struct {
     source: ?*shell_source.Pair = null,
     /// The timeline's RTOS record (RA8EMU-838).
     timeline: ?*timeline_model.Model = null,
+    /// Greys register and memory panes while moving backward or seeking (Slice 22.4).
+    busy: bool = false,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -135,6 +137,9 @@ fn drawMono(self: *Panes, list: *draw_list.DrawList, theme: *const Theme, pane: 
             const mono_paint = mono_target.paint();
             try registers_pane.draw(&mono_paint, theme, body, now, model.before, model.fold);
             if (self.edit) |edit| edit.draw(&mono_paint, theme, body, model.fold, model.core);
+            if (self.busy) {
+                try list.fill(toList(body), .{ .r = theme.well.r, .g = theme.well.g, .b = theme.well.b, .a = 160 });
+            }
             return true;
         }
     };
@@ -145,6 +150,9 @@ fn drawMono(self: *Panes, list: *draw_list.DrawList, theme: *const Theme, pane: 
             if (self.memory_field) |field| {
                 try shell_memory_field.draw(&mono_paint, theme, body, now, field);
             } else try memory_pane.draw(&mono_paint, theme, body, now);
+            if (self.busy) {
+                try list.fill(toList(body), .{ .r = theme.well.r, .g = theme.well.g, .b = theme.well.b, .a = 160 });
+            }
             return true;
         }
     };

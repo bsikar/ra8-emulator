@@ -233,7 +233,6 @@ fn sweepSession(allocator: std.mem.Allocator, base: *const history.base.Base, na
     // live recorder uses, with no second adapter to keep honest.
     var session = history.session.Session{ .base = base, .id = id, .dir = dir, .lock = held, .kept = kept };
     const store = history.storage.Store.from(&session);
-    const orphans = try history.prune.orphans(store, allocator, bind.prune_referrer);
-    const frames = try history.prune.frames(store);
-    try out.print("{s}: {d} orphan objects ({d} bytes), {d} frames ({d} bytes)\n", .{ name, orphans.orphans, orphans.orphan_bytes, frames.frames, frames.frame_bytes });
+    const res = try history.prune.relief(store, allocator, bind.prune_referrer);
+    try out.print("{s}: {d} orphan objects ({d} bytes), {d} frames ({d} bytes)\n", .{ name, res.orphans, res.orphan_bytes, res.frames, res.frame_bytes });
 }

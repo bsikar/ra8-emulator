@@ -220,7 +220,7 @@ pub const Armed = struct {
             clock.sink = .{ .context = self, .frame = onFrame, .settle = onSettle };
         } else {
             self.tap = .{ .io = io, .context = self, .captureFn = onFrame };
-            board.frame_tap = &self.tap;
+            board.addFrameTap(&self.tap);
         }
         return self;
     }
@@ -364,7 +364,7 @@ pub const Armed = struct {
                 clock.sink = null;
             };
         }
-        if (self.board.frame_tap == &self.tap) self.board.frame_tap = null;
+        self.board.removeFrameTap(&self.tap);
         const hooked = self.eink_panel orelse &self.board.panel;
         if (hooked.refresh_hook) |hook| {
             if (hook.context == @as(*anyopaque, @ptrCast(self))) hooked.refresh_hook = null;

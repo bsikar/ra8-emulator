@@ -29,6 +29,9 @@ pub const key_f11: u32 = 0x40000044;
 pub const key_f5: u32 = 0x4000003E;
 pub const key_home: u32 = 0x4000004A;
 pub const key_end: u32 = 0x4000004D;
+pub const key_space: u32 = ' ';
+pub const key_left: u32 = 0x40000050;
+pub const key_right: u32 = 0x4000004F;
 
 /// F10 steps over, F11 steps into, shift+F11 steps out; null when not one.
 pub fn keyControl(code: u32, shift: bool) ?bar.Control {
@@ -59,6 +62,12 @@ pub fn seek(status: *Status, run: *shell_run.Run, link: *Link, target: []const u
     if (!enabled(.step, status, run)) return error.NotReady;
     if (link.state != .connected) return error.NotConnected;
     _ = try link.send(proto.Seek, .seek, .{ .target = target });
+}
+
+pub fn play(status: *Status, run: *shell_run.Run, link: *Link, dir: proto.Direction) !void {
+    if (!enabled(.step, status, run)) return error.NotReady;
+    if (link.state != .connected) return error.NotConnected;
+    _ = try link.send(proto.PlayArgs, .play, .{ .dir = dir, .speed_milli = 0 });
 }
 
 /// The buffers the view's field and clock text live in; they outlive the view.

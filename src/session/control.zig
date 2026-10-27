@@ -24,6 +24,13 @@ pub fn interrupt(session: *api.Session, core: api.Core) anyerror!stop_machine.St
 
 pub fn pause(session: *api.Session, core: api.Core) anyerror!void {
     try session.select(core);
+    if (session.smooth_rewind) |smooth| {
+        if (smooth.status == .playing_backward) {
+            try smooth.pause();
+            session.publish(.{ .core = core, .kind = .paused });
+            return;
+        }
+    }
     session.live.machine.requestHalt();
     session.publish(.{ .core = core, .kind = .paused });
 }

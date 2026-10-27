@@ -55,6 +55,7 @@ fn visit(ctx: *Ctx, entry: replay_mod.Entry) anyerror!void {
             });
             note(ctx, hit.header.position.r);
         },
+        .checkpoint_picture => |hit| note(ctx, hit.header.position.r),
         .branch => |hit| note(ctx, hit.header.position.r),
         .intervention => |hit| note(ctx, hit.header.position.r),
         .boundary => |hit| note(ctx, hit.header.position.r),

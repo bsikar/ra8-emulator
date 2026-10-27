@@ -25,6 +25,7 @@ pub const omitted = .{
     .{ .name = "sd_volume", .reason = "Formatting report, not mutable card contents" },
     .{ .name = "event_sink", .reason = "Embedding event callback" },
     .{ .name = "frame_tap", .reason = "Passive frame tap wiring" },
+    .{ .name = "frame_taps", .reason = "Passive frame tap subscriber fan-out" },
     .{ .name = "input_landing", .reason = "Input landing observer wiring" },
     .{ .name = "panel_vsync", .reason = "Root configuration; the display's vsync section carries the clock state" },
 };

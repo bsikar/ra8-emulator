@@ -12,6 +12,7 @@ pub const child_transport = @import("child_transport.zig");
 pub const host_listener = @import("host_listener.zig");
 pub const served_setup = @import("served_setup.zig");
 pub const served_history = @import("served_history.zig");
+pub const frame_pipeline = @import("frame_pipeline.zig");
 pub const history_bind = @import("history_bind.zig");
 pub const history_ram = @import("history_ram.zig");
 pub const history_bridge = @import("history_bridge.zig");

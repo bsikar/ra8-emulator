@@ -17,6 +17,8 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const elf = @import("ra8_board").image.elf;
 const symbols = @import("../symbols.zig");
 const rtos_trace = @import("trace.zig");
+/// The trace's event shape and observer, for an index fed from the run.
+pub const trace_events = rtos_trace;
 pub const names = @import("names.zig");
 pub const isr = @import("isr.zig");
 pub const zig = @import("zig.zig");

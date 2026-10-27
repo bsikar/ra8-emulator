@@ -18,6 +18,7 @@ const out = @import("ctl/print.zig");
 pub const events = @import("ctl/events.zig");
 const ctl_branch = @import("ctl/branch.zig");
 const ctl_write = @import("ctl/write.zig");
+const ctl_nav = @import("ctl/nav.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
@@ -26,20 +27,11 @@ pub const usage =
     \\            speed FACTOR|max | break ADDRESS|NAME | break --clear ID
     \\            watch ADDRESS read|write|access | watch --clear ID
     \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
-    \\            advance 500ms|600s
-    \\            seek TARGET (12.402s, +500ms, -2s, 25%)
-    \\            rc (reverse-continue: back to the latest break or fault behind the run)
-    \\            plug MODEL@ENDPOINT | unplug ENDPOINT
-    \\            snapshot PATH | restore PATH (paths on the serving host)
-    \\            map (the memory map of the image last loaded)
-    \\            stack (MSP and PSP, the lowest each reached, any overflow)
-    \\            rtc (the board's RTC date and time)
-    \\            periph [BLOCK] (the peripheral blocks, or one block's registers)
-    \\            folded [THREAD] [FROM_NS TO_NS] (sampled stacks; serve --profile-folded)
-    \\            fault MODEL@ENDPOINT=MODE | fault --clear ENDPOINT
+    \\            advance 500ms|600s | seek TARGET | frame N | iter N | marker NAME | marker set NAME PLACE | nav KIND [ARG] | frames | play [--dir=back]
+    \\            rc | plug MODEL@ENDPOINT | unplug ENDPOINT | snapshot PATH | restore PATH
+    \\            map | stack | rtc | periph [BLOCK] | folded [THREAD] | fault MODEL@ENDPOINT=MODE
     \\            branch ls | branch switch ID | branch rm ID [--confirm]
-    \\            fork confirm | fork cancel | fork status
-    \\            write-reg NAME VALUE | write-mem ADDRESS HEXBYTES | console TEXT | skip-bkpt
+    \\            fork confirm | fork cancel | fork status | write-reg NAME VALUE | console TEXT
 ;
 
 /// What `regs` reads when it is given no names.
@@ -49,16 +41,12 @@ const max_regs = 32;
 pub const Command = union(enum) {
     load: []const u8,
     run: u64,
-    /// Virtual nanoseconds of board time to run through (RA8EMU-654).
     advance: u64,
-    /// A seek target in the history's own language (RA8EMU-1196, slice
-    /// 17): `12.402s`, `+500ms`, `-2s`, `25%`. The door parses it; while
-    /// the position-stop primitive is pending the served host refuses.
     seek: []const u8,
-    /// Reverse-continue (design 2.4): back to the latest breakpoint or
-    /// fault behind the run, through restore and replay. The served
-    /// host queues it on the transport and answers accepted; the stop
-    /// surfaces on the transport topic.
+    marker_set: ctl_nav.MarkerSet,
+    nav: ctl_nav.NavQuery,
+    frame_status,
+    play: ctl_nav.PlayCmd,
     rc,
     step,
     pause,
@@ -155,7 +143,14 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
     if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
-    if (eql(u8, name, "seek")) return if (args.len == 1) .{ .seek = args[0] } else error.BadArguments;
+    if (eql(u8, name, "play")) return .{ .play = try ctl_nav.parsePlay(args) };
+    if (eql(u8, name, "seek")) return .{ .seek = try ctl_nav.parseSeek(allocator, args) };
+    if (eql(u8, name, "frame")) return .{ .seek = try std.fmt.allocPrint(allocator, "frame {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
+    if (eql(u8, name, "iter")) return .{ .seek = try std.fmt.allocPrint(allocator, "iter {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
+    if (eql(u8, name, "frames")) return if (args.len == 0) .frame_status else error.BadArguments;
+    if (eql(u8, name, "nav")) return .{ .nav = try ctl_nav.parseNav(args) };
+    if (eql(u8, name, "marker") and args.len == 3 and eql(u8, args[0], "set")) return .{ .marker_set = .{ .name = args[1], .place = args[2] } };
+    if (eql(u8, name, "marker")) return .{ .seek = try std.fmt.allocPrint(allocator, "bm {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
     if (eql(u8, name, "rc")) return if (args.len == 0) .rc else error.BadArguments;
     if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
     if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
@@ -283,10 +278,11 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             const moved = try client.call(proto.Advanced, proto.Advance, .advance, .{ .core = .cpu0, .ns = ns });
             try out.advanced(w, json, moved);
         },
-        .seek => |text| {
-            _ = try client.call(proto.Ack, proto.Seek, .seek, .{ .target = text });
-            if (json) try w.print("{{\"seek\":{f}}}\n", .{std.json.fmt(text, .{})}) else try w.print("seek to {s} accepted\n", .{text});
-        },
+        .play => |cmd| try ctl_nav.runPlay(client, w, json, cmd),
+        .seek => |text| try ctl_nav.runSeek(client, w, json, text),
+        .frame_status => try ctl_nav.runFrameStatus(client, w, json),
+        .nav => |query| try ctl_nav.runNav(client, w, json, query),
+        .marker_set => |cmd| try ctl_nav.runMarkerSet(client, w, json, cmd),
         .rc => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .rcont, .{ .core = .cpu0 });
             try out.rcont(w, json);

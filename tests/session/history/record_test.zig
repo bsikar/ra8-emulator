@@ -22,7 +22,9 @@ test "the kind table's numbers and the mandatory bit are frozen" {
     try std.testing.expectEqual(@as(u16, 0x8000), record.mandatory_bit);
     try std.testing.expect(record.known(3));
     try std.testing.expect(!record.known(0));
-    try std.testing.expect(!record.known(6));
+    try std.testing.expectEqual(@as(u16, 6), @backingInt(record.Kind.checkpoint_picture));
+    try std.testing.expect(record.known(6));
+    try std.testing.expect(!record.known(7));
     try std.testing.expect(record.mandatory(record.mandatory_bit | 99));
     try std.testing.expect(!record.mandatory(99));
     try std.testing.expect(!record.mandatory(@backingInt(record.Kind.root)));

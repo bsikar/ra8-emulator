@@ -231,3 +231,22 @@ test "pause then play equals never pausing" {
     try std.testing.expectEqual(straight.counter, interrupted.counter);
     try std.testing.expectEqual(straight.pc, interrupted.pc);
 }
+
+test "backward play runs bounded slices through transport pump" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    defer opened.deinit();
+
+    const session = opened.session();
+    var engine = ra8.session.smooth_rewind.SmoothRewindEngine.init(std.testing.allocator, session);
+    defer engine.deinit();
+    session.attachSmoothRewind(&engine);
+    engine.decoder.setCursorNs(1_000_000_000);
+
+    var fake = FakeWall{};
+    var t = transport.Transport{ .session = session };
+    _ = try t.command(.{ .play = .{ .dir = .back } });
+
+    for (0..20) |_| {
+        _ = try t.pump(fake.wall(), fake.now_ns + 16_666_666);
+    }
+}

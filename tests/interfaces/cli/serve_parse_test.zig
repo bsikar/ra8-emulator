@@ -93,3 +93,11 @@ test "isLoopback separates loopback from the world (RA8EMU-1175)" {
     try std.testing.expect(!listen.isLoopback(try std.Io.net.IpAddress.parse("0.0.0.0", 0)));
     try std.testing.expect(!listen.isLoopback(try std.Io.net.IpAddress.parse("192.168.1.4", 0)));
 }
+
+test "--reopen names a kept session in the --history root and nothing else" {
+    const id = "0123456789abcdef0123456789abcdef";
+    const asked = parse(&.{ "ra8_emulator", "serve", "--history", "h", "--reopen", id, "--stdio", "a.elf" }).?;
+    try std.testing.expectEqualStrings(id, asked.reopen.?);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--reopen", id, "--stdio", "a.elf" }) == null);
+    try std.testing.expect(parse(&.{ "ra8_emulator", "serve", "--history", "h", "--kept", "--reopen", id, "--stdio", "a.elf" }) == null);
+}

@@ -37,6 +37,7 @@ pub fn known(kind: u16) bool {
         @backingInt(Kind.checkpoint),
         @backingInt(Kind.intervention),
         @backingInt(Kind.boundary),
+        @backingInt(Kind.checkpoint_picture),
         => true,
         else => false,
     };
@@ -55,6 +56,9 @@ pub const Kind = enum(u16) {
     intervention = 4,
     /// An external event landed at its boundary.
     boundary = 5,
+    /// A checkpoint's picture pinned an object: the composited last scan at
+    /// or before the checkpoint. The body is the checkpoint record's shape.
+    checkpoint_picture = 6,
     _,
 };
 
@@ -173,6 +177,17 @@ pub fn decodeCheckpoint(payload: []const u8) Error!CheckpointRecord {
     @memcpy(&object, payload[at..][0..16]);
     at += 16;
     return .{ .header = header, .checkpoint = .{ .id = id, .object = object } };
+}
+
+/// A checkpoint picture's record: the checkpoint it belongs to and the
+/// object holding the picture. It shares the checkpoint record's shape, and
+/// being a committed record is what keeps the orphan sweep off the object.
+pub fn encodeCheckpointPicture(writer: anytype, header: Header, picture: Checkpoint) !void {
+    try encodeCheckpoint(writer, header, picture);
+}
+
+pub fn decodeCheckpointPicture(payload: []const u8) Error!CheckpointRecord {
+    return decodeCheckpoint(payload);
 }
 
 /// A host-originated mutation through the UI or RPC, logged at the

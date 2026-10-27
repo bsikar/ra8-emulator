@@ -17,7 +17,7 @@ fn baseHeader(seq: u32) record.Header {
 
 /// One visited record, kept as the kind byte so the order assertions
 /// stay readable.
-const Which = enum(u8) { root, branch, checkpoint, intervention, boundary };
+const Which = enum(u8) { root, branch, checkpoint, intervention, boundary, checkpoint_picture };
 
 const Collector = struct {
     order: [8]Which = undefined,
@@ -42,6 +42,9 @@ const Collector = struct {
                 self.push(.checkpoint);
                 self.last_id = hit.checkpoint.id;
                 self.last_object = hit.checkpoint.object;
+            },
+            .checkpoint_picture => {
+                self.push(.checkpoint_picture);
             },
             .intervention => {
                 self.push(.intervention);

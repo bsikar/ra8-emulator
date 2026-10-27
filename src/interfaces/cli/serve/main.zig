@@ -25,12 +25,13 @@ pub const usage =
     \\       --kept preserves the session on disk after exit (with --history DIR)
     \\       --checkpoint-every N writes a closed-round checkpoint every N rounds (default 64)
     \\       --history-budget BYTES caps the served session's history share (with --history DIR; minimum 128 MiB)
+    \\       --frame-hz N caps the frame tap at N captures per host second (0 captures every change; default 60)
     \\       --ram-budget BYTES caps the RAM-only history's share (with --history off; minimum 128 MiB)
     \\
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
@@ -46,6 +47,8 @@ pub fn parse(argv: []const []const u8) ?Asked {
     var history_root: ?[]const u8 = null;
     var history_off = false;
     var kept = false;
+    var reopen: ?[]const u8 = null;
+    var frame_hz: ?u32 = null;
     var checkpoint_every: u32 = 64;
     var history_budget: ?u64 = null;
     var ram_budget: ?u64 = null;
@@ -71,6 +74,12 @@ pub fn parse(argv: []const []const u8) ?Asked {
             if (std.mem.eql(u8, argv[at], "off")) history_off = true else history_root = argv[at];
         } else if (std.mem.eql(u8, argv[at], "--kept") and !kept) {
             kept = true;
+        } else if (std.mem.eql(u8, argv[at], "--frame-hz") and frame_hz == null and valued) {
+            at += 1;
+            frame_hz = std.fmt.parseInt(u32, argv[at], 10) catch return null;
+        } else if (std.mem.eql(u8, argv[at], "--reopen") and reopen == null and valued) {
+            at += 1;
+            reopen = argv[at];
         } else if (std.mem.eql(u8, argv[at], "--checkpoint-every") and !checkpoint_set and valued) {
             at += 1;
             checkpoint_every = std.fmt.parseInt(u32, argv[at], 10) catch return null;
@@ -83,12 +92,6 @@ pub fn parse(argv: []const []const u8) ?Asked {
             ram_budget = std.fmt.parseInt(u64, argv[at], 10) catch return null;
         } else break;
     }
-    // A cap means nothing without a persistent history to cap.
-    if (history_budget != null and history_root == null) return null;
-    // Kept means nothing without a persistent history.
-    if (kept and history_root == null) return null;
-    // A RAM share cap means nothing without a RAM-only history to cap.
-    if (ram_budget != null and !history_off) return null;
     // Drop the options; the transport then sits at index 2 as before.
     var rest: [5][]const u8 = undefined;
     const left = argv.len - at;
@@ -107,7 +110,21 @@ pub fn parse(argv: []const []const u8) ?Asked {
     asked.cpu1 = cpu1;
     asked.sdhi = sdhi;
     asked.kept = kept;
-    return asked;
+    asked.reopen = reopen;
+    asked.frame_hz = frame_hz;
+    return if (consistent(asked)) asked else null;
+}
+
+/// Whether the history options make sense together.
+fn consistent(asked: Asked) bool {
+    // A cap means nothing without a persistent history to cap.
+    if (asked.history_budget != null and asked.history == null) return false;
+    // Kept means nothing without a persistent history.
+    if (asked.kept and asked.history == null) return false;
+    // A reopened session is one already on disk.
+    if (asked.reopen != null and (asked.history == null or asked.kept)) return false;
+    // A RAM share cap means nothing without a RAM-only history to cap.
+    return asked.ram_budget == null or asked.history_off;
 }
 
 fn parseWhere(argv: []const []const u8) ?Asked {
@@ -140,9 +157,9 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     };
     var setup: served_setup.Served = undefined;
     const history_opts: ?served_setup.HistoryOpts = if (asked.history) |root|
-        .{ .root = root, .checkpoint_every = asked.checkpoint_every, .budget = asked.history_budget, .kept = asked.kept }
+        .{ .root = root, .checkpoint_every = asked.checkpoint_every, .budget = asked.history_budget, .kept = asked.kept, .reopen = asked.reopen, .frame_hz = asked.frame_hz }
     else if (asked.history_off)
-        .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget }
+        .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget, .frame_hz = asked.frame_hz }
     else
         null;
     setup.open(allocator, io, asked.elf, null, history_opts) catch |err| {

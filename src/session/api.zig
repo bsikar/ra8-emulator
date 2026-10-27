@@ -34,6 +34,8 @@ const replay_feeder = @import("history/replay_feeder.zig");
 const session_line = @import("line.zig");
 const session_window = @import("window.zig");
 const window_engine = @import("history/window_engine.zig");
+const session_smooth_rewind = @import("smooth_rewind.zig");
+const history_nav_index = @import("history/nav_index.zig");
 
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
@@ -105,6 +107,8 @@ pub const Session = struct {
     persistent_recorder: ?*history_recorder.Recorder = null,
     async_traffic: async_traffic.AsyncTraffic = .{},
     replay_feeder: ?replay_feeder.ReplayFeeder = null,
+    smooth_rewind: ?*session_smooth_rewind.SmoothRewindEngine = null,
+    nav_index: ?*history_nav_index.NavIndex = null,
     /// Set while a job replays recorded history (RA8EMU-1196): the
     /// machine's states are the past's, not new stops, so the history
     /// ring records nothing while it holds.
@@ -147,9 +151,7 @@ pub const Session = struct {
     pub fn attachRoot(self: *Session, r: *const history_root.Root) void {
         self.root = r;
     }
-    pub fn setReplaying(self: *Session, replaying: bool) void {
-        session_fork.setReplaying(self, replaying);
-    }
+    pub const setReplaying = session_fork.setReplaying;
     pub fn attachImageIdentity(self: *Session, core: Core, id: [16]u8) void {
         self.image_identity[@as(usize, @backingInt(core))] = id;
     }
@@ -185,6 +187,12 @@ pub const Session = struct {
     /// Puts the run's scheduler position on the active line (after a restore).
     pub const stampLine = session_line.stampLine;
     pub const switchLine = session_line.switchLine;
+    pub const attachSmoothRewind = session_smooth_rewind.attachSmoothRewind;
+    pub const startSmoothRewind = session_smooth_rewind.startSmoothRewind;
+    pub const tickSmoothRewind = session_smooth_rewind.tickSmoothRewind;
+    pub const pauseSmoothRewind = session_smooth_rewind.pauseSmoothRewind;
+    pub const currentRewindFrame = session_smooth_rewind.currentRewindFrame;
+    pub const setRewindSpeed = session_smooth_rewind.setRewindSpeed;
     pub const forkPending = session_fork.forkPending;
     pub const confirmFork = session_fork.confirmFork;
     pub const cancelFork = session_fork.cancelFork;
@@ -193,19 +201,13 @@ pub const Session = struct {
     pub const skipBkpt = session_fork.skipBkpt;
     /// Frees what replay holds for this session (the feeder); its owner
     /// calls this at teardown.
-    pub fn releaseReplay(self: *Session) void {
-        replay_feeder.release(self);
-    }
+    pub const releaseReplay = replay_feeder.release;
 
     /// Put the part on `at` into `mode` from now on, mid-run included.
-    pub fn setFault(self: *Session, core: Core, at: Endpoint, mode: FaultMode) anyerror!void {
-        return session_fork.setFault(self, core, at, mode);
-    }
+    pub const setFault = session_fork.setFault;
 
     /// Let the part on `at` behave like the part again.
-    pub fn clearFault(self: *Session, core: Core, at: Endpoint) anyerror!void {
-        return session_fork.clearFault(self, core, at);
-    }
+    pub const clearFault = session_fork.clearFault;
 
     pub fn attachPlugs(self: *Session, hook: PlugHook) void {
         self.plugs = hook;

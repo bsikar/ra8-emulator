@@ -26,3 +26,63 @@ pub const Tap = struct {
         self.captureFn(self.context, virtual_ns);
     }
 };
+
+/// Multi-subscriber fan-out for passive frame taps.
+pub const FanOut = struct {
+    pub const max_subscribers = 4;
+    subscribers: [max_subscribers]?*Tap = .{ null, null, null, null },
+
+    pub fn add(self: *FanOut, tap: *Tap) bool {
+        for (&self.subscribers) |*slot| {
+            if (slot.* == tap) return true;
+        }
+        for (&self.subscribers) |*slot| {
+            if (slot.* == null) {
+                slot.* = tap;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn remove(self: *FanOut, tap: *Tap) void {
+        for (&self.subscribers) |*slot| {
+            if (slot.* == tap) {
+                slot.* = null;
+                return;
+            }
+        }
+    }
+
+    pub fn contains(self: *const FanOut, tap: *const Tap) bool {
+        for (self.subscribers) |slot| {
+            if (slot == tap) return true;
+        }
+        return false;
+    }
+
+    pub fn first(self: *const FanOut) ?*Tap {
+        for (self.subscribers) |slot| {
+            if (slot) |t| return t;
+        }
+        return null;
+    }
+
+    pub fn count(self: *const FanOut) usize {
+        var n: usize = 0;
+        for (self.subscribers) |slot| {
+            if (slot != null) n += 1;
+        }
+        return n;
+    }
+
+    pub fn isEmpty(self: *const FanOut) bool {
+        return self.first() == null;
+    }
+
+    pub fn afterBoundary(self: *FanOut, virtual_ns: u64) void {
+        for (self.subscribers) |maybe_tap| {
+            if (maybe_tap) |tap| tap.afterBoundary(virtual_ns);
+        }
+    }
+};

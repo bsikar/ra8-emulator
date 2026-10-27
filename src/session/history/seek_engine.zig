@@ -19,10 +19,12 @@ const seek_target = @import("seek_target.zig");
 const position_mod = @import("position.zig");
 const branch_mod = @import("branch.zig");
 const cross_seek = @import("cross_seek.zig");
+const nav_index = @import("nav_index.zig");
 
 pub const Position = position_mod.Position;
 pub const BranchGraph = branch_mod.BranchGraph;
 pub const BranchId = branch_mod.BranchId;
+pub const NavIndex = nav_index.NavIndex;
 
 /// One checkpoint the committed log names, as the base-selection index
 /// reads it: where it sits on its line, which checkpoint id it carries,
@@ -50,6 +52,7 @@ pub const Facts = struct {
     graph: ?*const BranchGraph = null,
     active_line: BranchId = branch_mod.root_branch_id,
     window: ?WindowFacts = null,
+    nav: ?*const NavIndex = null,
 };
 
 /// A target this engine cannot plan yet, and why. The transport reports
@@ -64,6 +67,8 @@ pub const Plan = struct {
     /// Rounds between the base and the target; zero when the base is
     /// already there.
     replay_rounds: u64,
+    /// Landing position of the seek.
+    target: Position = .{ .branch = 0, .r = 0, .phase = .board, .o = 0 },
 };
 
 pub const WindowDirection = enum { undo, redo };
@@ -91,19 +96,58 @@ pub const Outcome = union(enum) {
     pending: Pending,
 };
 
-/// Plans one seek. Only a position target plans today: it is the one kind
-/// whose resolution the committed log and the cursor already prove. The
-/// other kinds wait for the indexes their resolution needs and come back
-/// pending, each naming its own missing piece.
+fn factsCmp(ctx: ?*const anyopaque, a: Position, b: Position) std.math.Order {
+    if (ctx) |ptr| {
+        const facts: *const Facts = @ptrCast(@alignCast(ptr));
+        if (facts.graph) |graph| {
+            return graph.compareOnLine(facts.active_line, a, b) catch position_mod.compare(a, b) catch .eq;
+        }
+    }
+    return position_mod.compare(a, b) catch .eq;
+}
+
+/// Plans one seek. Target forms resolve through available indexes or facts.
 pub fn plan(target: seek_target.Target, facts: Facts) Outcome {
     switch (target) {
         .position => |pt| return planPosition(pt.position, facts),
         .time => return .{ .pending = .{ .what = "the virtual-time index" } },
         .percent => return .{ .pending = .{ .what = "the virtual-time index" } },
-        .frame => return .{ .pending = .{ .what = "the frame index" } },
-        .iteration => return .{ .pending = .{ .what = "the round-boundary index" } },
-        .bookmark => return .{ .pending = .{ .what = "bookmark storage" } },
-        .point => return .{ .pending = .{ .what = "the arrival index" } },
+        .frame => |fr| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "the frame index" } };
+            const maybe_pos: ?Position = switch (fr) {
+                .index => |idx| nav.getFrame(idx),
+                .prev => nav.prevFrame(facts.current, &facts, factsCmp),
+                .next => nav.nextFrame(facts.current, &facts, factsCmp),
+            };
+            if (maybe_pos) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "the frame index" } };
+        },
+        .iteration => |it| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "the round-boundary index" } };
+            if (nav.getIteration(it.n)) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "the round-boundary index" } };
+        },
+        .bookmark => |bm| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "bookmark storage" } };
+            if (nav.getBookmark(bm.name)) |pos| return planPosition(pos, facts);
+            if (nav.getMarkerArrival(bm.name, 1)) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "bookmark storage" } };
+        },
+        .step => |st| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "the navigation index" } };
+            if (nav.stepFrom(st.kind, st.dir, facts.current, &facts, factsCmp)) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "the navigation index" } };
+        },
+        .marker => |mk| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "the arrival index" } };
+            if (nav.getMarkerArrival(mk.name, mk.nth)) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "the arrival index" } };
+        },
+        .point => |pt| {
+            const nav = facts.nav orelse return .{ .pending = .{ .what = "the arrival index" } };
+            if (nav.getPointArrival(pt.address, pt.nth)) |pos| return planPosition(pos, facts);
+            return .{ .pending = .{ .what = "the arrival index" } };
+        },
     }
 }
 
@@ -154,6 +198,7 @@ fn windowPlan(win: WindowCover, target: Position) Outcome {
                 .slots = win.slots,
             } },
             .replay_rounds = win.rounds,
+            .target = target,
         },
     };
 }
@@ -163,13 +208,13 @@ fn planPosition(target: Position, facts: Facts) Outcome {
         if (graph.canonicalize(facts.active_line, target)) |target_canon| {
             const canon_current = graph.canonicalize(facts.active_line, facts.current) catch facts.current;
             const order = branch_mod.scalarOrder(target_canon, canon_current);
-            if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
+            if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0, .target = target } };
             if (windowCovers(facts, target)) |win| return windowPlan(win, target);
             const best = nearestOnLine(graph, facts.active_line, target, facts.checkpoints);
             if (order == .gt) {
                 const live_rounds = target.r -| facts.current.r;
                 if (best == null or live_rounds <= target.r -| best.?.position.r)
-                    return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds } };
+                    return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds, .target = target } };
                 return checkpointPlan(best.?, target);
             }
             const chosen = best orelse return .{ .pending = .{ .what = "the reverse window's undo base" } };
@@ -180,7 +225,7 @@ fn planPosition(target: Position, facts: Facts) Outcome {
     }
     const order = position_mod.compare(target, facts.current) catch
         return .{ .pending = .{ .what = "another line's seek" } };
-    if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
+    if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0, .target = target } };
     if (windowCovers(facts, target)) |win| return windowPlan(win, target);
     const best = nearestAtOrBefore(target, facts.checkpoints);
     if (order == .gt) {
@@ -188,7 +233,7 @@ fn planPosition(target: Position, facts: Facts) Outcome {
         // to it. With no checkpoint the cursor is the only base.
         const live_rounds = target.r - facts.current.r;
         if (best == null or live_rounds <= target.r - best.?.position.r)
-            return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds } };
+            return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds, .target = target } };
         return checkpointPlan(best.?, target);
     }
     // Backward: the cursor cannot go back, so the plan replays forward
@@ -272,6 +317,7 @@ fn checkpointPlan(chosen: Checkpoint, target: Position) Outcome {
             .position = chosen.position,
         } },
         .replay_rounds = target.r - chosen.position.r,
+        .target = target,
     } };
 }
 

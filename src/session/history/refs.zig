@@ -14,18 +14,31 @@ const record = @import("record.zig");
 pub const Name = [32]u8;
 
 /// Walks one committed segment's frames and reports the object name of
-/// every checkpoint record. The walk stops at a torn tail the way the
+/// every checkpoint record and of every checkpoint picture record: both
+/// are committed objects the orphan sweep must keep. The walk stops at a torn tail the way the
 /// recovery scan does, so uncommitted frames name nothing. A frame the
 /// table calls mandatory but the reader cannot make sense of is a hard
 /// error, and the walk stops before it.
 pub fn scanCheckpointObjects(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void) format.Error!void {
+    return scan(bytes, context, visit, true);
+}
+
+/// The same walk narrowed to the checkpoint picture records: the names of
+/// the pictures quota relief must never evict.
+pub fn scanPictureObjects(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void) format.Error!void {
+    return scan(bytes, context, visit, false);
+}
+
+fn scan(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void, comptime machines: bool) format.Error!void {
     const Walker = struct {
         segment: []const u8,
         ctx: @TypeOf(context),
         visitor: *const fn (@TypeOf(context), Name) void,
 
         fn see(self: *@This(), boundary: log.Boundary) void {
-            if (boundary.kind & 0x7FFF != @backingInt(record.Kind.checkpoint)) return;
+            const kind = boundary.kind & 0x7FFF;
+            const picture = kind == @backingInt(record.Kind.checkpoint_picture);
+            if (!picture and !(machines and kind == @backingInt(record.Kind.checkpoint))) return;
             const payload = self.segment[boundary.offset + format.header_len .. boundary.offset + boundary.consumed];
             // A checkpoint body ends with the 128-bit truncated digest;
             // anything shorter cannot name an object.

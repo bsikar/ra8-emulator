@@ -33,6 +33,9 @@ const session_folded = @import("folded.zig");
 const session_chunks = @import("load_chunks.zig");
 const session_branch = @import("branch.zig");
 const session_intervene = @import("intervene.zig");
+const session_nav = @import("nav_handlers.zig");
+const rewind_feed = @import("rewind_feed.zig");
+const session_marker = @import("nav_marker.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -98,6 +101,10 @@ pub const routes = .{
     .{ @backingInt(M.branch_status), session_branch.branchStatus },
     .{ @backingInt(M.console_input), session_intervene.consoleInput },
     .{ @backingInt(M.skip_bkpt), session_intervene.skipBkpt },
+    .{ @backingInt(M.play), session_nav.play },
+    .{ @backingInt(M.nav_query), session_nav.navQuery },
+    .{ @backingInt(M.marker_set), session_marker.markerSet },
+    .{ @backingInt(M.frame_status), session_nav.frameStatus },
 };
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
@@ -149,6 +156,7 @@ pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
     try event_feed.pump(context, server, tx);
     try trace_feed.pump(context, server, tx);
     try pumpTransport(context, server, tx);
+    try rewind_feed.pump(context, server, tx);
 }
 
 /// Drive the transport's active job one bounded slice and report on the

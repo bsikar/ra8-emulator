@@ -20,6 +20,7 @@ pub const Entry = union(enum) {
     root: []const u8,
     branch: record.BranchRecord,
     checkpoint: record.CheckpointRecord,
+    checkpoint_picture: record.CheckpointRecord,
     intervention: record.InterventionRecord,
     boundary: record.BoundaryRecord,
 };
@@ -40,6 +41,7 @@ pub fn replay(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(c
             @backingInt(record.Kind.root) => try visit(context, .{ .root = hit.frame.payload }),
             @backingInt(record.Kind.branch) => try visit(context, .{ .branch = try record.decodeBranch(hit.frame.payload) }),
             @backingInt(record.Kind.checkpoint) => try visit(context, .{ .checkpoint = try record.decodeCheckpoint(hit.frame.payload) }),
+            @backingInt(record.Kind.checkpoint_picture) => try visit(context, .{ .checkpoint_picture = try record.decodeCheckpointPicture(hit.frame.payload) }),
             @backingInt(record.Kind.intervention) => try visit(context, .{ .intervention = try record.decodeIntervention(hit.frame.payload) }),
             @backingInt(record.Kind.boundary) => try visit(context, .{ .boundary = try record.decodeBoundary(hit.frame.payload) }),
             else => {
