@@ -2,6 +2,7 @@
 
 pub const boundary = @import("boundary.zig");
 pub const camera = @import("camera.zig");
+pub const core_stream = @import("core_stream.zig");
 pub const display = @import("display.zig");
 pub const events = @import("events.zig");
 pub const faults = @import("faults/faults.zig");

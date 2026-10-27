@@ -113,7 +113,9 @@ pub const BoardBus = struct {
         if (self.check) |c| if (!c.allows(given, .load)) return false;
         const w = width(len) catch return false;
         self.periph.issuer = self.issuer;
-        return self.periph.repeat(address, w, times);
+        const done = self.periph.repeat(address, w, times);
+        if (done) if (self.touched) |t| t.touch(address, false);
+        return done;
     }
 
     /// Only a peripheral register peeks, and only when its block keeps one.

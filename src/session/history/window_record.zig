@@ -42,6 +42,43 @@ pub fn extendLive(w: *ReverseWindow, core: engine.Core) !void {
     };
 }
 
+/// What a slot did to the state beside guest memory: its delta, and the
+/// whole post image when the slot was saved whole (`whole`).
+const Side = struct {
+    delta: delta_mod.Delta,
+    post: std.ArrayList(u8) = .empty,
+    whole: bool = true,
+};
+
+/// Whether the slot only ran inside one CPU0 stretch and touched no
+/// peripheral, system control or part: its board state is as it was, so
+/// only the core sections need saving.
+fn quiet(w: *ReverseWindow, pre: engine.Position, post: engine.Position, touches: ?u64, records: []const trail_mod.Record) bool {
+    const before = touches orelse return false;
+    if ((w.port.touchCount() orelse return false) != before) return false;
+    if (pre.r != post.r or pre.phase != .cpu0 or post.phase != .cpu0) return false;
+    return w.port.cpu(.cpu1) == null and !touchesPart(records);
+}
+
+/// The delta the slot made: from the core sections alone for a quiet one
+/// whose sections kept their layout, else from the whole side save.
+fn sideOf(w: *ReverseWindow, is_quiet: bool) !Side {
+    if (is_quiet) if (try coreDelta(w)) |delta| return .{ .delta = delta, .whole = false };
+    var post: std.ArrayList(u8) = .empty;
+    errdefer post.deinit(w.allocator);
+    try w.port.sideInto(w.allocator, &post);
+    return .{ .delta = try delta_mod.encode(w.allocator, w.image.items, post.items), .post = post };
+}
+
+fn coreDelta(w: *ReverseWindow) !?delta_mod.Delta {
+    var core: std.ArrayList(u8) = .empty;
+    defer core.deinit(w.allocator);
+    try w.port.coreInto(w.allocator, &core);
+    const span = (try delta_mod.coreSpan(w.image.items)) orelse return null;
+    if (span.hi - span.lo != core.items.len) return null;
+    return try delta_mod.encodeRuns(w.allocator, w.image.items[span.lo..span.hi], core.items, span.lo);
+}
+
 fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     if (!w.recording.attached) return engine.Error.TrailDisarmed;
     const cpu = w.port.cpu(core) orelse return engine.Error.CoreMissing;
@@ -53,24 +90,23 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
         w.trail.active_slot = false;
         discardFrom(w.recording, mark);
     }
+    const touches = w.port.touchCount();
     if (live) try w.port.stepLive(core) else try w.port.step(core);
     const post_pos = w.port.position();
     if ((engine.Position.order(post_pos, pre_pos) orelse return engine.Error.OtherLine) != .gt) return engine.Error.NoProgress;
 
-    var post_image: std.ArrayList(u8) = .empty;
-    defer post_image.deinit(w.allocator);
-    try w.port.sideInto(w.allocator, &post_image);
-    var delta = try delta_mod.encode(w.allocator, w.image.items, post_image.items);
-    errdefer delta.deinit(w.allocator);
     const records = w.recording.records[mark..w.recording.record_count];
-    const kind: engine.Kind = if (delta.board or touchesPart(records)) .complex else .ram_cpu;
-    const digest: Digest = if (kind == .complex) try slotDigest(w, post_image.items, records) else @splat(0);
+    var side = try sideOf(w, quiet(w, pre_pos, post_pos, touches, records));
+    defer side.post.deinit(w.allocator);
+    errdefer side.delta.deinit(w.allocator);
+    const kind: engine.Kind = if (side.delta.board or touchesPart(records)) .complex else .ram_cpu;
+    const digest: Digest = if (kind == .complex) try slotDigest(w, side.post.items, records) else @splat(0);
     try w.slots.ensureUnusedCapacity(w.allocator, 1);
     const post_arch = slot_mod.ArchState.capture(cpu);
     try w.trail.endSlot(&post_arch, .ram_cpu);
     if (w.trail.slotAt(w.trail.count - 1).slot.kind == .barrier) {
-        delta.deinit(w.allocator);
-        delta = .{};
+        side.delta.deinit(w.allocator);
+        side.delta = .{};
         while (w.count() > 0) w.evictOldest();
         // The barrier's own trail slot has no window slot beside it.
         while (w.trail.count > 0) w.trail.evictOldest();
@@ -79,9 +115,9 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
         try w.plant();
         return;
     }
-    w.slots.appendAssumeCapacity(.{ .pre = pre_pos, .post = post_pos, .core = core, .kind = kind, .delta = delta, .digest = digest });
+    if (side.whole) std.mem.swap(std.ArrayList(u8), &w.image, &side.post) else try side.delta.flip(w.allocator, &w.image, true);
+    w.slots.appendAssumeCapacity(.{ .pre = pre_pos, .post = post_pos, .core = core, .kind = kind, .delta = side.delta, .digest = digest });
     w.slot_bytes += w.slotAt(w.count() - 1).bytes();
-    std.mem.swap(std.ArrayList(u8), &w.image, &post_image);
     w.enforceBudget();
 }
 

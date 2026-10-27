@@ -18,6 +18,7 @@ const trail = @import("../history/trail.zig");
 const engine = @import("../history/window_engine.zig");
 const record = @import("../history/window_record.zig");
 const machine_mod = @import("window_machine.zig");
+const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 
 const Machine = machine_mod.Machine;
@@ -37,11 +38,13 @@ pub const Window = struct {
     /// Builds the window of `budget` bytes, plants it at the loaded
     /// machine and attaches it, with its driver, to `session`. The result
     /// points into itself, so it is heap-stable until `destroy`.
-    pub fn create(gpa: std.mem.Allocator, session: *api.Session, files: *state.Files, store: *Store, slots: *const u64, budget: usize) !*Window {
+    pub fn create(gpa: std.mem.Allocator, session: *api.Session, files: *state.Files, store: *Store, bus: *BoardBus, slots: *const u64, budget: usize) !*Window {
         const self = try gpa.create(Window);
         errdefer gpa.destroy(self);
         self.gpa = gpa;
-        self.machine = .{ .session = session, .files = files };
+        self.machine = .{ .session = session, .files = files, .bus = bus };
+        bus.touched = .{ .context = &self.machine, .touchFn = Machine.touch };
+        errdefer bus.touched = null;
         self.recording = trail.Recording.init(gpa, .{ slots, slots }, store);
         self.recording.arm();
         errdefer self.recording.deinit();
@@ -57,6 +60,7 @@ pub const Window = struct {
         const session = self.machine.session;
         session.window = null;
         session.window_driver = null;
+        self.machine.bus.touched = null;
         self.window.deinit();
         self.recording.deinit();
         self.gpa.destroy(self);
@@ -118,12 +122,21 @@ pub const Window = struct {
         if (w.cursor() < w.count()) w.walkTo(w.count()) catch w.drop();
     }
 
+    /// A run the window does not record: the trail is off for it, since it
+    /// would only keep a pre-image of every store to throw away.
+    fn plain(self: *Window, command: api.Run) !api.Ended {
+        self.recording.disarm();
+        defer self.recording.arm();
+        return self.machine.session.live.go(command);
+    }
+
     fn go(context: *anyopaque, session: *api.Session, command: api.Run) anyerror!api.Ended {
         const self = of(context);
         const live = &session.live;
         const recorded = command == .step or (command == .cont and live.budget <= live_slots_max);
-        if (self.machine.muted or session.replaying or !recorded) return live.go(command);
-        if (self.asleep(self.machine.coreAt()) or !self.current()) return live.go(command);
+        if (self.machine.muted) return live.go(command);
+        if (session.replaying or !recorded) return self.plain(command);
+        if (self.asleep(self.machine.coreAt()) or !self.current()) return self.plain(command);
         self.machine.begin(command);
         if (command == .step) return self.slot(self.machine.coreAt());
         const budget = live.budget;
@@ -133,6 +146,8 @@ pub const Window = struct {
             const core = self.machine.coreAt();
             if (self.window.line == null or self.asleep(core)) {
                 live.budget = left;
+                self.recording.disarm();
+                defer self.recording.arm();
                 return self.machine.raw();
             }
             live.budget = 1;

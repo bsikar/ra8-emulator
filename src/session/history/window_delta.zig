@@ -73,6 +73,16 @@ pub fn encode(allocator: Allocator, pre: []const u8, post: []const u8) !Delta {
         errdefer allocator.free(pre_copy);
         return .{ .pre = pre_copy, .post = try allocator.dupe(u8, post), .board = true };
     }
+    var delta = try encodeRuns(allocator, pre, post, 0);
+    errdefer delta.deinit(allocator);
+    delta.board = try touchesBoard(post, delta.runs);
+    return delta;
+}
+
+/// The XOR delta between two equal-length spans that start `base` bytes
+/// into the image they belong to, its runs placed in that image. It does
+/// not classify the runs: the caller knows what the span holds.
+pub fn encodeRuns(allocator: Allocator, pre: []const u8, post: []const u8, base: usize) !Delta {
     var runs: std.ArrayList(Run) = .empty;
     errdefer runs.deinit(allocator);
     var total: usize = 0;
@@ -82,25 +92,26 @@ pub fn encode(allocator: Allocator, pre: []const u8, post: []const u8) !Delta {
         if (runs.items.len > 0) {
             const last = &runs.items[runs.items.len - 1];
             const last_end = @as(usize, last.offset) + last.len;
-            if (i - last_end <= merge_gap) {
-                total += i + 1 - last_end;
-                last.len = @intCast(i + 1 - last.offset);
+            if (base + i - last_end <= merge_gap) {
+                total += base + i + 1 - last_end;
+                last.len = @intCast(base + i + 1 - last.offset);
                 continue;
             }
         }
-        try runs.append(allocator, .{ .offset = @intCast(i), .len = 1 });
+        try runs.append(allocator, .{ .offset = @intCast(base + i), .len = 1 });
         total += 1;
     }
     const xor = try allocator.alloc(u8, total);
     errdefer allocator.free(xor);
     var at: usize = 0;
     for (runs.items) |run| {
-        for (xor[at..][0..run.len], pre[run.offset..][0..run.len], post[run.offset..][0..run.len]) |*x, a, b| x.* = a ^ b;
+        const from = run.offset - base;
+        for (xor[at..][0..run.len], pre[from..][0..run.len], post[from..][0..run.len]) |*x, a, b| x.* = a ^ b;
         at += run.len;
     }
     const owned = try runs.toOwnedSlice(allocator);
     errdefer allocator.free(owned);
-    return .{ .runs = owned, .xor = xor, .board = try touchesBoard(post, owned) };
+    return .{ .runs = owned, .xor = xor };
 }
 
 /// The sections a core-only restore puts back; every other section belongs
@@ -134,4 +145,21 @@ pub fn touchesBoard(image: []const u8, runs: []const Run) !bool {
         return true;
     }
     return false;
+}
+
+/// The byte span of `image` that holds the core sections, which the writer
+/// lays out one after another; null when there are none or a board section
+/// sits between them.
+pub fn coreSpan(image: []const u8) !?struct { lo: usize, hi: usize } {
+    var reader = try file.Reader.open(image);
+    var lo: ?usize = null;
+    var hi: usize = 0;
+    while (true) {
+        const before = reader.at;
+        const section = try reader.next() orelse break;
+        if (!coreSection(section.kind)) continue;
+        if (lo == null) lo = before else if (hi != before) return null;
+        hi = reader.at;
+    }
+    return .{ .lo = lo orelse return null, .hi = hi };
 }

@@ -277,7 +277,7 @@ pub const Harness = struct {
     /// machine and records the live run into it from here on. Call once.
     pub fn openWindow(self: *Harness, bytes: usize) !void {
         const state = self.state;
-        state.window = try window_box.Window.create(state.allocator, &state.session, &state.files, &state.cpu0.store.?, &state.cpu.slots, bytes);
+        state.window = try window_box.Window.create(state.allocator, &state.session, &state.files, &state.cpu0.store.?, &state.memory, &state.cpu.slots, bytes);
     }
 
     pub fn deinit(self: *Harness) void {

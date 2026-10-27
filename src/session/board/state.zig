@@ -64,6 +64,12 @@ pub const Files = struct {
         const stores = self.storesOf();
         const cores = self.coresOf();
         try run_file.savePairParts(writer, stores[0..count], cores[0..count], self.board, self.identity(), parts);
+        try self.writeTail(writer);
+        try attachment_snapshot.save(self.board, self.attachments, writer);
+    }
+
+    /// The clock, grid, second core, debug unit and runtime sections.
+    pub fn writeTail(self: *Files, writer: *std.Io.Writer) !void {
         try systick.save(.{ &self.edge.timebase, &self.edge.ns_timebase }, writer);
         try stretch.save(.{ .owed = self.edge.saved.stretch.carry }, writer);
         try stretch.saveGrid(self.edge.saved, writer);
@@ -74,11 +80,9 @@ pub const Files = struct {
         try self.debugBody(writer);
         try file.writeSectionHeader(writer, .session_runtime, if (self.edge.chunk != null) 9 else 1);
         try fields.write(writer, if (self.edge.chunk) |chunk| @as(?u64, chunk.mark) else @as(?u64, null));
-        try attachment_snapshot.save(self.board, self.attachments, writer);
     }
 
-    /// Puts the whole saved run back. A reverse window described the run
-    /// before it, so it is dropped; the window's own restore reads parts.
+    /// Puts the whole saved run back; a reverse window of the run before it goes.
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
         try self.readParts(bytes, .{});
         if (self.session) |session| session.dropWindow();
@@ -176,7 +180,7 @@ pub const Files = struct {
         return .{ self.store, if (self.pair) |pair| &pair.store.? else self.store };
     }
 
-    fn coresOf(self: *Files) [2]*Cpu {
+    pub fn coresOf(self: *Files) [2]*Cpu {
         return .{ self.cpu, if (self.pair) |pair| &pair.core.cpu else self.cpu };
     }
 
@@ -199,7 +203,7 @@ pub const Files = struct {
         return null;
     }
 
-    fn identity(self: *const Files) run_file.Identity {
+    pub fn identity(self: *const Files) run_file.Identity {
         var hashes: run_file.Identity = @splat(null);
         if (self.image) |image| hashes[0] = run_file.imageIdentity(image);
         if (self.images) |images| for (images.*, 0..) |held, index| {

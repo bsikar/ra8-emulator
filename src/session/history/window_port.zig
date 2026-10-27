@@ -48,6 +48,13 @@ pub const Port = struct {
         /// a live run records; null for a port that only replays. A stop
         /// before any slot ran answers StepError.NoSlot.
         liveStep: ?*const fn (context: *anyopaque, core: Core) anyerror!void = null,
+        /// Only the core sections of the save stream, laid out as in
+        /// `saveSide`; with `touches`, what lets a slot that touched no
+        /// board state skip the whole side save.
+        saveCore: ?*const fn (context: *anyopaque, writer: *std.Io.Writer) anyerror!void = null,
+        /// A count that moves whenever an access reaches a peripheral or
+        /// the system control space.
+        touches: ?*const fn (context: *anyopaque) u64 = null,
     };
 
     pub fn position(self: Port) Position {
@@ -64,6 +71,22 @@ pub const Port = struct {
 
     pub fn step(self: Port, core: Core) !void {
         return self.vtable.step(self.context, core);
+    }
+
+    /// The peripheral and system-control access count, when the port keeps one.
+    pub fn touchCount(self: Port) ?u64 {
+        const count = self.vtable.touches orelse return null;
+        if (self.vtable.saveCore == null) return null;
+        return count(self.context);
+    }
+
+    /// The core sections' stream into `image`, replacing what it held.
+    pub fn coreInto(self: Port, allocator: std.mem.Allocator, image: *std.ArrayList(u8)) !void {
+        var out: std.Io.Writer.Allocating = .fromArrayList(allocator, image);
+        errdefer image.* = out.toArrayList();
+        out.clearRetainingCapacity();
+        try self.vtable.saveCore.?(self.context, &out.writer);
+        image.* = out.toArrayList();
     }
 
     /// One live slot: the live step when the port has one, else the replay's.

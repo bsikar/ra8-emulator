@@ -49,6 +49,11 @@ fn savePairMode(writer: anytype, stores: []const *const Store, cores: []const *c
     if (parts.memory) {
         for (stores, 0..) |store, index| try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
     } else try memory.saveFabric(stores[0], writer);
+    try saveCores(writer, cores, identity);
+}
+
+/// The cores' own sections and the image identity that follows them.
+pub fn saveCores(writer: anytype, cores: []const *const Cpu, identity: Identity) !void {
     for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
     var counter: std.Io.Writer.Discarding = .init(&.{});
     try fields.write(&counter.writer, identity);

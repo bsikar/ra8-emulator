@@ -15,8 +15,8 @@ test {
     _ = @import("board/snapshot/inputs_test.zig");
     _ = @import("session/harness/stacks_test.zig");
     _ = @import("session/harness/window_test.zig");
-    _ = @import("session/harness/window_perf_test.zig");
     _ = @import("session/harness/window_machine_test.zig");
+    _ = @import("session/board/core_stream_test.zig");
     _ = @import("board/frame_tap_test.zig");
     _ = @import("board/profile_test.zig");
     _ = @import("board/panels_test.zig");

@@ -11,19 +11,30 @@ const api = @import("../api.zig");
 const line = @import("../line.zig");
 const state = @import("../board/state.zig");
 const port_mod = @import("../history/window_port.zig");
+const core_stream = @import("../board/core_stream.zig");
 
+const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
+const ppb_base: u32 = 0xE000_0000;
+const ppb_span: u32 = 0x10_0000;
 const Position = port_mod.Position;
 const Core = port_mod.Core;
 
 pub const Machine = struct {
     session: *api.Session,
     files: *state.Files,
+    /// The bus whose touched hook counts into `touched`.
+    bus: *BoardBus,
     /// A replayed slot is in flight: the window's own walk, not the run.
     muted: bool = false,
     /// The live run's command, for the first slot of a run; later slots
     /// carry on with the stop machine as it stands.
     command: api.Run = .cont,
     first: bool = true,
+    /// The images' identity as the last side save saw it; the images change
+    /// only with a load, which saves the side again.
+    identity: ?@import("ra8_board").snapshot.run.Identity = null,
+    /// Peripheral and system-control accesses so far (the bus's touched hook).
+    touched: u64 = 0,
     /// How the last live slot ended, and whether it ran at all.
     ended: api.Ended = .count,
     ran: bool = false,
@@ -84,6 +95,8 @@ pub const Machine = struct {
         .saveSide = saveSide,
         .loadSide = loadSide,
         .liveStep = liveStep,
+        .saveCore = saveCore,
+        .touches = touches,
     };
 
     fn of(context: *anyopaque) *Machine {
@@ -144,8 +157,29 @@ pub const Machine = struct {
         try of(context).files.readParts(bytes, .{});
     }
 
+    fn saveCore(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+        const self = of(context);
+        const identity = self.identity orelse return error.NoIdentity;
+        try core_stream.write(self.files, identity, writer);
+    }
+
+    fn touches(context: *anyopaque) u64 {
+        return of(context).touched;
+    }
+
+    /// The bus's touched hook: counts the access. A read of the system
+    /// control space is not one: the poll for exceptions and the debugger's
+    /// cycle projection make them on every run, and what such a read can
+    /// change (SysTick's flag) lives in the core sections.
+    pub fn touch(context: *anyopaque, address: u32, is_write: bool) void {
+        if (!is_write and address -% ppb_base < ppb_span) return;
+        of(context).touched +%= 1;
+    }
+
     fn saveSide(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
-        try of(context).files.writeParts(writer, .{ .memory = false });
+        const self = of(context);
+        self.identity = self.files.identity();
+        try self.files.writeParts(writer, .{ .memory = false });
     }
 
     fn loadSide(context: *anyopaque, bytes: []const u8, board: bool) anyerror!void {
