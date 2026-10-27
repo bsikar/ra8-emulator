@@ -10,7 +10,7 @@ pub const Position = position_mod.Position;
 pub const NavIndex = nav_index.NavIndex;
 
 pub const magic: [4]u8 = "MIDX".*;
-pub const version: u32 = 1;
+pub const version: u32 = 2;
 
 pub const File = struct {
     context: *anyopaque,
@@ -41,9 +41,13 @@ pub const Storage = struct {
     }
 };
 
+/// One cached marker. `end` is the length of the committed log its arrivals
+/// were indexed over: a log that has grown past it has arrivals the cache
+/// does not hold, so the cache no longer answers.
 pub const MarkerData = struct {
     name: []const u8,
     address: u32,
+    end: u64,
     arrivals: []const Position,
 };
 
@@ -77,6 +81,10 @@ pub fn saveDiskCache(
         var addr_bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &addr_bytes, m.address, .little);
         try buf.appendSlice(allocator, &addr_bytes);
+
+        var end_bytes: [8]u8 = undefined;
+        std.mem.writeInt(u64, &end_bytes, m.end, .little);
+        try buf.appendSlice(allocator, &end_bytes);
 
         var arr_count: [4]u8 = undefined;
         std.mem.writeInt(u32, &arr_count, @intCast(m.arrivals.len), .little);
@@ -135,6 +143,11 @@ pub fn loadDiskCache(
         offset += 4;
         const address = std.mem.readInt(u32, &addr_buf, .little);
 
+        var end_buf: [8]u8 = undefined;
+        if (try file.vtable.read(file.context, offset, &end_buf) < 8) return error.BadFormat;
+        offset += 8;
+        const end = std.mem.readInt(u64, &end_buf, .little);
+
         var a_len_buf: [4]u8 = undefined;
         if (try file.vtable.read(file.context, offset, &a_len_buf) < 4) return error.BadFormat;
         offset += 4;
@@ -154,6 +167,7 @@ pub fn loadDiskCache(
         try list.append(allocator, .{
             .name = name,
             .address = address,
+            .end = end,
             .arrivals = arrivals,
         });
     }
@@ -183,7 +197,8 @@ pub const Replay = struct {
 };
 
 /// Arms a marker after recording. A cached answer for the same name and
-/// address feeds the index without replaying; otherwise `replay` walks the
+/// address, indexed over a log of the same `end`, feeds the index without
+/// replaying; a log grown past a cached end drops that cache entry. Otherwise `replay` walks the
 /// recorded history once, its arrivals feed the index, and they are cached
 /// through `storage` (a failed cache write never fails the arm). Answers the
 /// number of arrivals the marker now has.
@@ -193,6 +208,7 @@ pub fn armLate(
     index_file: []const u8,
     name: []const u8,
     address: u32,
+    end: u64,
     replay: Replay,
     target_nav: *NavIndex,
 ) !usize {
@@ -202,10 +218,10 @@ pub fn armLate(
     if (storage) |st| {
         if (loadDiskCache(allocator, st, index_file)) |cached| {
             for (cached) |m| {
-                if (std.mem.eql(u8, m.name, name) and m.address == address) {
+                if (std.mem.eql(u8, m.name, name) and m.address == address and m.end == end) {
                     defer freeDiskCache(allocator, cached);
                     for (m.arrivals) |p| {
-                        _ = try target_nav.addMarkerArrival(m.name, m.address, p);
+                        _ = try target_nav.addMarkerArrivalAt(m.name, m.address, p, end);
                     }
                     return m.arrivals.len;
                 }
@@ -218,7 +234,7 @@ pub fn armLate(
     defer arrivals.deinit(allocator);
     try replay.runFn(replay.context, allocator, address, &arrivals);
     for (arrivals.items) |pos| {
-        _ = try target_nav.addMarkerArrival(name, address, pos);
+        _ = try target_nav.addMarkerArrivalAt(name, address, pos, end);
     }
 
     if (storage) |st| {
@@ -226,21 +242,23 @@ pub fn armLate(
         defer to_save.deinit(allocator);
         if (existing_cached) |prev| {
             for (prev) |m| {
-                if (!std.mem.eql(u8, m.name, name)) try to_save.append(allocator, m);
+                if (!std.mem.eql(u8, m.name, name) and m.end == end) try to_save.append(allocator, m);
             }
         }
-        try to_save.append(allocator, .{ .name = name, .address = address, .arrivals = arrivals.items });
+        try to_save.append(allocator, .{ .name = name, .address = address, .end = end, .arrivals = arrivals.items });
         saveDiskCache(allocator, st, index_file, to_save.items) catch {};
     }
     return arrivals.items.len;
 }
 
 /// Feeds every cached marker into `target_nav`, as a reopened history does
-/// so `seek marker` needs no replay. A missing cache is not an error.
+/// so `seek marker` needs no replay. A missing cache is not an error, and a
+/// marker cached over a shorter log than `end` is left out.
 pub fn loadInto(
     allocator: std.mem.Allocator,
     storage: Storage,
     index_file: []const u8,
+    end: u64,
     target_nav: *NavIndex,
 ) !void {
     const cached = loadDiskCache(allocator, storage, index_file) catch |err| switch (err) {
@@ -249,39 +267,9 @@ pub fn loadInto(
     };
     defer freeDiskCache(allocator, cached);
     for (cached) |m| {
-        for (m.arrivals) |p| _ = try target_nav.addMarkerArrival(m.name, m.address, p);
+        if (m.end != end) continue;
+        for (m.arrivals) |p| _ = try target_nav.addMarkerArrivalAt(m.name, m.address, p, end);
     }
-}
-
-const SliceReplay = struct {
-    hits: []const Position,
-
-    fn run(
-        context: *anyopaque,
-        allocator: std.mem.Allocator,
-        _: u32,
-        out: *std.ArrayListUnmanaged(Position),
-    ) anyerror!void {
-        const self: *SliceReplay = @ptrCast(@alignCast(context));
-        try out.appendSlice(allocator, self.hits);
-    }
-};
-
-/// Indexes a late marker from arrivals the caller already replayed.
-pub fn indexLateMarker(
-    allocator: std.mem.Allocator,
-    storage: ?Storage,
-    index_file: []const u8,
-    name: []const u8,
-    address: u32,
-    simulated_replay_hits: []const Position,
-    target_nav: *NavIndex,
-) !void {
-    var slice: SliceReplay = .{ .hits = simulated_replay_hits };
-    _ = try armLate(allocator, storage, index_file, name, address, .{
-        .context = &slice,
-        .runFn = &SliceReplay.run,
-    }, target_nav);
 }
 
 fn serializePosition(p: Position, out: *[24]u8) void {

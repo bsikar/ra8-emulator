@@ -28,6 +28,9 @@ pub const MarkerArrival = struct {
     address: ?u32 = null,
     position: Position,
     nth: u64,
+    /// The length of the log the arrival was indexed over; null for an
+    /// arrival the history's start fixes for good.
+    end: ?u64 = null,
 };
 
 pub const RtosSwitch = struct {
@@ -182,6 +185,17 @@ pub const NavIndex = struct {
         address: ?u32,
         pos: Position,
     ) !u64 {
+        return self.addMarkerArrivalAt(name, address, pos, null);
+    }
+
+    /// An arrival indexed over a log of `end` bytes.
+    pub fn addMarkerArrivalAt(
+        self: *NavIndex,
+        name: []const u8,
+        address: ?u32,
+        pos: Position,
+        end: ?u64,
+    ) !u64 {
         var nth: u64 = 1;
         for (self.marker_arrivals.items) |m| {
             if (std.mem.eql(u8, m.name, name)) {
@@ -195,8 +209,25 @@ pub const NavIndex = struct {
             .address = address,
             .position = pos,
             .nth = nth,
+            .end = end,
         });
         return nth;
+    }
+
+    /// Drops every marker indexed over a log other than `end` bytes long: a
+    /// history that grew past it has arrivals those markers do not hold,
+    /// so they are armed again by the next request.
+    pub fn dropStaleMarkers(self: *NavIndex, end: u64) void {
+        var kept: usize = 0;
+        for (self.marker_arrivals.items) |m| {
+            if (m.end) |at| if (at != end) {
+                self.allocator.free(m.name);
+                continue;
+            };
+            self.marker_arrivals.items[kept] = m;
+            kept += 1;
+        }
+        self.marker_arrivals.shrinkRetainingCapacity(kept);
     }
 
     pub fn getMarkerArrival(self: *const NavIndex, name: []const u8, nth: u64) ?Position {

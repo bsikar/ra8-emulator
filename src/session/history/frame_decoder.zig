@@ -311,6 +311,43 @@ pub const FrameDecoder = struct {
         return null;
     }
 
+    /// The newest pinned picture whose checkpoint was taken at or before
+    /// `virtual_ns`, the restore point of a decode. The cursor's time has
+    /// no frame position of its own (the screen may not have changed since
+    /// long before it), so the pictures' own times answer: a binary search
+    /// over the entries of the line the cursor's frame sits on.
+    pub fn lookupRestorePicture(self: *FrameDecoder, virtual_ns: u64) !?DecodedFrame {
+        const idx = self.pictures orelse return null;
+        const reader = self.picture_reader orelse return null;
+        const line = self.positionAt(virtual_ns, null).branch;
+        var lo: usize = 0;
+        while (lo < idx.entries.items.len and idx.entries.items[lo].at.branch < line) lo += 1;
+        var hi = lo;
+        while (hi < idx.entries.items.len and idx.entries.items[hi].at.branch == line) hi += 1;
+        var best: ?DecodedFrame = null;
+        errdefer if (best) |*b| b.deinit(self.allocator);
+        while (lo < hi) {
+            const mid = lo + (hi - lo) / 2;
+            var pic = try idx.load(reader, idx.entries.items[mid]);
+            if (pic.virtual_ns > virtual_ns) {
+                pic.deinit(self.allocator);
+                hi = mid;
+                continue;
+            }
+            if (best) |*b| b.deinit(self.allocator);
+            best = .{
+                .position = pic.position,
+                .virtual_ns = pic.virtual_ns,
+                .width = pic.width,
+                .height = pic.height,
+                .pixels = pic.pixels,
+                .source = .checkpoint_picture,
+            };
+            lo = mid + 1;
+        }
+        return best;
+    }
+
     pub fn lookupPicture(self: *FrameDecoder, virtual_ns: u64, pos: ?Position) !?DecodedFrame {
         const idx = self.pictures orelse return null;
         const reader = self.picture_reader orelse return null;

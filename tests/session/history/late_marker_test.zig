@@ -8,6 +8,42 @@ const scheduler = ra8.chip.core.scheduler;
 
 const Pos = scheduler.Position;
 
+const Position = late_marker.Position;
+
+/// Replays hits the caller already holds, so a late marker is armed with
+/// no machine behind it.
+const SliceReplay = struct {
+    hits: []const Position,
+
+    fn run(
+        context: *anyopaque,
+        allocator: std.mem.Allocator,
+        _: u32,
+        out: *std.ArrayListUnmanaged(Position),
+    ) anyerror!void {
+        const self: *SliceReplay = @ptrCast(@alignCast(context));
+        try out.appendSlice(allocator, self.hits);
+    }
+};
+
+const arming = struct {
+    fn indexLateMarker(
+        allocator: std.mem.Allocator,
+        storage: ?late_marker.Storage,
+        index_file: []const u8,
+        name: []const u8,
+        address: u32,
+        simulated_replay_hits: []const Position,
+        target_nav: *nav_index.NavIndex,
+    ) !void {
+        var slice: SliceReplay = .{ .hits = simulated_replay_hits };
+        _ = try late_marker.armLate(allocator, storage, index_file, name, address, 0, .{
+            .context = &slice,
+            .runFn = &SliceReplay.run,
+        }, target_nav);
+    }
+};
+
 fn pos(branch: u32, r: u64) Pos {
     return .{ .branch = branch, .r = r, .phase = .cpu0, .o = 0, .gap = .retired };
 }
@@ -107,7 +143,7 @@ test "late marker indexing matches on-time armed marker counts and positions" {
     var late_nav = nav_index.NavIndex.init(allocator);
     defer late_nav.deinit();
 
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -128,7 +164,7 @@ test "late marker indexing matches on-time armed marker counts and positions" {
     var cached_nav = nav_index.NavIndex.init(allocator);
     defer cached_nav.deinit();
 
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -156,7 +192,7 @@ test "indexing a new late marker must not truncate previously cached markers on 
     defer nav1.deinit();
 
     // 1. Index first marker "mark_head"
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -167,7 +203,7 @@ test "indexing a new late marker must not truncate previously cached markers on 
     );
 
     // 2. Index second marker "mark_tail"
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -181,7 +217,7 @@ test "indexing a new late marker must not truncate previously cached markers on 
     var nav_head = nav_index.NavIndex.init(allocator);
     defer nav_head.deinit();
 
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -197,7 +233,7 @@ test "indexing a new late marker must not truncate previously cached markers on 
     var nav_tail = nav_index.NavIndex.init(allocator);
     defer nav_tail.deinit();
 
-    try late_marker.indexLateMarker(
+    try arming.indexLateMarker(
         allocator,
         mem_storage.asStorage(),
         "markers.idx",
@@ -230,19 +266,35 @@ test "armLate replays once and a cached marker is fed back without a replay" {
 
     var first = nav_index.NavIndex.init(allocator);
     defer first.deinit();
-    const count = try late_marker.armLate(allocator, mem_storage.asStorage(), "markers.idx", "m", 0x100, .{ .context = &replay, .runFn = &CountingReplay.run }, &first);
+    const count = try late_marker.armLate(allocator, mem_storage.asStorage(), "markers.idx", "m", 0x100, 7, .{ .context = &replay, .runFn = &CountingReplay.run }, &first);
     try std.testing.expectEqual(@as(usize, 2), count);
     try std.testing.expectEqual(@as(u32, 1), replay.runs);
     try std.testing.expectEqual(@as(usize, 2), first.markerArrivalCount("m"));
 
     var second = nav_index.NavIndex.init(allocator);
     defer second.deinit();
-    try late_marker.loadInto(allocator, mem_storage.asStorage(), "markers.idx", &second);
+    try late_marker.loadInto(allocator, mem_storage.asStorage(), "markers.idx", 7, &second);
     try std.testing.expectEqual(pos(0, 20), second.getMarkerArrival("m", 2).?);
 
     var third = nav_index.NavIndex.init(allocator);
     defer third.deinit();
-    _ = try late_marker.armLate(allocator, mem_storage.asStorage(), "markers.idx", "m", 0x100, .{ .context = &replay, .runFn = &CountingReplay.run }, &third);
+    _ = try late_marker.armLate(allocator, mem_storage.asStorage(), "markers.idx", "m", 0x100, 7, .{ .context = &replay, .runFn = &CountingReplay.run }, &third);
     try std.testing.expectEqual(@as(u32, 1), replay.runs);
     try std.testing.expectEqual(@as(usize, 2), third.markerArrivalCount("m"));
+
+    // The log grew: the cache no longer answers, the replay runs again and
+    // the cache is rewritten over the new end.
+    var grown = nav_index.NavIndex.init(allocator);
+    defer grown.deinit();
+    try late_marker.loadInto(allocator, mem_storage.asStorage(), "markers.idx", 9, &grown);
+    try std.testing.expectEqual(@as(usize, 0), grown.markerArrivalCount("m"));
+    _ = try late_marker.armLate(allocator, mem_storage.asStorage(), "markers.idx", "m", 0x100, 9, .{ .context = &replay, .runFn = &CountingReplay.run }, &grown);
+    try std.testing.expectEqual(@as(u32, 2), replay.runs);
+    try std.testing.expectEqual(@as(usize, 2), grown.markerArrivalCount("m"));
+
+    // Markers held in memory over the shorter log go the same way.
+    _ = try third.addMarkerArrival("boot", 0, pos(0, 1));
+    third.dropStaleMarkers(9);
+    try std.testing.expectEqual(@as(usize, 0), third.markerArrivalCount("m"));
+    try std.testing.expectEqual(@as(usize, 1), third.markerArrivalCount("boot"));
 }

@@ -21,6 +21,7 @@ const symbols = @import("ra8_session").symbols;
 const late_marker = @import("ra8_session").history_late_marker;
 const history_segments = @import("history_segments.zig");
 const marker_store = @import("history_marker_store.zig");
+const nav_marker = @import("session/nav_marker.zig");
 const served_rewind = @import("served_rewind.zig");
 const frame_tap = @import("ra8_session").history_frame_tap;
 const served_setup = @import("served_setup.zig");
@@ -167,7 +168,8 @@ fn attachMarkers(self: *served_setup.Served, allocator: std.mem.Allocator, nav: 
     self.context.nav.markers = cache.storage();
     if (!reopened) return;
     standAtFirstCheckpoint(self);
-    late_marker.loadInto(allocator, cache.storage(), "markers.idx", nav) catch {};
+    const end = nav_marker.historyEnd(self.owner.transport());
+    late_marker.loadInto(allocator, cache.storage(), nav_marker.cache_file, end, nav) catch {};
     const log = history_segments.readAll(allocator, cache.store) catch return;
     defer allocator.free(log);
     self.owner.session().loadReplayInterventions(log) catch {};

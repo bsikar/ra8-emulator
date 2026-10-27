@@ -100,3 +100,41 @@ test "a late marker is indexed by replay, cached, and served again after a reope
     const second = try seekMarker(&again, "marker loop 2");
     try std.testing.expectEqual(landed, second);
 }
+
+test "a marker indexed over a shorter log is armed again once the history grew" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+
+    var served: setup.Served = undefined;
+    try served.open(gpa, std.testing.io, image, null, .{ .root = root, .checkpoint_every = 16, .kept = true });
+    defer served.deinit();
+    var place_buf: [16]u8 = undefined;
+    const address = try loopAddress(&served);
+    const place = try std.fmt.bufPrint(&place_buf, "0x{x}", .{address});
+    const nav = served.nav.?;
+
+    _ = try arm(&served, place);
+    const held = nav.markerArrivalCount("loop");
+    try std.testing.expect(held >= 2);
+    const armed_end = nav_marker.historyEnd(served.owner.transport());
+    try std.testing.expect(armed_end > 0);
+
+    // Current while the log stands where it was.
+    _ = try arm(&served, place);
+    try std.testing.expectEqual(held, nav.markerArrivalCount("loop"));
+
+    // A log that grew past the end the arrivals were indexed over: the
+    // arrivals no longer answer and the next arm replays again.
+    for (nav.marker_arrivals.items) |*m| {
+        if (m.end != null) m.end = armed_end -| 1;
+    }
+    const again = try arm(&served, place);
+    try std.testing.expectEqual(held, again.count);
+    for (nav.marker_arrivals.items) |m| {
+        if (std.mem.eql(u8, m.name, "loop")) try std.testing.expectEqual(armed_end, m.end.?);
+    }
+    try std.testing.expectEqual(@as(usize, 1), nav.markerArrivalCount("boot"));
+}

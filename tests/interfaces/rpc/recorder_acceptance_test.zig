@@ -119,6 +119,34 @@ test "acceptance: a torn tail recovers to the last whole frame on the real store
     try std.testing.expectEqual(ends[1], trim.cuts.items[0]);
 }
 
+test "acceptance: a reopened history cuts a torn tail before it appends" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    var id: history.name.Id = undefined;
+    var whole: u64 = 0;
+    {
+        const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{ .kept = true });
+        id = bind.session.id;
+        var rec = try recorder_mod.Recorder.init(gpa, bind.storage, .{});
+        defer rec.deinit();
+        rec.observe(0);
+        try rec.recordBoundary(header(1), .{ .what = .c6_bytes, .body = "abc" });
+        try rec.commit(1);
+        whole = try bind.logLength();
+        try rec.recordBoundary(header(2), .{ .what = .c6_bytes, .body = "tail" });
+        try rec.commit(2);
+        // The crash: the last commit landed in part.
+        try bind.storage.truncate(bind.storage.context, try bind.logLength() - 3);
+        _ = try bind.close();
+    }
+    const again = try bind_mod.Bind.open(gpa, std.testing.io, root, .{ .reopen = id });
+    defer _ = again.close() catch {};
+    try std.testing.expectEqual(whole, try again.logLength());
+}
+
 test "acceptance: a whole frame that fails its crc refuses the reopen" {
     const gpa = std.testing.allocator;
     var temp = std.testing.tmpDir(.{});

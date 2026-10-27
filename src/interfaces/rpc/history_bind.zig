@@ -87,6 +87,9 @@ pub const Bind = struct {
         }
         var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
         defer candidates.deinit(allocator);
+        // A reopened log may end in a commit a crash cut short: it is cut
+        // off before anything reads the log or the recorder appends to it.
+        if (opts.reopen != null) _ = try history_segments.repair(allocator, history.storage.Store.from(&bind.session));
         // The log is the last source: a graph rebuilt from its Branch
         // records when neither file decodes, recorded ends raised from it.
         const log_bytes = try history_segments.readAll(allocator, history.storage.Store.from(&bind.session));
