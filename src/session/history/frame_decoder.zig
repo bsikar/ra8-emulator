@@ -4,6 +4,7 @@
 //! and keyframe playback.
 const std = @import("std");
 const position_mod = @import("position.zig");
+const branch_mod = @import("branch.zig");
 const frame_cache_mod = @import("frame_cache.zig");
 const checkpoint_picture = @import("checkpoint_picture.zig");
 const temp_cp_mod = @import("temp_checkpoints.zig");
@@ -315,20 +316,39 @@ pub const FrameDecoder = struct {
     /// `virtual_ns`, the restore point of a decode. The cursor's time has
     /// no frame position of its own (the screen may not have changed since
     /// long before it), so the pictures' own times answer: a binary search
-    /// over the entries of the line the cursor's frame sits on.
-    pub fn lookupRestorePicture(self: *FrameDecoder, virtual_ns: u64) !?DecodedFrame {
+    /// over the entries of the cursor's `line`. A line with none there (a
+    /// fork just made) takes its ancestors' pictures from before its fork
+    /// point, found through `graph`.
+    pub fn lookupRestorePicture(self: *FrameDecoder, virtual_ns: u64, cursor_line: branch_mod.BranchId, graph: ?*const branch_mod.BranchGraph) !?DecodedFrame {
+        var line = cursor_line;
+        var limit: ?Position = null;
+        while (true) {
+            if (try self.searchLine(line, limit, virtual_ns)) |found| return found;
+            const g = graph orelse return null;
+            if (line == branch_mod.root_branch_id) return null;
+            const node = g.get(line) orelse return null;
+            limit = node.fork_at;
+            line = node.parent;
+        }
+    }
+
+    /// The newest picture on `line`, at or before `limit` when given, whose
+    /// checkpoint was taken at or before `virtual_ns`.
+    fn searchLine(self: *FrameDecoder, line: branch_mod.BranchId, limit: ?Position, virtual_ns: u64) !?DecodedFrame {
         const idx = self.pictures orelse return null;
         const reader = self.picture_reader orelse return null;
-        const line = self.positionAt(virtual_ns, null).branch;
+        const entries = idx.entries.items;
         var lo: usize = 0;
-        while (lo < idx.entries.items.len and idx.entries.items[lo].at.branch < line) lo += 1;
+        while (lo < entries.len and entries[lo].at.branch < line) lo += 1;
         var hi = lo;
-        while (hi < idx.entries.items.len and idx.entries.items[hi].at.branch == line) hi += 1;
+        while (hi < entries.len and entries[hi].at.branch == line) : (hi += 1) {
+            if (limit) |cut| if (branch_mod.scalarOrder(entries[hi].at, cut) == .gt) break;
+        }
         var best: ?DecodedFrame = null;
         errdefer if (best) |*b| b.deinit(self.allocator);
         while (lo < hi) {
             const mid = lo + (hi - lo) / 2;
-            var pic = try idx.load(reader, idx.entries.items[mid]);
+            var pic = try idx.load(reader, entries[mid]);
             if (pic.virtual_ns > virtual_ns) {
                 pic.deinit(self.allocator);
                 hi = mid;

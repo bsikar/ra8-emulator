@@ -6,8 +6,9 @@
 //! and the offset in architectural slots, which counts the trips a counted
 //! loop skipped (the core charges them as retired slots), so a skipped
 //! `k * n` is in the index's slot count without a separate record. A replay
-//! passes the same boundaries again; an entry is added only past the newest
-//! one already indexed, so a seek never lists a boundary twice.
+//! passes the same boundaries again: each entry is added once, whatever
+//! order the run reaches it in, so a seek back over a stretch first skipped
+//! by a restore fills it in and never lists a boundary twice.
 const std = @import("std");
 const api = @import("../api.zig");
 const line = @import("../line.zig");
@@ -27,10 +28,21 @@ pub const NavFeed = struct {
     /// Slots already charged to the index, and the thread last seen running.
     charged: u64 = 0,
     thread: u32 = 0,
-    /// The newest position of each kind indexed, so a replay adds nothing.
-    last_iteration: ?Position = null,
-    last_switch: ?Position = null,
-    last_isr: ?Position = null,
+    /// The entries already indexed, so a replay adds nothing twice.
+    seen: std.AutoHashMapUnmanaged(Seen, void) = .empty,
+
+    /// What tells two index entries apart: the kind, its detail (the
+    /// threads switched, or the exception and its direction) and where.
+    const Seen = struct {
+        kind: enum(u8) { iteration, switch_, isr },
+        a: u32 = 0,
+        b: u32 = 0,
+        at: Position,
+    };
+
+    pub fn deinit(self: *NavFeed) void {
+        self.seen.deinit(self.nav.allocator);
+    }
 
     pub fn observer(self: *NavFeed) rtos_trace.Observer {
         return .{ .context = self, .eventFn = &onEvent };
@@ -55,8 +67,7 @@ pub const NavFeed = struct {
         const self: *NavFeed = @ptrCast(@alignCast(context));
         var stamped = at;
         stamped.branch = line.currentPosition(self.session).branch;
-        if (!newer(self.last_iteration, stamped)) return;
-        self.last_iteration = stamped;
+        if (!self.first(.{ .kind = .iteration, .at = stamped })) return;
         self.nav.advanceSlots(self.slots.* -| self.charged);
         self.charged = self.slots.*;
         _ = self.nav.addIteration(stamped) catch {};
@@ -71,20 +82,21 @@ pub const NavFeed = struct {
                 const to: u32 = if (event.kind == .idle) 0 else event.thread;
                 const from = self.thread;
                 self.thread = to;
-                if (!newer(self.last_switch, at)) return;
-                self.last_switch = at;
+                if (!self.first(.{ .kind = .switch_, .a = from, .b = to, .at = at })) return;
                 self.nav.addRtosSwitch(from, to, at, 0) catch {};
             },
             .enter, .leave => {
-                if (!newer(self.last_isr, at)) return;
-                self.last_isr = at;
+                const entry = @intFromBool(event.kind == .enter);
+                if (!self.first(.{ .kind = .isr, .a = event.exception, .b = entry, .at = at })) return;
                 self.nav.addIsr(event.exception, event.kind == .enter, at, 0) catch {};
             },
         }
     }
 
-    fn newer(last: ?Position, at: Position) bool {
-        const held = last orelse return true;
-        return (position_mod.compare(held, at) catch .lt) == .lt;
+    /// Whether `entry` is new to the index; it is remembered either way.
+    /// Out of memory, it counts as seen, so the index only misses an entry.
+    fn first(self: *NavFeed, entry: Seen) bool {
+        const got = self.seen.getOrPut(self.nav.allocator, entry) catch return false;
+        return !got.found_existing;
     }
 };

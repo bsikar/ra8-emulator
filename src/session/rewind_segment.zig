@@ -54,7 +54,8 @@ fn restoreStart(engine: *smooth.SmoothRewindEngine, end_ns: u64) !void {
         engine.session.stampLine();
         return;
     }
-    var picture = (try engine.decoder.lookupRestorePicture(end_ns)) orelse return error.NoRestorePoint;
+    const graph = if (engine.session.fork_router) |router| router.graph else null;
+    var picture = (try engine.decoder.lookupRestorePicture(end_ns, line.currentPosition(engine.session).branch, graph)) orelse return error.NoRestorePoint;
     defer picture.deinit(engine.allocator);
     const hook = engine.restore_hook orelse return error.NoRestorePoint;
     try hook.restore(picture.position);

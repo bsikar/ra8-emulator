@@ -190,3 +190,69 @@ test "frame lookup honors source hierarchy: cache -> bucket -> checkpoint pictur
     defer cache_hit.?.deinit(gpa);
     try std.testing.expectEqual(decoder_mod.SourceKind.frame_cache, cache_hit.?.source);
 }
+
+/// Pictures held in memory, served by object name.
+const Pictures = struct {
+    names: [3]checkpoint_name = undefined,
+    blobs: [3][]u8 = undefined,
+    count: usize = 0,
+
+    const checkpoint_name = [32]u8;
+
+    fn get(context: *anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 {
+        const self: *Pictures = @ptrCast(@alignCast(context));
+        for (self.names[0..self.count], self.blobs[0..self.count]) |held, blob| {
+            if (std.mem.eql(u8, &held, name)) return allocator.dupe(u8, blob);
+        }
+        return error.FileNotFound;
+    }
+
+    fn add(self: *Pictures, index: *pic_mod.Index, at: pic_mod.Position, ns: u64, shade: u8) !void {
+        const gpa = std.testing.allocator;
+        var pixels: [4]u8 = @splat(shade);
+        const blob = try pic_mod.encode(gpa, .{ .position = at, .virtual_ns = ns, .width = 2, .height = 2, .pixels = &pixels });
+        const entry: pic_mod.Entry = .{ .id = @intCast(self.count), .at = at, .object = @splat(@intCast(self.count + 1)) };
+        self.names[self.count] = entry.name();
+        self.blobs[self.count] = blob;
+        self.count += 1;
+        try index.add(entry);
+    }
+
+    fn deinit(self: *Pictures) void {
+        for (self.blobs[0..self.count]) |blob| std.testing.allocator.free(blob);
+    }
+};
+
+test "a fresh fork restores from its parent's picture before the fork point" {
+    const gpa = std.testing.allocator;
+    const branch = ra8.session.history_branch;
+    var index = pic_mod.Index.init(gpa);
+    defer index.deinit();
+    var store: Pictures = .{};
+    defer store.deinit();
+    try store.add(&index, .{ .branch = 0, .r = 1, .phase = .board, .o = 0 }, 1_000_000, 10);
+    try store.add(&index, .{ .branch = 0, .r = 5, .phase = .board, .o = 0 }, 5_000_000, 50);
+
+    var graph = try branch.BranchGraph.init(gpa);
+    defer graph.deinit();
+    const child = try graph.addBranch(0, .{ .branch = 0, .r = 3, .phase = .board, .o = 0 }, .writes, 0);
+
+    var dec = decoder_mod.FrameDecoder.init(gpa);
+    defer dec.deinit();
+    dec.bindPictures(&index, .{ .context = &store, .getFn = Pictures.get });
+
+    // The child has no pictures; the parent's after the fork point ran a
+    // different future, so the one before it is the restore point.
+    var found = (try dec.lookupRestorePicture(9_000_000, child, &graph)).?;
+    defer found.deinit(gpa);
+    try std.testing.expectEqual(@as(u64, 1), found.position.r);
+    try std.testing.expectEqual(@as(u8, 10), found.pixels[0]);
+
+    // On the parent itself, the newest picture at or before the time wins.
+    var own = (try dec.lookupRestorePicture(9_000_000, 0, &graph)).?;
+    defer own.deinit(gpa);
+    try std.testing.expectEqual(@as(u64, 5), own.position.r);
+
+    // Without the graph there is no way up to the parent.
+    try std.testing.expect((try dec.lookupRestorePicture(9_000_000, child, null)) == null);
+}

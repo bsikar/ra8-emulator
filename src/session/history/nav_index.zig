@@ -111,32 +111,23 @@ pub const NavIndex = struct {
         return self.frames.items.len;
     }
 
-    pub fn prevFrame(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn prevFrame(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.frames.items, cursor, cmp_ctx, cmp_fn, .prev);
     }
 
-    pub fn nextFrame(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn nextFrame(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.frames.items, cursor, cmp_ctx, cmp_fn, .next);
     }
 
+    /// Iterations stay in position order, so iteration n is the nth one
+    /// indexed even when a replay fills in a stretch a restore skipped.
     pub fn addIteration(self: *NavIndex, pos: Position) !u64 {
-        const n = self.iterations.items.len + 1;
-        try self.iterations.append(self.allocator, .{
-            .n = n,
-            .position = pos,
-            .slots = self.accumulated_slots,
-        });
-        return n;
+        const items = self.iterations.items;
+        var at = items.len;
+        while (at > 0 and lineOrder(items[at - 1].position, pos) == .gt) at -= 1;
+        try self.iterations.insert(self.allocator, at, .{ .n = at + 1, .position = pos, .slots = self.accumulated_slots });
+        for (self.iterations.items[at + 1 ..]) |*later| later.n += 1;
+        return at + 1;
     }
 
     pub fn advanceSlots(self: *NavIndex, count: u64) void {
@@ -161,21 +152,11 @@ pub const NavIndex = struct {
         return self.iterations.items.len;
     }
 
-    pub fn prevIteration(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn prevIteration(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.iterations.items, cursor, cmp_ctx, cmp_fn, .prev);
     }
 
-    pub fn nextIteration(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn nextIteration(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.iterations.items, cursor, cmp_ctx, cmp_fn, .next);
     }
 
@@ -309,21 +290,11 @@ pub const NavIndex = struct {
         return self.rtos_switches.items.len;
     }
 
-    pub fn prevRtosSwitch(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn prevRtosSwitch(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.rtos_switches.items, cursor, cmp_ctx, cmp_fn, .prev);
     }
 
-    pub fn nextRtosSwitch(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn nextRtosSwitch(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.rtos_switches.items, cursor, cmp_ctx, cmp_fn, .next);
     }
 
@@ -346,21 +317,11 @@ pub const NavIndex = struct {
         return self.isr_transitions.items.len;
     }
 
-    pub fn prevIsr(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn prevIsr(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.isr_transitions.items, cursor, cmp_ctx, cmp_fn, .prev);
     }
 
-    pub fn nextIsr(
-        self: *const NavIndex,
-        cursor: Position,
-        cmp_ctx: ?*const anyopaque,
-        cmp_fn: ?CompareFn,
-    ) ?Position {
+    pub fn nextIsr(self: *const NavIndex, cursor: Position, cmp_ctx: ?*const anyopaque, cmp_fn: ?CompareFn) ?Position {
         return findAdjacent(self.isr_transitions.items, cursor, cmp_ctx, cmp_fn, .next);
     }
 };
@@ -394,4 +355,10 @@ fn comparePos(
 ) std.math.Order {
     if (cmp_fn) |f| return f(ctx, a, b);
     return position_mod.compare(a, b) catch .eq;
+}
+
+/// A total order on positions, the line breaking ties.
+fn lineOrder(a: Position, b: Position) std.math.Order {
+    const order = branch_mod.scalarOrder(a, b);
+    return if (order != .eq) order else std.math.order(a.branch, b.branch);
 }

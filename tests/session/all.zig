@@ -74,6 +74,7 @@ test {
     _ = @import("history/frame_decoder_test.zig");
     _ = @import("smooth_rewind_test.zig");
     _ = @import("history/nav_index_test.zig");
+    _ = @import("history/nav_feed_test.zig");
     _ = @import("history/late_marker_test.zig");
     _ = @import("history/seek_engine_nav_test.zig");
     _ = @import("harness_picture_test.zig");

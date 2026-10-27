@@ -180,6 +180,7 @@ pub fn deinitNav(self: *served_setup.Served) void {
     if (self.feed) |feed| {
         if (self.owner.session().live.checkpoints) |cp| cp.rounds = null;
         _ = self.owner.observeRtos(null);
+        feed.deinit();
         self.gpa.destroy(feed);
         self.feed = null;
     }
