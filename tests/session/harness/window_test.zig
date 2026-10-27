@@ -187,3 +187,21 @@ test "a run the window cannot follow leaves it stale and the next live slot plan
         try expectAt(&live, &straight, 60 - back);
     }
 }
+
+test "a register write at the live head starts the window over so a step back stops at the write" {
+    var live = try rig.openCounting(gpa, budget);
+    defer live.deinit();
+    const session = live.session();
+
+    try rig.runCount(&live, 40);
+    try std.testing.expectEqual(@as(usize, 40), session.windowStatus().?.slots);
+    try session.setRegister(.cpu0, .r7, 0x5A5A_1234);
+    const poked = try rig.digestOf(gpa, &live);
+    try std.testing.expectEqual(@as(usize, 0), session.windowStatus().?.slots);
+
+    try rig.runCount(&live, 1);
+    try std.testing.expectEqual(@as(usize, 1), session.windowStatus().?.slots);
+    try session.rewind(.cpu0, 1);
+    try std.testing.expectEqualSlices(u8, &poked, &try rig.digestOf(gpa, &live));
+    try std.testing.expectEqual(@as(u32, 0x5A5A_1234), try session.register(.cpu0, .r7));
+}

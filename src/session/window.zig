@@ -76,6 +76,8 @@ pub fn canStepBack(w: *window_engine.ReverseWindow, core: api.Core, count: u32) 
 /// Puts the run back `back` recorded stops; uses the reverse window when it
 /// covers them, falling back to the history ring outside the window.
 pub fn rewind(self: *api.Session, core: api.Core, back: u32) anyerror!void {
+    // A write since the last slot leaves the window stale: settle drops it.
+    if (self.window_driver) |driver| driver.settleFn(driver.context, self);
     if (self.window) |w| {
         if (canStepBack(w, core, back)) {
             const tc = toTrailCore(core);

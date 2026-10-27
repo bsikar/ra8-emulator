@@ -27,6 +27,7 @@ const apply = @import("apply.zig");
 const line = @import("line.zig");
 const run_slice = @import("run_slice.zig");
 const window_fork = @import("history/window_fork.zig");
+const session_window = @import("window.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -160,6 +161,7 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
     if (self.replaying) return applyAction(self, action);
     const router = self.fork_router orelse {
         try applyAction(self, action);
+        session_window.replantWindow(self);
         try recordActionIntervention(self, currentPosition(self), action);
         return;
     };
@@ -168,6 +170,9 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
     switch (decision) {
         .live => {
             try applyAction(self, action);
+            // The window's slots predate the change; a step back across it
+            // would land on a state that never ran.
+            session_window.replantWindow(self);
             try recordActionIntervention(self, line.canonicalPosition(self), action);
         },
         .needs_confirmation => {
