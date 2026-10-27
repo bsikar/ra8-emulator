@@ -14,6 +14,7 @@ pub const served_setup = @import("served_setup.zig");
 pub const served_history = @import("served_history.zig");
 pub const history_bind = @import("history_bind.zig");
 pub const history_ram = @import("history_ram.zig");
+pub const history_bridge = @import("history_bridge.zig");
 pub const session = @import("session/session.zig");
 pub const backtrace_wire = @import("backtrace_wire.zig");
 pub const locals_wire = @import("locals_wire.zig");

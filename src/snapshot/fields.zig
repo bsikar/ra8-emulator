@@ -22,7 +22,7 @@ pub fn write(writer: *std.Io.Writer, value: anytype) std.Io.Writer.Error!void {
         .int => try writer.writeInt(Whole(T), value, .little),
         .bool => try writer.writeByte(@intFromBool(value)),
         .@"enum" => try write(writer, @backingInt(value)),
-        .array => for (value) |item| try write(writer, item),
+        .array => |a| if (a.child == u8) try writer.writeAll(&value) else for (value) |item| try write(writer, item),
         .optional => if (value) |inner| {
             try writer.writeByte(1);
             try write(writer, inner);
@@ -75,6 +75,10 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
         .@"enum" => |e| return std.enums.fromInt(T, try read(e.tag_type, cursor)) orelse Error.BadValue,
         .array => |a| {
             var out: T = undefined;
+            if (a.child == u8) {
+                @memcpy(&out, try cursor.take(a.len));
+                return out;
+            }
             for (&out) |*item| item.* = try read(a.child, cursor);
             return out;
         },

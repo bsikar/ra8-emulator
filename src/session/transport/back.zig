@@ -11,6 +11,7 @@ const command_mod = @import("command.zig");
 const position_mod = @import("../history/position.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
+const back_window = @import("back_window.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -37,6 +38,8 @@ pub const Back = struct {
     /// Whether the landing is the log's beginning, settled as
     /// history_start instead of a finished step.
     start: bool = false,
+    /// Whether a window build was tried for this job (back_window.zig).
+    windowed: bool = false,
     /// The base the machine queued at, fixed once: a cancel returns
     /// the machine to this checkpoint exactly, whatever the replay
     /// later rebased to.
@@ -147,9 +150,56 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     // stands at the history's beginning already: nothing to
     // restore, no earlier slot, so the step settles at once.
     if (back.target == null and back.start) return .{ .stop = .history_start };
+    if (back.base == .window) {
+        const w = self.session.window orelse return Error.NotReady;
+        const canonical = @import("../history/canonical_step.zig");
+        const core: @import("../history/trail.zig").Core = switch (job.core) {
+            .cpu0 => .cpu0,
+            .cpu1 => .cpu1,
+        };
+        _ = canonical.stepBack(w, core) catch |err| {
+            if (err == canonical.Error.OutsideWindow) {
+                const bridge = self.history orelse return .{ .stop = .history_start };
+                var facts = bridge.facts(bridge.context) catch return .{ .stop = .history_start };
+                if (self.session.fork_router) |router| {
+                    facts.graph = router.graph;
+                    facts.active_line = router.active_line;
+                }
+                const cur_pos = if (self.session.grid) |g| g.at else back.cursor;
+                var earlier: ?seek_engine.Base = null;
+                for (facts.checkpoints) |c| {
+                    const before = self.session.comparePositions(c.position, cur_pos) catch continue;
+                    if (before != .lt) continue;
+                    const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
+                    if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+                }
+                if (earlier) |base| {
+                    back.base = base;
+                    back.cursor = cur_pos;
+                    back.restored = false;
+                    back.target = null;
+                    back.seen = null;
+                    return null;
+                }
+                return .{ .stop = .history_start };
+            }
+            return err;
+        };
+        job.left -= 1;
+        if (self.session.grid) |g| back.cursor = g.at;
+        if (job.left == 0) return .{ .stop = .stepped };
+        return null;
+    }
     if (!back.restored) {
         try self.restoreBase(back.base);
         back.restored = true;
+        return null;
+    }
+    if (!back.windowed and back.base == .checkpoint) {
+        // The machine stands at the checkpoint: a window built from it
+        // serves this step; one that cannot be built leaves the replay.
+        if (back_window.build(self, job, back)) return null;
+        back.restored = false;
         return null;
     }
     const grid = self.session.grid orelse return error.NoGrid;

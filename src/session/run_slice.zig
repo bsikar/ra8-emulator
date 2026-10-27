@@ -20,6 +20,7 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
     line.stampLine(self);
     try deliverDue(self);
+    if (self.window_driver) |driver| driver.enterFn(driver.context, self);
     const replay = !self.replaying and line.inPast(self);
     if (replay) self.setReplaying(true);
     defer if (replay) self.setReplaying(false);
@@ -27,9 +28,10 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     defer self.live.budget = budget;
     clampToNextItem(self);
     const retired_before = self.live.core.cpu.retired;
-    const ended = try self.live.go(command);
+    const ended = if (self.window_driver) |driver| try driver.goFn(driver.context, self, command) else try self.live.go(command);
     if (self.live.boundary == null) try advanceBoard(self, core, self.live.core.cpu.retired - retired_before);
     line.notePosition(self, line.currentPosition(self));
+    if (self.window_driver) |driver| driver.settleFn(driver.context, self);
     try deliverDue(self);
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
     self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });

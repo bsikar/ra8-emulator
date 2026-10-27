@@ -94,6 +94,9 @@ pub const Kind = enum(u32) {
     session_runtime = 33,
     attachments = 34,
     grid = 35,
+    /// The external memory fabric's state alone, written in place of the
+    /// memory sections by a save that leaves guest memory out.
+    fabric = 36,
     _,
 };
 

@@ -126,3 +126,60 @@ test "a region whose size changed is refused" {
     try std.testing.expectError(error.SizeMismatch, memory.load(&store, &payload));
     try std.testing.expectError(error.Truncated, memory.load(&store, payload[0..6]));
 }
+
+fn fabricStore(config: ra8.board.external.memory.Config, flash: *ra8.components.nor_flash.Flash, backing: *ra8.board.external.backing.Backing, store: *memory.Store) !ra8.board.external.memory.Layout {
+    const layout = try ra8.board.external.memory.Layout.init(config);
+    backing.* = try ra8.board.external.backing.Backing.init(layout, flash.window());
+    store.attachExternal(backing.port());
+    return layout;
+}
+
+test "the fabric section alone carries the fabric state and refuses a mismatched store" {
+    var config = ra8.board.external.memory.Config{};
+    config.ospi.size = 1024 * 1024;
+    config.sdram.size = 1024 * 1024;
+    var flash1 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
+    defer flash1.deinit();
+    var first = try memory.Store.init(null);
+    defer first.deinit();
+    var external1: ra8.board.external.backing.Backing = undefined;
+    const layout = try fabricStore(config, &flash1, &external1, &first);
+    defer external1.deinit();
+    external1.fabric.note(.cpu0, layout.locate(0x6800_0040, 4).?, .read, 4);
+    var list = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer list.deinit();
+    try file.writeHeader(&list.writer);
+    try memory.saveFabric(&first, &list.writer);
+
+    var flash2 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
+    defer flash2.deinit();
+    var second = try memory.Store.init(null);
+    defer second.deinit();
+    var external2: ra8.board.external.backing.Backing = undefined;
+    _ = try fabricStore(config, &flash2, &external2, &second);
+    defer external2.deinit();
+    const state = try memory.prepareFabric(&second, list.written());
+    memory.commitFabric(&second, state);
+    try std.testing.expectEqual(@as(u64, 4), external2.fabric.counters(.sdram, 0).bytes_read);
+
+    // A different fabric shape, and a store with no fabric at all, refuse.
+    var changed = config;
+    changed.sdram.width = 16;
+    var flash3 = ra8.components.nor_flash.Flash.init(std.testing.allocator);
+    defer flash3.deinit();
+    var third = try memory.Store.init(null);
+    defer third.deinit();
+    var external3: ra8.board.external.backing.Backing = undefined;
+    _ = try fabricStore(changed, &flash3, &external3, &third);
+    defer external3.deinit();
+    try std.testing.expectError(error.LayoutMismatch, memory.prepareFabric(&third, list.written()));
+    var bare = try memory.Store.init(null);
+    defer bare.deinit();
+    try std.testing.expectError(error.LayoutMismatch, memory.prepareFabric(&bare, list.written()));
+
+    // A stream with no fabric section is missing it.
+    var empty = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer empty.deinit();
+    try file.writeHeader(&empty.writer);
+    try std.testing.expectError(error.Missing, memory.prepareFabric(&second, empty.written()));
+}

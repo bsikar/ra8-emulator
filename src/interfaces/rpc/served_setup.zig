@@ -32,6 +32,7 @@ const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
 const history_bridge = @import("history_bridge.zig");
 const history_resources = @import("ra8_host").history.resources;
+const history_budget = @import("ra8_host").history.budget;
 const session_branch = @import("ra8_session").history_branch;
 const session_fork = @import("ra8_session").history_fork_router;
 const session_async = @import("ra8_session").history_async_queue;
@@ -115,6 +116,9 @@ pub const Served = struct {
         });
         errdefer owner.deinit();
         _ = owner.watchModules();
+        // A session that records history also keeps the reverse window: the
+        // host budget table's window share, planted at the loaded machine.
+        if (history_opts) |opts| try owner.openWindow(try windowBytes(opts));
         const Env = served.Server.Env;
         const rx = try allocator.alloc(u8, 2 * Env.max_frame);
         errdefer allocator.free(rx);
@@ -257,6 +261,16 @@ pub const Served = struct {
         if (self.ram_history) |ram| ram.deinit();
     }
 };
+
+/// The reverse window's byte budget: the window share of the RAM budget, the
+/// 128 MiB floor's share when the host's RAM cannot be measured.
+fn windowBytes(opts: HistoryOpts) !usize {
+    const ram = history_resources.ramBudget(opts.ram_budget) catch |err| switch (err) {
+        error.MeasurementUnavailable => history_budget.bytes.floor,
+        else => return err,
+    };
+    return @intCast((try history_budget.partition(ram)).window);
+}
 
 /// set_camera_source: open the source `spec` names on the host and make it
 /// the board's camera source. A source that will not open changes nothing.

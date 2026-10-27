@@ -20,6 +20,7 @@ const fields = @import("ra8_snapshot").fields;
 
 pub const Store = store_mod.Store;
 pub const page: u32 = 0x1000;
+pub const FabricState = ?external.State;
 
 pub const Error = fields.Error || error{ Unbacked, SizeMismatch, LayoutMismatch, OutOfMemory };
 
@@ -42,6 +43,33 @@ pub fn saveAs(store: *const Store, kind: file.Kind, writer: anytype) !void {
     }
     const state: ?external.State = if (external_backing.fabricOf(store)) |fabric| fabric.state() else null;
     try fields.write(writer, state);
+}
+
+/// The fabric section: the external memory fabric's timing state alone,
+/// for a save that leaves the guest bytes out.
+pub fn saveFabric(store: *const Store, writer: anytype) !void {
+    const state: ?external.State = if (external_backing.fabricOf(store)) |fabric| fabric.state() else null;
+    var counter: std.Io.Writer.Discarding = .init(&.{});
+    try fields.write(&counter.writer, state);
+    try file.writeSectionHeader(writer, .fabric, counter.fullCount());
+    try fields.write(writer, state);
+}
+
+/// Reads and checks a fabric section against `store`'s fabric.
+pub fn prepareFabric(store: *const Store, bytes: []const u8) !?external.State {
+    const section = try file.Reader.find(bytes, .fabric) orelse return error.Missing;
+    var cursor: fields.Cursor = .{ .bytes = section.payload };
+    const state = try fields.read(?external.State, &cursor);
+    if (!cursor.done()) return Error.Truncated;
+    const fabric = external_backing.fabricOf(store);
+    if ((state != null) != (fabric != null)) return Error.LayoutMismatch;
+    if (state) |saved| if (!std.meta.eql(saved.config, fabric.?.layout.config)) return Error.LayoutMismatch;
+    return state;
+}
+
+/// Puts a prepared fabric state back.
+pub fn commitFabric(store: *Store, state: ?external.State) void {
+    if (state) |saved| external_backing.fabricOf(store).?.restore(saved);
 }
 
 /// Fills `store`, freshly made, from a memory section's payload.

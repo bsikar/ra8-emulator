@@ -102,17 +102,25 @@ pub fn queue(self: *Transport) !Ticket {
         .pending => return Error.NotReady,
     };
     const base = plan.base;
-    const checkpoint = switch (base) {
-        .checkpoint => |checkpoint| checkpoint,
-        .current => return Error.NotReady,
-    };
-    // The checkpoint strictly before the base's, for the previous-interval fallback.
     var earlier: ?seek_engine.Base = null;
-    for (facts.checkpoints) |c| {
-        const before = self.session.comparePositions(c.position, checkpoint.position) catch continue;
-        if (before != .lt) continue;
-        const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
-        if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+    switch (base) {
+        .current => return Error.NotReady,
+        .checkpoint => |checkpoint| {
+            for (facts.checkpoints) |c| {
+                const before = self.session.comparePositions(c.position, checkpoint.position) catch continue;
+                if (before != .lt) continue;
+                const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
+                if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+            }
+        },
+        .window => {
+            for (facts.checkpoints) |c| {
+                const before = self.session.comparePositions(c.position, grid.at) catch continue;
+                if (before != .lt) continue;
+                const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
+                if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+            }
+        },
     }
     self.cancel();
     self.epoch += 1;
@@ -136,6 +144,21 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     const rc = &job.rc.?;
     if (rc.start) return .{ .stop = .history_start };
     const grid = self.session.grid orelse return error.NoGrid;
+    if (rc.base == .window) {
+        if (self.session.window) |w| {
+            while (w.cursor() > 0) {
+                _ = try w.undo();
+                const at = self.session.grid orelse return error.NoGrid;
+                if (rcBaseHit(self, at.at)) {
+                    return try rcHitStop(self, at.at.phase);
+                }
+            }
+        }
+        if (rc.prior) |earlier| {
+            return fallback(self, rc, earlier);
+        }
+        return .{ .stop = .history_start };
+    }
     if (rc.landing) {
         return landingSlice(self, job, rc, grid);
     }
@@ -194,6 +217,7 @@ fn fallback(self: *Transport, rc: *Rc, earlier: seek_engine.Base) !?api.Ended {
     const upper = switch (rc.base) {
         .checkpoint => |base| base.position,
         .current => return error.NoGrid,
+        .window => |w| w.position,
     };
     const bridge = self.history orelse return Error.NotReady;
     const facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;

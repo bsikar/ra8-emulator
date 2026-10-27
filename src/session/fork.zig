@@ -26,6 +26,8 @@ const new_history = @import("new_history.zig");
 const apply = @import("apply.zig");
 const line = @import("line.zig");
 const run_slice = @import("run_slice.zig");
+const window_fork = @import("history/window_fork.zig");
+const session_window = @import("window.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -144,8 +146,11 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     }
     router.switchActiveLine(undo.new_id);
     line.stampLine(self);
+    window_fork.noteFork(self, undo.new_id);
     undo.stage = .switched;
     try apply.applyAction(self, action);
+    // The cut window still holds the state before the write.
+    session_window.replantWindow(self);
     if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);
     if (self.net_hook) |hook| hook.closeFlowsFn(hook.context);
     _ = async_traffic.clearOnFork(self);
@@ -158,6 +163,7 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
     if (self.replaying) return applyAction(self, action);
     const router = self.fork_router orelse {
         try applyAction(self, action);
+        session_window.replantWindow(self);
         try recordActionIntervention(self, currentPosition(self), action);
         return;
     };
@@ -166,6 +172,9 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
     switch (decision) {
         .live => {
             try applyAction(self, action);
+            // The window's slots predate the change; a step back across it
+            // would land on a state that never ran.
+            session_window.replantWindow(self);
             try recordActionIntervention(self, line.canonicalPosition(self), action);
         },
         .needs_confirmation => {

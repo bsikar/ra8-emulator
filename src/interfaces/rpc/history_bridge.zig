@@ -61,8 +61,17 @@ pub const Bridge = struct {
         // A never-run machine has no grid: its cursor sits at or before
         // every checkpoint, which a zeroed position says. A session with
         // no log still refuses above.
-        if (self.session.grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
-        return .{ .current = .{}, .checkpoints = gathered.checkpoints };
+        const window = windowFacts(self.session);
+        if (self.session.grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints, .window = window };
+        return .{ .current = .{}, .checkpoints = gathered.checkpoints, .window = window };
+    }
+
+    /// The session's reverse window as the planners see it: its span, the
+    /// cursor and the line it was built on. Null while it holds no run.
+    pub fn windowFacts(session: *ra8_session.api.Session) ?seek_engine.WindowFacts {
+        const w = session.window orelse return null;
+        if (!w.ready()) return null;
+        return .{ .start = w.start() orelse return null, .end = w.end() orelse return null, .at = w.at() orelse return null, .line = w.line, .slots = w.count() };
     }
 
     /// Put the machine back at a checkpoint's saved state; `object` is

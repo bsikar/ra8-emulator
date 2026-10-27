@@ -32,6 +32,8 @@ const history_async = @import("history/async_queue.zig");
 const async_traffic = @import("history/async_traffic.zig");
 const replay_feeder = @import("history/replay_feeder.zig");
 const session_line = @import("line.zig");
+const session_window = @import("window.zig");
+const window_engine = @import("history/window_engine.zig");
 
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
@@ -89,6 +91,8 @@ pub const Session = struct {
     event_sources: event_sources.Sources = .{},
     /// The rewind history (RA8EMU-1170), when the harness attached one.
     history: ?*history_mod.History = null,
+    window: ?*window_engine.ReverseWindow = null,
+    window_driver: ?session_window.Driver = null,
     fork_router: ?*session_fork.ForkRouter = null,
     image_identity: [2]?[16]u8 = .{ null, null },
     root: ?*const history_root.Root = null,
@@ -269,13 +273,14 @@ pub const Session = struct {
         return self.run(core, .step);
     }
 
-    /// Puts the run back `back` recorded stops (RA8EMU-1170); forward replays.
-    pub fn rewind(self: *Session, core: Core, back: u32) anyerror!void {
-        return session_control.rewind(self, core, back);
-    }
-    pub fn stepBack(self: *Session, core: Core) anyerror!void {
-        return session_control.stepBack(self, core);
-    }
+    /// Puts the run back `back` recorded stops; window-backed when covered.
+    pub const rewind = session_window.rewind;
+    pub const stepBack = session_window.stepBack;
+    pub const attachWindow = session_window.attachWindow;
+    pub const attachWindowDriver = session_window.attachWindowDriver;
+    pub const dropWindow = session_window.dropWindow;
+    pub const replantWindow = session_window.replantWindow;
+    pub const windowStatus = session_window.windowStatus;
     pub fn interrupt(self: *Session, core: Core) anyerror!stop_machine.Stop {
         return session_control.interrupt(self, core);
     }

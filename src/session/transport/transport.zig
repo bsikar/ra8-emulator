@@ -143,15 +143,7 @@ pub const Transport = struct {
         self.cancel();
         self.epoch += 1;
         const ticket = self.issue();
-        self.job = .{
-            .ticket = ticket,
-            .epoch = self.epoch,
-            .core = step.core,
-            .kind = .step,
-            .prior_budget = prior,
-            .left = step.count,
-            .dir = step.dir,
-        };
+        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = step.core, .kind = .step, .prior_budget = prior, .left = step.count, .dir = step.dir };
         return ticket;
     }
 
@@ -163,14 +155,7 @@ pub const Transport = struct {
         self.cancel();
         self.epoch += 1;
         const ticket = self.issue();
-        self.job = .{
-            .ticket = ticket,
-            .epoch = self.epoch,
-            .core = advance.core,
-            .kind = .advance,
-            .prior_budget = prior,
-            .target_ns = target,
-        };
+        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = advance.core, .kind = .advance, .prior_budget = prior, .target_ns = target };
         return ticket;
     }
 
@@ -294,6 +279,19 @@ pub const Transport = struct {
 
     fn stepSlice(self: *Transport, job: *Job) !?api.Ended {
         if (job.dir == .back) return back_mod.slice(self, job);
+        if (self.session.window) |w| {
+            if (w.cursor() < w.count()) {
+                const canonical = @import("../history/canonical_step.zig");
+                const tc: @import("../history/trail.zig").Core = if (job.core == .cpu0) .cpu0 else .cpu1;
+                if (canonical.stepForward(w, tc)) |_| {
+                    job.left -= 1;
+                    return if (job.left == 0) .{ .stop = .stepped } else null;
+                } else |err| switch (err) {
+                    error.OutsideWindow => try w.walkTo(w.count()),
+                    else => return err,
+                }
+            }
+        }
         const ended = try self.session.run(job.core, .step);
         job.left -= 1;
         const point = ended == .stop and ended.stop != .stepped;
@@ -307,7 +305,7 @@ pub const Transport = struct {
     pub fn restoreBase(self: *Transport, base: seek_engine.Base) !void {
         const bridge = self.history orelse return Error.NotReady;
         switch (base) {
-            .current => {},
+            .current, .window => {},
             .checkpoint => |checkpoint| {
                 var name: [32]u8 = undefined;
                 objectName(checkpoint.object, &name);
@@ -315,6 +313,9 @@ pub const Transport = struct {
                 // The restored position names the line it is replayed on,
                 // and the line's interventions from there on are due again.
                 self.session.stampLine();
+                // The window described the run before the restore: it
+                // starts over at the restored state, on the stamped line.
+                self.session.replantWindow();
                 if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
             },
         }
@@ -322,6 +323,12 @@ pub const Transport = struct {
 
     fn advanceSlice(self: *Transport, job: *Job) !?api.Ended {
         const session = self.session;
+        if (session.window) |w| {
+            while (w.cursor() < w.count() and (try session.now()) < job.target_ns) {
+                if (!try w.redo()) break;
+            }
+            if ((try session.now()) >= job.target_ns) return reached();
+        }
         const before = try session.now();
         const base = session.time_base orelse return error.NoTime;
         const left = base.cyclesUntil(job.target_ns) -| saved(session);
@@ -330,8 +337,7 @@ pub const Transport = struct {
         const ended = try session.run(job.core, .cont);
         if (ended != .count) return ended;
         const after = try session.now();
-        if (after == before) return reached(); // a round that moves no time ends it
-        if (after >= job.target_ns) return reached();
+        if (after == before or after >= job.target_ns) return reached();
         return null;
     }
 

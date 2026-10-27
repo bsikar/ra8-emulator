@@ -34,6 +34,14 @@ pub const Checkpoint = struct {
     object: [16]u8,
 };
 
+pub const WindowFacts = struct {
+    start: Position,
+    end: Position,
+    at: Position,
+    line: ?BranchId = null,
+    slots: u64 = 0,
+};
+
 /// What the caller holds about the live run: the cursor's position and
 /// every checkpoint the committed log names, any order.
 pub const Facts = struct {
@@ -41,6 +49,7 @@ pub const Facts = struct {
     checkpoints: []const Checkpoint,
     graph: ?*const BranchGraph = null,
     active_line: BranchId = branch_mod.root_branch_id,
+    window: ?WindowFacts = null,
 };
 
 /// A target this engine cannot plan yet, and why. The transport reports
@@ -57,6 +66,8 @@ pub const Plan = struct {
     replay_rounds: u64,
 };
 
+pub const WindowDirection = enum { undo, redo };
+
 pub const Base = union(enum) {
     /// The live cursor's state, replayed forward to the target.
     current,
@@ -66,6 +77,12 @@ pub const Base = union(enum) {
         id: u32,
         object: [16]u8,
         position: Position,
+    },
+    /// The reverse window's redo/undo base.
+    window: struct {
+        position: Position,
+        dir: WindowDirection,
+        slots: u64 = 0,
     },
 };
 
@@ -90,12 +107,64 @@ pub fn plan(target: seek_target.Target, facts: Facts) Outcome {
     }
 }
 
+const WindowCover = struct {
+    dir: WindowDirection,
+    rounds: u64,
+    slots: u64,
+};
+
+fn windowCovers(facts: Facts, target: Position) ?WindowCover {
+    const win = facts.window orelse return null;
+    if (facts.graph) |graph| {
+        if (win.line) |wl| {
+            if (wl != facts.active_line) return null;
+        }
+        const target_canon = graph.canonicalize(facts.active_line, target) catch return null;
+        const win_start = graph.canonicalize(facts.active_line, win.start) catch return null;
+        const win_end = graph.canonicalize(facts.active_line, win.end) catch return null;
+        const win_at = graph.canonicalize(facts.active_line, win.at) catch return null;
+        if (branch_mod.scalarOrder(target_canon, win_start) == .lt) return null;
+        if (branch_mod.scalarOrder(target_canon, win_end) == .gt) return null;
+        const ord = branch_mod.scalarOrder(target_canon, win_at);
+        const dir: WindowDirection = if (ord == .lt) .undo else .redo;
+        const rounds = if (ord == .lt) win_at.r -| target_canon.r else target_canon.r -| win_at.r;
+        return .{ .dir = dir, .rounds = rounds, .slots = win.slots };
+    }
+    if (win.line) |wl| {
+        if (target.branch != wl) return null;
+    } else if (target.branch != win.start.branch) {
+        return null;
+    }
+    const cmp_start = position_mod.compare(target, win.start) catch return null;
+    if (cmp_start == .lt) return null;
+    const cmp_end = position_mod.compare(target, win.end) catch return null;
+    if (cmp_end == .gt) return null;
+    const ord = position_mod.compare(target, win.at) catch return null;
+    const dir: WindowDirection = if (ord == .lt) .undo else .redo;
+    const rounds = if (ord == .lt) win.at.r -| target.r else target.r -| win.at.r;
+    return .{ .dir = dir, .rounds = rounds, .slots = win.slots };
+}
+
+fn windowPlan(win: WindowCover, target: Position) Outcome {
+    return .{
+        .plan = .{
+            .base = .{ .window = .{
+                .position = target,
+                .dir = win.dir,
+                .slots = win.slots,
+            } },
+            .replay_rounds = win.rounds,
+        },
+    };
+}
+
 fn planPosition(target: Position, facts: Facts) Outcome {
     if (facts.graph) |graph| {
         if (graph.canonicalize(facts.active_line, target)) |target_canon| {
             const canon_current = graph.canonicalize(facts.active_line, facts.current) catch facts.current;
             const order = branch_mod.scalarOrder(target_canon, canon_current);
             if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
+            if (windowCovers(facts, target)) |win| return windowPlan(win, target);
             const best = nearestOnLine(graph, facts.active_line, target, facts.checkpoints);
             if (order == .gt) {
                 const live_rounds = target.r -| facts.current.r;
@@ -112,6 +181,7 @@ fn planPosition(target: Position, facts: Facts) Outcome {
     const order = position_mod.compare(target, facts.current) catch
         return .{ .pending = .{ .what = "another line's seek" } };
     if (order == .eq) return .{ .plan = .{ .base = .current, .replay_rounds = 0 } };
+    if (windowCovers(facts, target)) |win| return windowPlan(win, target);
     const best = nearestAtOrBefore(target, facts.checkpoints);
     if (order == .gt) {
         // Forward: the live cursor is a candidate too, and the tie goes
@@ -134,6 +204,23 @@ fn planPosition(target: Position, facts: Facts) Outcome {
 /// base, so with no checkpoint there the outcome stays pending naming
 /// the reverse window's undo base (unit 21).
 pub fn backBase(cursor: Position, facts: Facts) Outcome {
+    if (windowCovers(facts, cursor)) |win| {
+        const at_start = if (facts.graph) |graph| blk: {
+            const c_canon = graph.canonicalize(facts.active_line, cursor) catch break :blk false;
+            const s_canon = graph.canonicalize(facts.active_line, facts.window.?.start) catch break :blk false;
+            break :blk branch_mod.scalarOrder(c_canon, s_canon) == .eq;
+        } else (position_mod.compare(cursor, facts.window.?.start) catch .gt) == .eq;
+        if (!at_start) {
+            return .{ .plan = .{
+                .base = .{ .window = .{
+                    .position = cursor,
+                    .dir = .undo,
+                    .slots = 1,
+                } },
+                .replay_rounds = win.rounds,
+            } };
+        }
+    }
     const best = if (facts.graph) |graph|
         nearestOnLine(graph, facts.active_line, cursor, facts.checkpoints)
     else

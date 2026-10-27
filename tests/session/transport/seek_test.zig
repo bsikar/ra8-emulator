@@ -51,10 +51,17 @@ const TestBridge = struct {
         if (self.prior) |old| self.gpa.free(old.checkpoints);
         const gathered = try seek_facts_mod.gather(self.gpa, self.sink.bytes.items);
         self.prior = gathered;
+        const win_facts: ?seek_engine_mod.WindowFacts = if (self.opened.session().window) |w| if (w.start()) |st| .{
+            .start = st,
+            .end = w.end() orelse st,
+            .at = w.at() orelse st,
+            .line = w.line,
+            .slots = w.count(),
+        } else null else null;
         // A never-run machine has no grid: its cursor sits at or before
         // every checkpoint, which a zeroed position says.
-        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints };
-        return .{ .current = .{}, .checkpoints = gathered.checkpoints };
+        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints, .window = win_facts };
+        return .{ .current = .{}, .checkpoints = gathered.checkpoints, .window = win_facts };
     }
 
     fn restore(context: *anyopaque, object: []const u8) anyerror!void {
@@ -297,4 +304,72 @@ test "a seek without a bridge, on a pending kind, or past the log stays refused"
     t.history = state.bridge();
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "3:cpu1:4:polled" } }));
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "12.402s" } }));
+}
+
+const CpuRegs = ra8.chip.core.cpu.regs.Regs;
+
+fn directSeek(gpa: std.mem.Allocator, text: []const u8) !struct { pos: seek_engine_mod.Position, regs: CpuRegs } {
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects() });
+    defer opened.deinit();
+    _ = try opened.session().run(.cpu0, .run);
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = opened.session(), .history = state.bridge() };
+    var fake = FakeWall{};
+    _ = try t.command(.{ .seek = .{ .target = text } });
+    var pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    while (pumped.finished == null) pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    return .{ .pos = opened.session().grid.?.at, .regs = opened.primaryCpu().regs };
+}
+
+test "a backward seek with window underrun restores checkpoint base and lands on target" {
+    const gpa = std.testing.allocator;
+    var sink: fakes.Sink = .{ .gpa = gpa };
+    defer sink.deinit();
+    var objects: fakes.Objects = .{ .gpa = gpa };
+    defer objects.deinit();
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects() });
+    defer opened.deinit();
+    _ = try opened.session().run(.cpu0, .run);
+    var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
+    defer state.deinit();
+    var t = transport.Transport{ .session = opened.session(), .history = state.bridge() };
+
+    const facts = try TestBridge.facts(&state);
+    try std.testing.expect(facts.checkpoints.len >= 2);
+    const ckpt0 = facts.checkpoints[0].position;
+    const text = try std.fmt.allocPrint(gpa, "{d}:{s}:{d}:{s}", .{ ckpt0.r, @tagName(ckpt0.phase), ckpt0.o + 1, @tagName(ckpt0.gap) });
+    defer gpa.free(text);
+
+    const ref = try directSeek(gpa, text);
+    const live_pos = opened.session().grid.?.at;
+    const dummy_slot = ra8.session.history_window_engine.Slot{ .pre = live_pos, .post = live_pos, .core = .cpu0, .kind = .ram_cpu, .delta = .{}, .digest = @splat(0) };
+    var dummy_w: ra8.session.history_window_engine.ReverseWindow = undefined;
+    dummy_w.trail.cursor = 0;
+    dummy_w.slots = .empty;
+    try dummy_w.slots.append(gpa, dummy_slot);
+    defer dummy_w.slots.deinit(gpa);
+    dummy_w.head = 0;
+    dummy_w.image = .empty;
+    dummy_w.hot = &.{};
+    dummy_w.hot_at = null;
+    dummy_w.planted_at = ckpt0;
+    dummy_w.line = live_pos.branch;
+    dummy_w.rebuild = null;
+    dummy_w.refusal = null;
+    dummy_w.refused_slot = null;
+    dummy_w.slot_bytes = 0;
+    opened.session().attachWindow(&dummy_w);
+
+    var fake = FakeWall{};
+    const ticket = try t.command(.{ .seek = .{ .target = text } });
+    var pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    while (pumped.finished == null) pumped = try t.pump(fake.wall(), fake.now_ns + 4_000_000);
+    try std.testing.expectEqual(ticket, pumped.finished.?.ticket);
+    try std.testing.expectEqual(ref.pos, opened.session().grid.?.at);
+    try std.testing.expectEqual(ref.regs, opened.primaryCpu().regs);
 }

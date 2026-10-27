@@ -94,6 +94,78 @@ pub fn queue(self: *Transport, text: []const u8) !Ticket {
     return ticket;
 }
 
+fn seekWindowBase(self: *Transport, seek_job: *SeekKind, win: anytype) !?api.Ended {
+    const w = self.session.window orelse return Error.NotReady;
+    const grid = self.session.grid orelse return error.NoGrid;
+    const ord = self.session.comparePositions(grid.at, seek_job.target) catch return error.OtherLine;
+    if (ord == .eq) return transport_mod.reached();
+    if (win.dir == .undo or ord == .gt) {
+        var moved = false;
+        var had_complex = false;
+        errdefer if (moved) w.flushSide(had_complex) catch {};
+        while (true) {
+            const at = w.at() orelse return error.NoGrid;
+            const cmp = self.session.comparePositions(at, seek_job.target) catch return error.OtherLine;
+            if (cmp != .gt) break;
+            if (w.cursor() == 0) break;
+            const slot = w.slotAt(w.cursor() - 1);
+            if (slot.kind == .complex) had_complex = true;
+            if (!try w.undoStep()) break;
+            moved = true;
+        }
+        if (moved) try w.flushSide(had_complex);
+        const final_at = self.session.grid orelse return error.NoGrid;
+        const final_cmp = self.session.comparePositions(final_at.at, seek_job.target) catch return error.OtherLine;
+        if (final_cmp == .eq) return transport_mod.reached();
+        const bridge = self.history orelse return error.TargetBeforeHistory;
+        var facts = bridge.facts(bridge.context) catch return error.TargetBeforeHistory;
+        if (self.session.fork_router) |router| {
+            facts.graph = router.graph;
+            facts.active_line = router.active_line;
+        }
+        var earlier: ?seek_engine.Checkpoint = null;
+        for (facts.checkpoints) |c| {
+            const before = self.session.comparePositions(c.position, seek_job.target) catch continue;
+            if (before == .gt) continue;
+            const better = earlier == null or c.position.r > earlier.?.position.r;
+            if (better) earlier = c;
+        }
+        if (earlier) |c| {
+            seek_job.base = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+            seek_job.restored = false;
+            return null;
+        }
+        return error.TargetBeforeHistory;
+    } else {
+        var moved = false;
+        var had_complex = false;
+        errdefer if (moved) w.flushSide(had_complex) catch {};
+        while (true) {
+            const at = w.at() orelse return error.NoGrid;
+            const cmp = self.session.comparePositions(at, seek_job.target) catch return error.OtherLine;
+            if (cmp != .lt) break;
+            if (w.cursor() == w.count()) break;
+            const slot = w.slotAt(w.cursor());
+            if (slot.kind == .complex) {
+                if (moved) {
+                    try w.flushSide(had_complex);
+                    moved = false;
+                    had_complex = false;
+                }
+                _ = try w.redo();
+            } else {
+                if (!try w.redoStep()) break;
+                moved = true;
+            }
+        }
+        if (moved) try w.flushSide(had_complex);
+        const final_at = self.session.grid orelse return error.NoGrid;
+        const final_cmp = self.session.comparePositions(final_at.at, seek_job.target) catch return error.OtherLine;
+        if (final_cmp == .eq) return transport_mod.reached();
+        return null;
+    }
+}
+
 /// Drive one seek slice: restore a checkpoint base once, then run
 /// forward until the landing position. The landing is phase-precise:
 /// the first check whose position has reached the target's, in the
@@ -116,6 +188,10 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
                 if (bridge.logBytes) |read| try self.session.loadReplayInterventions(try read(bridge.context));
             }
             return null;
+        },
+        .window => |win| {
+            if (try seekWindowBase(self, seek_job, win)) |ended| return ended;
+            if (seek_job.base != .window) return null;
         },
     }
     const grid = self.session.grid orelse return error.NoGrid;
