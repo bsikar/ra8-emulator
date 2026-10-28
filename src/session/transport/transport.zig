@@ -31,6 +31,7 @@ const play_mod = @import("play.zig");
 const seek_mod = @import("seek.zig");
 const back_mod = @import("back.zig");
 const reverse_mod = @import("reverse.zig");
+const report_mod = @import("report.zig");
 
 pub const Command = command_mod.Command;
 pub const Direction = command_mod.Direction;
@@ -44,6 +45,7 @@ pub const Finished = command_mod.Finished;
 pub const Wall = command_mod.Wall;
 pub const Poll = command_mod.Poll;
 pub const Error = command_mod.Error;
+pub const Hook = seek_mod.Hook;
 
 /// One blocking `finish` pump is at most this much host time between polls.
 const finish_slice_ns: u64 = 50_000_000;
@@ -62,6 +64,9 @@ pub const Bridge = struct {
     restore: *const fn (*anyopaque, object: []const u8) anyerror!void,
     /// Returns the committed log's raw bytes, when available.
     logBytes: ?*const fn (*anyopaque) anyerror![]const u8 = null,
+    /// Reads one object of the history's object space by its 32-hex name;
+    /// the caller owns the bytes. Null when the bridge cannot.
+    readObject: ?*const fn (*anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 = null,
 };
 
 pub const Job = struct {
@@ -119,9 +124,14 @@ pub const Transport = struct {
     history: ?Bridge = null,
     /// The wall moment of the slice being driven, for a reverse clock.
     wall_ns: u64 = 0,
+    /// Told of every command and planned seek; the application's prefetcher binds it.
+    hook: ?seek_mod.Hook = null,
+    cancelled: bool = false,
 
     /// Validate and queue a command. Nothing runs until the next `pump`.
     pub fn command(self: *Transport, cmd: Command) !Ticket {
+        if (self.hook) |hook| hook.commandFn(hook.context);
+        self.cancelled = false;
         switch (cmd) {
             .pause => {
                 self.cancel();
@@ -164,12 +174,14 @@ pub const Transport = struct {
     pub fn issue(self: *Transport) Ticket {
         const ticket = self.next_ticket;
         self.next_ticket += 1;
+        self.cancelled = false;
         return ticket;
     }
 
     /// Preempt the running job the way a Cancel would: its ticket goes dead.
     pub fn cancel(self: *Transport) void {
         seek_mod.disarm(self);
+        self.cancelled = true;
         if (self.job) |job| {
             self.session.setRunBudget(job.core, job.prior_budget) catch {};
             // A backward job's cancel returns the machine to the origin
@@ -193,38 +205,7 @@ pub const Transport = struct {
     }
 
     /// The transport state now, without running anything.
-    pub fn report(self: *const Transport) Report {
-        var progress: command_mod.Progress = .{};
-        var phase: command_mod.Phase = .halted;
-        var state: ?command_mod.State = null;
-        if (self.job) |*job| {
-            progress.slices = job.slices;
-            if (job.kind == .advance) {
-                progress.target_ns = job.target_ns;
-                progress.reached_ns = self.session.now() catch null;
-            }
-            if (job.kind == .seek) {
-                progress.target_position = job.kind.seek.target;
-                progress.eta_ns = seek_mod.eta(self, job);
-            }
-            phase = switch (job.kind) {
-                .play => .playing,
-                .cont => .continuing,
-                .advance => .advancing,
-                .step => .stepping,
-                .seek => .seeking,
-                .rcont => .reverse_continuing,
-            };
-            state = jobState(job);
-        }
-        return .{
-            .epoch = self.epoch,
-            .phase = phase,
-            .state = state,
-            .position = if (self.session.grid) |grid| grid.at else null,
-            .progress = progress,
-        };
-    }
+    pub const report = report_mod.report;
 
     /// The read gate (the contract's "reads return busy{state}" while
     /// moving): the running job's state when a read must not touch the

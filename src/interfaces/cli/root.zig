@@ -16,6 +16,7 @@ pub const ctl_write = ctl.write;
 pub const host = @import("host/host.zig");
 pub const history_cli = @import("history_cli.zig");
 pub const history_branch_cli = @import("history_branch_cli.zig");
+pub const history_maint_cli = @import("history_maint_cli.zig");
 pub const video_out = @import("video_out.zig");
 pub const gif_out = @import("gif_out.zig");
 pub const debug_front = @import("debug_front.zig");

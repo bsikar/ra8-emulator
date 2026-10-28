@@ -52,6 +52,9 @@ const shell_source = @import("source.zig");
 const source_pane = @import("../ui/source_pane.zig");
 const timeline_model = @import("../timeline_model.zig");
 const timeline_pane = @import("../timeline_pane.zig");
+const diff_pane = @import("../ui/diff_pane.zig");
+const branch_tree = @import("../branch_tree.zig");
+const branch_state = @import("branch_state.zig");
 
 const geom = @import("../geom.zig");
 const Rect = geom.Rect;
@@ -72,6 +75,8 @@ pub fn waitingFor(kind: pane_layout.Kind) ?[]const u8 {
         .timeline => "waiting for the trace",
         .locals => "waiting for the locals",
         .map => "waiting for an image",
+        .diff => "waiting for diff results",
+        .branches => "waiting for the branches",
     };
 }
 
@@ -106,6 +111,9 @@ pub const Panes = struct {
     timeline: ?*timeline_model.Model = null,
     /// Greys register and memory panes while moving backward or seeking (Slice 22.4).
     busy: bool = false,
+    diff: ?*const diff_pane.DiffView = null,
+    /// The branch tree leaf's list, asked over the link.
+    branches: ?*const branch_state.Feed = null,
 
     pub fn painter(self: *Panes) shell_frame.Painter {
         return .{ .context = self, .paint = paint };
@@ -217,6 +225,12 @@ fn paint(context: *anyopaque, list: *draw_list.DrawList, table: *const widget.ty
         // A leaf too small for the board still shows the panel by itself.
         if (board.hasFrame()) return list.image(fit.fitIn(toList(body), board.width, board.height), board.image());
     };
+    if (pane.kind == .diff) if (self.diff) |diff_view| {
+        return diff_pane.draw(table, theme, toList(body), diff_view);
+    };
+    if (pane.kind == .branches) if (self.branches) |feed| {
+        if (feed.note() == null) return branch_tree.draw(table, theme, toList(body), feed.state.items());
+    };
     const note = noteFor(self, pane) orelse return;
     const at = noteAt(body) orelse return;
     try font.draw(list, at.x, at.y, font.fit(note, at.room), theme.muted);
@@ -267,6 +281,9 @@ fn noteFor(self: *const Panes, pane: pane_layout.Pane) ?[]const u8 {
     };
     if (pane.kind == .source) if (self.source) |pair| {
         if (pair.of(pane.core).note()) |note| return note;
+    };
+    if (pane.kind == .branches) if (self.branches) |feed| {
+        if (feed.note()) |note| return note;
     };
     return waitingFor(pane.kind);
 }

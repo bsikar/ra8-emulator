@@ -33,15 +33,26 @@ pub const Live = struct {
     panes: gui_app.shell.panes.Panes,
     stack: gui_app.shell.stack.Pair,
     files: gui_app.shell.open.Open,
+    branches: gui_app.shell.branch_state.Feed,
+    diff: gui_app.shell.diff_state.State,
+    filmstrip: gui_app.shell.filmstrip_feed.Feed,
 
     /// Opens in place and steps until `image` has loaded and halted. The
     /// bar's speed starts at `milli` thousandths of real time: the fixture
     /// images run a 1 GHz clock, which the session cannot keep up with.
     pub fn open(self: *Live, image: []const u8, milli: u64) !void {
+        return self.openWith(image, milli, null, null);
+    }
+
+    /// `open` on a session that records `history`, with `prepare` run on the
+    /// served session before the shell has stepped once. A recording session
+    /// is left as the image opened it, with no load of the shell's own.
+    pub fn openWith(self: *Live, image: []const u8, milli: u64, history: ?ra8.rpc.served_setup.HistoryOpts, prepare: ?*const fn (*Live) anyerror!void) !void {
         // Field defaults do not apply to an `undefined` rig; reset first.
         self.worker_clock = .{};
         const gpa = std.testing.allocator;
-        try self.session.open(gpa, std.testing.io, image, null);
+        try self.session.openWith(gpa, std.testing.io, image, null, history);
+        if (prepare) |run| try run(self);
         self.worker.bind(std.testing.io, gpa, &self.session, self.worker_clock.clock());
         self.link.openNative(&self.worker.native);
         self.shell = .init(gpa, try gui_app.pane_layout.twoCore(gpa));
@@ -53,7 +64,13 @@ pub const Live = struct {
         self.stack = .{};
         self.board = .init(gpa);
         self.pointer = .{};
-        self.panes = .{ .board = &self.board, .board_input = &self.pointer, .stack = &self.stack };
+        self.branches = .{};
+        self.diff = .{};
+        self.filmstrip = .{};
+        self.panes = .{ .board = &self.board, .board_input = &self.pointer, .stack = &self.stack, .branches = &self.branches, .diff = &self.diff.view };
+        self.shell.branches = &self.branches;
+        self.shell.diff = &self.diff;
+        self.shell.filmstrip = &self.filmstrip;
         self.shell.link = &self.link;
         self.shell.server = self.worker.inlineServer();
         self.shell.clock = self.clock.clock();
@@ -66,6 +83,7 @@ pub const Live = struct {
         self.files = .{ .io = std.testing.io, .allocator = gpa };
         self.shell.files = &self.files;
         try self.step();
+        if (history != null) return;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, image, gpa, .limited(1 << 20));
         defer gpa.free(bytes);
         try self.shell.status.load(&self.link, image, bytes);

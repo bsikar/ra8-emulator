@@ -122,6 +122,12 @@ pub const ZigSession = struct {
         }
     }
 
+    /// The machine store behind this session's boundary, if any.
+    pub fn store(self: ZigSession) ?*@import("ra8_chip").core.cpu.memory.store.Store {
+        if (self.boundary) |b| return b.store;
+        return null;
+    }
+
     /// The core as the printers and the unwinder read it.
     pub fn view(self: ZigSession) core_view.View {
         return .{ .zig = self.core };

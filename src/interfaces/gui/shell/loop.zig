@@ -42,6 +42,10 @@ const shell_stack = @import("stack.zig");
 const shell_source = @import("source.zig");
 const shell_locals = @import("locals.zig");
 const shell_map = @import("map.zig");
+const shell_branches = @import("branch_state.zig");
+const shell_diff = @import("diff_state.zig");
+const shell_filmstrip = @import("filmstrip_feed.zig");
+const history_strip = @import("../ui/history_strip.zig");
 const map_pane = @import("../ui/map_pane.zig");
 const shell_theme = @import("theme.zig");
 const menu_bar = @import("../menu_bar.zig");
@@ -99,6 +103,12 @@ pub const Shell = struct {
     locals: ?*shell_locals.Pair = null,
     /// The memory map leaf (RA8EMU-781): the image's sections over the regions.
     map: ?*shell_map.State = null,
+    /// The branch tree leaf: the session's branches, switched by a click.
+    branches: ?*shell_branches.Feed = null,
+    /// The state diff leaf: the cursor against one recorded stop.
+    diff: ?*shell_diff.State = null,
+    /// The thumbnails along the history strip, from the navigation index's frames.
+    filmstrip: ?*shell_filmstrip.Feed = null,
     /// The time bar's models: the run, the speed field and the clock.
     time: ?*shell_time.Time = null,
     /// Opening another image (RA8EMU-959) and the Board menu's pick (RA8EMU-1152).
@@ -192,7 +202,8 @@ pub const Shell = struct {
             .solved = &solved,
             .strip = status_capture.strip(&self.status, self.state()),
             .bar = if (self.time) |time| time.view(&self.status) else .{},
-            .track = if (self.time) |time| time.trackView() else .{},
+            .track = self.trackView(),
+            .banner = if (self.branches) |feed| feed.state.fork_pending else false,
             .menu = self.menu,
             .width = width,
             .height = height,
@@ -218,6 +229,7 @@ pub const Shell = struct {
                 if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
                 if (press.down and shell_press.pressDropdown(self, press.x, press.y)) return;
+                if (press.down) if (self.link) |link| if (shell_press.pressBanner(self, link, press.x, press.y)) return;
                 self.held = if (press.down) solved.hit(press.x, press.y) else null;
                 if (!press.down) return shell_press.releaseBoard(self, solved, press.x, press.y);
                 if (self.held != null) return;
@@ -227,6 +239,7 @@ pub const Shell = struct {
                 if (self.link) |link| if (self.timeline) |*model| if (self.snaps.pressed(link, &self.layout, solved, model, press.x, press.y)) return;
                 if (shell_press.pressBoard(self, solved, press.x, press.y)) return;
                 if (self.link) |link| if (shell_press.pressLink(self, link, solved, press.x, press.y)) return;
+                if (self.link) |link| if (shell_press.pressHistory(self, link, solved, press.x, press.y)) return;
                 if (shell_press.pressMap(self, solved, press.x, press.y)) return;
                 if (self.registers) |registers| if (registers.clickIn(&self.layout, solved, press.x, press.y)) return;
                 if (self.console) |console| if (console.clickIn(&self.layout, solved, press.x, press.y)) return;
@@ -261,6 +274,25 @@ pub const Shell = struct {
             .picked_profile => |path| if (self.pick) |pick| pick.picked(path),
             else => {},
         }
+    }
+
+    /// The history strip's view: the time bar's track with the filmstrip laid
+    /// out along it.
+    fn trackView(self: *Shell) history_strip.View {
+        const time = self.time orelse return .{};
+        const feed = self.filmstrip orelse return time.trackView();
+        // A session with a history shows its recorded extent: the frames
+        // reach as far as the machine has run.
+        const frames = feed.strip.items();
+        if (frames.len > 0) {
+            const at = time.boardNow();
+            time.track.end_ns = @max(frames[frames.len - 1].virtual_ns, at, time.track.end_ns orelse 0);
+            time.track.current_ns = at;
+        }
+        var view = time.trackView();
+        feed.strip.updateLayout(shell_frame.toList(self.track), view.track.total());
+        view.filmstrip = &feed.strip;
+        return view;
     }
 
     /// Opens `path`: loaded on the session, or the session started on it

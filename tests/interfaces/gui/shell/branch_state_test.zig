@@ -56,3 +56,17 @@ test "branch_state handles status and list updates and tracks confirmation state
     try state.onListAction(undefined, .cancel_delete);
     try std.testing.expectEqual(@as(?u32, null), state.confirming_id);
 }
+
+test "branch feed notes: waiting, refused without history, listed" {
+    var feed = branch_state.Feed{};
+    try std.testing.expectEqualStrings("waiting for the branches", feed.note().?);
+    feed.state.refused = true;
+    try std.testing.expectEqualStrings("the session keeps no history", feed.note().?);
+    feed.state.refused = false;
+    feed.state.answered = true;
+    try std.testing.expectEqualStrings("no branches recorded", feed.note().?);
+    feed.state.items_len = 1;
+    try std.testing.expect(feed.note() == null);
+    feed.reload();
+    try std.testing.expect(feed.state.want and !feed.state.answered and feed.state.items_len == 0);
+}

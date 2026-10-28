@@ -14,7 +14,27 @@ pub const LocalSession = struct {
     /// names (RA8EMU-1152; null is the shipped default). The host and the
     /// context point into `self`, so it stays put until `deinit`.
     pub fn open(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8) !void {
-        try self.setup.open(allocator, io, elf_path, board_profile, null);
+        try self.openWith(allocator, io, elf_path, board_profile, null);
+    }
+
+    /// `open` with a history to record, for a window whose branch tree and
+    /// state diff have something to show.
+    pub fn openWith(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history: ?served_setup.HistoryOpts) !void {
+        try self.setup.open(allocator, io, elf_path, board_profile, history);
+    }
+
+    /// The window's own session: it records its history, on disk under the
+    /// app's per-user directory `dir` when there is one and can be used,
+    /// otherwise in memory, so the branch tree, the filmstrip and the state
+    /// diff have a history to show. The on-disk session is ephemeral and
+    /// goes when the session closes.
+    pub fn openRecording(self: *LocalSession, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, dir: ?[]const u8) !void {
+        if (dir) |base| {
+            const root = try std.fmt.allocPrint(allocator, "{s}{c}history", .{ base, std.fs.path.sep });
+            defer allocator.free(root);
+            if (self.openWith(allocator, io, elf_path, board_profile, .{ .root = root })) |_| return else |_| {}
+        }
+        try self.openWith(allocator, io, elf_path, board_profile, .{});
     }
 
     /// Bring up cpu1 from `path` in the already-open session (RA8EMU-1192).

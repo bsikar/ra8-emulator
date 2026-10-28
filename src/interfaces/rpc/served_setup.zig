@@ -43,6 +43,8 @@ const history = @import("ra8_host").history;
 const history_marker_store = @import("history_marker_store.zig");
 const frame_pipeline = @import("frame_pipeline.zig");
 const served_frames = @import("served_frames.zig");
+const served_prefetch = @import("served_prefetch.zig");
+const frame_tap = @import("ra8_session").history_frame_tap;
 const frame_cache = @import("ra8_session").history_frame_cache;
 
 /// How a served session's persistent history is rooted, when the caller
@@ -99,6 +101,8 @@ pub const Served = struct {
     feed: ?*@import("ra8_session").history_nav_feed.NavFeed = null,
     nav: ?*@import("ra8_session").history_nav_index.NavIndex = null,
     rewind: ?*@import("ra8_session").smooth_rewind.SmoothRewindEngine = null,
+    /// The prefetch pool and its transport hook, once a disk history opened one.
+    prefetch: ?*served_prefetch.Wired = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
@@ -141,8 +145,7 @@ pub const Served = struct {
         errdefer allocator.free(scratch);
         self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind, .ram_history = ram };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
-        // The transport rides the context so run-control methods route
-        // through it (slice 14), and the host clock bounds its pumps.
+        // The transport rides the context so run-control methods route through it (slice 14).
         self.context.transport = self.owner.transport();
         // The history bridge (RA8EMU-1196, slice 17): a session that
         // records history binds it, so a seek plans from the committed
@@ -155,6 +158,7 @@ pub const Served = struct {
                 .facts = &history_bridge.Bridge.facts,
                 .restore = &history_bridge.Bridge.restore,
                 .logBytes = &history_bridge.Bridge.logBytes,
+                .readObject = &history_bridge.Bridge.readObject,
             };
             try served_frames.init(self, allocator, io, self.history, history_opts);
         }
@@ -162,6 +166,8 @@ pub const Served = struct {
             p.deinit();
             self.frames = null;
         };
+        errdefer served_prefetch.detach(self);
+        try served_prefetch.attach(self, if (history_opts) |o| o.ram_budget else null);
         self.context.wall = .{ .context = self, .nowFn = hostClock };
         self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
         self.context.board_profile = self.owner.boardProfile();
@@ -178,9 +184,8 @@ pub const Served = struct {
         self.context.host_clock = .{ .context = self, .nowFn = hostClock };
     }
 
-    /// Sample CPU0's call stacks every `every` instructions and answer
-    /// `folded` from them (RA8EMU-833), tagged with the ThreadX thread when
-    /// the image has one. Call once, after open.
+    /// Sample CPU0's call stacks every `every` instructions and answer `folded`
+    /// from them (RA8EMU-833), tagged with the ThreadX thread when the image has one.
     /// Name loaded ThreadX modules from their paired ELFs (RA8EMU-1141);
     /// `pairs` outlives the server.
     pub fn pairModules(self: *Served, pairs: []const @import("ra8_session").txm.debug.Pair) void {
@@ -222,7 +227,6 @@ pub const Served = struct {
         served_history.attachSecond(self, cpu1);
     }
 
-    /// RA8EMU-832: turn RTOS tracing on; safe to call when it already is.
     /// The host clock the lcd_dirty rate measures against (RA8EMU-822).
     fn hostClock(context: *anyopaque) u64 {
         const self: *Served = @ptrCast(@alignCast(context));
@@ -253,6 +257,7 @@ pub const Served = struct {
     }
 
     pub fn deinit(self: *Served) void {
+        served_prefetch.detach(self);
         served_history.deinitNav(self);
         if (self.frames) |p| {
             p.deinit();

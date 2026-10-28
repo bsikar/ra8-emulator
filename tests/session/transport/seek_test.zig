@@ -9,6 +9,7 @@ const fakes = @import("../history_fakes.zig");
 const seek_engine_mod = ra8.session.history_seek_engine;
 const seek_facts_mod = ra8.session.history_seek_facts;
 const position_mod = ra8.session.history_position;
+const touched_pages = ra8.session.history_touched_pages;
 
 const history_elf = "tests/fixtures/dfu/dfu_bootloader.elf";
 
@@ -36,6 +37,7 @@ const TestBridge = struct {
     sink: *fakes.Sink,
     objects: *fakes.Objects,
     prior: ?seek_facts_mod.Facts = null,
+    touched_scratch: std.ArrayList(*touched_pages.Touched) = .empty,
 
     fn bridge(self: *TestBridge) transport.Bridge {
         return .{ .context = self, .facts = facts, .restore = restore, .logBytes = logBytes };
@@ -49,8 +51,24 @@ const TestBridge = struct {
     fn facts(context: *anyopaque) anyerror!seek_engine_mod.Facts {
         const self: *TestBridge = @ptrCast(@alignCast(context));
         if (self.prior) |old| self.gpa.free(old.checkpoints);
+        for (self.touched_scratch.items) |t| {
+            t.deinit();
+            self.gpa.destroy(t);
+        }
+        self.touched_scratch.clearRetainingCapacity();
         const gathered = try seek_facts_mod.gather(self.gpa, self.sink.bytes.items);
         self.prior = gathered;
+        for (gathered.checkpoints) |*c| {
+            const t_name = touched_pages.objectName(c.object);
+            if (self.objects.get(&t_name)) |saved| {
+                if (touched_pages.Touched.decodeSlice(self.gpa, saved)) |t| {
+                    const ptr = try self.gpa.create(touched_pages.Touched);
+                    ptr.* = t;
+                    try self.touched_scratch.append(self.gpa, ptr);
+                    c.touched = ptr;
+                } else |_| {}
+            }
+        }
         const win_facts: ?seek_engine_mod.WindowFacts = if (self.opened.session().window) |w| if (w.start()) |st| .{
             .start = st,
             .end = w.end() orelse st,
@@ -72,6 +90,11 @@ const TestBridge = struct {
 
     fn deinit(self: *TestBridge) void {
         if (self.prior) |old| self.gpa.free(old.checkpoints);
+        for (self.touched_scratch.items) |t| {
+            t.deinit();
+            self.gpa.destroy(t);
+        }
+        self.touched_scratch.deinit(self.gpa);
     }
 };
 

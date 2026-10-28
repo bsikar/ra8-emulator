@@ -72,3 +72,6 @@ pub const script = @import("script/script.zig");
 pub const video = @import("video/video.zig");
 pub const fork_banner = @import("ui/fork_banner.zig");
 pub const branch_list = @import("ui/branch_list.zig");
+pub const filmstrip = @import("filmstrip.zig");
+pub const branch_tree = @import("branch_tree.zig");
+pub const diff_pane = @import("ui/diff_pane.zig");

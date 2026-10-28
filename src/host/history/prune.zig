@@ -61,6 +61,8 @@ const Sweep = struct {
     fn visit(context: *anyopaque, name: []const u8, size: u64) anyerror!void {
         const self: *Sweep = @ptrCast(@alignCast(context));
         if (self.names.contains(name)) return;
+        // Pack files hold the page and blob objects; the pack store owns them.
+        if (std.mem.startsWith(u8, name, "pack-")) return;
         try self.store.vtable.remove(self.store.context, .objects, name);
         self.count += 1;
         self.bytes += size;

@@ -31,6 +31,8 @@ pub const Write = struct {
     /// The bytes the storage holds before the write. Valid only during the
     /// observer call.
     pre: []const u8,
+    /// The bytes being written.
+    new: []const u8 = &.{},
 };
 
 /// A structural change around byte writes.

@@ -15,7 +15,7 @@ pub const gutter: i32 = 4;
 pub const min_size: i32 = 48;
 
 pub const Core = enum { cpu0, cpu1 };
-pub const Kind = enum { empty, board, console, camera, devices, registers, memory, disasm, stack, timeline, source, locals, map };
+pub const Kind = enum { empty, board, console, camera, devices, registers, memory, disasm, stack, timeline, source, locals, map, diff, branches };
 /// `across` places the two sides left and right; `down` stacks them.
 pub const Axis = enum { across, down };
 
@@ -64,6 +64,15 @@ pub const Layout = struct {
 
     pub fn deinit(self: *Layout) void {
         self.nodes.deinit(self.allocator);
+    }
+
+    /// Whether any leaf shows a pane of `kind`.
+    pub fn shows(self: *const Layout, kind: Kind) bool {
+        for (0..self.nodes.items.len) |i| {
+            const found = self.pane(@intCast(i)) orelse continue;
+            if (found.kind == kind) return true;
+        }
+        return false;
     }
 
     pub fn node(self: *const Layout, index: Index) Node {

@@ -57,6 +57,7 @@ fn queryFrame(nav: *const session_mod.history_nav_index.NavIndex, index: u64) Ou
             .o = pos.o,
             .gap = @backingInt(pos.gap),
             .count = count,
+            .virtual_ns = nav.getFrameNs(index) orelse 0,
         } };
     }
     return .{ .ok = .{ .found = 0, .count = count } };

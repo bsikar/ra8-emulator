@@ -14,6 +14,7 @@ const pane_layout = @import("../pane_layout.zig");
 const status_strip = @import("../status_strip.zig");
 const time_bar = @import("../time_bar.zig");
 const history_strip = @import("../history_strip.zig");
+const fork_banner = @import("../fork_banner.zig");
 const theme_picker = @import("../theme_picker.zig");
 const menu_bar = @import("../../menu_bar.zig");
 const widget_paint = @import("ra8_render").widget_paint;
@@ -78,6 +79,8 @@ pub const Shell = struct {
     width: i32,
     height: i32,
     painter: ?Painter = null,
+    /// A fork waits for its confirmation: the banner shows over the strip.
+    banner: bool = false,
 };
 
 pub fn kindName(kind: pane_layout.Kind) []const u8 {
@@ -95,6 +98,8 @@ pub fn kindName(kind: pane_layout.Kind) []const u8 {
         .source => "Source",
         .locals => "Locals",
         .map => "Memory Map",
+        .diff => "State Diff",
+        .branches => "Branch Tree",
     };
 }
 
@@ -114,6 +119,12 @@ pub fn panesArea(width: i32, height: i32) Rect {
 /// The time bar's row, on top of the status strip, under the history strip.
 pub fn barArea(width: i32, height: i32) Rect {
     return .{ .x = 0, .y = height - status_strip.height - time_bar.height, .w = width, .h = time_bar.height };
+}
+
+/// The fork banner's row, over the bottom of the history strip.
+pub fn bannerArea(width: i32, height: i32) Rect {
+    const bar = barArea(width, height);
+    return .{ .x = 0, .y = bar.y - fork_banner.height, .w = width, .h = fork_banner.height };
 }
 
 /// The history strip's row, on top of the time bar.
@@ -172,6 +183,7 @@ pub fn draw(list: *draw_list.DrawList, theme: *const Theme, shell: Shell) !void 
         try drawLeaf(list, &paint, theme, pane, toGeom(placed.area), shell.painter, tabs);
     }
     history_strip.draw(&paint, theme, toList(trackArea(shell.width, shell.height)), shell.track);
+    if (shell.banner) fork_banner.draw(&paint, theme, toList(bannerArea(shell.width, shell.height)));
     time_bar.draw(&paint, theme, toList(barArea(shell.width, shell.height)), shell.bar);
     const strip = status_strip.area(shell.width, shell.height);
     if (shell.themes) |picker| {

@@ -12,6 +12,8 @@ const board_pane = @import("../ui/board_pane.zig");
 const board_touch = @import("../board/touch.zig");
 const shell_board = @import("../shell/board/board.zig");
 const fork_banner = @import("../ui/fork_banner.zig");
+const branch_tree = @import("../branch_tree.zig");
+const diff_pane = @import("../ui/diff_pane.zig");
 const draw_list = @import("ra8_render").draw_list;
 
 const Rect = draw_list.Rect;
@@ -91,6 +93,7 @@ fn resolveNamed(
             }
             return null;
         },
+        .tree_node_0, .tree_node_1, .tree_node_2, .diff_earlier, .diff_later => return resolveHistory(allocator, layout, width, height, named),
         .board_sw1, .board_sw2 => {
             var solved = shell_frame.solve(layout, allocator, width, height) catch return null;
             defer solved.deinit(allocator);
@@ -109,6 +112,30 @@ fn resolveNamed(
             return null;
         },
     }
+}
+
+fn resolveHistory(allocator: std.mem.Allocator, layout: *const pane_layout.Layout, width: i32, height: i32, named: NamedTarget) ?Point {
+    var solved = shell_frame.solve(layout, allocator, width, height) catch return null;
+    defer solved.deinit(allocator);
+    const want: pane_layout.Kind = switch (named) {
+        .diff_earlier, .diff_later => .diff,
+        else => .branches,
+    };
+    for (solved.panes.items) |placed| {
+        const pane = layout.pane(placed.index) orelse continue;
+        if (pane.kind != want) continue;
+        const body = shell_frame.bodyOf(placed.area);
+        const rect = switch (named) {
+            .tree_node_0 => branch_tree.nodeRect(body, 0),
+            .tree_node_1 => branch_tree.nodeRect(body, 1),
+            .tree_node_2 => branch_tree.nodeRect(body, 2),
+            .diff_earlier => diff_pane.buttonEarlier(body),
+            .diff_later => diff_pane.buttonLater(body),
+            else => unreachable,
+        };
+        return centerOf(rect);
+    }
+    return null;
 }
 
 fn resolveTouch(

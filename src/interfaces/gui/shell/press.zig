@@ -112,3 +112,16 @@ pub fn releaseBoard(shell: *Shell, solved: *const pane_layout.Solved, x: i32, y:
     const link = shell.link orelse return;
     pointer.up(board, link, x, y, boardNow(shell));
 }
+/// Offer a press to the branch tree (a node switches to its branch) and the
+/// state diff's step buttons.
+pub fn pressHistory(shell: *Shell, link: *session_link.Link, solved: *const pane_layout.Solved, x: i32, y: i32) bool {
+    if (shell.branches) |feed| if (feed.press(link, &shell.layout, solved, x, y)) return true;
+    if (shell.diff) |diff| if (diff.press(&shell.layout, solved, x, y)) return true;
+    return false;
+}
+/// Offer a press to the fork banner, while a fork waits for its confirmation.
+pub fn pressBanner(shell: *Shell, link: *session_link.Link, x: i32, y: i32) bool {
+    const feed = shell.branches orelse return false;
+    const banner = shell_frame.bannerArea(shell.width, shell.height);
+    return feed.pressBanner(link, banner, x, y);
+}

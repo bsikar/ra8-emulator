@@ -8,6 +8,8 @@ const std = @import("std");
 const format = @import("format.zig");
 const log = @import("log.zig");
 const record = @import("record.zig");
+const touched_pages = @import("touched_pages.zig");
+const manifest = @import("manifest.zig");
 
 /// One object name: the lowercase hex of a checkpoint record's 128-bit
 /// truncated SHA-256, the same name the object space files carry.
@@ -44,10 +46,15 @@ fn scan(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context
             // anything shorter cannot name an object.
             if (payload.len < 20) return;
             var name: Name = undefined;
-            for (payload[payload.len - 16 ..], 0..) |byte, i| {
+            const obj_bytes = payload[payload.len - 16 ..];
+            for (obj_bytes, 0..) |byte, i| {
                 _ = std.fmt.bufPrint(name[i * 2 ..][0..2], "{x:0>2}", .{byte}) catch unreachable;
             }
             self.visitor(self.ctx, name);
+            if (!picture and machines) {
+                self.visitor(self.ctx, touched_pages.objectName(obj_bytes[0..16].*));
+                self.visitor(self.ctx, manifest.objectName(obj_bytes[0..16].*));
+            }
         }
     };
     var walker = Walker{ .segment = bytes, .ctx = context, .visitor = visit };

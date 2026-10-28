@@ -9,9 +9,12 @@ const history = @import("ra8_host").history;
 const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
 const history_segments = @import("history_segments.zig");
+const prefetch_pool = @import("prefetch_pool.zig");
+const object_read = @import("object_read.zig");
 
 const seek_engine = ra8_session.history_seek_engine;
 const seek_facts = ra8_session.history_seek_facts;
+const touched_pages = ra8_session.history_touched_pages;
 
 /// The bridge a served session binds: it reads the committed log for the
 /// transport's planner and restores checkpoint objects into the session's
@@ -28,6 +31,10 @@ pub const Bridge = struct {
     /// The disk log's bytes the last logBytes read, owned until the next
     /// read or teardown.
     log_scratch: ?[]u8 = null,
+    touched_scratch: std.ArrayList(*touched_pages.Touched) = .empty,
+    /// The prefetch pool a disk history opened; a restore takes the
+    /// checkpoint's snapshot from it when a worker already loaded it.
+    prefetched: ?*prefetch_pool.Pool = null,
 
     /// Drop the facts and log memory still owned at teardown.
     pub fn deinit(self: *Bridge) void {
@@ -35,6 +42,11 @@ pub const Bridge = struct {
         self.facts_scratch = null;
         if (self.log_scratch) |old| self.gpa.free(old);
         self.log_scratch = null;
+        for (self.touched_scratch.items) |t| {
+            t.deinit();
+            self.gpa.destroy(t);
+        }
+        self.touched_scratch.deinit(self.gpa);
     }
 
     /// The committed log's facts for the transport's planner: the
@@ -44,6 +56,11 @@ pub const Bridge = struct {
         const self: *Bridge = @ptrCast(@alignCast(context));
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
+        for (self.touched_scratch.items) |t| {
+            t.deinit();
+            self.gpa.destroy(t);
+        }
+        self.touched_scratch.clearRetainingCapacity();
         var disk_buf: ?[]u8 = null;
         defer if (disk_buf) |b| self.gpa.free(b);
         const bytes: []const u8 = blk: {
@@ -58,6 +75,7 @@ pub const Bridge = struct {
         };
         const gathered = try seek_facts.gather(self.gpa, bytes);
         self.facts_scratch = gathered;
+        try self.loadTouchedRecords(gathered.checkpoints);
         // A never-run machine has no grid: its cursor sits at or before
         // every checkpoint, which a zeroed position says. A session with
         // no log still refuses above.
@@ -74,6 +92,46 @@ pub const Bridge = struct {
         return .{ .start = w.start() orelse return null, .end = w.end() orelse return null, .at = w.at() orelse return null, .line = w.line, .slots = w.count() };
     }
 
+    pub fn loadTouchedRecords(self: *Bridge, checkpoints: []seek_engine.Checkpoint) !void {
+        for (checkpoints) |*c| {
+            const t_name = touched_pages.objectName(c.object);
+            if (self.ram) |r| {
+                if (r.get(&t_name)) |bytes| {
+                    if (touched_pages.Touched.decodeSlice(self.gpa, bytes)) |t| {
+                        var t_val = t;
+                        errdefer t_val.deinit();
+                        const ptr = try self.gpa.create(touched_pages.Touched);
+                        errdefer self.gpa.destroy(ptr);
+                        ptr.* = t_val;
+                        try self.touched_scratch.append(self.gpa, ptr);
+                        c.touched = ptr;
+                    } else |_| {}
+                }
+            } else if (self.disk) |d| {
+                const store = history.storage.Store.from(&d.session);
+                if (store.vtable.open(store.context, .objects, &t_name, .read)) |file| {
+                    defer file.vtable.close(file.context);
+                    if (file.vtable.length(file.context)) |len| {
+                        if (self.gpa.alloc(u8, @intCast(len))) |buf| {
+                            defer self.gpa.free(buf);
+                            if (readAll(file, buf)) |total| {
+                                if (touched_pages.Touched.decodeSlice(self.gpa, buf[0..total])) |t| {
+                                    var t_val = t;
+                                    errdefer t_val.deinit();
+                                    const ptr = try self.gpa.create(touched_pages.Touched);
+                                    errdefer self.gpa.destroy(ptr);
+                                    ptr.* = t_val;
+                                    try self.touched_scratch.append(self.gpa, ptr);
+                                    c.touched = ptr;
+                                } else |_| {}
+                            } else |_| {}
+                        } else |_| {}
+                    } else |_| {}
+                } else |_| {}
+            }
+        }
+    }
+
     /// Put the machine back at a checkpoint's saved state; `object` is
     /// the checkpoint record's 128-bit digest as its 32-hex object name.
     pub fn restore(context: *anyopaque, object: []const u8) anyerror!void {
@@ -82,6 +140,14 @@ pub const Bridge = struct {
         if (self.ram) |r| {
             const bytes = r.get(object) orelse return error.ObjectMissing;
             return session_history.restoreBytes(bytes);
+        }
+        if (self.prefetched) |pool| {
+            if (prefetch_pool.ObjectId.fromHex(object)) |id| {
+                if (pool.take(id)) |bytes| {
+                    defer self.gpa.free(bytes);
+                    return session_history.restoreBytes(bytes);
+                }
+            } else |_| {}
         }
         if (self.disk) |d| {
             const store = history.storage.Store.from(&d.session);
@@ -96,20 +162,20 @@ pub const Bridge = struct {
         return error.NoHistory;
     }
 
-    /// One object's bytes by its 32-hex name, owned by the caller: how a
-    /// pinned checkpoint picture is read back for the rewind.
-    pub fn objectBytes(context: *anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 {
+    /// One object's bytes by its 32-hex name: how a pinned checkpoint
+    /// picture is read back for the rewind.
+    pub const objectBytes = readObject;
+
+    /// One object of the history's object space by name, owned by the caller.
+    pub fn readObject(context: *anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 {
         const self: *Bridge = @ptrCast(@alignCast(context));
         if (self.ram) |r| return allocator.dupe(u8, r.get(name) orelse return error.ObjectMissing);
         const d = self.disk orelse return error.NoHistory;
-        const store = history.storage.Store.from(&d.session);
-        var file = try store.vtable.open(store.context, .objects, name, .read);
-        defer file.vtable.close(file.context);
-        const buf = try allocator.alloc(u8, @intCast(try file.vtable.length(file.context)));
-        errdefer allocator.free(buf);
-        const total = try readAll(file, buf);
-        if (total != buf.len) return error.Truncated;
-        return buf;
+        return object_read.read(history.storage.Store.from(&d.session), allocator, name) catch |err| {
+            // A page or blob object lives in the pack store, not as a file.
+            const id = prefetch_pool.ObjectId.fromHex(name) catch return err;
+            return (try d.packs.get(allocator, id)) orelse err;
+        };
     }
 
     /// The committed log's bytes across every segment, for the replay

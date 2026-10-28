@@ -6,14 +6,22 @@
 //! to stderr.
 const std = @import("std");
 const history = @import("ra8_host").history;
-const bind = @import("ra8_rpc").history_bind;
+const bind = struct {
+    const rpc = @import("ra8_rpc");
+    const prune_referrer = rpc.history_bind.prune_referrer;
+    const pack_store = rpc.pack_store;
+    const history_live = rpc.history_live;
+};
 const history_branch_cli = @import("history_branch_cli.zig");
+const history_maint_cli = @import("history_maint_cli.zig");
 
 pub const usage =
     \\usage: ra8_emulator history --root DIR ls
     \\       ra8_emulator history --root DIR du [SESSION]
     \\       ra8_emulator history --root DIR rm [--kept] SESSION
     \\       ra8_emulator history --root DIR prune
+    \\       ra8_emulator history --root DIR thin [--gap ROUNDS] SESSION
+    \\       ra8_emulator history --root DIR reroot --confirm SESSION CHECKPOINT_ID
     \\       ra8_emulator history --root DIR branch ls [SESSION]
     \\       ra8_emulator history --root DIR branch rm [--confirm] SESSION BRANCH_ID
     \\       ls lists the root's entries with their state; du reports bytes,
@@ -21,7 +29,10 @@ pub const usage =
     \\       one; prune sweeps each closed session's orphaned objects and
     \\       leftover frame cache, and never opens a session whose lock
     \\       another host still holds; branch ls lists branches of a session
-    \\       or all sessions; branch rm removes a branch with --confirm.
+    \\       or all sessions; branch rm removes a branch with --confirm;
+    \\       thin drops checkpoints so none are more than ROUNDS apart
+    \\       (default 4096) and reroot drops the history before a checkpoint;
+    \\       both then reclaim the dropped objects and compact the packs.
     \\
 ;
 
@@ -30,7 +41,7 @@ pub const BranchSub = union(enum) {
     rm: struct { session: []const u8, branch_id: u32, confirm: bool },
 };
 
-pub const Op = enum { ls, du, rm, prune, branch };
+pub const Op = enum { ls, du, rm, prune, branch, thin, reroot };
 
 const Command = struct {
     op: Op,
@@ -38,6 +49,9 @@ const Command = struct {
     entry: ?[]const u8 = null,
     kept: bool = false,
     branch_sub: ?BranchSub = null,
+    confirm: bool = false,
+    gap: u64 = 4096,
+    checkpoint: u32 = 0,
 };
 
 /// The flags come in any order; words name the operation and its target.
@@ -46,6 +60,7 @@ pub fn parse(argv: []const []const u8) !Command {
     var root: []const u8 = "";
     var kept = false;
     var confirm = false;
+    var gap: ?u64 = null;
     var words_buf: [8][]const u8 = undefined;
     var words_len: usize = 0;
 
@@ -59,6 +74,11 @@ pub fn parse(argv: []const []const u8) !Command {
         } else if (std.mem.eql(u8, arg, "--kept")) {
             if (kept) return error.Usage;
             kept = true;
+        } else if (std.mem.eql(u8, arg, "--gap")) {
+            i += 1;
+            if (i >= argv.len or gap != null) return error.Usage;
+            gap = std.fmt.parseInt(u64, argv[i], 10) catch return error.Usage;
+            if (gap.? == 0) return error.Usage;
         } else if (std.mem.eql(u8, arg, "--confirm")) {
             if (confirm) return error.Usage;
             confirm = true;
@@ -89,8 +109,19 @@ pub fn parse(argv: []const []const u8) !Command {
         .prune => {
             if (kept or confirm or words.len > 1) return error.Usage;
         },
+        .thin => {
+            if (kept or confirm or words.len != 2) return error.Usage;
+            command.entry = words[1];
+            command.gap = gap orelse 4096;
+        },
+        .reroot => {
+            if (kept or gap != null or words.len != 3) return error.Usage;
+            command.entry = words[1];
+            command.checkpoint = std.fmt.parseInt(u32, words[2], 10) catch return error.Usage;
+            command.confirm = confirm;
+        },
         .branch => {
-            if (kept or words.len < 2) return error.Usage;
+            if (kept or gap != null or words.len < 2) return error.Usage;
             const sub = words[1];
             if (std.mem.eql(u8, sub, "ls")) {
                 if (words.len > 3 or confirm) return error.Usage;
@@ -146,6 +177,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         .du => reportBytes(&base, &stdout.interface, command.entry),
         .rm => removeOne(&base, &stdout.interface, command.entry.?, command.kept),
         .prune => sweepClosed(allocator, &base, &stdout.interface),
+        .thin => history_maint_cli.thin(allocator, &base, command.entry.?, false, command.gap, &stdout.interface),
+        .reroot => history_maint_cli.reroot(allocator, &base, command.entry.?, false, command.checkpoint, command.confirm, &stdout.interface),
         .branch => switch (command.branch_sub.?) {
             .ls => |session_name| history_branch_cli.listBranches(allocator, &base, session_name, &stdout.interface),
             .rm => |b_rm| history_branch_cli.removeBranch(allocator, &base, b_rm.session, b_rm.branch_id, b_rm.confirm, &stdout.interface),
@@ -235,4 +268,9 @@ fn sweepSession(allocator: std.mem.Allocator, base: *const history.base.Base, na
     const store = history.storage.Store.from(&session);
     const res = try history.prune.relief(store, allocator, bind.prune_referrer);
     try out.print("{s}: {d} orphan objects ({d} bytes), {d} frames ({d} bytes)\n", .{ name, res.orphans, res.orphan_bytes, res.frames, res.frame_bytes });
+    // The pack step: packs more than 30% dead are rewritten.
+    const packs = try bind.pack_store.PackStore.open(allocator, &session);
+    defer packs.close();
+    const compacted = try bind.history_live.compactPacks(store, allocator, packs, bind.prune_referrer.collect);
+    try out.print("{s}: {d} packs compacted ({d} -> {d} bytes)\n", .{ name, compacted.packs_removed, compacted.bytes_before, compacted.bytes_after });
 }

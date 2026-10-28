@@ -37,6 +37,7 @@ const window_engine = @import("history/window_engine.zig");
 const session_smooth_rewind = @import("smooth_rewind.zig");
 const history_nav_index = @import("history/nav_index.zig");
 
+const session_search = @import("search.zig");
 pub const Core = @import("event/stream.zig").Core;
 pub const EventStream = @import("event/stream.zig").Stream;
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
@@ -113,6 +114,7 @@ pub const Session = struct {
     /// machine's states are the past's, not new stops, so the history
     /// ring records nothing while it holds.
     replaying: bool = false,
+    prefetch_pool: ?*@import("history/prefetch.zig").Prefetch = null,
     pub fn attachLoader(self: *Session, loader: Loader) void {
         self.loader = loader;
     }
@@ -212,15 +214,12 @@ pub const Session = struct {
     pub fn attachPlugs(self: *Session, hook: PlugHook) void {
         self.plugs = hook;
     }
-
     pub fn plug(self: *Session, core: Core, at: Endpoint, name: []const u8) anyerror!void {
         return session_fork.plug(self, core, at, name);
     }
-
     pub fn unplug(self: *Session, core: Core, at: Endpoint) anyerror!void {
         return session_fork.unplug(self, core, at);
     }
-
     pub fn waitSettled(self: *Session, timeout_ns: u64) anyerror!void {
         return session_control.waitSettled(self, timeout_ns);
     }
@@ -313,34 +312,33 @@ pub const Session = struct {
         return session_fork.write(self, core, address, bytes);
     }
     pub const RemovedPoint = session_points.RemovedPoint;
-
     pub fn setBreakpoint(self: *Session, core: Core, point: breakpoint.Break) anyerror!BreakId {
         return session_points.setBreakpoint(self, core, point);
     }
-
     pub fn setWatchpoint(self: *Session, core: Core, point: watch_table.Watch) anyerror!WatchId {
         return session_points.setWatchpoint(self, core, point);
     }
-
     pub fn clearBreakpoint(self: *Session, core: Core, id: BreakId) anyerror!void {
         return session_points.clearBreakpoint(self, core, id);
     }
-
     pub fn clearWatchpoint(self: *Session, core: Core, id: WatchId) anyerror!void {
         return session_points.clearWatchpoint(self, core, id);
     }
-
     pub fn removePoint(self: *Session, core: Core, id: u32) anyerror!RemovedPoint {
         return session_points.removePoint(self, core, id);
     }
-
     pub fn breakpointExists(self: *Session, core: Core, id: BreakId) anyerror!bool {
         return session_points.breakpointExists(self, core, id);
     }
-
     pub fn watchKind(self: *Session, core: Core, id: WatchId) anyerror!?watch_table.Kind {
         return session_points.watchKind(self, core, id);
     }
+    pub const matchingWatch = session_points.matchingWatch;
+    pub const hasArmedWriteWatch = session_points.hasArmedWriteWatch;
+    pub const attachPrefetch = session_search.attachPrefetch;
+    pub const prefetch = session_search.prefetch;
+    pub const prefetchCancel = session_search.prefetchCancel;
+    pub const reverseWatch = session_search.reverseWatch;
 
     pub fn hasCore(self: *const Session, core: Core) bool {
         return @backingInt(core) == self.live.index or self.live.other != null;
@@ -360,15 +358,17 @@ pub const Session = struct {
         return .{ .zig = other.core };
     }
 
+    pub fn store(self: *Session) ?*@import("ra8_chip").core.cpu.memory.store.Store {
+        return if (self.live.store()) |s| s else if (self.history) |h| h.files.store else null;
+    }
+
     pub fn machine(self: *Session, core: Core) anyerror!*stop_machine.Machine {
         if (@backingInt(core) == self.live.index) return self.live.machine;
         return (self.live.other orelse return Error.CoreNotAttached).machine;
     }
-
     pub fn itmPort(self: *Session, core: Core) anyerror!*itm.Itm {
         return session_control.itmPort(self, core);
     }
-
     pub fn flushItm(self: *Session, core: Core, out: anytype, final: bool) anyerror!void {
         return session_control.flushItm(self, core, out, final);
     }

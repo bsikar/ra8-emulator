@@ -17,6 +17,12 @@ const session_branches_codec = @import("ra8_session").history_branches_codec;
 const branches_recover = @import("ra8_session").history_branches_recover;
 const history_root = @import("ra8_session").history_root;
 const history_segments = @import("history_segments.zig");
+const object_read = @import("object_read.zig");
+const pack_store = @import("pack_store.zig");
+const history_live = @import("history_live.zig");
+const session_compaction = @import("ra8_session").history_compaction;
+const session_manifest = @import("ra8_session").history_manifest;
+const session_object_id = @import("ra8_session").history_object_id;
 
 /// Formats the segment leaf name for a given branch and segment index.
 pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
@@ -38,6 +44,8 @@ pub const Bind = struct {
     /// bind, which stays put until close.
     storage: session_recorder.Storage,
     objects: session_recorder.Objects,
+    /// The pack store the checkpoint engine's page and blob objects go to.
+    packs: *pack_store.PackStore = undefined,
     /// The disk budget the recorder checks before every commit and
     /// checkpoint: this history's share of the volume and a fresh
     /// free-space read per check.
@@ -125,7 +133,9 @@ pub const Bind = struct {
             .truncate = &truncateLog,
             .switchSegment = &switchSegmentLog,
         };
-        bind.objects = .{ .context = bind, .put = &putObject, .sync = &syncObjects };
+        bind.packs = try pack_store.PackStore.open(allocator, &bind.session);
+        errdefer bind.packs.close();
+        bind.objects = .{ .context = bind, .put = &putObject, .sync = &syncObjects, .putPacked = &putPacked };
         // The budget: one read at open sizes the share this history
         // takes, and every check reads the volume fresh.
         const volume = try history.resources.volume(allocator, io, bind.base.dir);
@@ -137,6 +147,7 @@ pub const Bind = struct {
         errdefer allocator.destroy(watch);
         watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir, .store = store };
         bind.watch = watch;
+        watch.packs = bind.packs;
         bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor, .relief = &relieveVolume };
         bind.checkpoint_cap = shares.checkpoints;
         return bind;
@@ -147,6 +158,7 @@ pub const Bind = struct {
     /// the root.
     pub fn close(self: *Bind) !history.session.Outcome {
         const gpa = self.gpa;
+        self.packs.close();
         self.log.vtable.close(self.log.context);
         self.disk = null;
         if (self.watch) |watch| gpa.destroy(watch);
@@ -187,7 +199,7 @@ const LogSink = struct {
 /// Reads the volume fresh for every budget check; the history root's
 /// directory is the handle the read goes through. The store rides along
 /// for the relief the budget's refusal path runs.
-const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, store: history.storage.Store };
+const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, store: history.storage.Store, packs: ?*pack_store.PackStore = null };
 
 /// The relief a refused commit or checkpoint runs before the refusal
 /// stands: the frames step only. The frames space holds pure
@@ -198,6 +210,10 @@ const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir
 fn relieveVolume(context: *anyopaque) anyerror!void {
     const watch: *VolumeWatch = @ptrCast(@alignCast(context));
     _ = try history.prune.relief(watch.store, watch.gpa, prune_referrer);
+    // The pack step: sealed packs that are mostly dead are rewritten. The
+    // objects of a checkpoint still being taken wait unsealed, so they are
+    // never mistaken for dead ones.
+    if (watch.packs) |packs| _ = try history_live.compactPacks(watch.store, watch.gpa, packs, &collectReferenced);
 }
 
 fn freeVolume(context: *anyopaque) anyerror!u64 {
@@ -272,9 +288,15 @@ fn putObject(context: *anyopaque, name: []const u8, bytes: []const u8) anyerror!
     try file.vtable.sync(file.context);
 }
 
-/// Every object put synced its own file, so a batch needs nothing.
+/// Every loose object synced its own file; the pack store's waiting
+/// objects reach disk here, pack before index.
 fn syncObjects(context: *anyopaque) anyerror!void {
-    _ = context;
+    try bindOf(context).packs.seal();
+}
+
+/// A content-addressed page or blob joins the pack being built.
+fn putPacked(context: *anyopaque, id: [16]u8, bytes: []const u8) anyerror!void {
+    try bindOf(context).packs.put(.{ .bytes = id }, bytes);
 }
 
 /// The host prune's referrer: names every object the committed log
@@ -348,4 +370,5 @@ fn collect(store: history.storage.Store, allocator: std.mem.Allocator, names: *s
     var segments = PruneSegments{ .store = store, .gather = &gather, .pictures_only = pictures_only };
     try store.vtable.list(store.context, .log, .{ .context = &segments, .visit = &PruneSegments.visit });
     if (gather.failed) |err| return err;
+    if (!pictures_only) try history_live.addManifestObjects(store, allocator, names);
 }

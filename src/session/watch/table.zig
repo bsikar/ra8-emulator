@@ -62,7 +62,7 @@ pub const Watch = struct {
     }
 };
 
-const Slot = struct {
+pub const Slot = struct {
     id: Id,
     watch: Watch,
     enabled: bool = true,
