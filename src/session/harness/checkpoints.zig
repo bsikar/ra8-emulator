@@ -7,6 +7,7 @@ const history_recorder = @import("../history/recorder.zig");
 const session_state = @import("../board/state.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
 const zig_session = @import("../zig/session.zig");
+const picture = @import("picture.zig");
 
 /// The armed pair in one heap-stable box: the recorder owns the staging,
 /// the controller owns the policy, and the boundary's hook points here,
@@ -43,6 +44,8 @@ pub fn arm(
         .saved = saved,
         .every = every,
         .object_cap = checkpoint_cap,
+        // Every checkpoint pins the panel's picture beside the machine.
+        .picture = picture.source(files),
     };
     try session.armCheckpoints(&armed.checkpoints);
     return armed;

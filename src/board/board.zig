@@ -346,13 +346,20 @@ pub const Board = struct {
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.
     event_sink: ?@import("event_sink.zig").EventSink = null,
-    /// A passive per-boundary frame consumer (the frame tap): it runs after
-    /// every boundary tick, never arms the panel's frame clock, and is
-    /// owned by whoever installed it. Null when nobody is capturing.
+    /// Passive per-boundary frame taps: slot mirror and subscriber fan-out.
     frame_tap: ?*frame_tap.Tap = null,
-    /// Which part this board is. main.zig sets it from the command line
-    /// before attach(); a test's board is an RA8D2 unless it says otherwise.
+    frame_taps: frame_tap.FanOut = .{},
     part: part.Part = .ra8d2,
+
+    pub fn addFrameTap(self: *Board, tap: *frame_tap.Tap) void {
+        _ = self.frame_taps.add(tap);
+        self.frame_tap = self.frame_taps.first();
+    }
+
+    pub fn removeFrameTap(self: *Board, tap: *frame_tap.Tap) void {
+        self.frame_taps.remove(tap);
+        self.frame_tap = self.frame_taps.first();
+    }
 
     /// A fresh board; what each block starts as lives in construct.zig.
     pub fn init(allocator: std.mem.Allocator) Board {
@@ -369,25 +376,18 @@ pub const Board = struct {
         self.bus.deinit();
         self.panel.deinit();
     }
-    /// The chunk boundary, peripheral side. boundary.zig owns what happens
-    /// there; this file is the list of what the board is made of.
     pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
         return boundary.tick(self, core, instructions);
     }
     pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: periph.Issuer) !void {
         return boundary.tickFrom(self, core, instructions, issuer);
     }
-    /// One event, offered to the links, the transfer controller and the core.
     pub fn raise(self: *Board, core: Guest, event: u16) !void {
         return boundary.raise(self, core, event);
     }
-    /// Whoever asked for a reset this boundary, plus the PPB windows that are
-    /// polled rather than hooked.
     pub fn takeResetRequests(self: *Board, core: anytype) !void {
         return boundary.takeResetRequests(self, core);
     }
-    /// A reset another core asked for, latched and handed to the run loop
-    /// the way CPU0's own request is (RA8EMU-59).
     pub fn requestReset(self: *Board, source: reset.Source) void {
         boundary.resetFor(self, source);
     }

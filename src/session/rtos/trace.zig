@@ -39,7 +39,16 @@ pub const Event = struct {
     exception: u16 = 0,
 };
 
+/// Sees every event as it is recorded, before the kept-events cap, so an
+/// index fed from it never loses the events a long run drops from the list.
+pub const Observer = struct {
+    context: *anyopaque,
+    eventFn: *const fn (context: *anyopaque, event: Event) void,
+};
+
 pub const Trace = struct {
+    /// Called for every event, kept or dropped; null sees nothing.
+    observer: ?Observer = null,
     events: [limits.kept]Event = undefined,
     len: usize = 0,
     /// Events past `limits.kept`, counted and not kept.
@@ -78,6 +87,7 @@ pub const Trace = struct {
         var timed = one;
         if (self.fine) |clock| timed.when = clock.*;
         self.load.feed(timed);
+        if (self.observer) |watching| watching.eventFn(watching.context, timed);
         if (self.len == limits.kept) {
             self.dropped += 1;
             return;

@@ -190,7 +190,7 @@ pub const Time = struct {
             switch (event) {
                 .key => |key| {
                     if (!key.down) return false;
-                    return self.trackKey(key.code, status, link);
+                    return self.trackKeyFull(key.code, key.shift, status, link);
                 },
                 else => return false,
             }
@@ -308,10 +308,43 @@ pub const Time = struct {
         return true;
     }
 
-    /// A key while the bar's field has no keyboard (slice 19): Home
-    /// seeks to the track's start and End to its recorded end, over the
-    /// same dispatch a strip click takes. An empty track takes nothing.
-    pub fn trackKey(self: *Time, code: u32, status: *Status, link: *Link) bool {
+    /// A key while the bar's field has no keyboard (Slice 22.4): Home
+    /// seeks to start, End to recorded end, Left/Right prev/next frame,
+    /// and Space/Shift+Space play forward/back.
+    pub fn trackKeyFull(self: *Time, code: u32, shift: bool, status: *Status, link: *Link) bool {
+        if (code == time_bar_capture.key_space) {
+            if (self.run.lit) {
+                self.pressCommand(.pause, link, status);
+                return true;
+            }
+            if (shift) {
+                time_bar_capture.play(status, &self.run, link, .back) catch {
+                    status.refused = .run;
+                    return true;
+                };
+                self.run.lit = true;
+                status.refused = null;
+                return true;
+            }
+            self.pressCommand(.run, link, status);
+            return true;
+        }
+        if (code == time_bar_capture.key_left) {
+            time_bar_capture.seek(status, &self.run, link, "prev") catch {
+                status.refused = .seek;
+                return true;
+            };
+            status.refused = null;
+            return true;
+        }
+        if (code == time_bar_capture.key_right) {
+            time_bar_capture.seek(status, &self.run, link, "next") catch {
+                status.refused = .seek;
+                return true;
+            };
+            status.refused = null;
+            return true;
+        }
         const end = self.track.end_ns orelse return false;
         if (end == 0) return false;
         const target_ns: u64 = switch (code) {

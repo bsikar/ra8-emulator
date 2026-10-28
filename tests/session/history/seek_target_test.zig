@@ -107,3 +107,13 @@ test "keyword forms are recognized before the bare forms" {
     try std.testing.expectError(error.BadValue, seek.parse("12:30"));
     try std.testing.expectError(error.BadValue, seek.parse("unknown 5"));
 }
+
+test "a marker target names an armed marker and optionally its Nth arrival" {
+    const first = try seek.parse("marker loop");
+    try std.testing.expectEqualStrings("loop", first.marker.name);
+    try std.testing.expectEqual(@as(u64, 1), first.marker.nth);
+    const third = try seek.parse("marker loop 3");
+    try std.testing.expectEqual(@as(u64, 3), third.marker.nth);
+    try std.testing.expectError(error.BadValue, seek.parse("marker loop 0"));
+    try std.testing.expectError(error.BadValue, seek.parse("marker a b"));
+}

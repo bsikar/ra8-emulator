@@ -33,6 +33,7 @@ const back_mod = @import("back.zig");
 const reverse_mod = @import("reverse.zig");
 
 pub const Command = command_mod.Command;
+pub const Direction = command_mod.Direction;
 pub const Ticket = command_mod.Ticket;
 pub const Phase = command_mod.Phase;
 pub const Progress = command_mod.Progress;
@@ -83,6 +84,8 @@ pub const Job = struct {
     dir: command_mod.Direction = .fwd,
     /// A play's pace, when one was asked for; null is `max`.
     speed: ?f64 = null,
+    /// The wall moment the job's last backward slice ran at.
+    last_ns: u64 = 0,
     /// A backward step's resolved plan, set when the job queues.
     back: ?back_mod.Back = null,
     /// A reverse-continue's resolved plan, set when the job queues.
@@ -114,6 +117,8 @@ pub const Transport = struct {
     /// The bound history bridge (unit 17), when the application serves
     /// one. Null keeps a seek refused.
     history: ?Bridge = null,
+    /// The wall moment of the slice being driven, for a reverse clock.
+    wall_ns: u64 = 0,
 
     /// Validate and queue a command. Nothing runs until the next `pump`.
     pub fn command(self: *Transport, cmd: Command) !Ticket {
@@ -123,11 +128,8 @@ pub const Transport = struct {
                 self.epoch += 1;
                 return self.issue();
             },
-            .cont => return play_mod.queue(self, null, .cont),
-            .play => |play| {
-                if (play.dir == .back) return Error.NotReady;
-                return play_mod.queue(self, play.speed, .play);
-            },
+            .cont => return play_mod.queue(self, null, .cont, .fwd),
+            .play => |play| return play_mod.queue(self, play.speed, .play, play.dir),
             .step => |step| return self.queueStep(step),
             .advance => |advance| return self.queueAdvance(advance),
             .seek => |seek| return seek_mod.queue(self, seek.target),
@@ -167,6 +169,7 @@ pub const Transport = struct {
 
     /// Preempt the running job the way a Cancel would: its ticket goes dead.
     pub fn cancel(self: *Transport) void {
+        seek_mod.disarm(self);
         if (self.job) |job| {
             self.session.setRunBudget(job.core, job.prior_budget) catch {};
             // A backward job's cancel returns the machine to the origin
@@ -174,6 +177,9 @@ pub const Transport = struct {
             // meanwhile (the seek contract's cancel rule, prompt 17).
             if (job.back) |*back| self.restoreBase(back.origin) catch {};
             if (job.rc) |*rc| self.restoreBase(rc.origin) catch {};
+            if (job.dir == .back) {
+                if (self.session.smooth_rewind) |rewind| rewind.pause() catch {};
+            }
             self.job = null;
         }
     }
@@ -230,6 +236,10 @@ pub const Transport = struct {
             if (job.slices == 0) return null;
             return jobState(job);
         }
+        // A rewind still settling after its job ended keeps reads gated.
+        if (self.session.smooth_rewind) |rewind| {
+            if (rewind.isBusy()) return .{ .playing = .{ .dir = .back, .speed = null } };
+        }
         return null;
     }
 
@@ -263,6 +273,7 @@ pub const Transport = struct {
         while (true) {
             const now_ns = wall.nowFn(wall.context);
             if (now_ns >= until_ns) break;
+            self.wall_ns = now_ns;
             const ended: ?api.Ended = switch (job.kind) {
                 .play, .cont => try play_mod.slice(self, job),
                 .advance => try self.advanceSlice(job),
@@ -345,6 +356,7 @@ pub const Transport = struct {
     /// the result. The result is captured before the job is cleared, since
     /// the caller's pointer lives inside the optional being cleared.
     fn settle(self: *Transport, job: *Job, ended: api.Ended) Finished {
+        seek_mod.disarm(self);
         const finished: Finished = .{ .ticket = job.ticket, .epoch = job.epoch, .core = job.core, .ended = ended };
         self.session.setRunBudget(job.core, job.prior_budget) catch {};
         self.job = null;

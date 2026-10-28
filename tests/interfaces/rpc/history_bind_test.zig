@@ -106,3 +106,46 @@ test "switchSegment creates events-<branch>-<seg> preserving parent segment byte
     try std.testing.expectEqual(child_bytes.len, child_len);
     try std.testing.expectEqualStrings(child_bytes, read_child[0..child_len]);
 }
+
+const Pictures = struct {
+    fn save(_: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+        try writer.writeAll("machine");
+    }
+    fn scan(_: *anyopaque, allocator: std.mem.Allocator, at: ra8.session.history_checkpoint_picture.Position) anyerror!?ra8.session.history_checkpoint_picture.Decoded {
+        return .{ .position = at, .virtual_ns = 1, .width = 4, .height = 2, .pixels = try allocator.dupe(u8, &.{ 1, 2, 3, 4, 5, 6, 7, 8 }) };
+    }
+};
+
+test "relief through the bind's referrer drops orphans and keeps checkpoint pictures" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const bind = try bind_mod.Bind.open(gpa, std.testing.io, root, .{});
+    defer _ = bind.close() catch {};
+
+    var rec = try ra8.session.history_recorder.Recorder.init(gpa, bind.storage, .{});
+    defer rec.deinit();
+    rec.observe(0);
+    rec.objects = bind.objects;
+    var saved: ra8.chip.core.scheduler.State = .{ .at = .{ .r = 2 } };
+    var context: u8 = 0;
+    var cp: ra8.session.history_checkpoint.Checkpoint = .{
+        .context = &context,
+        .saveFn = Pictures.save,
+        .recorder = &rec,
+        .saved = &saved,
+        .every = 1,
+        .picture = .{ .context = &context, .lastScanFn = Pictures.scan },
+    };
+    try cp.fire(2);
+    try bind.objects.put(bind.objects.context, "ffffffffffffffffffffffffffffffff", "stray");
+
+    try std.testing.expect(bind_mod.prune_referrer.pictures != null);
+    const store = history.storage.Store.from(&bind.session);
+    const report = try history.prune.relief(store, gpa, bind_mod.prune_referrer);
+    try std.testing.expectEqual(@as(usize, 1), report.orphans);
+    try std.testing.expectEqual(@as(usize, 1), report.pictures_kept);
+    try std.testing.expect(report.intact());
+}

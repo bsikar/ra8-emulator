@@ -103,7 +103,15 @@ pub fn decide(
 }
 
 /// Router state holding confirmation status, pending fork, and sequence counter.
+/// Told when the active line changes, with the new line.
+pub const SwitchObserver = struct {
+    context: *anyopaque,
+    switchedFn: *const fn (context: *anyopaque, line: BranchId) void,
+};
+
 pub const ForkRouter = struct {
+    /// The frame tap listens here, so a new line starts a new keyframe segment.
+    switch_observer: ?SwitchObserver = null,
     allocator: std.mem.Allocator,
     graph: ?*BranchGraph = null,
     active_line: BranchId = branch_mod.root_branch_id,
@@ -129,6 +137,7 @@ pub const ForkRouter = struct {
     pub fn switchActiveLine(self: *ForkRouter, new_line: BranchId) void {
         self.active_line = new_line;
         if (self.graph) |g| g.setActive(new_line);
+        if (self.switch_observer) |watching| watching.switchedFn(watching.context, new_line);
     }
 
     /// Returns the recorded end position of the active execution line.

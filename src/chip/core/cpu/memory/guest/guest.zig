@@ -7,16 +7,25 @@ pub const bus = @import("bus.zig");
 
 pub const Error = error{Unmapped};
 pub const MapError = error{ Mapped, Full, OutOfMemory };
+pub const ReadFn = *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void;
 
 pub const Guest = struct {
     store: *Store,
     initiator: Initiator = .none,
+    read_fn: ?ReadFn = null,
+    read_ctx: ?*anyopaque = null,
 
     pub fn asInitiator(self: Guest, initiator: Initiator) Guest {
-        return .{ .store = self.store, .initiator = initiator };
+        return .{
+            .store = self.store,
+            .initiator = initiator,
+            .read_fn = self.read_fn,
+            .read_ctx = self.read_ctx,
+        };
     }
 
     pub fn read(self: Guest, address: u32, into: []u8) Error!void {
+        if (self.read_fn) |rf| return rf(self.read_ctx orelse return Error.Unmapped, address, into);
         self.store.read(self.initiator, address, into) catch return Error.Unmapped;
     }
 

@@ -17,13 +17,17 @@ const Error = command_mod.Error;
 const Ticket = command_mod.Ticket;
 
 /// Validate, pace and queue a play or continue job.
-pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
+pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind, dir: command_mod.Direction) !Ticket {
+    if (dir == .back and self.session.smooth_rewind == null) return Error.NotReady;
     const change = session_speed.Change.of(speed, debug_session.limits.default_budget) catch return Error.InvalidSpeed;
     const core = self.session.currentCore();
     const prior = transport_mod.budgetOf(self.session, core);
     self.cancel();
     self.epoch += 1;
     try self.session.setRunBudget(core, change.budget);
+    if (dir == .back) {
+        try self.session.smooth_rewind.?.start(speed orelse 1.0);
+    }
     const ticket = self.issue();
     self.job = .{
         .ticket = ticket,
@@ -32,7 +36,7 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind) !Ticket {
         .kind = kind,
         .prior_budget = prior,
         .budget = change.budget,
-        .dir = .fwd,
+        .dir = dir,
         .speed = speed,
     };
     return ticket;
@@ -57,6 +61,20 @@ pub fn checkWatchHit(watches: *watch_table.Table, records: []const window_trail.
 /// line's interventions, which load once, due after the position the
 /// machine already stands at.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
+    if (job.dir == .back) {
+        if (self.session.smooth_rewind) |rewind| {
+            // The reverse clock runs on the wall time between slices; the
+            // first slice of a job has none yet and takes one display frame.
+            const dt: u64 = if (job.last_ns == 0) 16_666_666 else self.wall_ns -| job.last_ns;
+            job.last_ns = self.wall_ns;
+            const res = try rewind.tick(dt);
+            if (res.status == .history_start) {
+                return api.Ended{ .stop = .history_start };
+            }
+            return null;
+        }
+        return Error.NotReady;
+    }
     if (self.session.window) |w| {
         if (w.cursor() < w.count()) {
             const count = @min(w.count() - w.cursor(), if (job.budget > 0) job.budget else 1000);

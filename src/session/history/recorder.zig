@@ -188,16 +188,16 @@ pub const Recorder = struct {
     }
 
     /// Undoes what a fork that did not complete wrote: the staged bytes go,
-    /// the segment is cut back to `mark` (its length when the fork opened
+    /// the segment is cut back to `cut_at` (its length when the fork opened
     /// it), and appends return to `back`. Best effort: the fork's own
     /// error is the one its caller reports, and bytes left behind name a
     /// branch no graph holds, which every reader skips.
-    pub fn abandonSegment(self: *Recorder, back: Segment, mark: u64) void {
+    pub fn abandonSegment(self: *Recorder, back: Segment, cut_at: u64) void {
         self.discardStaged();
-        if (self.committed_bytes > mark) {
-            self.storage.truncate(self.storage.context, mark) catch {};
-            self.history_bytes -|= self.committed_bytes - mark;
-            self.committed_bytes = mark;
+        if (self.committed_bytes > cut_at) {
+            self.storage.truncate(self.storage.context, cut_at) catch {};
+            self.history_bytes -|= self.committed_bytes - cut_at;
+            self.committed_bytes = cut_at;
         }
         if (self.segment.branch != back.branch or self.segment.index != back.index)
             self.switchSegment(0, back.branch, back.index) catch {};
@@ -216,6 +216,34 @@ pub const Recorder = struct {
     /// storage does not hold yet. The staged record leaves at the next
     /// commit, with whatever frames share it.
     pub fn checkpoint(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
+        try self.pin(.checkpoint, header, id, bytes);
+    }
+
+    /// What a caller needs to undo a group of staged pins that did not
+    /// all land (a picture staged, then its checkpoint refused).
+    pub const Mark = struct { end: usize, pending: usize, object_bytes: u64 };
+
+    pub fn mark(self: *const Recorder) Mark {
+        return .{ .end = self.staging.writer.end, .pending = self.log.pending_bytes, .object_bytes = self.object_bytes };
+    }
+
+    /// Unstages every record after `to` and gives back the object bytes
+    /// counted since. The objects themselves stay in the object space,
+    /// unnamed, for the orphan sweep.
+    pub fn rollback(self: *Recorder, to: Mark) void {
+        self.staging.writer.end = to.end;
+        self.log.pending_bytes = to.pending;
+        self.object_bytes = to.object_bytes;
+    }
+
+    /// Pins one checkpoint's picture the same way: object first, durable,
+    /// then its record. The record is what keeps the object off the orphan
+    /// sweep, so a picture the log names is never reclaimed.
+    pub fn checkpointPicture(self: *Recorder, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
+        try self.pin(.checkpoint_picture, header, id, bytes);
+    }
+
+    fn pin(self: *Recorder, kind: record.Kind, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
         // A replayed round's state is already in the history: neither its
         // object nor its record is written again, nor counted again.
         if (self.replaying or self.stopped) return;
@@ -234,7 +262,7 @@ pub const Recorder = struct {
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64);
         defer staging.deinit();
         try record.encodeCheckpoint(&staging.writer, header, .{ .id = id, .object = digest[0..16].* });
-        try self.stagePayload(@backingInt(record.Kind.checkpoint), staging.writer.buffered());
+        try self.stagePayload(@backingInt(kind), staging.writer.buffered());
         self.object_bytes += bytes.len;
     }
 

@@ -14,6 +14,7 @@ test {
     _ = @import("host/history/enospc_test.zig");
     _ = @import("host/history/lifecycle_exact_test.zig");
     _ = @import("host/history/prune_test.zig");
+    _ = @import("host/history/frame_prune_test.zig");
     _ = @import("host/history/catalog_test.zig");
     _ = @import("host/history/layout_test.zig");
     _ = @import("host/history/gates_test.zig");
@@ -321,6 +322,7 @@ test {
     _ = @import("interfaces/rpc/host_gdb_test.zig");
     _ = @import("interfaces/rpc/socket_transport_test.zig");
     _ = @import("interfaces/rpc/served_setup_test.zig");
+    _ = @import("interfaces/rpc/frame_pipeline_test.zig");
     _ = @import("interfaces/rpc/history_off_nodisk_test.zig");
     _ = @import("interfaces/rpc/session_list_parts_test.zig");
     _ = @import("interfaces/rpc/session_board_parts_test.zig");
@@ -350,4 +352,10 @@ test {
     _ = @import("interfaces/rpc/history_bridge_test.zig");
     _ = @import("interfaces/rpc/history_ram_test.zig");
     _ = @import("interfaces/rpc/recorder_acceptance_test.zig");
+    _ = @import("interfaces/rpc/session/nav_rpc_test.zig");
+    _ = @import("interfaces/cli/nav_cli_test.zig");
+    _ = @import("interfaces/rpc/served_markers_test.zig");
+    _ = @import("interfaces/rpc/served_nav_feed_test.zig");
+    _ = @import("interfaces/rpc/served_rewind_test.zig");
+    _ = @import("interfaces/gui/smooth_rewind_gui_test.zig");
 }

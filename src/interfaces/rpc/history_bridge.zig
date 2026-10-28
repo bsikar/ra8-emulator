@@ -96,6 +96,22 @@ pub const Bridge = struct {
         return error.NoHistory;
     }
 
+    /// One object's bytes by its 32-hex name, owned by the caller: how a
+    /// pinned checkpoint picture is read back for the rewind.
+    pub fn objectBytes(context: *anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 {
+        const self: *Bridge = @ptrCast(@alignCast(context));
+        if (self.ram) |r| return allocator.dupe(u8, r.get(name) orelse return error.ObjectMissing);
+        const d = self.disk orelse return error.NoHistory;
+        const store = history.storage.Store.from(&d.session);
+        var file = try store.vtable.open(store.context, .objects, name, .read);
+        defer file.vtable.close(file.context);
+        const buf = try allocator.alloc(u8, @intCast(try file.vtable.length(file.context)));
+        errdefer allocator.free(buf);
+        const total = try readAll(file, buf);
+        if (total != buf.len) return error.Truncated;
+        return buf;
+    }
+
     /// The committed log's bytes across every segment, for the replay
     /// feeder; the bridge owns them until the next call.
     pub fn logBytes(context: *anyopaque) anyerror![]const u8 {

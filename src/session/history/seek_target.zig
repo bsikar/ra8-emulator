@@ -18,6 +18,10 @@
 //!   iter 7                        the 7th round boundary
 //!   bm main_loop                  a named bookmark
 //!   arrival 2 0x08001abc          the 2nd arrival at a point
+//!   iter prev, iter next          the round boundary before or after the cursor
+//!   rtos prev, rtos next          the thread switch before or after the cursor
+//!   isr prev, isr next            the exception entry or return before or after
+//!   marker main_loop 3            the 3rd arrival at an armed marker
 //!
 //! A bare number is refused: every time names its unit, so no form is
 //! ambiguous with another. A bookmark may contain colons or percent signs;
@@ -66,6 +70,18 @@ pub const Bookmark = struct {
     name: []const u8,
 };
 
+/// The nearest entry of one index before or after the cursor.
+pub const Step = struct {
+    kind: enum { iteration, rtos, isr },
+    dir: enum { prev, next },
+};
+
+/// The Nth arrival at an armed marker, counting from one.
+pub const Marker = struct {
+    name: []const u8,
+    nth: u64,
+};
+
 /// The Nth arrival at a point. The point's identity (which armed breakpoint
 /// or watch the address means) is the transport's to say, not this file's.
 pub const Point = struct {
@@ -89,6 +105,8 @@ pub const Target = union(enum) {
     frame: Frame,
     iteration: Iteration,
     bookmark: Bookmark,
+    marker: Marker,
+    step: Step,
     point: Point,
 };
 
@@ -110,6 +128,11 @@ fn keyword(word: []const u8, rest: []const u8) Error!Target {
     if (std.mem.eql(u8, word, "frame")) {
         return .{ .frame = .{ .index = try unsigned(u64, rest) } };
     }
+    if (std.mem.eql(u8, word, "rtos")) return stepOf(.rtos, rest);
+    if (std.mem.eql(u8, word, "isr")) return stepOf(.isr, rest);
+    if (std.mem.eql(u8, word, "iter") and (std.mem.eql(u8, rest, "prev") or std.mem.eql(u8, rest, "next"))) {
+        return stepOf(.iteration, rest);
+    }
     if (std.mem.eql(u8, word, "iter")) {
         const n = try unsigned(u64, rest);
         if (n == 0) return Error.BadValue;
@@ -120,6 +143,7 @@ fn keyword(word: []const u8, rest: []const u8) Error!Target {
         return .{ .bookmark = .{ .name = rest } };
     }
     if (std.mem.eql(u8, word, "arrival")) return parseArrival(rest);
+    if (std.mem.eql(u8, word, "marker")) return parseMarker(rest);
     return Error.BadValue;
 }
 
@@ -134,6 +158,23 @@ fn parseArrival(rest: []const u8) Error!Target {
     else
         try unsigned(u32, addr_text);
     return .{ .point = .{ .address = address, .nth = nth } };
+}
+
+fn stepOf(kind: @FieldType(Step, "kind"), rest: []const u8) Error!Target {
+    const dir = std.meta.stringToEnum(@FieldType(Step, "dir"), rest) orelse return Error.BadValue;
+    return .{ .step = .{ .kind = kind, .dir = dir } };
+}
+
+fn parseMarker(rest: []const u8) Error!Target {
+    const sp = std.mem.lastIndexOfScalar(u8, rest, ' ') orelse {
+        if (rest.len == 0) return Error.BadValue;
+        return .{ .marker = .{ .name = rest, .nth = 1 } };
+    };
+    const nth = try unsigned(u64, std.mem.trim(u8, rest[sp + 1 ..], " \t"));
+    if (nth == 0) return Error.BadValue;
+    const name = std.mem.trim(u8, rest[0..sp], " \t");
+    if (name.len == 0) return Error.BadValue;
+    return .{ .marker = .{ .name = name, .nth = nth } };
 }
 
 fn isHex(text: []const u8) bool {

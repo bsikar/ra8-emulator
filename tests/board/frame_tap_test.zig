@@ -33,3 +33,65 @@ test "the capture carries the boundary's virtual time" {
     try std.testing.expectEqual(@as(u32, 1), captures);
     try std.testing.expectEqual(@as(u64, 7_654_321), captured_at);
 }
+
+var fan_captures_1: u32 = 0;
+var fan_captures_2: u32 = 0;
+fn onFanCapture1(_: *anyopaque, _: u64) void {
+    fan_captures_1 += 1;
+}
+fn onFanCapture2(_: *anyopaque, _: u64) void {
+    fan_captures_2 += 1;
+}
+
+test "fan-out dispatches boundary to multiple subscribers" {
+    fan_captures_1 = 0;
+    fan_captures_2 = 0;
+    var fan: frame_tap.FanOut = .{};
+    try std.testing.expect(fan.isEmpty());
+    try std.testing.expectEqual(@as(usize, 0), fan.count());
+
+    var tap1: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+    var tap2: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture2, .interval_ns = 0 };
+
+    try std.testing.expect(fan.add(&tap1));
+    try std.testing.expect(fan.add(&tap2));
+    try std.testing.expect(!fan.isEmpty());
+    try std.testing.expectEqual(@as(usize, 2), fan.count());
+    try std.testing.expect(fan.contains(&tap1));
+    try std.testing.expect(fan.contains(&tap2));
+
+    fan.afterBoundary(100);
+    try std.testing.expectEqual(@as(u32, 1), fan_captures_1);
+    try std.testing.expectEqual(@as(u32, 1), fan_captures_2);
+
+    fan.remove(&tap1);
+    try std.testing.expectEqual(@as(usize, 1), fan.count());
+    try std.testing.expect(!fan.contains(&tap1));
+    try std.testing.expect(fan.contains(&tap2));
+
+    fan.afterBoundary(200);
+    try std.testing.expectEqual(@as(u32, 1), fan_captures_1);
+    try std.testing.expectEqual(@as(u32, 2), fan_captures_2);
+
+    fan.remove(&tap2);
+    try std.testing.expect(fan.isEmpty());
+}
+
+test "fan-out duplicate add and capacity limits" {
+    var fan: frame_tap.FanOut = .{};
+    var tap1: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+    var tap2: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+    var tap3: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+    var tap4: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+    var tap5: frame_tap.Tap = .{ .io = std.testing.io, .context = undefined, .captureFn = onFanCapture1, .interval_ns = 0 };
+
+    try std.testing.expect(fan.add(&tap1));
+    try std.testing.expect(fan.add(&tap1));
+    try std.testing.expectEqual(@as(usize, 1), fan.count());
+
+    try std.testing.expect(fan.add(&tap2));
+    try std.testing.expect(fan.add(&tap3));
+    try std.testing.expect(fan.add(&tap4));
+    try std.testing.expectEqual(@as(usize, 4), fan.count());
+    try std.testing.expect(!fan.add(&tap5));
+}

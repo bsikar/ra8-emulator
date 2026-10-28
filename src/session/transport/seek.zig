@@ -51,31 +51,41 @@ pub const SeekKind = struct {
 
 /// Validate, plan and queue a seek against the bound history bridge.
 pub fn queue(self: *Transport, text: []const u8) !Ticket {
-    const target = seek_target.parse(text) catch return Error.InvalidArgs;
+    var target = seek_target.parse(text) catch return Error.InvalidArgs;
     const bridge = self.history orelse return Error.NotReady;
-    // Only a position target executes today: the other kinds' plans
-    // name the index their resolution still waits for, so they stay
-    // refused until it lands.
-    var pos: seek_engine.Position = switch (target) {
-        .position => |pt| pt.position,
-        else => return Error.NotReady,
-    };
-    // A position without a branch names a point on the line the session
-    // is on, never the root's line.
-    const unnamed = switch (target) {
-        .position => |pt| !pt.branch_named,
-        else => false,
-    };
-    if (unnamed) pos.branch = self.session.currentPosition().branch;
     var facts = bridge.facts(bridge.context) catch return Error.HistoryBroken;
     if (self.session.fork_router) |router| {
         facts.graph = router.graph;
         facts.active_line = router.active_line;
     }
-    const plan = switch (seek_engine.plan(.{ .position = .{ .position = pos, .branch_named = true } }, facts)) {
-        .plan => |plan| plan,
+    if (self.session.nav_index) |nav| {
+        facts.nav = nav;
+    }
+    if (self.session.window) |w| {
+        if (w.ready() and w.start() != null and w.end() != null and w.at() != null) {
+            facts.window = .{
+                .start = w.start().?,
+                .end = w.end().?,
+                .at = w.at().?,
+                .line = w.line,
+                .slots = w.count(),
+            };
+        }
+    }
+    switch (target) {
+        .position => |*pt| {
+            if (!pt.branch_named) {
+                pt.position.branch = self.session.currentPosition().branch;
+                pt.branch_named = true;
+            }
+        },
+        else => {},
+    }
+    const planned = switch (seek_engine.plan(target, facts)) {
+        .plan => |p| p,
         .pending => return Error.NotReady,
     };
+    const pos = planned.target;
     // A position target lands on the boundary grid; without one there
     // is nothing to land on.
     if (self.session.grid == null) return Error.InvalidArgs;
@@ -88,7 +98,7 @@ pub fn queue(self: *Transport, text: []const u8) !Ticket {
         .ticket = ticket,
         .epoch = self.epoch,
         .core = core,
-        .kind = .{ .seek = .{ .target = pos, .base = plan.base } },
+        .kind = .{ .seek = .{ .target = pos, .base = planned.base } },
         .prior_budget = prior,
     };
     return ticket;
@@ -199,9 +209,57 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     if (ord != .lt) return transport_mod.reached();
     self.session.setReplaying(true);
     defer self.session.setReplaying(false);
-    const ended = try self.session.run(job.core, .cont);
+    const ended = try landing(self, job, grid.at, seek_job.target);
     if (ended != .count) return ended;
     return null;
+}
+
+/// One forward run toward the landing. A target in the round and phase the
+/// machine stands in is reached by instruction count, so a position inside a
+/// round is landed on and not run past: a target after its poll takes the
+/// last instruction as a step, which polls and then runs onto it. The run is
+/// reported as spent so the caller's position check settles the seek.
+fn landing(self: *Transport, job: *Job, at: seek_engine.Position, target: seek_engine.Position) !api.Ended {
+    const session = self.session;
+    if (at.r < target.r) return throughRound(self, job);
+    if (at.r != target.r or at.phase != target.phase or target.o <= at.o) return session.run(job.core, .cont);
+    const dist = target.o - at.o;
+    if (target.gap == .polled and dist == 1) {
+        const stepped = try session.run(job.core, .step);
+        const spent: api.Ended = .count;
+        return if (stepped == .stop and stepped.stop == .stepped) spent else stepped;
+    }
+    const budget: u64 = if (target.gap == .polled) dist - 1 else dist;
+    try session.setRunBudget(job.core, budget);
+    defer session.setRunBudget(job.core, job.prior_budget) catch {};
+    return session.run(job.core, .cont);
+}
+
+/// A run toward a later round that halts as that round opens, so a target
+/// inside it is then approached by instruction count and never run past. The
+/// round observer fires as each round closes and halts the run at the first
+/// one that has reached the target's round.
+fn throughRound(self: *Transport, job: *Job) !api.Ended {
+    const session = self.session;
+    if (session.live.checkpoints) |cp| cp.stop = .{ .context = self, .roundFn = &haltAtTargetRound };
+    const ended = try session.run(job.core, .cont);
+    const halted = ended == .stop and ended.stop == .halt_requested;
+    const spent: api.Ended = .count;
+    return if (halted) spent else ended;
+}
+
+/// Halts the run once a closed round reaches the seek's target round.
+fn haltAtTargetRound(context: *anyopaque, at: seek_engine.Position) void {
+    const self: *Transport = @ptrCast(@alignCast(context));
+    const job = self.job orelse return disarm(self);
+    if (job.kind != .seek or at.r < job.kind.seek.target.r) return;
+    disarm(self);
+    self.session.live.machine.requestHalt();
+}
+
+/// Removes the round stop a seek armed.
+pub fn disarm(self: *Transport) void {
+    if (self.session.live.checkpoints) |cp| cp.stop = null;
 }
 
 /// Whether `target` lies off the session's active line.

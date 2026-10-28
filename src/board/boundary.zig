@@ -86,7 +86,10 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("r
             frame.notify(now);
         }
     }
-    if (self.frame_tap) |tap| tap.afterBoundary(self.time.base.now());
+    if (self.frame_tap) |tap| {
+        if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
+    }
+    self.frame_taps.afterBoundary(self.time.base.now());
     core_clock.retune(self);
     try takeResetRequestsFrom(self, core, issuer);
     for (self.serial.channels) |channel| {

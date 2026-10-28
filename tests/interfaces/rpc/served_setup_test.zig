@@ -89,3 +89,112 @@ test "a source that will not open is refused and the old one stays" {
     try std.testing.expect(refused == .err);
     try std.testing.expectEqualStrings(before, source.label);
 }
+
+test "Served.open cleans up scratch buffer when frame pipeline initialization fails" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(io, ".", gpa);
+    defer gpa.free(root);
+
+    var opened: setup.Served = undefined;
+    const result = opened.open(gpa, io, image, null, .{
+        .root = root,
+        .ram_budget = 1,
+    });
+    try std.testing.expectError(error.BudgetTooSmall, result);
+}
+
+const FailOnEngineAlloc = struct {
+    parent: std.mem.Allocator,
+    target_size: usize,
+    has_failed: bool = false,
+
+    fn allocator(self: *FailOnEngineAlloc) std.mem.Allocator {
+        return .{
+            .ptr = self,
+            .vtable = &.{
+                .alloc = alloc,
+                .resize = resize,
+                .remap = remap,
+                .free = free,
+            },
+        };
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+        const self: *FailOnEngineAlloc = @ptrCast(@alignCast(ctx));
+        if (len == self.target_size and !self.has_failed) {
+            self.has_failed = true;
+            return null;
+        }
+        return self.parent.vtable.alloc(self.parent.ptr, len, alignment, ret_addr);
+    }
+
+    fn resize(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
+        const self: *FailOnEngineAlloc = @ptrCast(@alignCast(ctx));
+        return self.parent.vtable.resize(self.parent.ptr, memory, alignment, new_len, ret_addr);
+    }
+
+    fn remap(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *FailOnEngineAlloc = @ptrCast(@alignCast(ctx));
+        return self.parent.vtable.remap(self.parent.ptr, memory, alignment, new_len, ret_addr);
+    }
+
+    fn free(ctx: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
+        const self: *FailOnEngineAlloc = @ptrCast(@alignCast(ctx));
+        self.parent.vtable.free(self.parent.ptr, memory, alignment, ret_addr);
+    }
+};
+
+test "Served.open error path stops compositor worker on attachNav failure" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(io, ".", gpa);
+    defer gpa.free(root);
+
+    var fail_alloc = FailOnEngineAlloc{
+        .parent = gpa,
+        .target_size = @sizeOf(ra8.session.smooth_rewind.SmoothRewindEngine),
+    };
+
+    var opened: setup.Served = undefined;
+    const result = opened.open(fail_alloc.allocator(), io, image, null, .{
+        .root = root,
+    });
+    try std.testing.expectError(error.OutOfMemory, result);
+    try std.testing.expect(fail_alloc.has_failed);
+    try std.testing.expect(opened.frames == null);
+}
+
+test "attachNav error path leaves no dangling pointer on allocation failure" {
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+
+    var opened: setup.Served = undefined;
+    try opened.open(gpa, io, image, null, null);
+    defer opened.deinit();
+
+    const session = opened.owner.session();
+    const served_history = ra8.rpc.served_history;
+    served_history.deinitNav(&opened);
+    try std.testing.expect(session.nav_index == null);
+
+    var fail_alloc = FailOnEngineAlloc{
+        .parent = gpa,
+        .target_size = @sizeOf(ra8.session.smooth_rewind.SmoothRewindEngine),
+    };
+
+    const res = served_history.attachNav(&opened, fail_alloc.allocator());
+    try std.testing.expectError(error.OutOfMemory, res);
+    try std.testing.expect(fail_alloc.has_failed);
+    try std.testing.expect(opened.nav == null);
+    try std.testing.expect(opened.rewind == null);
+    try std.testing.expect(session.nav_index == null);
+    try std.testing.expect(session.smooth_rewind == null);
+}

@@ -124,7 +124,7 @@ fn narrow(value: u32) u16 {
     return @intCast(@min(value, std.math.maxInt(u16)));
 }
 
-fn send(server: anytype, of: proto.Core, rect: Rect, virtual_ns: u64, frame: api.Frame, chunk: []u8, tx: []u8) !void {
+pub fn send(server: anytype, of: proto.Core, rect: Rect, virtual_ns: u64, frame: api.Frame, chunk: []u8, tx: []u8) !void {
     const rows_per: u16 = @intCast(@min(rect.height, max_pixels / rect.width));
     var row: u16 = 0;
     while (row < rect.height) : (row += rows_per) {

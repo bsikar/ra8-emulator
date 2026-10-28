@@ -16,16 +16,10 @@ pub const capabilities: u32 = 0x0000_7FFF;
 pub const transport_cap: u32 = 0x0000_8000;
 pub const max_payload = 1_048_576;
 
-/// Refusal codes this message set adds above the library's own.
 pub const app_codes = struct {
-    /// The Session refused the call; the error name went to stderr.
     pub const refused: u16 = 0x0100;
-    /// The call named a core this session has no image for.
     pub const no_core: u16 = 0x0101;
-    /// A read asked for more bytes than one reply carries.
     pub const too_long: u16 = 0x0102;
-    /// A seek's history read failed: the committed log or the checkpoint
-    /// object it names is unreadable (RA8EMU-1196, slice 17).
     pub const history: u16 = 0x0103;
 };
 
@@ -84,6 +78,10 @@ pub const Method = enum(u16) {
     branch_status = 0x0135,
     console_input = 0x0136,
     skip_bkpt = 0x0137,
+    play = 0x0138,
+    nav_query = 0x0139,
+    marker_set = 0x013A,
+    frame_status = 0x013B,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -233,23 +231,16 @@ pub const BoardParts = struct {
     switch_names: []const u8,
     pub const max_len = .{ .panel = 64, .led_names = 256, .led_colors = 32, .switch_names = 256 };
 };
-/// A camera source in `--camera-source` syntax (RA8EMU-795); a webcam
-/// opens only when `allow_webcam` is 1, the client's user having consented.
 pub const CameraSource = struct {
     text: []const u8,
     allow_webcam: u8 = 0,
     pub const max_len = .{ .text = 512 };
 };
-/// Which core's image to map, and whether as JSON (1) or as the text
-/// `--map` prints (0) (RA8EMU-794).
 pub const MapAsk = struct { core: Core, json: u8 = 0 };
-/// The memory map of the image the core last loaded.
 pub const MapText = struct {
     text: []const u8,
     pub const max_len = .{ .text = 65536 };
 };
-/// The peripheral blocks a core's bus maps, or with `block` set the
-/// registers of that block, as JSON (1) or text (0) (RA8EMU-818).
 pub const PeriphAsk = struct {
     core: Core,
     json: u8 = 0,
@@ -387,6 +378,14 @@ pub const BranchDelete = branch_wire.BranchDelete;
 pub const BranchConfirmFork = branch_wire.BranchConfirmFork;
 pub const BranchCancelFork = branch_wire.BranchCancelFork;
 pub const ForkStatus = branch_wire.ForkStatus;
+pub const nav_wire = @import("nav_wire.zig");
+pub const Direction = nav_wire.Direction;
+pub const PlayArgs = nav_wire.PlayArgs;
+pub const NavQueryKind = nav_wire.NavQueryKind;
+pub const NavQueryArgs = nav_wire.NavQueryArgs;
+pub const NavQueryResult = nav_wire.NavQueryResult;
+pub const MarkerSetArgs = nav_wire.MarkerSetArgs;
+pub const FrameStatusResult = nav_wire.FrameStatusResult;
 /// Calls a client can hold unanswered at once; a leaf with more reads than
 /// this sends the rest as answers free slots.
 pub const pending_slots = 32;

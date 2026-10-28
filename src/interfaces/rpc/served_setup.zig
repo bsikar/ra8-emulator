@@ -39,6 +39,11 @@ const session_async = @import("ra8_session").history_async_queue;
 const session_async_traffic = @import("ra8_session").history_async_traffic;
 const history_root = @import("ra8_session").history_root;
 const served_history = @import("served_history.zig");
+const history = @import("ra8_host").history;
+const history_marker_store = @import("history_marker_store.zig");
+const frame_pipeline = @import("frame_pipeline.zig");
+const served_frames = @import("served_frames.zig");
+const frame_cache = @import("ra8_session").history_frame_cache;
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -56,6 +61,10 @@ pub const HistoryOpts = struct {
     /// without a root. Null sizes the share from the host's RAM.
     ram_budget: ?u64 = null,
     kept: bool = false,
+    /// The kept session to take over instead of making a new one.
+    reopen: ?[]const u8 = null,
+    /// Frame tap captures per host second; zero captures every change.
+    frame_hz: ?u32 = null,
 };
 
 pub const Served = struct {
@@ -84,13 +93,16 @@ pub const Served = struct {
     /// history records: a seek plans from the committed log and restores
     /// through the checkpoint objects. Points into `self`.
     bridge: ?history_bridge.Bridge = null,
+    /// Passive frame pipeline (milestone M7): tap, worker and cache.
+    frames: ?*frame_pipeline.FramePipeline = null,
+    markers: ?*history_marker_store.MarkerStore = null,
+    feed: ?*@import("ra8_session").history_nav_feed.NavFeed = null,
+    nav: ?*@import("ra8_session").history_nav_index.NavIndex = null,
+    rewind: ?*@import("ra8_session").smooth_rewind.SmoothRewindEngine = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
     pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history_opts: ?HistoryOpts) !void {
-        // The bind outlives the harness: the armed checkpoints write
-        // through its shapes until the harness's teardown disarms, so on
-        // an error the harness goes first and the bind closes second.
         // The history outlives the harness: the armed checkpoints write
         // through its shapes until the harness's teardown disarms, so on
         // an error the harness goes first and the history closes second.
@@ -100,7 +112,8 @@ pub const Served = struct {
         errdefer if (ram) |r| r.deinit();
         if (history_opts) |opts| {
             if (opts.root) |root| {
-                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget, .kept = opts.kept });
+                const id = if (opts.reopen) |text| try history.name.id(text) else null;
+                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget, .kept = opts.kept, .reopen = id });
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
@@ -125,6 +138,7 @@ pub const Served = struct {
         const tx = try allocator.alloc(u8, Env.max_frame);
         errdefer allocator.free(tx);
         const scratch = try allocator.alloc(u8, proto.max_payload);
+        errdefer allocator.free(scratch);
         self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind, .ram_history = ram };
         self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
         // The transport rides the context so run-control methods route
@@ -142,7 +156,12 @@ pub const Served = struct {
                 .restore = &history_bridge.Bridge.restore,
                 .logBytes = &history_bridge.Bridge.logBytes,
             };
+            try served_frames.init(self, allocator, io, self.history, history_opts);
         }
+        errdefer if (self.frames) |p| {
+            p.deinit();
+            self.frames = null;
+        };
         self.context.wall = .{ .context = self, .nowFn = hostClock };
         self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
         self.context.board_profile = self.owner.boardProfile();
@@ -229,7 +248,16 @@ pub const Served = struct {
         return rtos_names.name(memory, thread, buffer[0..rtos_names.longest]);
     }
 
+    pub fn frameCache(self: *Served) ?*frame_cache.FrameCache {
+        return if (self.frames) |f| &f.cache else null;
+    }
+
     pub fn deinit(self: *Served) void {
+        served_history.deinitNav(self);
+        if (self.frames) |p| {
+            p.deinit();
+            self.frames = null;
+        }
         if (self.bridge) |*b| b.deinit();
         if (self.stacks) |stacks| {
             self.owner.unsampleStacks(stacks);

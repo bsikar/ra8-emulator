@@ -68,12 +68,12 @@ test "history track keys: Home and End seek over the same dispatch" {
     var status: Status = .{};
     var link = session_link.Link{};
     const capture = gui_app.time.bar_capture;
-    try std.testing.expect(time.trackKey(capture.key_home, &status, &link));
+    try std.testing.expect(time.trackKeyFull(capture.key_home, false, &status, &link));
     try std.testing.expectEqual(status_bar.Refusal.seek, status.refused.?);
     status.refused = null;
-    try std.testing.expect(time.trackKey(capture.key_end, &status, &link));
+    try std.testing.expect(time.trackKeyFull(capture.key_end, false, &status, &link));
     try std.testing.expectEqual(status_bar.Refusal.seek, status.refused.?);
-    try std.testing.expect(!time.trackKey(capture.key_f5, &status, &link));
+    try std.testing.expect(!time.trackKeyFull(capture.key_f5, false, &status, &link));
 }
 
 test "history track keys: an empty track takes nothing" {
@@ -81,8 +81,8 @@ test "history track keys: an empty track takes nothing" {
     var status: Status = .{};
     var link = session_link.Link{};
     const capture = gui_app.time.bar_capture;
-    try std.testing.expect(!time.trackKey(capture.key_home, &status, &link));
-    try std.testing.expect(!time.trackKey(capture.key_end, &status, &link));
+    try std.testing.expect(!time.trackKeyFull(capture.key_home, false, &status, &link));
+    try std.testing.expect(!time.trackKeyFull(capture.key_end, false, &status, &link));
     try std.testing.expect(status.refused == null);
 }
 
