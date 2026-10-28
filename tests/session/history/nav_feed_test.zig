@@ -79,13 +79,22 @@ test "iterations reached out of order are kept in position order once each" {
     rig.init();
     defer rig.deinit();
 
+    rig.at(10, 1000);
     rig.round(10);
+    // A seek back replays rounds a restore skipped; CPU0's counter is back
+    // at what it was there.
+    rig.at(5, 500);
     rig.round(5);
+    rig.at(10, 1000);
     rig.round(10);
+    rig.at(7, 700);
     rig.round(7);
     try std.testing.expectEqual(@as(usize, 3), rig.nav.iterations.items.len);
     try std.testing.expectEqual(@as(u64, 5), rig.nav.getIteration(1).?.r);
     try std.testing.expectEqual(@as(u64, 7), rig.nav.getIteration(2).?.r);
     try std.testing.expectEqual(@as(u64, 10), rig.nav.getIteration(3).?.r);
     for (rig.nav.iterations.items, 1..) |entry, n| try std.testing.expectEqual(@as(u64, n), entry.n);
+    try std.testing.expectEqual(@as(u64, 500), rig.nav.getIterationSlots(1).?);
+    try std.testing.expectEqual(@as(u64, 700), rig.nav.getIterationSlots(2).?);
+    try std.testing.expectEqual(@as(u64, 1000), rig.nav.getIterationSlots(3).?);
 }

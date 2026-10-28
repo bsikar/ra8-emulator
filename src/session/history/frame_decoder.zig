@@ -322,9 +322,12 @@ pub const FrameDecoder = struct {
     pub fn lookupRestorePicture(self: *FrameDecoder, virtual_ns: u64, cursor_line: branch_mod.BranchId, graph: ?*const branch_mod.BranchGraph) !?DecodedFrame {
         var line = cursor_line;
         var limit: ?Position = null;
-        while (true) {
+        // A line has fewer ancestors than the graph has nodes.
+        var hops: usize = if (graph) |g| g.nodes.count() else 0;
+        while (true) : (hops -|= 1) {
             if (try self.searchLine(line, limit, virtual_ns)) |found| return found;
             const g = graph orelse return null;
+            if (hops == 0) return null;
             if (line == branch_mod.root_branch_id) return null;
             const node = g.get(line) orelse return null;
             limit = node.fork_at;

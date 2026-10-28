@@ -25,8 +25,9 @@ pub const NavFeed = struct {
     /// The run's saved scheduler state and CPU0's slot counter.
     saved: *const scheduler.State,
     slots: *const u64,
-    /// Slots already charged to the index, and the thread last seen running.
-    charged: u64 = 0,
+    /// CPU0's slot counter when the feed started, and the thread last
+    /// seen running.
+    base_slots: u64 = 0,
     thread: u32 = 0,
     /// The entries already indexed, so a replay adds nothing twice.
     seen: std.AutoHashMapUnmanaged(Seen, void) = .empty,
@@ -61,16 +62,15 @@ pub const NavFeed = struct {
         };
     }
 
-    /// A round closed: the next one starts here. The slots run since the
-    /// last boundary, skipped trips included, join the iteration's count.
+    /// A round closed: the next one starts here. Its slot count is the
+    /// slots run since the feed started, skipped trips included, read off
+    /// CPU0's counter, which a restore puts back with the rest of the state.
     pub fn onRound(context: *anyopaque, at: Position) void {
         const self: *NavFeed = @ptrCast(@alignCast(context));
         var stamped = at;
         stamped.branch = line.currentPosition(self.session).branch;
         if (!self.first(.{ .kind = .iteration, .at = stamped })) return;
-        self.nav.advanceSlots(self.slots.* -| self.charged);
-        self.charged = self.slots.*;
-        _ = self.nav.addIteration(stamped) catch {};
+        _ = self.nav.addIterationAt(stamped, self.slots.* -| self.base_slots) catch {};
     }
 
     fn onEvent(context: *anyopaque, event: rtos_trace.Event) void {
@@ -94,7 +94,7 @@ pub const NavFeed = struct {
     }
 
     /// Whether `entry` is new to the index; it is remembered either way.
-    /// Out of memory, it counts as seen, so the index only misses an entry.
+    /// Out of memory, it is skipped, so the index only misses an entry.
     fn first(self: *NavFeed, entry: Seen) bool {
         const got = self.seen.getOrPut(self.nav.allocator, entry) catch return false;
         return !got.found_existing;

@@ -122,10 +122,16 @@ pub const NavIndex = struct {
     /// Iterations stay in position order, so iteration n is the nth one
     /// indexed even when a replay fills in a stretch a restore skipped.
     pub fn addIteration(self: *NavIndex, pos: Position) !u64 {
+        return self.addIterationAt(pos, self.accumulated_slots);
+    }
+
+    /// As `addIteration`, with the slots run up to `pos` given: an
+    /// iteration filled in behind later ones has its own count, not theirs.
+    pub fn addIterationAt(self: *NavIndex, pos: Position, slots: u64) !u64 {
         const items = self.iterations.items;
         var at = items.len;
         while (at > 0 and lineOrder(items[at - 1].position, pos) == .gt) at -= 1;
-        try self.iterations.insert(self.allocator, at, .{ .n = at + 1, .position = pos, .slots = self.accumulated_slots });
+        try self.iterations.insert(self.allocator, at, .{ .n = at + 1, .position = pos, .slots = slots });
         for (self.iterations.items[at + 1 ..]) |*later| later.n += 1;
         return at + 1;
     }

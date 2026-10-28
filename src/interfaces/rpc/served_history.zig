@@ -135,7 +135,7 @@ fn attachFeed(self: *served_setup.Served, allocator: std.mem.Allocator, nav: *se
     const session = self.owner.session();
     const feed = allocator.create(session_feed.NavFeed) catch return;
     feed.* = .{ .nav = nav, .session = session, .saved = self.owner.grid(), .slots = &self.owner.primaryCpu().slots };
-    feed.charged = feed.slots.*;
+    feed.base_slots = feed.slots.*;
     self.feed = feed;
     if (session.live.checkpoints) |cp| cp.rounds = .{ .context = feed, .roundFn = &session_feed.NavFeed.onRound };
     if (symbols.addressOf(self.owner.image(), "_tx_thread_current_ptr") != null and self.owner.traceIfRtos()) {
