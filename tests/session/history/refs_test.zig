@@ -1,6 +1,7 @@
 //! Covers src/session/history/refs.zig: the committed frame walk that
-//! reports the object names the checkpoint records carry, mandatory
-//! bits aside, and stops at a torn tail.
+//! reports the object names the checkpoint records carry (the saved
+//! machine, its touched pages and its manifest), mandatory bits aside,
+//! and stops at a torn tail.
 const std = @import("std");
 const ra8 = @import("ra8");
 const refs = ra8.session.history_refs;
@@ -25,13 +26,16 @@ fn hexName(buffer: *[32]u8) void {
 
 const Collector = struct {
     count: usize = 0,
-    last: [32]u8 = undefined,
+    names: [4][32]u8 = undefined,
 
     fn visit(self: *Collector, name: refs.Name) void {
+        if (self.count < self.names.len) self.names[self.count] = name;
         self.count += 1;
-        self.last = name;
     }
 };
+
+/// The names one checkpoint record carries.
+const per_checkpoint: usize = 3;
 
 fn scanned(kind: u16, tail: []const u8) !Collector {
     var buffer: [256]u8 = undefined;
@@ -43,17 +47,19 @@ fn scanned(kind: u16, tail: []const u8) !Collector {
     return seen;
 }
 
-test "the walk reports a checkpoint record's object name" {
+test "the walk reports a checkpoint record's machine, touched-pages and manifest names" {
     const seen = try scanned(@backingInt(@import("ra8").session.history_record.Kind.checkpoint), "");
-    try std.testing.expectEqual(@as(usize, 1), seen.count);
+    try std.testing.expectEqual(per_checkpoint, seen.count);
     var want: [32]u8 = undefined;
     hexName(&want);
-    try std.testing.expectEqualSlices(u8, &want, &seen.last);
+    try std.testing.expectEqualSlices(u8, &want, &seen.names[0]);
+    try std.testing.expectEqualSlices(u8, &ra8.session.history_touched_pages.objectName(digest), &seen.names[1]);
+    try std.testing.expectEqualSlices(u8, &ra8.session.history_manifest.objectName(digest), &seen.names[2]);
 }
 
 test "the walk reads the mandatory bit as decoration" {
     const seen = try scanned(@backingInt(@import("ra8").session.history_record.Kind.checkpoint) | 0x8000, "");
-    try std.testing.expectEqual(@as(usize, 1), seen.count);
+    try std.testing.expectEqual(per_checkpoint, seen.count);
 }
 
 test "the walk skips other kinds" {
@@ -65,5 +71,5 @@ test "the walk skips other kinds" {
 
 test "the walk stops at a torn tail" {
     const seen = try scanned(@backingInt(@import("ra8").session.history_record.Kind.checkpoint), "\x00\x00\x00");
-    try std.testing.expectEqual(@as(usize, 1), seen.count);
+    try std.testing.expectEqual(per_checkpoint, seen.count);
 }

@@ -23,6 +23,7 @@ test {
     _ = @import("history/log_test.zig");
     _ = @import("history/root_test.zig");
     _ = @import("history/trail_test.zig");
+    _ = @import("history/trail_types_test.zig");
     _ = @import("history/recorder_test.zig");
     _ = @import("history/segment_recover_test.zig");
     _ = @import("history/replay_test.zig");
