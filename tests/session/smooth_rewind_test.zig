@@ -78,10 +78,12 @@ test "smooth rewind playback at 1x, 8x, and 32x via Session API" {
     var cache = cache_mod.FrameCache.init(gpa, std.testing.io, .{ .ram_bytes = 1 << 20 }, null);
     defer cache.deinit();
 
+    // Frames a few hundred rounds in (100, 500 and 900 us), so the pause
+    // at the end replays a short way to the frame it shows.
     const pic_val = fx.picture(1, 0);
-    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 100_000), &pic_val));
-    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 500_000), &pic_val));
-    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 900_000), &pic_val));
+    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 100), &pic_val));
+    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 500), &pic_val));
+    try fx.put(&cache, gpa, try fx.keyRecord(gpa, fx.at(0, 900), &pic_val));
 
     const session = rig.opened.session();
     var engine = smooth_rewind.SmoothRewindEngine.init(gpa, session);
@@ -92,13 +94,14 @@ test "smooth rewind playback at 1x, 8x, and 32x via Session API" {
     // Initial state: stopped, not busy
     try std.testing.expect(!engine.isBusy());
 
-    // 1x speed start from 1 second
-    engine.decoder.setCursorNs(1_000_000_000);
+    // 1x speed start from 1 ms
+    engine.decoder.setCursorNs(1_000_000);
     try session.startSmoothRewind(1.0);
     try std.testing.expect(engine.isBusy());
 
-    // Tick advances reverse clock
-    const dt: u64 = 16_666_667;
+    // Each tick moves the reverse clock 20 us of wall time times the speed:
+    // to 980, 820 and 180 us, each past a frame.
+    const dt: u64 = 20_000;
     const res1 = try session.tickSmoothRewind(dt);
     try std.testing.expectEqual(smooth_rewind.Status.ok, res1.status);
     try std.testing.expect(res1.frame != null);
