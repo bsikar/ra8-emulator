@@ -132,3 +132,38 @@ test "the trail joins in front of the store's observer, which sees every write, 
     run.deinit();
     try std.testing.expectEqual(&held, store.observer.?);
 }
+
+test "an observer that joins above the trail and leaves first hands the head back to the trail" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var below: Counter = .{};
+    const below_observer: memory.observer.Observer = .{ .ctx = &below, .vtable = &Counter.vtable };
+    store.observer = &below_observer;
+    var slots: [2]u64 = .{ 0, 0 };
+    var run = recording(&store, &slots);
+    defer run.deinit();
+    run.arm();
+
+    // A later observer joins on top, forwarding to the trail, then leaves.
+    const Above = struct {
+        prev: ?*const memory.observer.Observer,
+        writes: usize = 0,
+        fn bytes(ctx: *anyopaque, write: memory.observer.Write) void {
+            const self: *@This() = @ptrCast(@alignCast(ctx));
+            self.writes += 1;
+            if (self.prev) |prev| prev.bytes(write);
+        }
+        fn barrier(_: *anyopaque, _: memory.observer.Barrier) void {}
+        const vtable: memory.observer.Observer.VTable = .{ .bytes = bytes, .barrier = barrier };
+    };
+    var above: Above = .{ .prev = store.observer };
+    const above_observer: memory.observer.Observer = .{ .ctx = &above, .vtable = &Above.vtable };
+    store.observer = &above_observer;
+    try store.write(.cpu0, memmap.sram_base, &.{0x44});
+    store.observer = above.prev;
+
+    try store.write(.cpu0, memmap.sram_base, &.{0x55});
+    try std.testing.expectEqual(@as(usize, 1), above.writes);
+    try std.testing.expectEqual(@as(usize, 2), run.slice().len);
+    try std.testing.expectEqual(@as(usize, 2), below.writes);
+}

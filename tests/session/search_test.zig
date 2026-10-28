@@ -234,3 +234,51 @@ test "overflow-safe range arithmetic handles watchpoints near address space ceil
     try std.testing.expect(sess.matchingWatch(0xFFFF_FFFC, 4) != null);
     try std.testing.expect(sess.matchingWatch(0xFFFF_FFE0, 4) == null);
 }
+
+/// The observer the store held before a replay: it counts what reaches it.
+const Held = struct {
+    writes: usize = 0,
+    barriers: usize = 0,
+
+    fn bytes(ctx: *anyopaque, _: ra8.chip.core.cpu.memory.observer.Write) void {
+        const self: *Held = @ptrCast(@alignCast(ctx));
+        self.writes += 1;
+    }
+    fn barrier(ctx: *anyopaque, _: ra8.chip.core.cpu.memory.observer.Barrier) void {
+        const self: *Held = @ptrCast(@alignCast(ctx));
+        self.barriers += 1;
+    }
+    const vtable: ra8.chip.core.cpu.memory.observer.Observer.VTable = .{ .bytes = bytes, .barrier = barrier };
+};
+
+test "ReplayObserver passes every write on to the observer it stood in front of" {
+    var cpu: ra8.chip.core.cpu.cpu.Cpu = undefined;
+    cpu.slots = 10;
+    var machine: ra8.session.stop_machine.Machine = .{};
+    var sess: ra8.session.api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    var grid_state: ra8.chip.core.scheduler.State = .{
+        .at = .{ .branch = 0, .r = 5, .phase = .cpu0, .o = 1, .gap = .retired },
+        .base = .{ 5, 0 },
+    };
+    sess.grid = &grid_state;
+    var sink: rw.Sink = .{
+        .range = .{ .address = 0x2000_0000, .size = 16 },
+        .start = .{ .r = 0 },
+        .until = .{ .r = 10 },
+        .value_change_only = false,
+    };
+    var held: Held = .{};
+    const held_observer: ra8.chip.core.cpu.memory.observer.Observer = .{ .ctx = &held, .vtable = &Held.vtable };
+    var observer = ra8.session.search.ReplayObserver{ .sink = &sink, .session = &sess, .prev = &held_observer };
+    const obs = observer.observer();
+
+    const pre = [_]u8{ 0, 0, 0, 0 };
+    const new = [_]u8{ 1, 2, 3, 4 };
+    // One write inside the watched range and one outside it: both reach the
+    // observer behind, and only the first is a hit.
+    obs.bytes(.{ .base = 0x2000_0000, .offset = 0, .initiator = .cpu0, .pre = &pre, .new = &new });
+    obs.bytes(.{ .base = 0x2000_1000, .offset = 0, .initiator = .cpu0, .pre = &pre, .new = &new });
+    try std.testing.expectEqual(@as(usize, 2), held.writes);
+    try std.testing.expect(sink.best != null);
+    try std.testing.expectEqual(@as(u32, 0x2000_0000), sink.best.?.address);
+}

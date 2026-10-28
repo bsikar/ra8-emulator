@@ -110,7 +110,9 @@ pub const Recording = struct {
     /// Start recording. The first arm joins the store's observer slot in
     /// front of whatever held it, which keeps seeing every write; a
     /// borrower store chases the lender's, so one machine records one
-    /// trail however many stores write.
+    /// trail however many stores write. Observers join and leave the
+    /// store's chain last in, first out (checkpoints' dirty pages, then
+    /// the trail, then the frame tap), so each one leaves as the head.
     pub fn arm(self: *Recording) void {
         if (!self.linked) {
             self.observer = .{ .ctx = self, .vtable = &machine_hooks };

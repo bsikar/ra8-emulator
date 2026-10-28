@@ -12,9 +12,18 @@ const Session = api.Session;
 pub const ReplayObserver = struct {
     sink: *reverse_watch.Sink,
     session: *api.Session,
+    /// The observer the store held before the replay: every write still
+    /// reaches it, so dirty-page tracking, the trail and the frame tap see
+    /// the replay's writes as they would a live run's.
+    prev: ?*const memory_observer.Observer = null,
 
     fn onBytes(ctx: *anyopaque, write: memory_observer.Write) void {
         const self: *ReplayObserver = @ptrCast(@alignCast(ctx));
+        self.take(write);
+        if (self.prev) |prev| prev.bytes(write);
+    }
+
+    fn take(self: *ReplayObserver, write: memory_observer.Write) void {
         const start: u64 = @as(u64, write.base) + write.offset;
         const len: u32 = @intCast(write.pre.len);
         const addr: u32 = @truncate(start);
@@ -49,7 +58,10 @@ pub const ReplayObserver = struct {
         });
     }
 
-    fn onBarrier(_: *anyopaque, _: memory_observer.Barrier) void {}
+    fn onBarrier(ctx: *anyopaque, event: memory_observer.Barrier) void {
+        const self: *ReplayObserver = @ptrCast(@alignCast(ctx));
+        if (self.prev) |prev| prev.barrier(event);
+    }
 
     pub fn observer(self: *ReplayObserver) memory_observer.Observer {
         return .{ .ctx = self, .vtable = &.{ .bytes = onBytes, .barrier = onBarrier } };

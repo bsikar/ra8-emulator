@@ -38,9 +38,9 @@ fn replaySession(
     self.restoreBase(.{ .checkpoint = .{ .id = base.id, .object = base.object, .position = base.position } }) catch return reverse_watch.Error.ReplayFailed;
 
     const store = self.session.store() orelse return reverse_watch.Error.ReplayFailed;
-    var obs_ctx: ReplayObserver = .{ .sink = sink, .session = self.session };
-    const obs = obs_ctx.observer();
     const prev_observer = store.observer;
+    var obs_ctx: ReplayObserver = .{ .sink = sink, .session = self.session, .prev = prev_observer };
+    const obs = obs_ctx.observer();
     store.observer = &obs;
     defer store.observer = prev_observer;
 
