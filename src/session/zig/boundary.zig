@@ -25,6 +25,7 @@ pub const Boundary = struct {
     saved: ?*scheduler.State = null,
     pair: ?*chip.core.second.core.zig.run.Driver = null,
     cut: ?*chip.core.cpu.cpu.systick_cut.Cut = null,
+    store: ?*chip.core.cpu.memory.store.Store = null,
 
     /// Drains what instrumentation recorded, reached by every stop or budget
     /// return. It runs no guest code and ticks no board.

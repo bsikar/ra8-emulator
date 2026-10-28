@@ -20,6 +20,7 @@ const position_mod = @import("position.zig");
 const branch_mod = @import("branch.zig");
 const cross_seek = @import("cross_seek.zig");
 const nav_index = @import("nav_index.zig");
+const bisect = @import("value_bisect.zig");
 
 pub const Position = position_mod.Position;
 pub const BranchGraph = branch_mod.BranchGraph;
@@ -34,6 +35,7 @@ pub const Checkpoint = struct {
     position: Position,
     id: u32,
     object: [16]u8,
+    touched: ?*const bisect.Touched = null,
 };
 
 pub const WindowFacts = struct {
@@ -82,6 +84,7 @@ pub const Base = union(enum) {
         id: u32,
         object: [16]u8,
         position: Position,
+        touched: ?*const bisect.Touched = null,
     },
     /// The reverse window's redo/undo base.
     window: struct {
@@ -315,6 +318,7 @@ fn checkpointPlan(chosen: Checkpoint, target: Position) Outcome {
             .id = chosen.id,
             .object = chosen.object,
             .position = chosen.position,
+            .touched = chosen.touched,
         } },
         .replay_rounds = target.r - chosen.position.r,
         .target = target,

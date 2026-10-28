@@ -28,80 +28,18 @@ const memory = @import("ra8_chip").core.cpu.memory;
 const observer = memory.observer;
 const store_mod = memory.store;
 const initiator_mod = memory.initiator;
+const types = @import("trail_types.zig");
 
 const Allocator = std.mem.Allocator;
 const Initiator = initiator_mod.Initiator;
 
-/// Which side of the machine a record's write came from, in the trail's
-/// own position terms.
-pub const Source = union(enum) {
-    /// A core wrote during its own slot: `slots` is the core's cumulative
-    /// slot count when the write left, so the record sits in that core's
-    /// retire gap for that slot.
-    core: struct { core: Core, slots: u64 },
-    /// A board-phase writer (the NPU's DMA, a DTC, the display, ...): its
-    /// write lands at the board phase of its round.
-    board: Initiator,
-    /// Untimed setup, whose writes carry no initiator of their own.
-    untimed,
-};
-
-/// The two cores, in round order.
-pub const Core = enum(u1) { cpu0, cpu1 };
-
-/// One byte record: what a write was about to replace, and where it lands.
-pub const Bytes = struct {
-    /// The canonical base of the space the write hit: the memory region's
-    /// base for store-space records, the part's own origin for part-space
-    /// ones.
-    base: u32,
-    offset: u64,
-    initiator: Initiator,
-    source: Source,
-    /// The part index when the record came from a component's own hooks,
-    /// null from the machine store's.
-    part: ?u16,
-    /// The bytes the storage held before the write, owned by the trail.
-    pre: []u8,
-
-    pub fn deinit(self: *Bytes, allocator: Allocator) void {
-        allocator.free(self.pre);
-    }
-};
-
-/// The trail's records in arrival order.
-pub const Record = union(enum) {
-    bytes: Bytes,
-    /// A structural change around byte writes (H5/H6).
-    barrier: observer.Barrier,
-};
-
-/// A labelled noncore-write watch (unit 09): every write outside the two
-/// cores whose bytes overlap the watched range raises one labelled hit.
-pub const Watch = struct {
-    base: u32,
-    size: u32,
-    /// The trail's own copy of the caller's label.
-    label: []u8,
-};
-
-/// One watch hit: which watch, what range the write covered, and who
-/// drove it as far as the trail can see.
-pub const Hit = struct {
-    watch: usize,
-    start: u64,
-    len: u64,
-    initiator: Initiator,
-    source: Source,
-};
-
-/// A component's own restore, in the component's own address space: the
-/// raw overwrite past its write semantics, the counterpart of the hook
-/// that recorded the bytes.
-pub const PartRestore = struct {
-    ctx: *anyopaque,
-    raw: *const fn (ctx: *anyopaque, address: u32, bytes: []const u8) void,
-};
+pub const Source = types.Source;
+pub const Core = types.Core;
+pub const Bytes = types.Bytes;
+pub const Record = types.Record;
+pub const Watch = types.Watch;
+pub const Hit = types.Hit;
+pub const PartRestore = types.PartRestore;
 
 const machine_hooks = observer.Observer.VTable{ .bytes = machineBytes, .barrier = machineBarrier };
 const part_hooks = observer.Observer.VTable{ .bytes = partBytes, .barrier = partBarrier };
@@ -115,12 +53,14 @@ const Node = struct {
 
 fn machineBytes(ctx: *anyopaque, write: observer.Write) void {
     const self: *Recording = @ptrCast(@alignCast(ctx));
-    self.takeBytes(write, null);
+    if (self.attached) self.takeBytes(write, null);
+    if (self.prev) |prev| prev.bytes(write);
 }
 
 fn machineBarrier(ctx: *anyopaque, event: observer.Barrier) void {
     const self: *Recording = @ptrCast(@alignCast(ctx));
-    self.takeBarrier(event);
+    if (self.attached) self.takeBarrier(event);
+    if (self.prev) |prev| prev.barrier(event);
 }
 
 fn partBytes(ctx: *anyopaque, write: observer.Write) void {
@@ -156,30 +96,49 @@ pub const Recording = struct {
     /// this point is untrustworthy and must not be trusted.
     poisoned: bool = false,
     observer: observer.Observer = .{ .ctx = undefined, .vtable = &machine_hooks },
+    /// The observer the store held before the trail joined it: every
+    /// write still reaches it, recorded or not.
+    prev: ?*const observer.Observer = null,
+    /// Whether the trail sits in the store's observer chain.
+    linked: bool = false,
 
     /// The trail starts unarmed: the machine arms it when its run records.
     pub fn init(allocator: Allocator, slots: [2]*const u64, store: *store_mod.Store) Recording {
         return .{ .allocator = allocator, .store = store, .slots = slots };
     }
 
-    /// Attach the trail to its store's observer slot. A borrower store
-    /// chases the lender's, so one machine records one trail however many
-    /// stores write.
+    /// Start recording. The first arm joins the store's observer slot in
+    /// front of whatever held it, which keeps seeing every write; a
+    /// borrower store chases the lender's, so one machine records one
+    /// trail however many stores write. Observers join and leave the
+    /// store's chain last in, first out (checkpoints' dirty pages, then
+    /// the trail, then the frame tap), so each one leaves as the head.
     pub fn arm(self: *Recording) void {
-        self.observer = .{ .ctx = self, .vtable = &machine_hooks };
-        self.store.observer = &self.observer;
+        if (!self.linked) {
+            self.observer = .{ .ctx = self, .vtable = &machine_hooks };
+            self.prev = self.store.observer;
+            self.store.observer = &self.observer;
+            self.linked = true;
+        }
         self.attached = true;
     }
 
-    /// Leave the store recording nothing. Only this trail's own observer
-    /// is removed; another was never this call's to take.
+    /// Stop recording. The trail stays in the chain, passing writes on.
     pub fn disarm(self: *Recording) void {
-        if (self.attached and self.store.observer == &self.observer) self.store.observer = null;
+        self.attached = false;
+    }
+
+    /// Leave the store's chain, giving the slot back to the observer the
+    /// trail joined in front of. One that joined since holds the trail's
+    /// observer and is not this call's to take.
+    fn unlink(self: *Recording) void {
+        if (self.linked and self.store.observer == &self.observer) self.store.observer = self.prev;
+        self.linked = false;
         self.attached = false;
     }
 
     pub fn deinit(self: *Recording) void {
-        self.disarm();
+        self.unlink();
         for (self.records[0..self.record_count]) |*record| switch (record.*) {
             .bytes => |*bytes| bytes.deinit(self.allocator),
             .barrier => {},

@@ -29,6 +29,9 @@ pub fn pump(self: *Shell) !void {
     if (self.stack) |stack| stack.attach(link);
     if (self.source) |source| source.attach(link);
     if (self.locals) |locals| locals.attach(link);
+    if (self.branches) |feed| feed.attach(link, &self.layout);
+    if (self.diff) |diff| diff.attach(link, &self.layout);
+    if (self.filmstrip) |film| film.attach(link);
     self.drained = false;
     var taken: usize = 0;
     while (taken < loop.max_arrivals) : (taken += 1) {
@@ -46,6 +49,7 @@ pub fn pump(self: *Shell) !void {
         if (answered) self.loaded = true;
         if (answered) if (self.time) |time| time.loaded(&self.status);
         observeCore(self, answered, arrival);
+        observeHistory(self, answered, arrival);
         if (self.console) |console| try console.observe(arrival);
         if (self.board) |board| try board.observe(arrival, self.now());
         if (self.devices) |devices| devices.observe(arrival);
@@ -81,4 +85,25 @@ fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
         memory.observe(arrival);
         memory.follow(registers);
     };
+}
+
+/// The branch tree and the state diff leaves: start over after a load, take
+/// the arrival, and read the core's leaves again when a branch switch moved
+/// the machine to another line.
+fn observeHistory(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
+    if (loaded) {
+        if (self.branches) |feed| feed.reload();
+        if (self.diff) |diff| diff.reload();
+        if (self.filmstrip) |film| film.reload();
+    }
+    if (self.branches) |feed| if (feed.observe(arrival) == .switched) {
+        if (self.registers) |registers| registers.refresh();
+        if (self.stack) |stack| stack.refresh();
+        if (self.source) |source| source.refresh();
+        if (self.locals) |locals| locals.refresh();
+        if (self.time) |time| time.stale = true;
+        if (self.diff) |diff| diff.reload();
+    };
+    if (self.diff) |diff| _ = diff.observe(self.allocator, arrival);
+    if (self.filmstrip) |film| film.observe(arrival);
 }

@@ -10,6 +10,7 @@ const draw_list = @import("ra8_render").draw_list;
 const widget = @import("ra8_widget");
 const Theme = @import("colors.zig").Theme;
 const history_track = @import("../history_track.zig");
+const filmstrip_mod = @import("../filmstrip.zig");
 
 const Color = draw_list.Color;
 const Rect = draw_list.Rect;
@@ -26,6 +27,7 @@ pub const hatch_w: i32 = 2;
 pub const View = struct {
     track: history_track.Track = .{},
     marks: []const history_track.Mark = &.{},
+    filmstrip: ?*const filmstrip_mod.Filmstrip = null,
 };
 
 /// The track's area inside the strip: one pixel of border above and below,
@@ -76,6 +78,9 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, strip: Rect, 
         }
         if (view.track.cursorFraction()) |fraction| {
             fill(table, .{ .x = fractionToX(fraction, strip), .y = strip.y, .w = 1, .h = strip.h }, theme.pc_cyan);
+        }
+        if (view.filmstrip) |fs| {
+            fs.draw(table, theme, strip, total);
         }
     }
     table.pop_clip.?(table.user);

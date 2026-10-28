@@ -42,7 +42,7 @@ pub const BoardBoundary = struct {
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
         self.cut.clocks = .{ &self.timebase, &self.ns_timebase };
-        return .{ .context = self, .tickFn = tick, .chunk = self.timebase.per_chunk, .sleepFn = asleep, .awakeFn = awake, .saved = &self.saved, .pair = self.pair, .cut = &self.cut };
+        return .{ .context = self, .tickFn = tick, .chunk = self.timebase.per_chunk, .sleepFn = asleep, .awakeFn = awake, .saved = &self.saved, .pair = self.pair, .cut = &self.cut, .store = self.core.store };
     }
 
     /// An awake CPU0's width: up to a plain run's stretch, cut to the

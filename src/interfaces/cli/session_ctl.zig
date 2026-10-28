@@ -19,6 +19,7 @@ pub const events = @import("ctl/events.zig");
 const ctl_branch = @import("ctl/branch.zig");
 const ctl_write = @import("ctl/write.zig");
 const ctl_nav = @import("ctl/nav.zig");
+const ctl_diff = @import("ctl/diff.zig");
 
 pub const usage =
     \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
@@ -30,7 +31,7 @@ pub const usage =
     \\            advance 500ms|600s | seek TARGET | frame N | iter N | marker NAME | marker set NAME PLACE | nav KIND [ARG] | frames | play [--dir=back]
     \\            rc | plug MODEL@ENDPOINT | unplug ENDPOINT | snapshot PATH | restore PATH
     \\            map | stack | rtc | periph [BLOCK] | folded [THREAD] | fault MODEL@ENDPOINT=MODE
-    \\            branch ls | branch switch ID | branch rm ID [--confirm]
+    \\            branch ls | branch switch ID | branch rm ID [--confirm] | diff A B
     \\            fork confirm | fork cancel | fork status | write-reg NAME VALUE | console TEXT
 ;
 
@@ -60,9 +61,7 @@ pub const Command = union(enum) {
     set_watch: struct { address: u32, access: proto.Access },
     clear_watch: u32,
     events: events.Options,
-    /// A part spec in `--attach`/`--fault` syntax, parsed by the server.
     part: Part,
-    /// A run file on the serving host (RA8EMU-768).
     files: Files,
     /// The memory map of the last loaded image (RA8EMU-794).
     map,
@@ -76,6 +75,7 @@ pub const Command = union(enum) {
     folded: Folded,
     branch_cmd: ctl_branch.BranchCommand,
     write_cmd: ctl_write.WriteCommand,
+    diff_cmd: struct { a: []const u8, b: []const u8 },
 };
 
 /// What `ctl folded` asks for; the defaults take every thread, all time.
@@ -139,6 +139,7 @@ fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []
     const eql = std.mem.eql;
     if (eql(u8, name, "branch")) return .{ .branch_cmd = try ctl_branch.parseBranch(args) };
     if (eql(u8, name, "fork")) return .{ .branch_cmd = try ctl_branch.parseFork(args) };
+    if (eql(u8, name, "diff")) return if (args.len == 2) .{ .diff_cmd = .{ .a = args[0], .b = args[1] } } else error.BadArguments;
     if (try ctl_write.parseWord(allocator, name, args)) |cmd| return .{ .write_cmd = cmd };
     if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
     if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
@@ -333,6 +334,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
         },
         .branch_cmd => |cmd| try ctl_branch.perform(client, w, json, cmd),
         .write_cmd => |cmd| try ctl_write.perform(client, w, json, cmd),
+        .diff_cmd => |cmd| try ctl_diff.perform(client, w, json, cmd.a, cmd.b),
     }
     return 0;
 }

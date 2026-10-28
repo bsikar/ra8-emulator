@@ -82,7 +82,7 @@ pub const DirectMemory = struct {
     /// range (RA8EMU-D1).
     inline fn write(self: *const DirectMemory, address: u32, bytes: []const u8) bool {
         const hit = self.locate(address, bytes.len) orelse return false;
-        if (self.observer) |o| o.bytes(.{ .base = hit.base, .offset = hit.offset, .initiator = self.initiator, .pre = hit.data });
+        if (self.observer) |o| o.bytes(.{ .base = hit.base, .offset = hit.offset, .initiator = self.initiator, .pre = hit.data, .new = bytes });
         @memcpy(hit.data, bytes);
         if (self.lines) |fan| fan.notify(address, bytes.len);
         return true;

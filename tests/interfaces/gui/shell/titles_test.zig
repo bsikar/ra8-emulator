@@ -20,7 +20,9 @@ test "the kinds cycle from empty through the call stack and back to empty" {
     try std.testing.expectEqual(pane_layout.Kind.source, titles.nextKind(.timeline));
     try std.testing.expectEqual(pane_layout.Kind.locals, titles.nextKind(.source));
     try std.testing.expectEqual(pane_layout.Kind.map, titles.nextKind(.locals));
-    try std.testing.expectEqual(pane_layout.Kind.empty, titles.nextKind(.map));
+    try std.testing.expectEqual(pane_layout.Kind.diff, titles.nextKind(.map));
+    try std.testing.expectEqual(pane_layout.Kind.branches, titles.nextKind(.diff));
+    try std.testing.expectEqual(pane_layout.Kind.empty, titles.nextKind(.branches));
 }
 
 test "a press on a title steps that leaf's kind and keeps its core" {

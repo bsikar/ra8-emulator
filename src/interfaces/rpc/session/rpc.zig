@@ -82,6 +82,7 @@ pub const Method = enum(u16) {
     nav_query = 0x0139,
     marker_set = 0x013A,
     frame_status = 0x013B,
+    diff = 0x013C,
 };
 pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -100,11 +101,7 @@ pub const Load = struct {
 /// The chunked load protocol (RA8EMU-1174): an image larger than one
 /// payload streams in ordered chunks and commits with load_end; small
 /// images keep the single Load wire format above.
-pub const LoadBegin = struct {
-    core: Core,
-    total_len: u64,
-    checksum: u32,
-};
+pub const LoadBegin = struct { core: Core, total_len: u64, checksum: u32 };
 pub const LoadChunk = struct {
     core: Core,
     offset: u64,
@@ -386,6 +383,9 @@ pub const NavQueryArgs = nav_wire.NavQueryArgs;
 pub const NavQueryResult = nav_wire.NavQueryResult;
 pub const MarkerSetArgs = nav_wire.MarkerSetArgs;
 pub const FrameStatusResult = nav_wire.FrameStatusResult;
+pub const diff_wire = @import("diff_wire.zig");
+pub const DiffWire = diff_wire.DiffWire;
+pub const DiffArgs = diff_wire.DiffArgs;
 /// Calls a client can hold unanswered at once; a leaf with more reads than
 /// this sends the rest as answers free slots.
 pub const pending_slots = 32;

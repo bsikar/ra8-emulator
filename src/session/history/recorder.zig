@@ -20,6 +20,9 @@ const format = @import("format.zig");
 const log_mod = @import("log.zig");
 const record = @import("record.zig");
 const budget = @import("budget.zig");
+const touched_pages = @import("touched_pages.zig");
+const manifest_mod = @import("manifest.zig");
+const segment_recover = @import("segment_recover.zig");
 
 /// The host storage the recorder writes through, as the application
 /// fills it. Session calls these and nothing else about the host.
@@ -40,35 +43,11 @@ pub const Segment = struct {
     index: u32 = 0,
 };
 
-/// What a recovered segment answered.
-pub const Recovery = struct {
-    /// Where the whole frames end; a torn tail was truncated here.
-    complete_end: u64,
-    frames: usize,
-    torn: bool,
-};
+/// What a recovered segment answered, and the scan a reopen runs.
+pub const Recovery = segment_recover.Recovery;
+pub const recoverSegment = segment_recover.recoverSegment;
 
 pub const Error = error{ OutOfMemory, WriteFailed, NoObjects } || format.Error;
-
-fn countVisit(context: *usize, boundary: log_mod.Boundary) void {
-    _ = boundary;
-    context.* += 1;
-}
-
-/// Scans a segment's bytes the way a reopen does: every whole frame is
-/// kept, a torn final tail is truncated away through the storage, and a
-/// whole frame that fails its length or CRC refuses the reopen. The
-/// caller owns reading the bytes; the recorder only ever asks the
-/// storage to shorten them.
-pub fn recoverSegment(bytes: []const u8, storage: Storage) (format.Error || anyerror)!Recovery {
-    var frames: usize = 0;
-    const hit = try log_mod.scan(bytes, &frames, countVisit);
-    if (hit.torn) {
-        try storage.truncate(storage.context, hit.complete_end);
-        return .{ .complete_end = hit.complete_end, .frames = hit.frames, .torn = true };
-    }
-    return .{ .complete_end = hit.complete_end, .frames = hit.frames, .torn = false };
-}
 
 /// The recorder over one log segment.
 /// The object space a checkpoint's saved machine reaches, as the
@@ -81,6 +60,10 @@ pub const Objects = struct {
     context: *anyopaque,
     put: *const fn (context: *anyopaque, name: []const u8, bytes: []const u8) anyerror!void,
     sync: *const fn (context: *anyopaque) anyerror!void,
+    /// Stores a content-addressed page or blob object (named by its 128-bit
+    /// identity) where the application keeps such objects; `sync` makes it
+    /// durable like the rest. Null stores them through `put` by hex name.
+    putPacked: ?*const fn (context: *anyopaque, id: [16]u8, bytes: []const u8) anyerror!void = null,
 };
 
 /// The disk-side budget the application fills: the share this history's
@@ -219,6 +202,29 @@ pub const Recorder = struct {
         try self.pin(.checkpoint, header, id, bytes);
     }
 
+    pub fn checkpointTouched(
+        self: *Recorder,
+        header: record.Header,
+        id: u32,
+        bytes: []const u8,
+        touched: *const touched_pages.Touched,
+    ) anyerror!void {
+        try self.pinWithTouched(.checkpoint, header, id, bytes, touched, null);
+    }
+
+    /// `checkpointTouched` that also files the checkpoint's encoded
+    /// manifest as an object beside it, when one is given.
+    pub fn checkpointRecords(
+        self: *Recorder,
+        header: record.Header,
+        id: u32,
+        bytes: []const u8,
+        touched: ?*const touched_pages.Touched,
+        manifest_bytes: ?[]const u8,
+    ) anyerror!void {
+        try self.pinWithTouched(.checkpoint, header, id, bytes, touched, manifest_bytes);
+    }
+
     /// What a caller needs to undo a group of staged pins that did not
     /// all land (a picture staged, then its checkpoint refused).
     pub const Mark = struct { end: usize, pending: usize, object_bytes: u64 };
@@ -244,6 +250,18 @@ pub const Recorder = struct {
     }
 
     fn pin(self: *Recorder, kind: record.Kind, header: record.Header, id: u32, bytes: []const u8) anyerror!void {
+        return self.pinWithTouched(kind, header, id, bytes, null, null);
+    }
+
+    fn pinWithTouched(
+        self: *Recorder,
+        kind: record.Kind,
+        header: record.Header,
+        id: u32,
+        bytes: []const u8,
+        touched: ?*const touched_pages.Touched,
+        manifest_bytes: ?[]const u8,
+    ) anyerror!void {
         // A replayed round's state is already in the history: neither its
         // object nor its record is written again, nor counted again.
         if (self.replaying or self.stopped) return;
@@ -258,6 +276,17 @@ pub const Recorder = struct {
             _ = std.fmt.bufPrint(name[i * 2 ..][0..2], "{x:0>2}", .{byte}) catch unreachable;
         }
         try objects.put(objects.context, &name, bytes);
+        if (touched) |t| {
+            var touched_buf: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 256);
+            defer touched_buf.deinit();
+            try t.encode(&touched_buf.writer);
+            const t_name = touched_pages.objectName(digest[0..16].*);
+            try objects.put(objects.context, &t_name, touched_buf.writer.buffered());
+        }
+        if (manifest_bytes) |m| {
+            const m_name = manifest_mod.objectName(digest[0..16].*);
+            try objects.put(objects.context, &m_name, m);
+        }
         try objects.sync(objects.context);
         var staging: std.Io.Writer.Allocating = try .initCapacity(self.gpa, 64);
         defer staging.deinit();

@@ -62,12 +62,12 @@ pub fn hit(area: Rect, items: []const Item, confirming_id: ?u32, x: i32, y: i32)
 
 pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, items: []const Item, confirming_id: ?u32) void {
     if (area.empty()) return;
-    fillArea(table, area, theme.panel);
+    fillArea(table, area, theme.surface);
     drawBorder(table, area, theme.border);
 
     // Header
     const title_y = area.y + draw_list.centre(row_h, font.glyph_h);
-    drawText(table, area.x + pad, title_y, "Branches", theme.ink, theme.panel);
+    drawText(table, area.x + pad, title_y, "Branches", theme.ink, theme.surface);
     fillArea(table, .{ .x = area.x, .y = area.y + row_h - 1, .w = area.w, .h = 1 }, theme.border);
 
     var row_y = area.y + row_h;
@@ -80,7 +80,7 @@ pub fn draw(table: *const widget.types.Paint, theme: *const Theme, area: Rect, i
         var label_buf: [64]u8 = undefined;
         const label = std.fmt.bufPrint(&label_buf, "Branch {d} (p:{d} fork:{d})", .{ it.id, it.parent, it.fork_r }) catch "Branch";
         const text_top = row_y + draw_list.centre(row_h, font.glyph_h);
-        drawText(table, area.x + pad, text_top, label, theme.ink, if (it.is_live) theme.well else theme.panel);
+        drawText(table, area.x + pad, text_top, label, theme.ink, if (it.is_live) theme.well else theme.surface);
 
         if (it.is_live) {
             drawText(table, area.x + area.w - 50, text_top, "Live", theme.ink, theme.well);

@@ -160,3 +160,10 @@ test "parse the seek and track click targets" {
     try std.testing.expectEqual(script.action.NamedTarget.bar_seek, parsed.items.items[0].action.click.named);
     try std.testing.expectEqual(script.action.NamedTarget.bar_track, parsed.items.items[1].action.click.named);
 }
+
+test "branch tree and diff targets parse" {
+    var parsed = try script.parser.parse(std.testing.allocator, "at 1s click tree:node1\nat 2s click diff:earlier\n");
+    defer parsed.deinit();
+    try std.testing.expectEqual(script.action.NamedTarget.tree_node_1, parsed.items.items[0].action.click.named);
+    try std.testing.expectEqual(script.action.NamedTarget.diff_earlier, parsed.items.items[1].action.click.named);
+}

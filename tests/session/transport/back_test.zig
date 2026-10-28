@@ -9,98 +9,14 @@ const fakes = @import("../history_fakes.zig");
 const seek_engine_mod = ra8.session.history_seek_engine;
 const seek_facts_mod = ra8.session.history_seek_facts;
 const position_mod = ra8.session.history_position;
+const rig = @import("transport_rig.zig");
 
-const history_elf = "tests/fixtures/dfu/dfu_bootloader.elf";
-
-const image_path = "tests/fixtures/display/ra8_ui.elf";
-
-/// A wall the test drives: one millisecond per read, so a pump loop makes
-/// progress and terminates on its own bound.
-const FakeWall = struct {
-    now_ns: u64 = 0,
-    fn now(context: *anyopaque) u64 {
-        const self: *FakeWall = @ptrCast(@alignCast(context));
-        self.now_ns += 1_000_000;
-        return self.now_ns;
-    }
-    fn wall(self: *FakeWall) transport.Wall {
-        return .{ .context = self, .nowFn = now };
-    }
-};
-
-/// The guest counter the count fixture increments, above the code at +0x6000.
-const counter_addr = ra8.chip.core.memmap.sram_base + 0x6100;
-
-/// The loop fixture's `b .` becomes a counting loop: `ldr r0,[r1]; adds
-/// r0,#1; str r0,[r1]; b` back, so every iteration writes guest memory and
-/// retires four instructions, four cycles apart.
-fn countFixture(opened: *ra8.session.harness.Harness) !void {
-    try loopFixture(opened);
-    const at = ra8.chip.core.memmap.sram_base + 0x6000;
-    try opened.guest().write(at, &.{ 0x08, 0x68, 0x40, 0x1C, 0x08, 0x60, 0xFB, 0xE7 });
-    try opened.guest().writeWord(counter_addr, 0);
-    const cpu = opened.primaryCpu();
-    cpu.regs.low[0] = 0;
-    cpu.regs.low[1] = counter_addr;
-}
-
-fn loopFixture(opened: *ra8.session.harness.Harness) !void {
-    opened.state.edge.idle_skip = false;
-    opened.state.edge.timebase.per_chunk = 64;
-    opened.session().live.boundary.?.chunk = 64;
-    const at = ra8.chip.core.memmap.sram_base + 0x6000;
-    try opened.guest().write(at, &.{ 0xfe, 0xe7 });
-    opened.primaryCpu().regs.pc = at;
-    opened.primaryCpu().regs.primask = 1;
-    opened.primaryCpu().waiting = null;
-}
-
-/// The bridge the backward tests bind: facts gathered from the in-memory log
-/// the recorder committed, restores from the in-memory object space, and
-/// the live cursor's position from the boundary grid. The bridge owns one
-/// gathered facts at a time; the next gather frees the last.
-const TestBridge = struct {
-    gpa: std.mem.Allocator,
-    opened: *ra8.session.harness.Harness,
-    sink: *fakes.Sink,
-    objects: *fakes.Objects,
-    prior: ?seek_facts_mod.Facts = null,
-
-    fn bridge(self: *TestBridge) transport.Bridge {
-        return .{ .context = self, .facts = facts, .restore = restore, .logBytes = logBytes };
-    }
-
-    fn logBytes(context: *anyopaque) anyerror![]const u8 {
-        const self: *TestBridge = @ptrCast(@alignCast(context));
-        return self.sink.bytes.items;
-    }
-
-    fn facts(context: *anyopaque) anyerror!seek_engine_mod.Facts {
-        const self: *TestBridge = @ptrCast(@alignCast(context));
-        if (self.prior) |old| self.gpa.free(old.checkpoints);
-        const gathered = try seek_facts_mod.gather(self.gpa, self.sink.bytes.items);
-        self.prior = gathered;
-        const win_facts: ?seek_engine_mod.WindowFacts = if (self.opened.session().window) |w| .{
-            .start = w.start() orelse .{},
-            .end = w.end() orelse .{},
-            .at = if (self.opened.session().grid) |g| g.at else .{},
-            .line = w.line,
-            .slots = w.count(),
-        } else null;
-        if (self.opened.session().grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints, .window = win_facts };
-        return .{ .current = .{}, .checkpoints = gathered.checkpoints, .window = win_facts };
-    }
-
-    fn restore(context: *anyopaque, object: []const u8) anyerror!void {
-        const self: *TestBridge = @ptrCast(@alignCast(context));
-        const saved = self.objects.get(object) orelse return error.MissingObject;
-        try self.opened.history().restoreBytes(saved);
-    }
-
-    fn deinit(self: *TestBridge) void {
-        if (self.prior) |old| self.gpa.free(old.checkpoints);
-    }
-};
+const FakeWall = rig.FakeWall;
+const counter_addr = rig.counter_addr;
+const countFixture = rig.countFixture;
+const TestBridge = rig.TestBridge;
+const history_elf = rig.history_elf;
+const image_path = rig.image_path;
 
 test "a backward step is refused without a bridge" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
@@ -205,24 +121,11 @@ test "a backward step at the log's beginning settles with history_start" {
     try std.testing.expectEqualStrings("history_start", @tagName(pumped.finished.?.ended.stop));
 }
 
-test "a reverse-continue is refused without a bridge and while a watch is armed" {
+test "a reverse-continue is refused without a bridge" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
     defer opened.deinit();
-    const session = opened.session();
-    var t = transport.Transport{ .session = session };
+    var t = transport.Transport{ .session = opened.session() };
     try std.testing.expectError(transport.Error.NotReady, t.command(.rcont));
-
-    var sink: fakes.Sink = .{ .gpa = std.testing.allocator };
-    defer sink.deinit();
-    var objects: fakes.Objects = .{ .gpa = std.testing.allocator };
-    defer objects.deinit();
-    var with = transport.Transport{ .session = session };
-    var state = TestBridge{ .gpa = std.testing.allocator, .opened = &opened, .sink = &sink, .objects = &objects };
-    defer state.deinit();
-    with.history = state.bridge();
-    _ = try session.run(.cpu0, .run);
-    _ = try session.setWatchpoint(.cpu0, .{ .first = counter_addr, .last = counter_addr + 3, .kind = .write });
-    try std.testing.expectError(transport.Error.WatchArmed, with.command(.rcont));
 }
 
 test "a reverse-continue replays to the latest hit before the cursor" {

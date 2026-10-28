@@ -6,6 +6,7 @@ const std = @import("std");
 const recorder_mod = @import("recorder.zig");
 const record = @import("record.zig");
 const picture_mod = @import("checkpoint_picture.zig");
+const touched_pages = @import("touched_pages.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
 
 /// One session's checkpoint policy and sink. The application binds the
@@ -47,6 +48,11 @@ pub const Checkpoint = struct {
     /// A second observer of closed rounds, set by the seek that wants the
     /// run to stop at a round it names; it clears itself when it fires.
     stop: ?RoundObserver = null,
+    /// Touched-page record for the interval ending at this checkpoint.
+    touched_record: ?touched_pages.Touched = null,
+    /// The encoded manifest of the state this checkpoint saves, owned until
+    /// it is filed beside the checkpoint's object (recorder.gpa's memory).
+    manifest_record: ?[]u8 = null,
 
     /// Offers a closed round to the policy. On every Nth round the save
     /// stream goes to the recorder's object space first, then the
@@ -98,11 +104,25 @@ pub const Checkpoint = struct {
     fn stagePair(self: *Checkpoint, header: record.Header, bytes: []const u8) !u64 {
         const staged = self.recorder.mark();
         errdefer self.recorder.rollback(staged);
+        errdefer if (self.touched_record) |*t| {
+            t.deinit();
+            self.touched_record = null;
+        };
+        defer if (self.manifest_record) |m| {
+            self.recorder.gpa.free(m);
+            self.manifest_record = null;
+        };
         var extra: u64 = 0;
         if (self.picture) |source| {
             extra = try picture_mod.capture(self.recorder, source, self.recorder.gpa, header, self.next_id) orelse 0;
         }
-        try self.recorder.checkpoint(header, self.next_id, bytes);
+        if (self.touched_record) |*t| {
+            try self.recorder.checkpointRecords(header, self.next_id, bytes, t, self.manifest_record);
+            t.deinit();
+            self.touched_record = null;
+        } else {
+            try self.recorder.checkpointRecords(header, self.next_id, bytes, null, self.manifest_record);
+        }
         return extra;
     }
 

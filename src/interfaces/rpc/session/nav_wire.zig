@@ -32,6 +32,8 @@ pub const NavQueryResult = struct {
     gap: u8 = 0,
     count: u64 = 0,
     slots: u64 = 0,
+    /// A frame's capture time in virtual nanoseconds.
+    virtual_ns: u64 = 0,
 };
 
 /// The frame pipeline's byte accounting and the rewind's decode count.

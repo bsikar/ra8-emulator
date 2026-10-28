@@ -60,7 +60,7 @@ pub const Rebuild = struct {
         self.worker.stop();
         self.link.close();
         self.session.deinit();
-        try self.session.open(self.allocator, self.io, self.image, profile);
+        try self.session.openRecording(self.allocator, self.io, self.image, profile, if (self.pick.store) |s| s.dir else null);
         self.session.setup.stageApps(self.io, self.allocator, self.apps) catch |err| {
             std.debug.print("ra8_gui: cannot stage the apps: {s}\n", .{@errorName(err)});
         };

@@ -40,7 +40,7 @@ pub const Boot = struct {
     /// Brings the session up on `image` and serves it to the shell. The
     /// drive loop loads the image once the session greets.
     pub fn start(self: *Boot, image: first_image.Image) !void {
-        try self.session.open(self.allocator, self.io, image.path, null);
+        try self.session.openRecording(self.allocator, self.io, image.path, null, self.store.dir);
         errdefer self.session.deinit();
         try self.session.setup.stageApps(self.io, self.allocator, self.apps);
         // The local session rides the worker's native mailbox (RA8EMU-1196)

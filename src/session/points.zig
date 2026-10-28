@@ -57,3 +57,29 @@ pub fn watchKind(self: *Session, core: Core, id: WatchId) anyerror!?watch_table.
     const point = (try self.machine(core)).watches.get(id) orelse return null;
     return point.kind;
 }
+
+pub fn matchingWatch(self: *Session, address: u32, len: u32) ?watch_table.Slot {
+    const cores = [_]Core{ .cpu0, .cpu1 };
+    const count: usize = if (self.hasCore(.cpu1)) 2 else 1;
+    for (cores[0..count]) |c| {
+        const m = self.machine(c) catch continue;
+        for (m.watches.entries()) |slot| {
+            if (!slot.enabled or !slot.watch.kind.covers(.write)) continue;
+            const end = address +| (@max(len, 1) -| 1);
+            if (address <= slot.watch.last and end >= slot.watch.first) return slot;
+        }
+    }
+    return null;
+}
+
+pub fn hasArmedWriteWatch(self: *Session) bool {
+    const cores = [_]Core{ .cpu0, .cpu1 };
+    const count: usize = if (self.hasCore(.cpu1)) 2 else 1;
+    for (cores[0..count]) |c| {
+        const m = self.machine(c) catch continue;
+        for (m.watches.entries()) |slot| {
+            if (slot.enabled and slot.watch.kind.covers(.write)) return true;
+        }
+    }
+    return false;
+}

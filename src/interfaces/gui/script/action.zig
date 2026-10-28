@@ -31,6 +31,11 @@ pub const NamedTarget = enum {
     board_sw2,
     banner_confirm,
     banner_cancel,
+    tree_node_0,
+    tree_node_1,
+    tree_node_2,
+    diff_earlier,
+    diff_later,
 };
 
 pub const Target = union(enum) {

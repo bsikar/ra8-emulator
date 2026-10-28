@@ -270,8 +270,9 @@ test "the log walk names every picture object for the orphan sweep" {
     try refs.scanCheckpointObjects(rig.sink.bytes.items, &all, Names.visit);
     var pictures: Names = .{};
     try refs.scanPictureObjects(rig.sink.bytes.items, &pictures, Names.visit);
-    // Machine plus picture are both committed objects; one of them a picture.
-    try std.testing.expectEqual(@as(usize, 2), all.count);
+    // The machine with its touched pages and manifest, plus the picture,
+    // are all committed objects; one of them a picture.
+    try std.testing.expectEqual(@as(usize, 4), all.count);
     try std.testing.expectEqual(@as(usize, 1), pictures.count);
     try std.testing.expect(record.known(@backingInt(record.Kind.checkpoint_picture)));
 }

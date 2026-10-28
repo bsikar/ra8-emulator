@@ -40,6 +40,9 @@ const shell_source = @import("source.zig");
 const shell_locals = @import("locals.zig");
 const shell_memory = @import("memory.zig");
 const shell_map = @import("map.zig");
+const shell_branches = @import("branch_state.zig");
+const shell_diff = @import("diff_state.zig");
+const shell_filmstrip = @import("filmstrip_feed.zig");
 const shell_memory_field = @import("memory_field.zig");
 const shell_breaks = @import("breaks.zig");
 const shell_open = @import("open.zig");
@@ -178,6 +181,9 @@ const ShellFeeds = struct {
     memory_field: shell_memory_field.Pin = .{},
     code: shell_memory.Pair = .{ .follows = .pc },
     breaks: shell_breaks.Breaks = .{},
+    branches: shell_branches.Feed = .{},
+    diff: shell_diff.State = .{},
+    filmstrip: shell_filmstrip.Feed = .{},
 
     fn init(self: *ShellFeeds) !void {
         try self.plug.init();
@@ -274,6 +280,9 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.memory_field = &feeds.memory_field;
     shell.code = &feeds.code;
     shell.breaks = &feeds.breaks;
+    shell.branches = &feeds.branches;
+    shell.diff = &feeds.diff;
+    shell.filmstrip = &feeds.filmstrip;
     var map: shell_map.State = .{ .allocator = allocator, .io = io };
     defer map.deinit();
     shell.map = &map;
@@ -282,7 +291,7 @@ fn local(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envir
     shell.files = &files;
     var recent_menu = shell_recent_menu.State{ .recents = &recent_list };
     shell.recent_menu = &recent_menu;
-    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &feeds.registers, .edit = &feeds.edit, .memory = &feeds.memory, .memory_field = &feeds.memory_field, .code = &feeds.code, .breaks = &feeds.breaks, .map = &map, .stack = &feeds.stack, .timeline = &shell.timeline.?, .source = &source, .locals = &feeds.locals };
+    var panes: shell_panes.Panes = .{ .console = &console, .board = &board, .board_input = &feeds.board_input, .devices = &feeds.devices, .faults = &feeds.faults, .camera = &camera, .plug = &feeds.plug, .camera_file = &feeds.camera_file, .registers = &feeds.registers, .edit = &feeds.edit, .memory = &feeds.memory, .memory_field = &feeds.memory_field, .code = &feeds.code, .breaks = &feeds.breaks, .map = &map, .stack = &feeds.stack, .timeline = &shell.timeline.?, .source = &source, .locals = &feeds.locals, .branches = &feeds.branches, .diff = &feeds.diff.view };
     shell.painter = panes.painter();
     if (image) |named| try boot.start(named);
     try driveAndSave(io, &shell, window, &boot, args.frames, &layout_store, &recent_store, recent_list);

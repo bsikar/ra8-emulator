@@ -37,12 +37,12 @@ pub fn hit(banner: Rect, x: i32, y: i32) Action {
 
 pub fn draw(table: *const widget.types.Paint, theme: *const Theme, banner: Rect) void {
     if (banner.empty()) return;
-    fillArea(table, banner, theme.panel);
+    fillArea(table, banner, theme.surface);
     fillArea(table, .{ .x = banner.x, .y = banner.y + banner.h - 1, .w = banner.w, .h = 1 }, theme.border);
 
     const msg = "Fork pending: action in past history. Confirm branch?";
     const text_top = banner.y + draw_list.centre(banner.h, font.glyph_h);
-    drawText(table, banner.x + pad, text_top, msg, theme.ink, theme.panel);
+    drawText(table, banner.x + pad, text_top, msg, theme.ink, theme.surface);
 
     // Cancel button
     const c_btn = buttonCancel(banner);

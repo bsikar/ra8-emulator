@@ -9,7 +9,7 @@
 const api = @import("../api.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
 
-pub const Error = error{ InvalidSpeed, InvalidArgs, NotReady, Cancelled, HistoryBroken, WatchArmed };
+pub const Error = error{ InvalidSpeed, InvalidArgs, NotReady, Cancelled, HistoryBroken };
 
 /// Where a play or step moves. Backward play is refused until the history
 /// contracts land (units 17/18); the type is here so front ends speak it.

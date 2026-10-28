@@ -155,7 +155,7 @@ pub const Store = struct {
             switch (hit.kind) {
                 .ospi => if (!(try port.flash.write(hit.offset, bytes))) return AccessError.Unmapped,
                 .sdram => {
-                    self.hookBytes(initiator, memmap.sdram_base, hit.offset, port.sdram[hit.offset..][0..bytes.len]);
+                    self.hookBytes(initiator, memmap.sdram_base, hit.offset, port.sdram[hit.offset..][0..bytes.len], bytes);
                     @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
                 },
             }
@@ -163,7 +163,7 @@ pub const Store = struct {
             return;
         };
         const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;
-        self.hookBytes(initiator, target.base, target.offset, target.bytes);
+        self.hookBytes(initiator, target.base, target.offset, target.bytes, bytes);
         @memcpy(target.bytes, bytes);
     }
 
@@ -245,8 +245,8 @@ pub const Store = struct {
         return self.pages[indexOf(base) orelse return null];
     }
 
-    inline fn hookBytes(self: *const Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8) void {
-        if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre });
+    inline fn hookBytes(self: *const Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8, new: []const u8) void {
+        if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new });
     }
 };
 

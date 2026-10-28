@@ -107,6 +107,12 @@ pub const NavIndex = struct {
         return null;
     }
 
+    /// The virtual time the frame at `index` was captured at.
+    pub fn getFrameNs(self: *const NavIndex, index: u64) ?u64 {
+        if (index < self.frames.items.len) return self.frames.items[@intCast(index)].virtual_ns;
+        return null;
+    }
+
     pub fn frameCount(self: *const NavIndex) usize {
         return self.frames.items.len;
     }

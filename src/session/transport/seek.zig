@@ -49,6 +49,16 @@ pub const SeekKind = struct {
     rate: RateWindow = .{},
 };
 
+/// What the application hears of the transport: every command as it
+/// arrives (the epoch a background reader must drop its work at), and
+/// every seek as it is planned, with the facts it planned from (valid for
+/// the call only), which is where a prefetcher learns the cursor's heading.
+pub const Hook = struct {
+    context: *anyopaque,
+    commandFn: *const fn (context: *anyopaque) void,
+    plannedFn: *const fn (context: *anyopaque, plan: seek_engine.Plan, facts: seek_engine.Facts) void,
+};
+
 /// Validate, plan and queue a seek against the bound history bridge.
 pub fn queue(self: *Transport, text: []const u8) !Ticket {
     var target = seek_target.parse(text) catch return Error.InvalidArgs;
@@ -101,6 +111,7 @@ pub fn queue(self: *Transport, text: []const u8) !Ticket {
         .kind = .{ .seek = .{ .target = pos, .base = planned.base } },
         .prior_budget = prior,
     };
+    if (self.hook) |hook| hook.plannedFn(hook.context, planned, facts);
     return ticket;
 }
 

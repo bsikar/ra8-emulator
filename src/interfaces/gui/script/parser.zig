@@ -111,6 +111,19 @@ fn parseAction(allocator: std.mem.Allocator, act_tok: []const u8, tokens: *std.m
     return error.BadAction;
 }
 
+/// The branch tree and state diff targets a script may click.
+fn historyTarget(tok: []const u8) ?action_mod.NamedTarget {
+    const names = [_]struct { text: []const u8, target: action_mod.NamedTarget }{
+        .{ .text = "tree:node0", .target = .tree_node_0 },
+        .{ .text = "tree:node1", .target = .tree_node_1 },
+        .{ .text = "tree:node2", .target = .tree_node_2 },
+        .{ .text = "diff:earlier", .target = .diff_earlier },
+        .{ .text = "diff:later", .target = .diff_later },
+    };
+    for (names) |n| if (std.mem.eql(u8, tok, n.text)) return n.target;
+    return null;
+}
+
 fn parseClick(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     const target_tok = tokens.next() orelse return error.BadCoordinates;
     if (std.mem.eql(u8, target_tok, "bar:run")) {
@@ -161,6 +174,7 @@ fn parseClick(tokens: *std.mem.TokenIterator(u8, .any)) ParseError!Action {
     if (std.mem.eql(u8, target_tok, "banner:cancel")) {
         return .{ .click = .{ .named = .banner_cancel } };
     }
+    if (historyTarget(target_tok)) |named| return .{ .click = .{ .named = named } };
     if (std.mem.eql(u8, target_tok, "board:touch")) {
         const x_tok = tokens.next() orelse return error.BadCoordinates;
         const y_tok = tokens.next() orelse return error.BadCoordinates;
