@@ -3,33 +3,33 @@
 //! The emulator, CPU and disassembler use Zig. Only libc links to C;
 //! nothing is exported back to C and there is no C ABI of our own.
 //!
-//!   zig build         the emulator into zig-out/bin
-//!   zig build run     build and run it
-//!   zig build run-gui -Dgui -- IMAGE
-//!                     build and run ra8_gui on IMAGE
-//!   zig build test    the unit tests under tests/
-//!   zig build gate    zig fmt --check, then the file and function length
-//!                     checks in tools/gate.zig
-//!   zig build -Dgui   also ra8_gui, the debugger shell in an SDL window;
-//!                     SDL is a lazy dependency, fetched and built only
-//!                     with -Dgui
+//!    zig build          the emulator into zig-out/bin
+//!    zig build run      build and run it
+//!    zig build run-gui -Dgui -- IMAGE
+//!                       build and run ra8_gui on IMAGE
+//!    zig build test     the unit tests under tests/
+//!    zig build gate     zig fmt --check, then the file and function length
+//!                       checks in tools/gate.zig
+//!    zig build -Dgui    also ra8_gui, the debugger shell in an SDL window;
+//!                       SDL is a lazy dependency, fetched and built only
+//!                       with -Dgui
 //!
 //! The source is ten libraries and two applications, each a build module
 //! rooted at root.zig in its own directory (ADR 0004, AGENTS.md):
 //!
-//!   src/host/               ra8_host        the host OS: sockets, files, cameras
-//!   src/snapshot/           ra8_snapshot    the snapshot format
-//!   src/chip/               ra8_chip        the cores (core/) and the on-chip
-//!                                           blocks (periph/)
-//!   src/components/         ra8_components  off-chip parts and the plug layer
-//!   src/board/              ra8_board       the board, its image loader and run policy
-//!   src/session/            ra8_session     the embedding API and the debugger
-//!   src/interfaces/render/  ra8_render      drawing and the image encoders
-//!   src/interfaces/rpc/     ra8_rpc         the session over a wire
-//!   src/interfaces/gdb/     ra8_gdb         the GDB remote server
-//!   src/interfaces/usbip/   ra8_usbip       the USB/IP bridge
-//!   src/interfaces/cli/     cli_app         ra8_emulator, which never links SDL
-//!   src/interfaces/gui/     gui_app         ra8_gui, built under -Dgui
+//!    src/host/                ra8_host        the host OS: sockets, files, cameras
+//!    src/snapshot/            ra8_snapshot    the snapshot format
+//!    src/chip/                ra8_chip        the cores (core/) and the on-chip
+//!                                             blocks (periph/)
+//!    src/components/          ra8_components  off-chip parts and the plug layer
+//!    src/board/               ra8_board       the board, its image loader and run policy
+//!    src/session/             ra8_session     the embedding API and the debugger
+//!    src/interfaces/render/   ra8_render      drawing and the image encoders
+//!    src/interfaces/rpc/      ra8_rpc          the session over a wire
+//!    src/interfaces/gdb/      ra8_gdb          the GDB remote server
+//!    src/interfaces/usbip/    ra8_usbip        the USB/IP bridge
+//!    src/interfaces/cli/      cli_app          ra8_emulator, which never links SDL
+//!    src/interfaces/gui/      gui_app          ra8_gui, built under -Dgui
 //!
 //! src/root.zig re-exports libraries. Tests mirror source under tests/;
 //! tests/all.zig and tests/all_host.zig collect them, with no inline tests.
@@ -45,6 +45,10 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const gui = b.option(bool, "gui", "Fetch SDL3 and build ra8_gui and the GUI tests") orelse false;
     const peer_only = b.option(bool, "host-move-peer-only", "Build the internal native directory move peer") orelse false;
+
+    const system_include_path = b.option([]const u8, "system_include_path", "Host/sysroot path to C headers for cross-compilation");
+    const system_framework_path = b.option([]const u8, "system_framework_path", "Host/sysroot path to Apple frameworks for cross-compilation");
+    const library_path = b.option([]const u8, "library_path", "Host/sysroot path to C libraries for cross-compilation");
 
     const firmware = b.dependency("ra8_firmware", .{});
     const libs = libraries(b, target, optimize, firmware);
@@ -104,8 +108,8 @@ pub fn build(b: *std.Build) void {
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
     usbipAttach(b, target, optimize);
-    const sdl_mod = sdlModule(b, target, optimize, apps.gui, libs.render, gui);
-    const gui_exe = if (sdl_mod) |mod| guiExe(b, target, optimize, apps.gui, libs.host, mod) else null;
+    const sdl_mod = sdlModule(b, target, optimize, apps.gui, libs.render, gui, system_include_path, system_framework_path, library_path);
+    const gui_exe = if (sdl_mod) |mod| guiExe(b, target, optimize, apps.gui, libs.host, mod, system_framework_path) else null;
     guiTest(b, target, optimize, emu, gui, sdl_mod, gui_exe);
     runGui(b, gui_exe);
 
@@ -290,9 +294,25 @@ fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bu
 /// -Dgui. It draws what gui_app hands it and imports nothing else of ours
 /// but the render library. SDL is a lazy dependency asked for only under -Dgui, so test and
 /// gate never fetch or compile it.
-fn sdlModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, gui_app: *std.Build.Module, render: *std.Build.Module, enabled: bool) ?*std.Build.Module {
+fn sdlModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    gui_app: *std.Build.Module,
+    render: *std.Build.Module,
+    enabled: bool,
+    system_include_path: ?[]const u8,
+    system_framework_path: ?[]const u8,
+    library_path: ?[]const u8,
+) ?*std.Build.Module {
     if (!enabled) return null;
-    const sdl_dep = b.lazyDependency("sdl", .{ .target = target, .optimize = optimize }) orelse return null;
+    const sdl_dep = b.lazyDependency("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .system_include_path = system_include_path,
+        .system_framework_path = system_framework_path,
+        .library_path = library_path,
+    }) orelse return null;
     const sdl_mod = b.createModule(.{ .root_source_file = b.path("src/interfaces/gui/sdl/sdl.zig"), .target = target, .optimize = optimize });
     sdl_mod.addImport("gui_app", gui_app);
     sdl_mod.addImport("ra8_render", render);
@@ -312,7 +332,15 @@ fn sdlTranslation(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
 
 /// ra8_gui (RA8EMU-1087, ADR 0004 step 6): the debugger shell in its SDL
 /// window, installed next to ra8_emulator in a -Dgui build.
-fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, gui_app: *std.Build.Module, host: *std.Build.Module, sdl: *std.Build.Module) *std.Build.Step.Compile {
+fn guiExe(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    gui_app: *std.Build.Module,
+    host: *std.Build.Module,
+    sdl: *std.Build.Module,
+    system_framework_path: ?[]const u8,
+) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "ra8_gui",
         .root_module = b.createModule(.{
@@ -323,6 +351,9 @@ fn guiExe(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
             .imports = &.{ .{ .name = "gui_app", .module = gui_app }, .{ .name = "gui_sdl", .module = sdl }, .{ .name = "ra8_host", .module = host } },
         }),
     });
+    if (system_framework_path) |fpath| {
+        exe.root_module.addSystemFrameworkPath(.{ .cwd_relative = fpath });
+    }
     b.installArtifact(exe);
     return exe;
 }

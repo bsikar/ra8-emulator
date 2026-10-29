@@ -14,4 +14,4 @@ zig-out/
 .github/copilot-instructions.md
 .vscode/extensions.json
 .vscode/mcp.json
-INTERVIEW_PREP.md
+.DS_Store
