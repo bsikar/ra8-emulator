@@ -111,6 +111,7 @@ test "planCrossLine plans checkpoint base on common prefix and computes replay r
     const outcome = cross_seek.planCrossLine(&graph, facts, pos(0, 180));
     switch (outcome) {
         .plan => |plan| {
+            try std.testing.expectEqual(pos(0, 180), plan.target);
             try std.testing.expectEqual(@as(u64, 80), plan.replay_rounds);
             try std.testing.expectEqual(@as(u32, 2), plan.base.checkpoint.id);
             try std.testing.expectEqual(@as(u64, 100), plan.base.checkpoint.position.r);

@@ -102,5 +102,6 @@ pub fn planCrossLine(
             .position = best.position,
         } },
         .replay_rounds = target.r -| best.position.r,
+        .target = target,
     } };
 }
