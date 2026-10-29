@@ -6,3 +6,12 @@ build/
 /shell
 .zig-cache/
 zig-out/
+
+.agents/
+.claude/
+.repowise/
+.mcp.json
+.github/copilot-instructions.md
+.vscode/extensions.json
+.vscode/mcp.json
+INTERVIEW_PREP.md
