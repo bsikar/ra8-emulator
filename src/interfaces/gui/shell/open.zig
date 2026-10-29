@@ -118,7 +118,9 @@ pub const Open = struct {
     pub fn keep(self: *Open, path: []const u8) void {
         if (self.history) |list| _ = list.add(path);
         self.path_len = @min(path.len, path_max);
-        @memcpy(self.path_buf[0..self.path_len], path[0..self.path_len]);
+        // Reload passes the kept path itself; a path may also be a suffix
+        // of this buffer. Both cases permit a forward overlapping copy.
+        std.mem.copyForwards(u8, self.path_buf[0..self.path_len], path[0..self.path_len]);
     }
 
     /// The frame's turn for a pick the mailbox turned back: the load goes
