@@ -49,6 +49,7 @@ pub fn pump(self: *Shell) !void {
         if (answered) self.loaded = true;
         if (answered) if (self.time) |time| time.loaded(&self.status);
         observeCore(self, answered, arrival);
+        if (self.breaks) |breaks| breaks.observe(arrival);
         observeHistory(self, answered, arrival);
         if (self.console) |console| try console.observe(arrival);
         if (self.board) |board| try board.observe(arrival, self.now());

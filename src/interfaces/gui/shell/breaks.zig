@@ -39,7 +39,8 @@ pub const Core = struct {
 
     fn add(self: *Core, id: u32, address: u32) void {
         for (self.at[0..self.left], 0..) |at, i| if (at == address) {
-            self.ids[i] = id;
+            // A session event has no id; preserve the id from our reply.
+            if (id != 0) self.ids[i] = id;
             return;
         };
         if (self.left == cap) return;

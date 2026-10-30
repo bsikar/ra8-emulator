@@ -19,6 +19,52 @@ const Stdio = ra8.rpc.stdio_transport.Stdio;
 const session_link = gui_app.session_link;
 const Env = proto.Client.Env;
 
+test "a disassembly click marks a live breakpoint, runs to it and clears it" {
+    const Live = @import("../live_shell.zig").Live;
+    var live: Live = undefined;
+    try live.open("tests/fixtures/gpio/blink.elf", 1);
+    defer live.deinit();
+    var code: shell_memory.Pair = .{ .follows = .pc };
+    var breaks: shell_breaks.Breaks = .{};
+    var devices: gui_app.shell.devices.Devices = .{};
+    live.shell.code = &code;
+    live.shell.breaks = &breaks;
+    live.shell.devices = &devices;
+    live.panes.code = &code;
+    live.panes.breaks = &breaks;
+    for (0..30) |_| {
+        try live.step();
+        if (code.cores[0].now != null) break;
+    }
+    const gpa = std.testing.allocator;
+    var solved = try frame.solve(&live.shell.layout, gpa, 640, 480);
+    defer solved.deinit(gpa);
+    for (solved.panes.items) |placed| {
+        const pane = live.shell.layout.pane(placed.index) orelse continue;
+        if (pane.kind != .disasm or pane.core != .cpu0) continue;
+        const body = frame.bodyOf(placed.area);
+        const snapshot = shell_panes.codeSnapshotFrom(code.cores[0].from, &code.cores[0].now.?, frame.toGeom(body));
+        const address = snapshot.lines[2].address;
+        const band = disasm_pane.rowRect(body, 2);
+        try live.clickIn(band);
+        for (0..5) |_| try live.step();
+        try std.testing.expectEqualSlices(u32, &.{address}, breaks.marks(.cpu0));
+        try std.testing.expectEqual(@as(?u32, null), breaks.cores[0].flight);
+        try std.testing.expect(breaks.cores[0].ids[0] != 0);
+        try live.clickIn(band);
+        for (0..5) |_| try live.step();
+        try std.testing.expectEqual(@as(usize, 0), breaks.marks(.cpu0).len);
+        try live.clickIn(band);
+        for (0..5) |_| try live.step();
+        const serial = live.registers.cores[0].serial;
+        try live.click(.run);
+        try live.untilRead(serial);
+        try std.testing.expectEqual(address, live.pc());
+        return;
+    }
+    return error.NoDisassemblyPane;
+}
+
 /// A link that has finished its greeting, writing into a pipe nobody answers.
 const Wire = struct {
     link: session_link.Link = undefined,
