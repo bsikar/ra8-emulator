@@ -74,15 +74,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(exe);
-    // The two internal peers the tests spawn as real second processes.
-    var peers: [2]*std.Build.Step.Compile = undefined;
-    const peer_mains = [_][]const u8{ "src/interfaces/cli/host_move_main.zig", "src/interfaces/cli/host_lifecycle_main.zig" };
-    for (peer_mains, 0..) |main_file, i| {
-        peers[i] = b.addExecutable(.{
-            .name = if (i == 0) "ra8_host_move_peer" else "ra8_host_lifecycle_peer",
-            .root_module = b.createModule(.{ .root_source_file = b.path(main_file), .target = target, .optimize = optimize, .link_libc = true, .imports = &.{.{ .name = "cli_app", .module = apps.cli }} }),
-        });
-    }
+    const peers = testPeers(b, target, optimize, apps.cli);
     const move_peer = if (peer_only) exe else peers[0];
     const lifecycle_peer = peers[1];
 
@@ -123,6 +115,19 @@ pub fn build(b: *std.Build) void {
     build_tests.add(b, &tests, target, optimize, emu, &exe.step);
 
     b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
+}
+
+/// The two internal peers the tests spawn as real second processes.
+fn testPeers(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, cli: *std.Build.Module) [2]*std.Build.Step.Compile {
+    var peers: [2]*std.Build.Step.Compile = undefined;
+    const mains = [_][]const u8{ "src/interfaces/cli/host_move_main.zig", "src/interfaces/cli/host_lifecycle_main.zig" };
+    for (mains, 0..) |main_file, i| {
+        peers[i] = b.addExecutable(.{
+            .name = if (i == 0) "ra8_host_move_peer" else "ra8_host_lifecycle_peer",
+            .root_module = b.createModule(.{ .root_source_file = b.path(main_file), .target = target, .optimize = optimize, .link_libc = true, .imports = &.{.{ .name = "cli_app", .module = cli }} }),
+        });
+    }
+    return peers;
 }
 
 /// The libraries that are build modules of their own (ADR 0004 section 1,
