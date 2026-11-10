@@ -10,6 +10,7 @@ const served_camera = @import("ra8_rpc").served_camera;
 const source_spec = @import("ra8_host").camera.source_spec;
 const loop = @import("loop.zig");
 const listen = @import("listen.zig");
+const discovery = @import("discovery.zig");
 const card_setup = @import("../card/setup.zig");
 const card_apps = @import("ra8_rpc").card_apps;
 const txm_debug = @import("ra8_session").txm.debug;
@@ -18,8 +19,9 @@ const elf = @import("ra8_board").image.elf;
 const usbip_run = @import("ra8_usbip").exported.run;
 
 pub const usage =
-    \\usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
-    \\       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] [--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
+    \\usage: ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
+    \\       ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] [--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
+    \\       --discover publishes per-user RPC/GDB discovery for ctl and IDE clients
     \\       --profile-folded samples each core's call stacks for `ctl folded`
     \\       --cpu1 brings CPU1 up from its own image, parked until it is run
     \\       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the SDHI card, as for a run
@@ -35,13 +37,14 @@ pub const usage =
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, discover: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
 
 const ParsedFlags = struct {
     folded: bool = false,
+    discover: bool = false,
     allow_state: bool = false,
     cpu1: ?[]const u8 = null,
     sdhi: card_setup.Sdhi = .{},
@@ -74,6 +77,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
     }
     var asked = parseTail(argv, at) orelse return null;
     asked.folded = flags.folded;
+    asked.discover = flags.discover;
     asked.allow_state_files = flags.allow_state;
     asked.history = flags.history_root;
     asked.history_off = flags.history_off;
@@ -100,7 +104,9 @@ const FlagStep = enum { taken, stop, bad };
 fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
     const idx = at.*;
     const valued = idx + 1 < argv.len;
-    if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
+    if (std.mem.eql(u8, argv[idx], "--discover") and !flags.discover) {
+        flags.discover = true;
+    } else if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
         flags.folded = true;
     } else if (std.mem.eql(u8, argv[idx], "--allow-state-files") and !flags.allow_state) {
         flags.allow_state = true;
@@ -193,7 +199,7 @@ const BreakArmer = struct {
 };
 
 /// Serve `argv` (`ra8_emulator serve ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
     const asked = parse(argv) orelse {
         std.debug.print("{s}", .{usage});
         return 2;
@@ -246,7 +252,10 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         },
         .stdio => {},
     }
-    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx };
+    if (asked.discover) listen.catchStops();
+    var hosted = if (asked.discover) try discovery.open(allocator, io, env, asked.elf, setup.context.session) else null;
+    defer if (hosted) |*listener| listener.deinit();
+    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx, .listener = if (hosted) |*listener| listener else null };
     const context = &setup.context;
     const done = switch (asked.where) {
         .stdio => loop.answerStdio(io, context, buffers),
