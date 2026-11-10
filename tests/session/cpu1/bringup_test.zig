@@ -49,6 +49,7 @@ test "path and offline CPU1 startup register the published widget tree and permi
         var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
         if (offline) try cpu1.openBytes(gpa, &h, bytes) else try cpu1.open(gpa, std.testing.io, std.Io.Dir.cwd(), &h, path);
         defer cpu1.close(gpa);
+        try capabilities(&h, &cpu1);
         try std.testing.expectEqual(@as(?u32, tree_address), ra8.session.symbols.addressOf(cpu1.image.?, ra8.session.widget_tree.symbol));
         var channel: [104]u8 = @splat(0);
         std.mem.writeInt(u32, channel[0..4], ra8.session.widget_tree.magic, .little);
@@ -81,12 +82,66 @@ test "failed bytes startup leaves no attached core and permits a successful retr
     try std.testing.expect(cpu1.image == null);
     try std.testing.expect(h.session().live.other == null);
     try std.testing.expect(h.state.files.pair == null);
+    try std.testing.expectEqual(@as(u4, 4), cpu1.machine.dwt.numcomp);
     const bytes = try gpa.dupe(u8, second);
     defer gpa.free(bytes);
     try cpu1.openBytes(gpa, &h, bytes);
     defer cpu1.close(gpa);
+    try capabilities(&h, &cpu1);
     @memset(bytes, 0);
     try std.testing.expectEqualSlices(u8, second, cpu1.bytes);
     try std.testing.expectEqualSlices(u8, second, h.loadedImage(.cpu1).?.bytes);
     try std.testing.expect(h.state.files.pair == &cpu1.pair);
+}
+
+fn capabilities(h: *ra8.session.harness.Harness, cpu1: *ra8.session.cpu1.bringup.Cpu1) !void {
+    try std.testing.expectEqualDeep(ra8.chip.core.part.cpu1_profile, cpu1.cpu().profile);
+    std.debug.print("CPU1 startup DWT count={d} CTRL={x}\n", .{ cpu1.machine.dwt.numcomp, ra8.session.step_hook.watch.bus.unit_view.word(&cpu1.machine, dwt.base, 0).? });
+    try std.testing.expectEqual(@as(?u32, 0x40000000), ra8.session.step_hook.watch.bus.unit_view.word(&cpu1.machine, dwt.base, 0));
+    try std.testing.expectEqual(@as(u4, 4), cpu1.machine.dwt.numcomp);
+    try std.testing.expectEqual(@as(u4, 8), h.session().live.machine.dwt.numcomp);
+    try std.testing.expectEqual(@as(?u32, 0x80000000), ra8.session.step_hook.watch.bus.unit_view.word(h.session().live.machine, dwt.base, 0));
+}
+
+const dwt = ra8.chip.periph.dwt;
+
+test "CPU1 startup ignores absent comparator four and matches valid comparator three" {
+    var h = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "absent.elf", .elf_bytes = first });
+    defer h.deinit();
+    var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
+    try cpu1.openBytes(gpa, &h, second);
+    defer cpu1.close(gpa);
+    const unit = &cpu1.machine.dwt;
+    unit.trcena = true;
+    const function = dwt.match.instruction | dwt.function_bits.action_debug << dwt.function_bits.action_shift;
+    const absent = 4 * dwt.offsets.stride;
+    try std.testing.expect(unit.write(dwt.offsets.comp0 + absent, 0x20000000));
+    try std.testing.expect(unit.write(dwt.offsets.function0 + absent, function));
+    try std.testing.expect(unit.write(dwt.offsets.vmask0 + absent, 0xffffffff));
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(dwt.offsets.comp0 + absent));
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(dwt.offsets.function0 + absent));
+    try std.testing.expectEqual(@as(?u32, 0), unit.peek(dwt.offsets.vmask0 + absent));
+    try std.testing.expectEqual(@as(?usize, null), unit.matchesPc(0x20000000));
+    try std.testing.expectEqual(@as(u32, 0), unit.functions[4]);
+    const valid = 3 * dwt.offsets.stride;
+    try std.testing.expect(unit.write(dwt.offsets.comp0 + valid, 0x20000000));
+    try std.testing.expect(unit.write(dwt.offsets.function0 + valid, function));
+    try std.testing.expectEqual(@as(?usize, 3), unit.matchesPc(0x20000000));
+    try std.testing.expect(unit.functions[3] & dwt.function_bits.matched != 0);
+}
+
+test "CPU1 close and reinitialize retain the M33 DWT capability" {
+    var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
+    for (0..2) |_| {
+        var h = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "absent.elf", .elf_bytes = first });
+        defer h.deinit();
+        try cpu1.openBytes(gpa, &h, second);
+        capabilities(&h, &cpu1) catch |err| {
+            cpu1.close(gpa);
+            return err;
+        };
+        cpu1.close(gpa);
+        try std.testing.expectEqual(@as(u4, 4), cpu1.machine.dwt.numcomp);
+        try std.testing.expect(!cpu1.machine.dwt.trcena);
+    }
 }

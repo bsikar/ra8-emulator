@@ -5,6 +5,8 @@
 const std = @import("std");
 const elf = @import("ra8_board").image.elf;
 const board_wiring = @import("ra8_board").wiring;
+const dwt = @import("ra8_chip").periph.dwt;
+const cpuid = @import("ra8_chip").periph.cpuid;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const exclusive_peer = @import("ra8_chip").core.cpu.exclusive_peer;
 const second_core = @import("ra8_chip").core.second.core;
@@ -22,7 +24,7 @@ const widget_tree = @import("../widget_tree.zig");
 /// Holds what CPU1 runs on; it stays put while the session has it.
 pub const Cpu1 = struct {
     pair: second_core.zig.run.Driver = undefined,
-    machine: stop_machine.Machine = .{},
+    machine: stop_machine.Machine = .{ .dwt = .{ .numcomp = dwt.numcompOf(cpuid.cpu1) } },
     driver: step_hook.Driver = undefined,
     watching: watch_bus.WatchBus = undefined,
     bytes: []u8 = &.{},
