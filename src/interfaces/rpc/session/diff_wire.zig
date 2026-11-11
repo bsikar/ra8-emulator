@@ -1,5 +1,26 @@
 //! Wire codec for state diff RPC operations (Slice 23.5).
 const std = @import("std");
+const ra8_session = @import("ra8_session");
+const history_position = ra8_session.history_position;
+
+pub const Position = history_position.Position;
+pub const Phase = history_position.Phase;
+pub const Gap = history_position.Gap;
+
+pub const LineOrder = enum(u8) {
+    lt = 0,
+    eq = 1,
+    gt = 2,
+    other_line = 3,
+
+    pub fn fromMathOrder(ord: std.math.Order) LineOrder {
+        return switch (ord) {
+            .lt => .lt,
+            .eq => .eq,
+            .gt => .gt,
+        };
+    }
+};
 
 pub const RegItem = struct {
     core: u8,
@@ -41,11 +62,36 @@ pub const DiffArgs = struct {
 pub const Side = struct {
     branch: u32 = 0,
     r: u64 = 0,
+    phase: Phase = .cpu0,
+    o: u32 = 0,
+    gap: Gap = .retired,
+
+    pub fn fromPosition(pos: Position) Side {
+        return .{
+            .branch = pos.branch,
+            .r = pos.r,
+            .phase = pos.phase,
+            .o = pos.o,
+            .gap = pos.gap,
+        };
+    }
+
+    pub fn position(self: Side) Position {
+        return .{
+            .branch = self.branch,
+            .r = self.r,
+            .phase = self.phase,
+            .o = self.o,
+            .gap = self.gap,
+        };
+    }
 };
 
 pub const DecodedDiff = struct {
     a: Side = .{},
     b: Side = .{},
+    /// Order of `a` relative to `b` on their line, or `other_line` across lines.
+    order: LineOrder = .eq,
     /// Rewind-history frames the session held when it answered.
     frames: u16 = 0,
     regs: []RegItem = &.{},
@@ -81,11 +127,28 @@ pub fn encodeSides(
     pages: []const PageItem,
     periphs: []const PeriphItem,
 ) !void {
+    const order: LineOrder = if (history_position.compare(a.position(), b.position())) |ord|
+        LineOrder.fromMathOrder(ord)
+    else |_|
+        .other_line;
+    return encodeSidesOrdered(writer, frames, a, b, order, regs, pages, periphs);
+}
+
+/// `encode` with both sides' full positions and resolved line order.
+pub fn encodeSidesOrdered(
+    writer: anytype,
+    frames: u16,
+    a: Side,
+    b: Side,
+    order: LineOrder,
+    regs: []const RegItem,
+    pages: []const PageItem,
+    periphs: []const PeriphItem,
+) !void {
     try encodeHead(writer, frames, regs.len, pages.len, periphs.len);
-    for ([_]Side{ a, b }) |side| {
-        try writer.writeInt(u32, side.branch, .little);
-        try writer.writeInt(u64, side.r, .little);
-    }
+    try history_position.encode(writer, a.position());
+    try history_position.encode(writer, b.position());
+    try writer.writeByte(@backingInt(order));
     try encodeBody(writer, regs, pages, periphs);
 }
 
@@ -211,13 +274,19 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !DecodedDiff {
     at += 2;
     const frames = std.mem.readInt(u16, bytes[at..][0..2], .little);
     at += 2;
-    if (bytes.len < at + 24) return error.Truncated;
-    var sides: [2]Side = undefined;
-    for (&sides) |*side| {
-        side.branch = std.mem.readInt(u32, bytes[at..][0..4], .little);
-        side.r = std.mem.readInt(u64, bytes[at + 4 ..][0..8], .little);
-        at += 12;
-    }
+    if (bytes.len < at + 2 * history_position.encoded_len + 1) return error.Truncated;
+    const pos_a = history_position.decode(bytes, &at) catch |err| switch (err) {
+        error.Truncated => return error.Truncated,
+        else => return error.BadValue,
+    };
+    const pos_b = history_position.decode(bytes, &at) catch |err| switch (err) {
+        error.Truncated => return error.Truncated,
+        else => return error.BadValue,
+    };
+    const order_byte = bytes[at];
+    at += 1;
+    if (order_byte > 3) return error.BadValue;
+    const order: LineOrder = @fromBackingInt(@intCast(order_byte));
 
     const regs = try decodeRegs(allocator, bytes, &at, reg_count);
     errdefer allocator.free(regs);
@@ -226,5 +295,13 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !DecodedDiff {
     const periphs = try decodePeriphs(allocator, bytes, &at, periph_count);
     errdefer allocator.free(periphs);
 
-    return .{ .frames = frames, .a = sides[0], .b = sides[1], .regs = regs, .pages = pages, .periphs = periphs };
+    return .{
+        .frames = frames,
+        .a = Side.fromPosition(pos_a),
+        .b = Side.fromPosition(pos_b),
+        .order = order,
+        .regs = regs,
+        .pages = pages,
+        .periphs = periphs,
+    };
 }

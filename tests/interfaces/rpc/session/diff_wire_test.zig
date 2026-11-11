@@ -60,4 +60,19 @@ test "diff wire carries the frame count and each side's position" {
     try std.testing.expectEqual(@as(u16, 7), decoded.frames);
     try std.testing.expectEqual(@as(u32, 1), decoded.a.branch);
     try std.testing.expectEqual(@as(u64, 90), decoded.b.r);
+    try std.testing.expectEqual(diff_wire.LineOrder.other_line, decoded.order);
+}
+
+test "diff wire round-trips full Position phase, offset, gap and line order" {
+    var buf: [256]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buf);
+    const side_a: diff_wire.Side = .{ .branch = 3, .r = 12, .phase = .cpu0, .o = 5, .gap = .polled };
+    const side_b: diff_wire.Side = .{ .branch = 3, .r = 12, .phase = .cpu0, .o = 5, .gap = .retired };
+    try diff_wire.encodeSidesOrdered(&writer, 4, side_a, side_b, .lt, &.{}, &.{}, &.{});
+
+    var decoded = try diff_wire.decode(std.testing.allocator, writer.buffered());
+    defer decoded.deinit(std.testing.allocator);
+    try std.testing.expectEqual(side_a.position(), decoded.a.position());
+    try std.testing.expectEqual(side_b.position(), decoded.b.position());
+    try std.testing.expectEqual(diff_wire.LineOrder.lt, decoded.order);
 }
