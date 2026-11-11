@@ -6,7 +6,9 @@ name: validation
 on:
   workflow_dispatch:
   push:
-    branches: [BSIKAR/time-travel]
+    branches: [dev]
+  pull_request:
+    branches: [dev]
 
 jobs:
   suites:
@@ -29,6 +31,9 @@ jobs:
       - name: Gate (length and terminology)
         run: zig build gate -j1
 
+      - name: Memory writer guard
+        run: zig run tools/memory_writer_guard.zig -- src
+
       - name: Build
         run: zig build -j1
 
@@ -49,3 +54,98 @@ jobs:
         run: |
           zig build ra8_gui_link_tests-exe
           ./zig-out/bin/ra8_gui_link_tests
+
+  windows-sr2:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig 0.17.0
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.17.0.zip'
+          $expected = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+          curl.exe -fsSL --retry 3 -o $zip https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download Zig 0.17.0 (exit $LASTEXITCODE)" }
+          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+          Write-Host "zig_archive_sha256=$actual"
+          if ($actual -ne $expected) { throw "SHA256 mismatch: expected $expected, got $actual" }
+          $dest = Join-Path $env:RUNNER_TEMP 'zig'
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          tar.exe -xf $zip -C $dest
+          if ($LASTEXITCODE -ne 0) { throw "Failed to extract Zig archive (exit $LASTEXITCODE)" }
+          $zigDir = Join-Path $dest 'zig-x86_64-windows-0.17.0'
+          if (-not (Test-Path (Join-Path $zigDir 'zig.exe'))) { throw "zig.exe not found in $zigDir" }
+          Add-Content -Path $env:GITHUB_PATH -Value $zigDir
+
+      - name: Log runner environment and privileges
+        shell: pwsh
+        run: |
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "git rev-parse HEAD failed" }
+          $zigExe = (Get-Command zig).Source
+          $zigVer = (zig version).Trim()
+          if ($LASTEXITCODE -ne 0) { throw "zig version failed" }
+          $zigHash = (Get-FileHash -Algorithm SHA256 $zigExe).Hash.ToLowerInvariant()
+          Write-Host "git_head=$head"
+          Write-Host "zig_version=$zigVer"
+          Write-Host "zig_exe=$zigExe"
+          Write-Host "zig_exe_sha256=$zigHash"
+          if ($zigVer -ne '0.17.0') { throw "Expected Zig 0.17.0, got $zigVer" }
+          $priv = (whoami.exe /priv | Out-String)
+          if ($LASTEXITCODE -ne 0) { throw "whoami /priv failed" }
+          Write-Host $priv.TrimEnd()
+          if ($priv -notmatch 'SeCreateSymbolicLinkPrivilege') {
+            throw "SeCreateSymbolicLinkPrivilege missing from runner token"
+          }
+
+      - name: Host history session suite (Debug)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force .\zig-out -ErrorAction SilentlyContinue
+          zig build ra8_host_tests-exe -j1 '-Dtest-filter=host.history.session_test'
+          if ($LASTEXITCODE -ne 0) { throw "Debug build failed with exit code $LASTEXITCODE" }
+          $bin = '.\zig-out\bin\ra8_host_tests.exe'
+          $binHash = (Get-FileHash -Algorithm SHA256 $bin).Hash.ToLowerInvariant()
+          Write-Host "debug_binary_sha256=$binHash"
+          $env:SR2_LOG = Join-Path $env:RUNNER_TEMP 'sr2-debug.log'
+          cmd.exe /d /c '.\zig-out\bin\ra8_host_tests.exe > "%SR2_LOG%" 2>&1'
+          $exitCode = $LASTEXITCODE
+          $outHash = (Get-FileHash -Algorithm SHA256 $env:SR2_LOG).Hash.ToLowerInvariant()
+          $output = Get-Content -Raw -Path $env:SR2_LOG
+          Write-Host $output.TrimEnd()
+          Write-Host "debug_exit_code=$exitCode"
+          Write-Host "debug_output_sha256=$outHash"
+          if ($exitCode -ne 0) { throw "Debug test run failed with exit code $exitCode" }
+          if ($output -notmatch '(?m)^\d+/\d+ host\.history\.session_test\.test\.host lifecycle keep refuses symlink dangling link and unexpected directory without outside writes\.\.\.OK\r?$') {
+            throw "Expected symlink test OK in Debug output"
+          }
+          if ($output -notmatch '(?m)^All \d+ tests passed\.\r?$') {
+            throw "Expected 'All <N> tests passed.' in Debug output"
+          }
+
+      - name: Host history session suite (ReleaseFast)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force .\zig-out -ErrorAction SilentlyContinue
+          zig build ra8_host_tests-exe '-Doptimize=ReleaseFast' -j1 '-Dtest-filter=host.history.session_test'
+          if ($LASTEXITCODE -ne 0) { throw "ReleaseFast build failed with exit code $LASTEXITCODE" }
+          $bin = '.\zig-out\bin\ra8_host_tests.exe'
+          $binHash = (Get-FileHash -Algorithm SHA256 $bin).Hash.ToLowerInvariant()
+          Write-Host "releasefast_binary_sha256=$binHash"
+          $env:SR2_LOG = Join-Path $env:RUNNER_TEMP 'sr2-releasefast.log'
+          cmd.exe /d /c '.\zig-out\bin\ra8_host_tests.exe > "%SR2_LOG%" 2>&1'
+          $exitCode = $LASTEXITCODE
+          $outHash = (Get-FileHash -Algorithm SHA256 $env:SR2_LOG).Hash.ToLowerInvariant()
+          $output = Get-Content -Raw -Path $env:SR2_LOG
+          Write-Host $output.TrimEnd()
+          Write-Host "releasefast_exit_code=$exitCode"
+          Write-Host "releasefast_output_sha256=$outHash"
+          if ($exitCode -ne 0) { throw "ReleaseFast test run failed with exit code $exitCode" }
+          if ($output -notmatch '(?m)^\d+/\d+ host\.history\.session_test\.test\.host lifecycle keep refuses symlink dangling link and unexpected directory without outside writes\.\.\.OK\r?$') {
+            throw "Expected symlink test OK in ReleaseFast output"
+          }
+          if ($output -notmatch '(?m)^All \d+ tests passed\.\r?$') {
+            throw "Expected 'All <N> tests passed.' in ReleaseFast output"
+          }
