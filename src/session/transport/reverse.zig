@@ -35,6 +35,7 @@ pub const Rc = struct {
     landing_restored: bool = false,
     start: bool = false,
     origin: seek_engine.Base,
+    origin_checkpoint: ?seek_engine.Base = null,
     has_watch: bool = false,
     range: reverse_watch.Range = .{ .address = 0, .size = 0 },
     watch_hit: ?reverse_watch.Hit = null,
@@ -89,6 +90,7 @@ pub fn queue(self: *Transport) !Ticket {
     };
     const base = plan.base;
     const earlier = try earlierCheckpoint(self.session, base, grid.at, facts.checkpoints);
+    const origin_cp = if (base == .window) @import("back.zig").checkpointAtOrBefore(self.session, grid.at, facts.checkpoints) else null;
     self.cancel();
     self.epoch += 1;
     const ticket = self.issue();
@@ -105,11 +107,16 @@ pub fn queue(self: *Transport) !Ticket {
             .base = base,
             .prior = earlier,
             .origin = base,
+            .origin_checkpoint = origin_cp,
             .has_watch = watch_range != null,
             .range = watch_range orelse .{ .address = 0, .size = 0 },
         },
     };
     return ticket;
+}
+
+pub fn restoreOrigin(self: *Transport, rc: *const Rc) void {
+    @import("back.zig").restoreOriginPair(self, rc.origin, rc.origin_checkpoint);
 }
 
 fn earlierCheckpoint(

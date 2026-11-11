@@ -51,6 +51,7 @@ pub const Window = struct {
         self.window = engine.ReverseWindow.init(gpa, self.machine.port(), &self.recording, store, budget);
         errdefer self.window.deinit();
         try self.window.plant();
+        if (files.pair) |pair| self.attachSecond(&pair.core.cpu.slots);
         session.attachWindow(&self.window);
         session.attachWindowDriver(.{ .context = self, .enterFn = enter, .goFn = go, .settleFn = settle, .resetFn = reset });
         return self;
@@ -61,14 +62,29 @@ pub const Window = struct {
         session.window = null;
         session.window_driver = null;
         self.machine.bus.touched = null;
+        self.detachSecond();
         self.window.deinit();
         self.recording.deinit();
         self.gpa.destroy(self);
     }
 
-    /// CPU1's slot counter, once a second core is attached.
+    /// CPU1's slot counter and private store, once a second core is attached.
     pub fn attachSecond(self: *Window, slots: *const u64) void {
         self.recording.slots[1] = slots;
+        if (self.machine.files.pair) |pair| {
+            const ps = if (pair.store) |*s| s else null;
+            self.recording.peer_store = ps;
+            self.window.trail.peer_store = ps;
+            pair.core.board.touched = .{ .context = &self.machine, .touchFn = Machine.touch };
+        }
+    }
+
+    /// Unhooks CPU1's private store and board listener before CPU1 closes.
+    pub fn detachSecond(self: *Window) void {
+        self.recording.slots[1] = self.recording.slots[0];
+        self.recording.peer_store = null;
+        self.window.trail.peer_store = null;
+        if (self.machine.files.pair) |pair| pair.core.board.touched = null;
     }
 
     fn of(context: *anyopaque) *Window {
@@ -134,28 +150,57 @@ pub const Window = struct {
         const self = of(context);
         const live = &session.live;
         const recorded = command == .step or (!session.advancing and command == .cont and live.budget <= live_slots_max);
-        if (self.machine.muted) return live.go(command);
+        if (self.machine.muted) {
+            if (!self.machine.slot_mode) return live.go(command);
+            if (live.started) live.machine.proceed() else live.machine.begin();
+            return (try live.stepSlot(std.math.maxInt(u64), null)).ended;
+        }
         if (session.replaying or !recorded) return self.plain(command);
-        if (self.asleep(self.machine.coreAt()) or !self.current()) return self.plain(command);
+        if ((self.machine.files.pair == null and self.asleep(.cpu0)) or !self.current()) return self.plain(command);
         self.machine.begin(command);
-        if (command == .step) return self.slot(self.machine.coreAt());
+        if (command == .step) return self.goStep(live);
         const budget = live.budget;
         defer live.budget = budget;
         var left = budget;
-        while (left > 0) {
-            const core = self.machine.coreAt();
-            if (self.window.line == null or self.asleep(core)) {
+        while (!(self.machine.position().phase == .cpu0 and left == 0)) {
+            if (self.window.line == null or (self.machine.files.pair == null and self.asleep(.cpu0))) {
                 live.budget = left;
                 self.recording.disarm();
                 defer self.recording.arm();
                 return self.machine.raw();
             }
-            live.budget = 1;
-            const ended = try self.slot(core);
+            self.machine.slot_budget = if (self.machine.position().phase == .cpu0) left else std.math.maxInt(u64);
+            self.machine.slot_target = null;
+            const ended = try self.slot(self.machine.coreAt());
+            left -|= self.machine.last_cpu0_elapsed;
             if (ended != .count) return ended;
-            left -= 1;
         }
         return .count;
+    }
+
+    fn goStep(self: *Window, live: anytype) !api.Ended {
+        const budget = live.budget;
+        defer live.budget = budget;
+        const target = @import("../zig/round.zig").Target{
+            .core = @intCast(live.index),
+            .slots = live.core.cpu.slots + 1,
+        };
+        defer self.machine.slot_target = null;
+        var left = budget;
+        var steps: u64 = 0;
+        while (steps < live_slots_max) : (steps += 1) {
+            if (self.window.line == null or (self.machine.files.pair == null and self.asleep(.cpu0))) break;
+            self.machine.slot_budget = if (self.machine.position().phase == .cpu0) left else std.math.maxInt(u64);
+            self.machine.slot_target = target;
+            const ended = try self.slot(self.machine.coreAt());
+            left -|= self.machine.last_cpu0_elapsed;
+            if (ended != .count) return ended;
+            if (left == 0 and live.core.cpu.waiting != null) return .count;
+        }
+        live.budget = left;
+        self.recording.disarm();
+        defer self.recording.arm();
+        return self.machine.session.live.launchStepFallback(target);
     }
 
     /// The machine was put back from a saved state: the window forgets the
@@ -165,7 +210,7 @@ pub const Window = struct {
         _ = session;
         const self = of(context);
         const w = &self.window;
-        if (w.rebuild != null) return;
+        if (self.machine.muted) return;
         record.discardFrom(&self.recording, 0);
         self.recording.poisoned = false;
         w.drop();

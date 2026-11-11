@@ -50,14 +50,15 @@ const Side = struct {
     whole: bool = true,
 };
 
-/// Whether the slot only ran inside one CPU0 stretch and touched no
+/// Whether the slot only ran inside one core's stretch and touched no
 /// peripheral, system control or part: its board state is as it was, so
 /// only the core sections need saving.
 fn quiet(w: *ReverseWindow, pre: engine.Position, post: engine.Position, touches: ?u64, records: []const trail_mod.Record) bool {
     const before = touches orelse return false;
     if ((w.port.touchCount() orelse return false) != before) return false;
-    if (pre.r != post.r or pre.phase != .cpu0 or post.phase != .cpu0) return false;
-    return w.port.cpu(.cpu1) == null and !touchesPart(records);
+    if (pre.r != post.r or pre.phase != post.phase) return false;
+    if (pre.phase != .cpu0 and pre.phase != .cpu1) return false;
+    return !touchesPart(records);
 }
 
 /// The delta the slot made: from the core sections alone for a quiet one
@@ -83,6 +84,8 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     if (!w.recording.attached) return engine.Error.TrailDisarmed;
     const cpu = w.port.cpu(core) orelse return engine.Error.CoreMissing;
     const pre_pos = w.port.position();
+    const pre_slots0 = if (w.port.cpu(.cpu0)) |c| c.slots else 0;
+    const pre_slots1 = if (w.port.cpu(.cpu1)) |c| c.slots else 0;
     const pre_arch = slot_mod.ArchState.capture(cpu);
     w.trail.startSlot(core, pre_pos, &pre_arch);
     const mark = w.trail.recording_mark;
@@ -94,6 +97,9 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     if (live) try w.port.stepLive(core) else try w.port.step(core);
     const post_pos = w.port.position();
     if ((engine.Position.order(post_pos, pre_pos) orelse return engine.Error.OtherLine) != .gt) return engine.Error.NoProgress;
+    const post_slots0 = if (w.port.cpu(.cpu0)) |c| c.slots else 0;
+    const post_slots1 = if (w.port.cpu(.cpu1)) |c| c.slots else 0;
+    const retired = post_slots0 != pre_slots0 or post_slots1 != pre_slots1;
 
     const records = w.recording.records[mark..w.recording.record_count];
     var side = try sideOf(w, quiet(w, pre_pos, post_pos, touches, records));
@@ -116,7 +122,7 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
         return;
     }
     if (side.whole) std.mem.swap(std.ArrayList(u8), &w.image, &side.post) else try side.delta.flip(w.allocator, &w.image, true);
-    w.slots.appendAssumeCapacity(.{ .pre = pre_pos, .post = post_pos, .core = core, .kind = kind, .delta = side.delta, .digest = digest });
+    w.slots.appendAssumeCapacity(.{ .pre = pre_pos, .post = post_pos, .core = core, .kind = kind, .retired = retired, .delta = side.delta, .digest = digest });
     w.slot_bytes += w.slotAt(w.count() - 1).bytes();
     w.enforceBudget();
 }
@@ -152,24 +158,27 @@ pub fn reexecute(w: *ReverseWindow, slot: *engine.Slot) !void {
 /// The post digest of one slot: the side image, then every write's place
 /// and, for a store write, the bytes it left.
 pub fn slotDigest(w: *ReverseWindow, image: []const u8, records: []const trail_mod.Record) !Digest {
+    const wtrail_mod = @import("window_trail.zig");
     var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(image);
     var buffer: [256]u8 = undefined;
     for (records) |one| switch (one) {
         .barrier => hasher.update("barrier"),
         .bytes => |b| {
-            var head: [16]u8 = undefined;
+            var head: [17]u8 = undefined;
             std.mem.writeInt(u32, head[0..4], b.base, .little);
             std.mem.writeInt(u64, head[4..12], b.offset, .little);
             std.mem.writeInt(u16, head[12..14], b.part orelse std.math.maxInt(u16), .little);
             std.mem.writeInt(u16, head[14..16], @intCast(@min(b.pre.len, std.math.maxInt(u16))), .little);
+            head[16] = @backingInt(b.initiator);
             hasher.update(&head);
             if (b.part != null) continue;
+            const s = w.trail.storeFor(b.initiator);
             const address: u32 = @intCast(b.base + b.offset);
             var done: usize = 0;
             while (done < b.pre.len) {
                 const n = @min(buffer.len, b.pre.len - done);
-                try w.trail.pureRead(address + @as(u32, @intCast(done)), buffer[0..n]);
+                try wtrail_mod.WindowTrail.pureReadFrom(s, address + @as(u32, @intCast(done)), buffer[0..n]);
                 hasher.update(buffer[0..n]);
                 done += n;
             }
@@ -192,7 +201,7 @@ fn sameShape(kept: []const @import("window_trail.zig").ByteSwapRecord, fresh: []
     if (kept.len != fresh.len) return false;
     for (kept, fresh) |a, one| switch (one) {
         .barrier => return false,
-        .bytes => |b| if (a.base != b.base or a.offset != b.offset or a.part != b.part or a.data.len != b.pre.len) return false,
+        .bytes => |b| if (a.base != b.base or a.offset != b.offset or a.part != b.part or a.initiator != b.initiator or a.data.len != b.pre.len) return false,
     };
     return true;
 }
@@ -211,9 +220,10 @@ fn rollback(w: *ReverseWindow, mark: usize) !void {
                     restore.raw(restore.ctx, @truncate(b.offset), b.pre);
                 }
             } else {
+                const s = w.trail.storeFor(b.initiator);
                 const address: u32 = @intCast(b.base + b.offset);
-                try w.trail.store.rawWrite(address, b.pre);
-                w.trail.store.fan().notify(address, b.pre.len);
+                try s.rawWrite(address, b.pre);
+                s.fan().notify(address, b.pre.len);
             },
         }
     }

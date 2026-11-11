@@ -36,14 +36,21 @@ pub const Landed = struct {
     }
 };
 
+pub fn retiresOn(slot: *const engine.Slot, core: Core) bool {
+    return slot.core == core and slot.retired;
+}
+
 /// Stepi(S): lands at the next canonical stop of `core`.
 pub fn stepForward(w: *ReverseWindow, core: Core) !Landed {
     var landed: Landed = .{};
     var next = w.cursor();
-    while (next < w.count() and w.slotAt(next).core != core) next += 1;
+    while (next < w.count() and !retiresOn(w.slotAt(next), core)) next += 1;
     if (next == w.count()) return Error.OutsideWindow;
-    while (w.cursor() <= next) landed.cross(try redoOne(w), core);
-    while (w.cursor() < w.count() and w.slotAt(w.cursor()).core != core) landed.cross(try redoOne(w), core);
+    var target = next + 1;
+    while (target < w.count() and !retiresOn(w.slotAt(target), core)) target += 1;
+    const from = w.cursor();
+    try w.walkTo(target);
+    for (from..target) |idx| landed.cross(w.slotAt(idx), core);
     landed.at_window_end = w.cursor() == w.count();
     return landed;
 }
@@ -52,20 +59,14 @@ pub fn stepForward(w: *ReverseWindow, core: Core) !Landed {
 pub fn stepBack(w: *ReverseWindow, core: Core) !Landed {
     var landed: Landed = .{};
     var last = w.cursor();
-    while (last > 0 and w.slotAt(last - 1).core != core) last -= 1;
+    while (last > 0 and !retiresOn(w.slotAt(last - 1), core)) last -= 1;
     if (last == 0) return Error.OutsideWindow;
-    while (w.cursor() >= last) landed.cross(try undoOne(w), core);
+    const target = last - 1;
+    var idx = w.cursor();
+    while (idx > target) {
+        idx -= 1;
+        landed.cross(w.slotAt(idx), core);
+    }
+    try w.walkTo(target);
     return landed;
-}
-
-fn redoOne(w: *ReverseWindow) !*engine.Slot {
-    const slot = w.slotAt(w.cursor());
-    _ = try w.redo();
-    return slot;
-}
-
-fn undoOne(w: *ReverseWindow) !*engine.Slot {
-    const slot = w.slotAt(w.cursor() - 1);
-    _ = try w.undo();
-    return slot;
 }

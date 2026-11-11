@@ -60,6 +60,23 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     return ended;
 }
 
+/// Advances one replay slot on whichever core owns the current round phase,
+/// delivering any recorded interventions due before or after the slot.
+pub fn stepReplaySlot(self: *Session) anyerror!api.Ended {
+    self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
+    line.stampLine(self);
+    try deliverDue(self);
+    if (self.live.started) self.live.machine.proceed() else self.live.machine.begin();
+    const res = try self.live.stepSlot(std.math.maxInt(u64), null);
+    line.notePosition(self, line.currentPosition(self));
+    try deliverDue(self);
+    if (self.replay_failure) |failure| {
+        self.replay_failure = null;
+        return .{ .stop = .{ .replay_failed = failure } };
+    }
+    return res.ended;
+}
+
 /// Re-applies the recorded interventions due at the session's position.
 pub fn deliverDue(self: *Session) anyerror!void {
     if (self.replay_feeder) |*feeder| try feeder.checkAndApply(self);

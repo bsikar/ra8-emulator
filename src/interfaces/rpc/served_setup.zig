@@ -308,10 +308,7 @@ pub const Served = struct {
             if (self.second) |cpu1| stacks.unwatch(1, cpu1.cpu());
             self.gpa.destroy(stacks);
         }
-        if (self.second) |cpu1| {
-            cpu1.close(self.gpa);
-            self.gpa.destroy(cpu1);
-        }
+        served_second.close(self);
         self.context.chunks.drop();
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);

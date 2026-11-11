@@ -15,6 +15,7 @@ const seek_target = @import("../history/seek_target.zig");
 const position_mod = @import("../history/position.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
+const run_slice = @import("../run_slice.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -233,17 +234,21 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
 fn landing(self: *Transport, job: *Job, at: seek_engine.Position, target: seek_engine.Position) !api.Ended {
     const session = self.session;
     if (at.r < target.r) return throughRound(self, job);
-    if (at.r != target.r or at.phase != target.phase or target.o <= at.o) return session.run(job.core, .cont);
+    if (at.r != target.r) return session.run(job.core, .cont);
+    if (at.phase != target.phase) return run_slice.stepReplaySlot(session);
+    if (target.o <= at.o) return run_slice.stepReplaySlot(session);
+    const phase_core: api.Core = if (target.phase == .cpu1) .cpu1 else .cpu0;
     const dist = target.o - at.o;
     if (target.gap == .polled and dist == 1) {
-        const stepped = try session.run(job.core, .step);
+        const stepped = try session.run(phase_core, .step);
         const spent: api.Ended = .count;
         return if (stepped == .stop and stepped.stop == .stepped) spent else stepped;
     }
+    if (target.phase == .cpu1) return run_slice.stepReplaySlot(session);
     const budget: u64 = if (target.gap == .polled) dist - 1 else dist;
-    try session.setRunBudget(job.core, budget);
-    defer session.setRunBudget(job.core, job.prior_budget) catch {};
-    return session.run(job.core, .cont);
+    try session.setRunBudget(phase_core, budget);
+    defer session.setRunBudget(phase_core, transport_mod.budgetOf(session, phase_core)) catch {};
+    return session.run(phase_core, .cont);
 }
 
 /// A run toward a later round that halts as that round opens, so a target

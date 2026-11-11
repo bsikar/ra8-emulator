@@ -32,6 +32,7 @@ pub const Cpu1 = struct {
     /// CPU1's image, for its names, frames and lines.
     image: ?elf.Image = null,
     paired: ?*cpu_mod.Cpu = null,
+    opened: ?harness.Harness = null,
     /// CPU1's RTOS tracer, its bus listener and its publisher onto the
     /// session's event stream, once traceRtos arms them (RA8EMU-840).
     tracer: ?rtos_hook.Tracer = null,
@@ -75,6 +76,7 @@ pub const Cpu1 = struct {
         opened.bindSecondDriver(&self.pair);
         opened.state.edge.pair = &self.pair;
         if (live.live.boundary) |*edge| edge.pair = &self.pair;
+        self.opened = opened.*;
     }
 
     pub fn cpu(self: *Cpu1) *cpu_mod.Cpu {
@@ -116,6 +118,20 @@ pub const Cpu1 = struct {
     }
 
     pub fn close(self: *Cpu1, allocator: std.mem.Allocator) void {
+        if (self.opened) |h| {
+            const st = h.state;
+            if (st.persistent) |held| held.recorder.force() catch {};
+            if (st.window) |held| held.detachSecond();
+            st.edge.second = null;
+            st.edge.second_memory = null;
+            st.edge.pair = null;
+            st.files.pair = null;
+            st.loading.cpu[1] = null;
+            st.loading.memory[1] = null;
+            st.session.live.other = null;
+            if (st.session.live.boundary) |*edge| edge.pair = null;
+            self.opened = null;
+        }
         if (self.paired) |cpu0| {
             exclusive_peer.unpair(cpu0, &self.pair.core.cpu);
             cpu0.event_sender = null;

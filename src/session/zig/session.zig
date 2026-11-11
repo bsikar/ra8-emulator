@@ -110,6 +110,36 @@ pub const ZigSession = struct {
         return round.run(self, edge, target);
     }
 
+    /// Runs one scheduler slot on the phase's active core.
+    pub fn stepSlot(self: *ZigSession, cpu0_budget: u64, target: ?round.Target) Error!round.SlotStep {
+        self.started = true;
+        self.ended_index = self.index;
+        const edge = self.boundary orelse {
+            const want = @min(@as(u64, 1), cpu0_budget);
+            const before = self.core.cpu.slots;
+            const ended = zig_drive.runClocked(self.core, self.machine, want, self.watch, &self.clock);
+            return .{ .ended = ended, .cpu0_elapsed = self.core.cpu.slots - before };
+        };
+        if (self.other) |*other| {
+            if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
+            other.started = true;
+        }
+        defer zig_boundary.observe(edge);
+        return round.runSlot(self, edge, cpu0_budget, target);
+    }
+
+    pub fn launchStepFallback(self: *ZigSession, target: round.Target) Error!zig_drive.Ended {
+        self.started = true;
+        self.ended_index = self.index;
+        const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
+        if (self.other) |*other| {
+            if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
+            other.started = true;
+        }
+        defer zig_boundary.observe(edge);
+        return round.run(self, edge, target);
+    }
+
     /// Arms the closed-round checkpoints on the session's boundary.
     /// Refuses while a second core is attached (RA8EMU-768), the rule
     /// the wire snapshot and restore methods follow.

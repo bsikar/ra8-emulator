@@ -77,6 +77,7 @@ fn partBarrier(ctx: *anyopaque, event: observer.Barrier) void {
 pub const Recording = struct {
     allocator: Allocator,
     store: *store_mod.Store,
+    peer_store: ?*store_mod.Store = null,
     /// The two cores' cumulative slot counters, cpu0 first.
     slots: [2]*const u64,
     records: []Record = &.{},
@@ -221,7 +222,8 @@ pub const Recording = struct {
                         const restore = self.parts[index];
                         restore.raw(restore.ctx, @intCast(bytes.offset), bytes.pre);
                     } else {
-                        try self.store.rawWrite(@intCast(bytes.base + bytes.offset), bytes.pre);
+                        const s = if (bytes.initiator == .cpu1) (self.peer_store orelse self.store) else self.store;
+                        try s.rawWrite(@intCast(bytes.base + bytes.offset), bytes.pre);
                     }
                     bytes.deinit(self.allocator);
                     self.record_count -= 1;

@@ -7,6 +7,7 @@ const session = @import("session.zig");
 const CutBus = @import("cut_bus.zig").CutBus;
 
 pub const Target = struct { core: u1, slots: u64 };
+pub const SlotStep = struct { ended: drive.Ended, cpu0_elapsed: u64 = 0 };
 
 pub fn run(live: *session.ZigSession, edge: boundary.Boundary, target: ?Target) session.Error!drive.Ended {
     const selected = live.index;
@@ -28,6 +29,151 @@ pub fn run(live: *session.ZigSession, edge: boundary.Boundary, target: ?Target) 
     if (live.other) |other| scheduler.pairEvents(cpu0, other.core.cpu);
     var running: Round = .{ .live = live, .saved = saved, .edge = edge, .left = budget, .target = target };
     while (true) if (try running.advance()) |ended| return ended;
+}
+
+pub fn runSlot(live: *session.ZigSession, edge: boundary.Boundary, cpu0_budget: u64, target: ?Target) session.Error!SlotStep {
+    const selected = live.index;
+    defer live.switchTo(selected) catch unreachable;
+    const saved = edge.saved orelse &live.saved;
+    try live.switchTo(0);
+    const cpu0 = live.core.cpu;
+    var cutting: CutBus = undefined;
+    const inner = cpu0.bus;
+    if (edge.cut) |cut| {
+        cut.requester = &cpu0.banked;
+        cut.instruction = &cpu0.slots;
+        cutting = .{ .inner = inner, .cut = cut };
+        cpu0.bus = cutting.view();
+        cpu0.cut = cut;
+    }
+    defer cpu0.bus = inner;
+    if (live.other) |other| scheduler.pairEvents(cpu0, other.core.cpu);
+    if (saved.at.phase == .board) try closeBoard(saved, edge);
+    return switch (saved.at.phase) {
+        .cpu0 => slotCpu0(live, saved, edge, cpu0_budget, target),
+        .cpu1 => slotCpu1(live, saved, edge, target),
+        .board => unreachable,
+    };
+}
+
+fn limitOf(target: ?Target, core: u1) ?u64 {
+    const asked = target orelse return null;
+    return if (asked.core == core) asked.slots else null;
+}
+
+fn closeBoard(saved: *scheduler.State, edge: boundary.Boundary) session.Error!void {
+    try edge.tick(saved.stretch.carry);
+    saved.next();
+    try edge.checkpoint(saved.at.r);
+}
+
+fn finishCpu0Phase(saved: *scheduler.State, edge: boundary.Boundary) session.Error!void {
+    if (saved.at.phase == .board) return closeBoard(saved, edge);
+    const pair = edge.pair orelse return closeBoard(saved, edge);
+    const carry = saved.stretch.carry;
+    const inactive = carry == 0 or pair.second.state.fault != null or
+        pair.second.state.heldInReset(pair.core.memory) or
+        pair.second.state.turn(carry) == 0;
+    if (!inactive) return;
+    pair.openTurn(carry, chip.periph.clocks.timebase.default_hz);
+    if (pair.second.state.fault != null or pair.turn_state.open) pair.closeTurn();
+    try closeBoard(saved, edge);
+}
+
+fn checkStepTarget(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, target: ?Target, cpu0_elapsed: u64) session.Error!SlotStep {
+    const asked = target orelse return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
+    const phase_core: u1 = if (saved.at.phase == .cpu1) 1 else 0;
+    if (asked.core != phase_core) return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
+    try live.switchTo(asked.core);
+    const cpu = live.core.cpu;
+    if (cpu.slots < asked.slots or cpu.waiting != null) return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
+    if (asked.core == 0) {
+        if (saved.stretch.full == 0) {
+            saved.open(boundary.widthOf(edge), cpu.slots);
+            saved.base[1] = if (live.other) |other| other.core.cpu.slots else 0;
+        }
+        return .{ .ended = stepped(live, saved), .cpu0_elapsed = cpu0_elapsed };
+    }
+    const pair = edge.pair orelse return error.CoreNotAttached;
+    pair.openTurn(saved.stretch.carry, chip.periph.clocks.timebase.default_hz);
+    if (pair.second.state.fault != null) pair.closeTurn();
+    if (!pair.turn_state.open) {
+        try closeBoard(saved, edge);
+        return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
+    }
+    const settled = stepped(live, saved);
+    if (settled == .core) pair.second.state.fault = .{ .pc = cpu.regs.pc, .detail = @tagName(settled.core) };
+    return .{ .ended = settled, .cpu0_elapsed = cpu0_elapsed };
+}
+
+fn slotCpu0(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, cpu0_budget: u64, target: ?Target) session.Error!SlotStep {
+    try live.switchTo(0);
+    if (saved.cut) {
+        saved.endCpu0(true, edge.pair != null);
+        try finishCpu0Phase(saved, edge);
+        return checkStepTarget(live, saved, edge, target, 0);
+    }
+    const cpu = live.core.cpu;
+    const canonical = if (limitOf(target, 0)) |at| cpu.slots >= at else false;
+    if (cpu0_budget == 0 and !canonical and target == null) return .{ .ended = .count };
+    if (cpu0_budget == 0 and limitOf(target, 0) != null and cpu.waiting != null) return .{ .ended = .count };
+    if (saved.stretch.full == 0) {
+        saved.open(boundary.widthOf(edge), cpu.slots);
+        saved.base[1] = if (live.other) |other| other.core.cpu.slots else 0;
+    }
+    const max_stretch = if (target != null and cpu0_budget == 0) @as(u64, saved.stretch.left()) else @min(cpu0_budget, saved.stretch.left());
+    const want = @min(@as(u64, 1), max_stretch);
+    var slots: u64 = 0;
+    const ended = drive.runTarget(live.core, live.machine, want, live.watch, &live.clock, &slots, limitOf(target, 0));
+    const elapsed = if (ended == .count and cpu.waiting != null) max_stretch else slots;
+    cpu.idle_cycles +|= elapsed -| slots;
+    saved.advance(@intCast(elapsed), @intCast(slots));
+    const pending = if (edge.cut) |latch| latch.takePending() else null;
+    const cut = pending != null;
+    saved.cut = cut;
+    saved.cut_pending = pending orelse .{};
+    if (ended != .count) return .{ .ended = stopped(live, saved, ended), .cpu0_elapsed = elapsed };
+    if (cut and live.machine.halting and live.machine.pendingData()) {
+        var none: u64 = 0;
+        const polled = drive.runTarget(live.core, live.machine, 0, live.watch, &live.clock, &none, cpu.slots);
+        if (polled != .count) return .{ .ended = stopped(live, saved, polled), .cpu0_elapsed = elapsed };
+    }
+    if (cut or saved.stretch.left() == 0) {
+        saved.endCpu0(cut, edge.pair != null);
+        try finishCpu0Phase(saved, edge);
+    }
+    return checkStepTarget(live, saved, edge, target, elapsed);
+}
+
+fn slotCpu1(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, target: ?Target) session.Error!SlotStep {
+    const pair = edge.pair orelse return error.CoreNotAttached;
+    try live.switchTo(1);
+    pair.openTurn(saved.stretch.carry, chip.periph.clocks.timebase.default_hz);
+    if (pair.second.state.fault != null) pair.closeTurn();
+    if (!pair.turn_state.open) {
+        try closeBoard(saved, edge);
+        return checkStepTarget(live, saved, edge, target, 0);
+    }
+    const cpu = live.core.cpu;
+    const rem: u64 = pair.turn_state.share - pair.turn_state.elapsed;
+    const want = @min(@as(u64, 1), rem);
+    var slots: u64 = 0;
+    const ended = drive.runTarget(live.core, live.machine, want, live.watch, &live.clock, &slots, limitOf(target, 1));
+    const elapsed = if (ended == .count and cpu.waiting != null) rem else slots;
+    cpu.idle_cycles +|= elapsed -| slots;
+    pair.noteTurn(@intCast(elapsed), @intCast(slots));
+    saved.lengths[1] += @intCast(slots);
+    saved.at.o = saved.lengths[1];
+    saved.at.gap = .retired;
+    if (ended == .core) pair.second.state.fault = .{ .pc = cpu.regs.pc, .detail = @tagName(ended.core) };
+    if (ended != .count) return .{ .ended = stopped(live, saved, ended) };
+    if (pair.turn_state.elapsed == pair.turn_state.share) {
+        pair.closeTurn();
+        try closeBoard(saved, edge);
+    }
+    const out = try checkStepTarget(live, saved, edge, target, 0);
+    if (out.ended == .core) pair.second.state.fault = .{ .pc = cpu.regs.pc, .detail = @tagName(out.ended.core) };
+    return out;
 }
 
 const Round = struct {

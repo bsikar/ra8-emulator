@@ -51,6 +51,7 @@ pub const Slot = struct {
     post: Position,
     core: Core,
     kind: Kind,
+    retired: bool = true,
     delta: Delta,
     /// The post-state digest a re-executed complex slot must reproduce.
     digest: Digest = @splat(0),

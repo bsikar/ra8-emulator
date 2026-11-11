@@ -65,7 +65,7 @@ pub fn canStepBack(w: *window_engine.ReverseWindow, core: api.Core, count: u32) 
     var remaining = count;
     var pos = w.cursor();
     while (remaining > 0) {
-        while (pos > 0 and w.slotAt(pos - 1).core != tc) pos -= 1;
+        while (pos > 0 and !canonical_step.retiresOn(w.slotAt(pos - 1), tc)) pos -= 1;
         if (pos == 0) return false;
         pos -= 1;
         remaining -= 1;

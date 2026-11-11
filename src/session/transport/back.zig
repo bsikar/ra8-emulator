@@ -12,6 +12,7 @@ const position_mod = @import("../history/position.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
 const back_window = @import("back_window.zig");
+const run_slice = @import("../run_slice.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -40,10 +41,14 @@ pub const Back = struct {
     start: bool = false,
     /// Whether a window build was tried for this job (back_window.zig).
     windowed: bool = false,
+    /// Whether a sliced window rebuild is currently in progress.
+    rebuilding: bool = false,
     /// The base the machine queued at, fixed once: a cancel returns
-    /// the machine to this checkpoint exactly, whatever the replay
-    /// later rebased to.
+    /// the machine to this checkpoint or window origin exactly.
     origin: seek_engine.Base,
+    /// Fallback checkpoint `<= origin` when `origin` was `.window` and a
+    /// later fallback dropped that window.
+    origin_checkpoint: ?seek_engine.Base = null,
 };
 
 /// Validate, plan and queue a backward step against the bound history bridge.
@@ -110,6 +115,7 @@ fn queueAtGrid(self: *Transport, step: command_mod.Step, facts: seek_engine.Fact
         .plan => |plan| plan,
         .pending => return Error.NotReady,
     };
+    const origin_cp = if (plan.base == .window) checkpointAtOrBefore(self.session, grid.at, facts.checkpoints) else null;
     self.cancel();
     self.epoch += 1;
     // The replay recreates the recorded path one instruction at a time; wakes ride along.
@@ -124,9 +130,58 @@ fn queueAtGrid(self: *Transport, step: command_mod.Step, facts: seek_engine.Fact
         .budget = 1,
         .left = step.count,
         .dir = .back,
-        .back = .{ .cursor = grid.at, .base = plan.base, .origin = plan.base },
+        .back = .{ .cursor = grid.at, .base = plan.base, .origin = plan.base, .origin_checkpoint = origin_cp },
     };
     return ticket;
+}
+
+pub fn checkpointAtOrBefore(
+    session: *api.Session,
+    cursor: seek_engine.Position,
+    checkpoints: []const seek_engine.Checkpoint,
+) ?seek_engine.Base {
+    var best: ?seek_engine.Base = null;
+    for (checkpoints) |c| {
+        const cmp = session.comparePositions(c.position, cursor) catch continue;
+        if (cmp == .gt) continue;
+        if (best == null or c.position.r > best.?.checkpoint.position.r) {
+            best = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+        }
+    }
+    return best;
+}
+
+pub fn restoreOrigin(self: *Transport, back: *const Back) void {
+    restoreOriginPair(self, back.origin, back.origin_checkpoint);
+}
+
+pub fn restoreOriginPair(self: *Transport, origin: seek_engine.Base, fallback_cp: ?seek_engine.Base) void {
+    switch (origin) {
+        .current => {},
+        .checkpoint => self.restoreBase(origin) catch {},
+        .window => |win| {
+            if (self.session.window) |w| {
+                if (w.ready() and w.covers(win.position)) {
+                    walkWindowTo(self.session, w, win.position) catch {};
+                    return;
+                }
+            }
+            if (fallback_cp) |cp| self.restoreBase(cp) catch {};
+        },
+    }
+}
+
+fn walkWindowTo(session: *api.Session, w: *@import("../history/window_engine.zig").ReverseWindow, target: seek_engine.Position) !void {
+    while (w.cursor() > 0) {
+        const at = w.at() orelse break;
+        if ((session.comparePositions(at, target) catch break) != .gt) break;
+        _ = try w.undo();
+    }
+    while (w.cursor() < w.count()) {
+        const at = w.at() orelse break;
+        if ((session.comparePositions(at, target) catch break) != .lt) break;
+        _ = try w.redo();
+    }
 }
 
 /// Drive one backward step in two passes over the committed log.
@@ -150,6 +205,10 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     // stands at the history's beginning already: nothing to
     // restore, no earlier slot, so the step settles at once.
     if (back.target == null and back.start) return .{ .stop = .history_start };
+    if (back.rebuilding) {
+        _ = back_window.stepBuild(self, back);
+        return null;
+    }
     if (back.base == .window) {
         const w = self.session.window orelse return Error.NotReady;
         const canonical = @import("../history/canonical_step.zig");
@@ -159,29 +218,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         };
         _ = canonical.stepBack(w, core) catch |err| {
             if (err == canonical.Error.OutsideWindow) {
-                const bridge = self.history orelse return .{ .stop = .history_start };
-                var facts = bridge.facts(bridge.context) catch return .{ .stop = .history_start };
-                if (self.session.fork_router) |router| {
-                    facts.graph = router.graph;
-                    facts.active_line = router.active_line;
-                }
-                const cur_pos = if (self.session.grid) |g| g.at else back.cursor;
-                var earlier: ?seek_engine.Base = null;
-                for (facts.checkpoints) |c| {
-                    const before = self.session.comparePositions(c.position, cur_pos) catch continue;
-                    if (before != .lt) continue;
-                    const better = earlier == null or c.position.r > earlier.?.checkpoint.position.r;
-                    if (better) earlier = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
-                }
-                if (earlier) |base| {
-                    back.base = base;
-                    back.cursor = cur_pos;
-                    back.restored = false;
-                    back.target = null;
-                    back.seen = null;
-                    return null;
-                }
-                return .{ .stop = .history_start };
+                return outsideWindowFallback(self, w, back);
             }
             return err;
         };
@@ -196,9 +233,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         return null;
     }
     if (!back.windowed and back.base == .checkpoint) {
-        // The machine stands at the checkpoint: a window built from it
-        // serves this step; one that cannot be built leaves the replay.
-        if (back_window.build(self, job, back)) return null;
+        if (back_window.beginBuild(self, job, back)) return null;
         back.restored = false;
         return null;
     }
@@ -207,6 +242,43 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
         return discoverPass(self, job, back, grid);
     }
     return landPass(self, job, back, grid);
+}
+
+fn outsideWindowFallback(
+    self: *Transport,
+    w: *@import("../history/window_engine.zig").ReverseWindow,
+    back: *Back,
+) ?api.Ended {
+    const bridge = self.history orelse return .{ .stop = .history_start };
+    var facts = bridge.facts(bridge.context) catch return .{ .stop = .history_start };
+    if (self.session.fork_router) |router| {
+        facts.graph = router.graph;
+        facts.active_line = router.active_line;
+    }
+    const cur_pos = if (self.session.grid) |g| g.at else back.cursor;
+    const win_bound = w.hot_at orelse w.start();
+    var earlier_win: ?seek_engine.Base = null;
+    var earlier_cur: ?seek_engine.Base = null;
+    for (facts.checkpoints) |c| {
+        const entry: seek_engine.Base = .{ .checkpoint = .{ .id = c.id, .object = c.object, .position = c.position } };
+        if (win_bound) |bound| {
+            if ((self.session.comparePositions(c.position, bound) catch .gt) == .lt) {
+                if (earlier_win == null or c.position.r > earlier_win.?.checkpoint.position.r) earlier_win = entry;
+            }
+        }
+        if ((self.session.comparePositions(c.position, cur_pos) catch .gt) == .lt) {
+            if (earlier_cur == null or c.position.r > earlier_cur.?.checkpoint.position.r) earlier_cur = entry;
+        }
+    }
+    const chosen = earlier_win orelse earlier_cur orelse return .{ .stop = .history_start };
+    back.base = chosen;
+    back.cursor = cur_pos;
+    back.restored = false;
+    back.windowed = earlier_win == null;
+    back.rebuilding = false;
+    back.target = null;
+    back.seen = null;
+    return null;
 }
 
 fn discoverPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.Ended {
@@ -224,13 +296,9 @@ fn discoverPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.E
         return null;
     }
     if (before == .lt and grid.at.phase == corePhase(job.core)) back.seen = grid.at;
-    const ended = try self.session.run(job.core, .cont);
+    const ended = try run_slice.stepReplaySlot(self.session);
     const after = self.session.comparePositions(grid.at, back.cursor) catch return error.OtherLine;
     if (after == .lt and grid.at.phase == corePhase(job.core)) back.seen = grid.at;
-    // A one-instruction slice that used its budget made
-    // progress; anything else is a stop the replay met on the
-    // way, which settles the job with it, the way a seek's
-    // replay does.
     if (ended == .count) return null;
     return ended;
 }
@@ -251,7 +319,7 @@ fn landPass(self: *Transport, job: *Job, back: *Back, grid: anytype) !?api.Ended
         return null;
     }
     if (ord == .gt) return error.OtherLine;
-    const ended = try self.session.run(job.core, .cont);
+    const ended = try run_slice.stepReplaySlot(self.session);
     if (ended == .count) return null;
     return ended;
 }

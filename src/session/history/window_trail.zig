@@ -8,6 +8,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const store_mod = @import("ra8_chip").core.cpu.memory.store;
+const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const trail_mod = @import("trail.zig");
 const slot_mod = @import("window_slot.zig");
@@ -25,6 +26,7 @@ pub const ByteSwapRecord = struct {
     base: u32,
     offset: u64,
     part: ?u16,
+    initiator: Initiator = .none,
     data: []u8,
 };
 
@@ -39,6 +41,7 @@ pub const WindowTrail = struct {
     allocator: Allocator,
     recording: *trail_mod.Recording,
     store: *store_mod.Store,
+    peer_store: ?*store_mod.Store = null,
     capacity_bytes: usize,
     used_honest_bytes: usize = 0,
     slots: []SlotPayload = &.{},
@@ -121,6 +124,7 @@ pub const WindowTrail = struct {
                     .base = b.base,
                     .offset = b.offset,
                     .part = b.part,
+                    .initiator = b.initiator,
                     .data = b.pre,
                 };
                 total_payload_bytes += b.pre.len;
@@ -311,7 +315,12 @@ pub const WindowTrail = struct {
         try self.swapMemoryChunks(rec);
     }
 
+    pub fn storeFor(self: *const WindowTrail, initiator: Initiator) *store_mod.Store {
+        return if (initiator == .cpu1) (self.peer_store orelse self.store) else self.store;
+    }
+
     fn swapMemoryChunks(self: *WindowTrail, rec: *ByteSwapRecord) !void {
+        const s = self.storeFor(rec.initiator);
         const addr: u32 = @intCast(rec.base + rec.offset);
         var chunk_offset: usize = 0;
         var temp_buf: [256]u8 = undefined;
@@ -322,25 +331,29 @@ pub const WindowTrail = struct {
             const chunk_slice = rec.data[chunk_offset..][0..chunk_len];
             const temp = temp_buf[0..chunk_len];
 
-            try self.pureRead(chunk_addr, temp);
-            try self.store.rawWrite(chunk_addr, chunk_slice);
+            try pureReadFrom(s, chunk_addr, temp);
+            try s.rawWrite(chunk_addr, chunk_slice);
             @memcpy(chunk_slice, temp);
-            self.store.fan().notify(chunk_addr, chunk_len);
+            s.fan().notify(chunk_addr, chunk_len);
 
             chunk_offset += chunk_len;
         }
     }
 
     pub fn pureRead(self: *WindowTrail, address: u32, into: []u8) !void {
+        return pureReadFrom(self.store, address, into);
+    }
+
+    pub fn pureReadFrom(store: *store_mod.Store, address: u32, into: []u8) !void {
         if (into.len == 0) return;
-        if (self.store.port) |*port| if (port.geometry.locate(address, into.len)) |hit| {
+        if (store.port) |*port| if (port.geometry.locate(address, into.len)) |hit| {
             switch (hit.kind) {
                 .ospi => if (!port.flash.read(hit.offset, into)) return error.Unmapped,
                 .sdram => @memcpy(into, port.sdram[hit.offset..][0..into.len]),
             }
             return;
         };
-        const loc = self.store.locate(address, into.len) orelse return error.Unmapped;
+        const loc = store.locate(address, into.len) orelse return error.Unmapped;
         @memcpy(into, loc.bytes);
     }
 

@@ -190,8 +190,8 @@ pub const Transport = struct {
             // A backward job's cancel returns the machine to the origin
             // checkpoint it queued at, whatever its replay rebased to
             // meanwhile (the seek contract's cancel rule, prompt 17).
-            if (job.back) |*back| self.restoreBase(back.origin) catch {};
-            if (job.rc) |*rc| self.restoreBase(rc.origin) catch {};
+            if (job.back) |*back| back_mod.restoreOrigin(self, back);
+            if (job.rc) |*rc| reverse_mod.restoreOrigin(self, rc);
             if (job.dir == .back) {
                 if (self.session.smooth_rewind) |rewind| rewind.pause() catch {};
             }

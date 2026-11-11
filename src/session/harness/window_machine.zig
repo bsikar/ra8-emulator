@@ -12,6 +12,8 @@ const line = @import("../line.zig");
 const state = @import("../board/state.zig");
 const port_mod = @import("../history/window_port.zig");
 const core_stream = @import("../board/core_stream.zig");
+const round = @import("../zig/round.zig");
+const external_backing = @import("ra8_board").external.backing;
 
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
 const ppb_base: u32 = 0xE000_0000;
@@ -26,6 +28,10 @@ pub const Machine = struct {
     bus: *BoardBus,
     /// A replayed slot is in flight: the window's own walk, not the run.
     muted: bool = false,
+    slot_mode: bool = false,
+    slot_budget: u64 = std.math.maxInt(u64),
+    slot_target: ?round.Target = null,
+    last_cpu0_elapsed: u64 = 0,
     /// The live run's command, for the first slot of a run; later slots
     /// carry on with the stop machine as it stands.
     command: api.Run = .cont,
@@ -71,6 +77,31 @@ pub const Machine = struct {
         self.ran = true;
         self.ended = ended;
         return ended;
+    }
+
+    /// Runs one scheduler slot of the live run, arming `command` on the first
+    /// slot and carrying on across subsequent slots of the same command.
+    pub fn rawSlot(self: *Machine) !api.Ended {
+        const live = &self.session.live;
+        if (self.first) {
+            if (live.boundary) |edge| if (live.index == 1 and edge.pair == null) return error.CoreNotAttached;
+            switch (self.command) {
+                .run => {
+                    if (live.started) return error.AlreadyRunning;
+                    live.machine.begin();
+                },
+                .cont => if (live.started) live.machine.proceed() else live.machine.begin(),
+                .step => live.machine.step(),
+                .next => live.machine.stepOver(),
+                .finish => live.machine.stepOut(live.core.register(.lr), live.core.register(.sp)),
+            }
+            self.first = false;
+        }
+        const res = try live.stepSlot(self.slot_budget, self.slot_target);
+        self.last_cpu0_elapsed = res.cpu0_elapsed;
+        self.ran = true;
+        self.ended = res.ended;
+        return res.ended;
     }
 
     /// The core a slot taken now runs on: the one whose phase it is.
@@ -126,7 +157,9 @@ pub const Machine = struct {
         const was_muted = self.muted;
         session.setReplaying(true);
         self.muted = true;
+        self.slot_mode = true;
         defer {
+            self.slot_mode = false;
             self.muted = was_muted;
             session.setReplaying(was_replaying);
             session.setRunBudget(asked, prior) catch {};
@@ -143,7 +176,7 @@ pub const Machine = struct {
         _ = core;
         const self = of(context);
         const before = self.position();
-        const ended = try self.raw();
+        const ended = try self.rawSlot();
         if (ended != .count and std.meta.eql(before, self.position())) return port_mod.StepError.NoSlot;
     }
 
@@ -164,7 +197,13 @@ pub const Machine = struct {
     }
 
     fn touches(context: *anyopaque) u64 {
-        return of(context).touched;
+        const self = of(context);
+        var sum = self.touched;
+        if (external_backing.fabricOf(self.files.store)) |fabric| {
+            for (fabric.regions) |r| sum +%= r.reads +% r.writes;
+            for (fabric.pending) |p| sum +%= p;
+        }
+        return sum;
     }
 
     /// The bus's touched hook: counts the access. A read of the system

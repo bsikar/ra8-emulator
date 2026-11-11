@@ -91,7 +91,7 @@ pub fn slice(w: *ReverseWindow, max_slots: usize) !bool {
                 const at = w.port.position();
                 job.reached = at;
                 if (try order(at, job.target) != .lt) return finish(w);
-                try record.recordSlot(w, job.core);
+                try record.recordSlot(w, slotCore(w, job, at));
                 job.slots += 1;
             }
             return false;
@@ -110,6 +110,10 @@ pub fn cancel(w: *ReverseWindow) void {
     w.drop();
 }
 
+fn slotCore(w: *ReverseWindow, job: *const Job, at: Position) Core {
+    return if (at.phase == .cpu1) .cpu1 else if (w.port.cpu(.cpu1) != null) .cpu0 else job.core;
+}
+
 fn seek(w: *ReverseWindow, job: *Job, max_slots: usize) !bool {
     var n: usize = 0;
     while (n < max_slots) : (n += 1) {
@@ -122,7 +126,10 @@ fn seek(w: *ReverseWindow, job: *Job, max_slots: usize) !bool {
             return false;
         }
         const mark = w.recording.record_count;
-        try w.port.step(job.core);
+        const was_armed = w.recording.attached;
+        if (was_armed) w.recording.disarm();
+        defer if (was_armed) w.recording.arm();
+        try w.port.step(slotCore(w, job, at));
         record.discardFrom(w.recording, mark);
         if (try order(w.port.position(), at) != .gt) return engine.Error.NoProgress;
         job.slots += 1;
