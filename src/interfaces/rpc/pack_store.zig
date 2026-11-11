@@ -64,9 +64,15 @@ pub const PackStore = struct {
         return false;
     }
 
-    /// Queues one object for the next seal; one already held is a no-op.
+    /// Queues one object for the next seal; verifies full bytes when already held.
     pub fn put(self: *PackStore, id: ObjectId, data: []const u8) !void {
-        if (self.has(id)) return;
+        if (try self.get(self.gpa, id)) |existing| {
+            defer self.gpa.free(existing);
+            if (!std.mem.eql(u8, existing, data)) return error.ObjectConflict;
+            if (!ObjectId.compute(data).eql(id)) return error.ForgedIdentity;
+            return;
+        }
+        if (!ObjectId.compute(data).eql(id)) return error.ForgedIdentity;
         if (self.building.items.len == 0) {
             var w: std.Io.Writer.Allocating = .fromArrayList(self.gpa, &self.building);
             defer self.building = w.toArrayList();
@@ -105,7 +111,13 @@ pub const PackStore = struct {
     /// The bytes of the object, read from its pack or the waiting buffer;
     /// null when the store does not hold it. The caller owns the bytes.
     pub fn get(self: *PackStore, allocator: std.mem.Allocator, id: ObjectId) !?[]u8 {
-        for (self.entries.items) |entry| if (entry.object_id.eql(id)) return try self.decode(allocator, self.building.items[@intCast(entry.pack_offset)..]);
+        for (self.entries.items) |entry| {
+            if (!entry.object_id.eql(id)) continue;
+            const want: usize = session_pack.record_overhead + entry.compressed_len;
+            const start: usize = @intCast(entry.pack_offset);
+            if (start > self.building.items.len or want > self.building.items.len - start) return error.TruncatedPack;
+            return try decodeVerified(allocator, id, entry, self.building.items[start .. start + want]);
+        }
         for (self.sealed.items) |*index| {
             const entry = index.lookup(id) orelse continue;
             var leaf: [32]u8 = undefined;
@@ -115,15 +127,20 @@ pub const PackStore = struct {
             defer allocator.free(buf);
             const got = try self.bytes.readAt(self.bytes.context, pack_leaf, entry.pack_offset, buf);
             if (got != want) return error.TruncatedPack;
-            return try self.decode(allocator, buf);
+            return try decodeVerified(allocator, id, entry, buf);
         }
         return null;
     }
 
-    fn decode(self: *PackStore, allocator: std.mem.Allocator, bytes: []const u8) ![]u8 {
-        _ = self;
+    fn decodeVerified(allocator: std.mem.Allocator, expected_id: ObjectId, entry: pack_index.Entry, bytes: []const u8) ![]u8 {
         const got = try session_pack.decodeRecordFromSlice(allocator, bytes);
-        return got.record.data;
+        var rec = got.record;
+        errdefer rec.deinit(allocator);
+        if (got.consumed != bytes.len) return error.CorruptPack;
+        if (rec.compressed_len != entry.compressed_len or rec.uncompressed_len != entry.uncompressed_len) return error.CorruptPack;
+        if (!rec.object_id.eql(expected_id)) return error.ForgedIdentity;
+        if (!ObjectId.compute(rec.data).eql(expected_id)) return error.ForgedIdentity;
+        return rec.data;
     }
 
     /// Compacts the sealed packs against `live`: a pack more than 30% dead
@@ -198,17 +215,20 @@ pub const PackStore = struct {
     fn load(self: *PackStore, pack_id: u32) !void {
         var leaf: [32]u8 = undefined;
         const idx_leaf = try packName(&leaf, pack_id, "idx");
-        const index = self.readIndex(idx_leaf) catch try self.rebuild(pack_id);
+        const index = self.readIndex(pack_id, idx_leaf) catch try self.rebuild(pack_id);
         try self.sealed.append(self.gpa, index);
         self.next_id = @max(self.next_id, pack_id + 1);
     }
 
-    fn readIndex(self: *PackStore, leaf: []const u8) !pack_index.Index {
+    fn readIndex(self: *PackStore, pack_id: u32, leaf: []const u8) !pack_index.Index {
         const len = try self.bytes.length(self.bytes.context, leaf);
         const buf = try self.gpa.alloc(u8, @intCast(len));
         defer self.gpa.free(buf);
         if (try self.bytes.readAt(self.bytes.context, leaf, 0, buf) != buf.len) return error.TruncatedIndex;
-        return pack_index.decode(self.gpa, buf);
+        var index = try pack_index.decode(self.gpa, buf);
+        errdefer index.deinit(self.gpa);
+        if (index.pack_id != pack_id) return error.CorruptIndex;
+        return index;
     }
 
     fn rebuild(self: *PackStore, pack_id: u32) !pack_index.Index {
@@ -218,7 +238,9 @@ pub const PackStore = struct {
         const buf = try self.gpa.alloc(u8, @intCast(len));
         defer self.gpa.free(buf);
         if (try self.bytes.readAt(self.bytes.context, pack_leaf, 0, buf) != buf.len) return error.TruncatedPack;
-        const index = try pack_index.rebuildFromPack(self.gpa, buf);
+        var index = try pack_index.rebuildFromPack(self.gpa, buf);
+        errdefer index.deinit(self.gpa);
+        if (index.pack_id != pack_id) return error.CorruptPack;
         try self.writeIndex(pack_id, index.entries);
         return index;
     }

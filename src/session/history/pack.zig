@@ -111,6 +111,7 @@ pub fn encodeRecord(
     rec_flags: u8,
     data: []const u8,
 ) !usize {
+    if (!ObjectId.compute(data).eql(object_id)) return Error.ForgedIdentity;
     const compressed = compressFlate1(allocator, data) catch null;
     defer if (compressed) |c| allocator.free(c);
 
@@ -164,10 +165,14 @@ pub fn decodeRecordFromSlice(
     crc.update(payload);
     if (crc.final() != stored_crc) return Error.CorruptCrc;
 
-    const data = if (compression_mode == 1)
-        try decompressFlate(allocator, payload, uncompressed_len)
-    else
-        try allocator.dupe(u8, payload);
+    const data = switch (compression_mode) {
+        0 => blk: {
+            if (compressed_len != uncompressed_len) return Error.DecompressFailed;
+            break :blk try allocator.dupe(u8, payload);
+        },
+        1 => try decompressFlate(allocator, payload, uncompressed_len),
+        else => return Error.DecompressFailed,
+    };
     errdefer allocator.free(data);
 
     if (data.len != uncompressed_len) return Error.DecompressFailed;

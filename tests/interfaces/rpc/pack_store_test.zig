@@ -80,3 +80,102 @@ test "compaction rewrites a mostly dead pack into the live objects" {
     const again = try packs.compact(&live);
     try std.testing.expectEqual(@as(usize, 0), again.packs_removed);
 }
+
+test "put refuses corrupt sealed pack payload without overwriting" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const a = object(11);
+    const id_a = ObjectId.compute(&a);
+
+    const bind = try openBind(gpa, root);
+    defer _ = bind.close() catch {};
+    try bind.packs.put(id_a, &a);
+    try bind.packs.seal();
+
+    var leaf_buf: [32]u8 = undefined;
+    const pack_leaf = try pack_store.packName(&leaf_buf, 1, "pack");
+    const store = ra8.host.history.storage.Store.from(&bind.session);
+    const before = try ra8.rpc.object_read.read(store, gpa, pack_leaf);
+    defer gpa.free(before);
+
+    var corrupted = try gpa.dupe(u8, before);
+    defer gpa.free(corrupted);
+    corrupted[ra8.session.history_pack.header_len + ra8.session.history_pack.record_header_len] ^= 0x01;
+    {
+        const file = try store.vtable.open(store.context, .objects, pack_leaf, .update);
+        defer file.vtable.close(file.context);
+        try file.vtable.write(file.context, 0, corrupted);
+        try file.vtable.sync(file.context);
+    }
+
+    try std.testing.expectError(error.CorruptCrc, bind.packs.put(id_a, &a));
+    try std.testing.expectEqual(@as(usize, 0), bind.packs.entries.items.len);
+    const after = try ra8.rpc.object_read.read(store, gpa, pack_leaf);
+    defer gpa.free(after);
+    try std.testing.expectEqualSlices(u8, corrupted, after);
+}
+
+test "put refuses pending full-byte mismatch and forged fresh identity" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const a = object(21);
+    const b = object(39);
+    const id_a = ObjectId.compute(&a);
+    const id_c = ObjectId.compute("other genuine payload");
+
+    const bind = try openBind(gpa, root);
+    defer _ = bind.close() catch {};
+
+    try std.testing.expectError(error.ForgedIdentity, bind.packs.put(id_c, &b));
+    try std.testing.expect(!bind.packs.has(id_c));
+
+    try bind.packs.put(id_a, &a);
+    try std.testing.expectError(error.ObjectConflict, bind.packs.put(id_a, &b));
+    const still_a = (try bind.packs.get(gpa, id_a)).?;
+    defer gpa.free(still_a);
+    try std.testing.expectEqualSlices(u8, &a, still_a);
+}
+
+test "get refuses forged CRC-valid index pointing idA at record B" {
+    const gpa = std.testing.allocator;
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const root = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(root);
+    const a = object(51);
+    const b = object(77);
+    const id_a = ObjectId.compute(&a);
+    const id_b = ObjectId.compute(&b);
+
+    const bind = try openBind(gpa, root);
+    defer _ = bind.close() catch {};
+    try bind.packs.put(id_b, &b);
+    try bind.packs.seal();
+
+    const entry_b = bind.packs.sealed.items[0].lookup(id_b).?;
+    const forged_entries = [_]ra8.session.history_pack_index.Entry{.{
+        .object_id = id_a,
+        .xxh3_prefilter = id_a.prefilter(),
+        .pack_offset = entry_b.pack_offset,
+        .compressed_len = entry_b.compressed_len,
+        .uncompressed_len = entry_b.uncompressed_len,
+    }};
+    var idx_buf: std.Io.Writer.Allocating = .init(gpa);
+    defer idx_buf.deinit();
+    try ra8.session.history_pack_index.encode(gpa, &idx_buf.writer, 1, &forged_entries);
+
+    var leaf_buf: [32]u8 = undefined;
+    const idx_leaf = try pack_store.packName(&leaf_buf, 1, "idx");
+    try ra8.host.history.pack_file.writeAtomic(&bind.session, idx_leaf, idx_buf.written());
+
+    const reopened = try pack_store.PackStore.open(gpa, &bind.session);
+    defer reopened.close();
+    try std.testing.expectError(error.ForgedIdentity, reopened.get(gpa, id_a));
+    try std.testing.expectError(error.ForgedIdentity, reopened.put(id_a, &a));
+}

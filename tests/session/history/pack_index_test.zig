@@ -88,3 +88,34 @@ test "Pack index robustness: index rebuild from pack after index loss" {
     defer rec_b.deinit(allocator);
     try std.testing.expectEqualStrings(data_b, rec_b.data);
 }
+
+test "Pack index rebuild refuses CRC-valid record with forged ObjectId" {
+    const allocator = std.testing.allocator;
+    const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
+    const genuine = "genuine object bytes";
+    const forged = "forged bytes masquerading under genuine id";
+    const genuine_id = ObjectId.compute(genuine);
+
+    var raw: std.Io.Writer.Allocating = try .initCapacity(allocator, 256);
+    defer raw.deinit();
+    try pack.writeHeader(&raw.writer, 3);
+
+    var hdr: [pack.record_header_len]u8 = @splat(0);
+    @memcpy(hdr[0..16], &genuine_id.bytes);
+    std.mem.writeInt(u32, hdr[16..20], @intCast(forged.len), .little);
+    std.mem.writeInt(u32, hdr[20..24], @intCast(forged.len), .little);
+    hdr[24] = 0;
+    hdr[25] = pack.flags.page;
+
+    var crc = Crc32c.init();
+    crc.update(&hdr);
+    crc.update(forged);
+
+    try raw.writer.writeAll(&hdr);
+    try raw.writer.writeAll(forged);
+    var trailer: [4]u8 = undefined;
+    std.mem.writeInt(u32, &trailer, crc.final(), .little);
+    try raw.writer.writeAll(&trailer);
+
+    try std.testing.expectError(error.CorruptPack, pack_index.rebuildFromPack(allocator, raw.written()));
+}

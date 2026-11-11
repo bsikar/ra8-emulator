@@ -154,36 +154,30 @@ pub fn rebuildFromPack(allocator: std.mem.Allocator, pack_bytes: []const u8) Err
 
     var at: usize = pack_mod.header_len;
     while (at < pack_bytes.len) {
-        if (at + pack_mod.record_overhead > pack_bytes.len) return Error.CorruptPack;
-
-        const obj_id = ObjectId{ .bytes = pack_bytes[at..][0..16].* };
-        const uncompressed_len = std.mem.readInt(u32, pack_bytes[at + 16 ..][0..4], .little);
-        const compressed_len = std.mem.readInt(u32, pack_bytes[at + 20 ..][0..4], .little);
-
-        const total_rec = pack_mod.record_overhead + @as(usize, compressed_len);
-        if (at + total_rec > pack_bytes.len) return Error.CorruptPack;
-
-        const payload = pack_bytes[at + pack_mod.record_header_len .. at + pack_mod.record_header_len + compressed_len];
-        const stored_crc = std.mem.readInt(u32, pack_bytes[at + pack_mod.record_header_len + compressed_len ..][0..4], .little);
-
-        var crc = Crc32c.init();
-        crc.update(pack_bytes[at .. at + pack_mod.record_header_len]);
-        crc.update(payload);
-        if (crc.final() != stored_crc) return Error.CorruptPack;
+        const decoded = pack_mod.decodeRecordFromSlice(allocator, pack_bytes[at..]) catch |err| switch (err) {
+            error.OutOfMemory => return Error.OutOfMemory,
+            else => return Error.CorruptPack,
+        };
+        var rec = decoded.record;
+        defer rec.deinit(allocator);
 
         list.append(allocator, .{
-            .object_id = obj_id,
-            .xxh3_prefilter = obj_id.prefilter(),
+            .object_id = rec.object_id,
+            .xxh3_prefilter = rec.object_id.prefilter(),
             .pack_offset = at,
-            .compressed_len = compressed_len,
-            .uncompressed_len = uncompressed_len,
+            .compressed_len = rec.compressed_len,
+            .uncompressed_len = rec.uncompressed_len,
         }) catch return Error.OutOfMemory;
 
-        at += total_rec;
+        at += decoded.consumed;
     }
 
     const entries = list.toOwnedSlice(allocator) catch return Error.OutOfMemory;
+    errdefer allocator.free(entries);
     std.mem.sort(Entry, entries, {}, Entry.order);
+    for (1..entries.len) |i| {
+        if (entries[i - 1].object_id.order(entries[i].object_id) != .lt) return Error.CorruptPack;
+    }
 
     return .{
         .pack_id = pack_id,
