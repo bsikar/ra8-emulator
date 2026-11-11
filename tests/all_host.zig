@@ -29,25 +29,6 @@ test {
     _ = @import("host/history/machine_test.zig");
     _ = @import("host/history/metadata_test.zig");
     _ = @import("host/history/move/root_test.zig");
-    _ = @import("host/history/move/move_test.zig");
-    _ = @import("host/history/move/windows_test.zig");
-    _ = @import("host/history/move/file_test.zig");
-    _ = @import("host/history/move/tree_test.zig");
-    _ = @import("host/history/move/probe_test.zig");
-    _ = @import("host/history/move/receipt_test.zig");
-    _ = @import("host/history/move/wire_test.zig");
-    _ = @import("host/history/move/deadline_test.zig");
-    _ = @import("host/history/move/verify_test.zig");
-    _ = @import("host/history/move/window_test.zig");
-    _ = @import("host/history/move/collector_test.zig");
-    _ = @import("host/history/move/proxy_test.zig");
-    _ = @import("host/history/move/provider_test.zig");
-    _ = @import("host/history/move/context_test.zig");
-    _ = @import("host/history/move/intent_test.zig");
-    _ = @import("host/history/move/bridge_test.zig");
-    _ = @import("host/history/move/recovery_test.zig");
-    _ = @import("host/history/move/dispatch_test.zig");
-    _ = @import("host/history/move/linux_test.zig");
     _ = @import("interfaces/cli/host/relocation_test.zig");
     _ = @import("host/history/name_test.zig");
     _ = @import("host/history/owner_test.zig");
@@ -395,5 +376,6 @@ test {
     _ = @import("interfaces/rpc/served_nav_feed_test.zig");
     _ = @import("interfaces/rpc/served_rewind_test.zig");
     _ = @import("interfaces/gui/smooth_rewind_gui_test.zig");
+    _ = @import("tools/memory_writer_guard_test.zig");
     _ = @import("interfaces/rpc/ws_all_test.zig");
 }

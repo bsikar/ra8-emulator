@@ -8,4 +8,6 @@ test {
     _ = @import("load_test.zig");
     _ = @import("extra_test.zig");
     _ = @import("initiator_test.zig");
+    _ = @import("store_families_test.zig");
+    _ = @import("writer_boundary_test.zig");
 }

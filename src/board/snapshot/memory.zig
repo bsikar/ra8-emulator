@@ -228,7 +228,7 @@ fn backing(store: *Store, base: u32, len: u32) Error![]u8 {
             else => Error.Unbacked,
         };
     }
-    return (store.extra.locate(base, len) orelse return Error.Unbacked).bytes;
+    return (store.extra.locateMut(base, len) orelse return Error.Unbacked).bytes;
 }
 
 const LiveCounts = [memmap.ram.len + 1 + @as(Store, .{}).extra.windows.len]u32;

@@ -23,6 +23,7 @@ pub fn compile(b: *std.Build, name: []const u8, root: []const u8, target: std.Bu
     tests.root_module.addImport("gate", imports.gate);
     tests.root_module.addImport("terms", imports.terms);
     tests.root_module.addImport("example_table", imports.table);
+    tests.root_module.addImport("memory_writer_guard", b.createModule(.{ .root_source_file = b.path("tools/memory_writer_guard.zig"), .target = target, .optimize = optimize }));
     testPaths(b, tests, exe, move_peer, lifecycle_peer);
     return tests;
 }

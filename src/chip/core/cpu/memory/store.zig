@@ -12,11 +12,14 @@ pub const Error = error{OutOfMemory};
 pub const AccessError = error{Unmapped} || Error;
 pub const MapError = extra.Error;
 
-/// Where a byte write lands: the canonical backing region's base, the
-/// offset inside it, and the mutable host bytes (RA8EMU-D1). Aliases fold
-/// onto the region they view, so every write into one storage reports one
+/// Where a byte access lands: the canonical backing region's base, the
+/// offset inside it, and the read-only host bytes (RA8EMU-D1). Aliases fold
+/// onto the region they view, so every access into one storage reports one
 /// identity.
-pub const Located = struct { base: u32, offset: usize, bytes: []u8 };
+pub const Located = struct { base: u32, offset: usize, bytes: []const u8 };
+
+/// Mutable backing resolution reserved for hooked writers and raw restore.
+pub const LocatedMut = struct { base: u32, offset: usize, bytes: []u8 };
 
 pub const Store = struct {
     touched: @import("touched.zig").Tracker = .{},
@@ -100,9 +103,14 @@ pub const Store = struct {
         self.notifyCodeRanges();
     }
 
-    pub fn touches(self: *const Store) *@import("touched.zig").Tracker {
+    pub fn touches(self: *const Store) *const @import("touched.zig").Tracker {
         if (self.lender) |first| return first.touches();
-        return @constCast(&self.touched);
+        return &self.touched;
+    }
+
+    pub fn touchesMut(self: *Store) *@import("touched.zig").Tracker {
+        if (self.lender) |first| return first.touchesMut();
+        return &self.touched;
     }
 
     pub fn region(self: *const Store, base: u32) ?[]const u8 {
@@ -116,7 +124,7 @@ pub const Store = struct {
         return hit.bytes;
     }
 
-    /// Resolve an access to the storage it mutates, with the canonical
+    /// Resolve a read-only access to its backing storage, with the canonical
     /// region base the trail records (RA8EMU-D1). OSPI stays out: its
     /// erased inversion and NOR program semantics cannot be bypassed.
     pub fn locate(self: *const Store, address: u32, len: usize) ?Located {
@@ -136,6 +144,28 @@ pub const Store = struct {
             return .{ .base = base, .offset = offset, .bytes = bytes[offset..][0..len] };
         }
         const hit = self.extra.locate(address, len) orelse return null;
+        return .{ .base = hit.base, .offset = hit.offset, .bytes = hit.bytes };
+    }
+
+    /// Resolve an access to the mutable backing storage it mutates; reserved
+    /// for hooked writers and raw restore (RA8EMU-D1).
+    pub fn locateMut(self: *Store, address: u32, len: usize) ?LocatedMut {
+        if (self.port) |*port| {
+            if (port.geometry.locate(address, len)) |hit| {
+                if (hit.kind == .sdram) return .{ .base = memmap.sdram_base, .offset = hit.offset, .bytes = port.sdram[hit.offset..][0..len] };
+                return null;
+            }
+            if (port.geometry.overlaps(address, len)) return null;
+        }
+        for (memmap.ram, 0..) |entry, index| {
+            if (address < entry.base or address >= entry.end()) continue;
+            const offset = address - entry.base;
+            const bytes = self.pages[index] orelse return null;
+            if (offset > bytes.len or len > bytes.len - offset) return null;
+            const base = viewOf(entry.base) orelse entry.base;
+            return .{ .base = base, .offset = offset, .bytes = bytes[offset..][0..len] };
+        }
+        const hit = self.extra.locateMut(address, len) orelse return null;
         return .{ .base = hit.base, .offset = hit.offset, .bytes = hit.bytes };
     }
 
@@ -169,7 +199,7 @@ pub const Store = struct {
             port.meter.note(initiator, hit, .write, bytes.len);
             return;
         };
-        const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;
+        const target = self.locateMut(address, bytes.len) orelse return AccessError.Unmapped;
         self.hookBytes(initiator, target.base, target.offset, target.bytes, bytes);
         @memcpy(target.bytes, bytes);
     }
@@ -183,7 +213,7 @@ pub const Store = struct {
     /// nothing, the sectors the shadow restores re-executing as usual.
     pub fn rawWrite(self: *Store, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
-        self.touches().invalidate();
+        self.touchesMut().invalidate();
         if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
                 .ospi => port.flash.rawWrite(hit.offset, bytes),
@@ -191,7 +221,7 @@ pub const Store = struct {
             }
             return;
         };
-        const target = self.locate(address, bytes.len) orelse return AccessError.Unmapped;
+        const target = self.locateMut(address, bytes.len) orelse return AccessError.Unmapped;
         @memcpy(target.bytes, bytes);
         self.notifyCodeRanges();
     }
@@ -200,7 +230,7 @@ pub const Store = struct {
     /// barrier entry, and ranges this store zeroes drop formed blocks so
     /// restored code executes fresh.
     pub fn barrier(self: *Store, event: observer.Barrier) void {
-        if (event == .snapshot_load) self.touches().invalidate();
+        if (event == .snapshot_load) self.touchesMut().invalidate();
         if (self.trail()) |o| o.barrier(event);
     }
 
@@ -254,8 +284,8 @@ pub const Store = struct {
         return self.pages[indexOf(base) orelse return null];
     }
 
-    inline fn hookBytes(self: *const Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8, new: []const u8) void {
-        self.touches().note(base, offset, new.len);
+    inline fn hookBytes(self: *Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8, new: []const u8) void {
+        self.touchesMut().note(base, offset, new.len);
         if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new });
     }
 };

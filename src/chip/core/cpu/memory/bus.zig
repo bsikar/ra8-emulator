@@ -13,7 +13,7 @@ pub const MemoryBus = struct {
 
     pub fn view(self: *MemoryBus) bus.Bus {
         self.direct = .{
-            .touched = self.store.touches(),
+            .touched = self.store.touchesMut(),
             .flash = self.store.mutRegion(memmap.mram_base),
             .sram = self.store.mutRegion(memmap.sram_base),
             .enabled = self.fast_enabled,

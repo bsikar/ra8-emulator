@@ -16,6 +16,9 @@ pub const Error = error{ Mapped, Full, OutOfMemory };
 /// window alone filled it, so an image page there failed to map (RA8EMU-580).
 pub const capacity = 32;
 
+pub const Located = struct { base: u32, offset: usize, bytes: []const u8 };
+pub const LocatedMut = struct { base: u32, offset: usize, bytes: []u8 };
+
 const Window = struct {
     base: u32,
     bytes: []u8,
@@ -44,10 +47,22 @@ pub const Extra = struct {
         self.windows[slot] = .{ .base = base, .bytes = bytes };
     }
 
-    /// Where an access lands: the window's base, the offset inside it and
-    /// the mutable host bytes (RA8EMU-D1). The window base is the write's
-    /// storage identity.
-    pub fn locate(self: *const Extra, address: u32, len: usize) ?struct { base: u32, offset: usize, bytes: []u8 } {
+    /// Where a read lands: the window's base, the offset inside it and the
+    /// read-only host bytes (RA8EMU-D1).
+    pub fn locate(self: *const Extra, address: u32, len: usize) ?Located {
+        for (self.windows) |held| {
+            const window = held orelse continue;
+            if (address < window.base or address >= window.end()) continue;
+            const offset = address - window.base;
+            if (len > window.bytes.len - offset) return null;
+            return .{ .base = window.base, .offset = offset, .bytes = window.bytes[offset..][0..len] };
+        }
+        return null;
+    }
+
+    /// Mutable backing bytes inside a mapped window, reserved for hooked
+    /// writers and snapshot restore (RA8EMU-D1).
+    pub fn locateMut(self: *Extra, address: u32, len: usize) ?LocatedMut {
         for (self.windows) |held| {
             const window = held orelse continue;
             if (address < window.base or address >= window.end()) continue;
