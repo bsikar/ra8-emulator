@@ -106,6 +106,11 @@ test {
     _ = @import("history/prefetch_test.zig");
     _ = @import("history/diff_engine_test.zig");
     _ = @import("harness_checkpoints_test.zig");
+    _ = @import("harness/common_oracle_test.zig");
+    _ = @import("harness/common_stream_test.zig");
+    _ = @import("harness/common_nav_test.zig");
+    _ = @import("harness/common_sources_replay_test.zig");
+    _ = @import("harness/common_net_usbip_replay_test.zig");
     _ = @import("zig/boundary_test.zig");
     _ = @import("core_view_test.zig");
     _ = @import("debug_read_test.zig");
