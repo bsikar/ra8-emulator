@@ -3,6 +3,7 @@
 //! with no state hook, or a session with CPU1 attached, refuses.
 const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
+const harness_files = @import("ra8_session").harness.files;
 const proto = @import("rpc.zig");
 const handlers = @import("handlers.zig");
 
@@ -17,6 +18,7 @@ fn refused(err: anyerror) Ack {
 
 /// Write the whole run to `path`.
 pub fn snapshot(context: *Context, args: proto.StatePath) Ack {
+    harness_files.bareName(args.path) catch |err| return refused(err);
     const files = context.state orelse return refused(error.NoStateFiles);
     files.save(args.path) catch |err| return refused(err);
     return ack;
@@ -25,6 +27,7 @@ pub fn snapshot(context: *Context, args: proto.StatePath) Ack {
 /// Put the run back as `path` holds it. A stop still owed to the client
 /// belongs to the run that was replaced, so it is dropped.
 pub fn restore(context: *Context, args: proto.StatePath) Ack {
+    harness_files.bareName(args.path) catch |err| return refused(err);
     const files = context.state orelse return refused(error.NoStateFiles);
     files.restore(args.path) catch |err| return refused(err);
     context.pending = null;
