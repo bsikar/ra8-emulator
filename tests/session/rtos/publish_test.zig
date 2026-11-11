@@ -25,13 +25,14 @@ test "grid strict stacked RTOS and TXM preserve awake reach and saved boundary w
     var counter: Counter = .{};
     var saved: ra8.chip.core.scheduler.State = .{};
     var cut: ra8.chip.core.cpu.cpu.systick_cut.Cut = .{};
-    var publisher: Publisher = .{ .trace = &trace, .stream = &stream, .inner = .{ .context = &counter, .tickFn = Counter.tick, .awakeFn = Counter.awake, .saved = &saved, .cut = &cut } };
+    var publisher: Publisher = .{ .trace = &trace, .stream = &stream, .inner = .{ .context = &counter, .tickFn = Counter.tick, .awakeFn = Counter.awake, .saved = &saved, .cut = &cut, .store = &store } };
     var modules: ra8.session.txm.publish.Watcher = .{ .head_at = 0, .memory = .{ .guest = .{ .store = &store } }, .stream = &stream, .inner = publisher.hook() };
     const hook = modules.hook();
     try std.testing.expect(hook.awakeFn != null);
     try std.testing.expectEqual(@as(u32, 700), hook.awakeFn.?(hook.context, 100));
     try std.testing.expect(hook.saved == &saved);
     try std.testing.expect(hook.cut == &cut);
+    try std.testing.expect(hook.store == &store);
 }
 
 fn expectRtos(event: stream_mod.Event, kind: stream_mod.Event.Kind, core: stream_mod.Core, when: u64, thread: u32, exception: u16) !void {

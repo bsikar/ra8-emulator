@@ -91,8 +91,9 @@ test "an observation reaches the inner boundary and publishes no module change" 
     var stream: stream_mod.Stream = .{};
     const id = stream.subscribe().?;
     var seen: Seen = .{};
-    var watcher: publish.Watcher = .{ .head_at = 0, .memory = .{ .guest = .{ .store = &store } }, .stream = &stream, .inner = .{ .context = &seen, .tickFn = Seen.tick, .observeFn = Seen.observe } };
+    var watcher: publish.Watcher = .{ .head_at = 0, .memory = .{ .guest = .{ .store = &store } }, .stream = &stream, .inner = .{ .context = &seen, .tickFn = Seen.tick, .observeFn = Seen.observe, .store = &store } };
     const edge = watcher.hook();
+    try std.testing.expect(edge.store == &store);
     ra8.session.step_hook.zig.boundary.observe(edge);
     try std.testing.expectEqual(@as(u32, 1), seen.observed);
     var out: [2]stream_mod.Event = undefined;
