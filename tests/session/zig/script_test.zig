@@ -235,6 +235,7 @@ test "speed moves the board's pacer mid-script and refuses a bad factor" {
 test "step-back, rewind and timeline walk the recorded window (RA8EMU-1170)" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf",
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const open_session = opened.session();

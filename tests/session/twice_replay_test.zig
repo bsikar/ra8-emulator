@@ -54,6 +54,7 @@ test "a checkpoint's object restores the run and a replay lands its next checkpo
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();

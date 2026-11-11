@@ -183,6 +183,7 @@ test {
     _ = @import("rtos_load_wait_test.zig");
     _ = @import("rtos_clock_test.zig");
     _ = @import("rtos/file_test.zig");
+    _ = @import("file_ops_test.zig");
     _ = @import("../interfaces/cli/report/json/json_test.zig");
     _ = @import("../interfaces/cli/report/json/run_test.zig");
     _ = @import("../interfaces/cli/report/json/protect_test.zig");

@@ -9,7 +9,7 @@ const ra8 = @import("ra8");
 const elf_path = "tests/fixtures/dfu/dfu_bootloader.elf";
 
 test "steps are recorded and a rewind puts the run back (RA8EMU-1170)" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     const history = opened.history();
@@ -37,6 +37,7 @@ test "the ring drops its oldest frame past the stated capacity (RA8EMU-1170)" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = elf_path,
         .history_frames = 4,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();

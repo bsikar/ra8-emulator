@@ -150,6 +150,7 @@ pub const Served = struct {
             .history_disk = if (bind) |b| b.disk else if (ram) |r| r.budget else null,
             .history_checkpoint_cap = if (bind) |b| b.checkpoint_cap else 0,
             .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
+            .files = @import("ra8_host").session_files.cwd(@import("ra8_session").file_ops.Ops),
         });
         errdefer owner.deinit();
         _ = owner.watchModules();
@@ -360,11 +361,7 @@ fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]
     const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
     const image = owner.loadedImage(which) orelse return error.NoImage;
     var w: std.Io.Writer = .fixed(out);
-    if (json) {
-        try region_map_json.write(&w, image, &region_map.ek_ra8d2);
-    } else {
-        try region_map_text.render(&w, image, &region_map.ek_ra8d2);
-    }
+    if (json) try region_map_json.write(&w, image, &region_map.ek_ra8d2) else try region_map_text.render(&w, image, &region_map.ek_ra8d2);
     return w.buffered();
 }
 /// The blocks on the board's bus, or one block's registers (RA8EMU-818).

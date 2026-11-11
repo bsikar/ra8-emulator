@@ -157,7 +157,7 @@ test "no CPU1 prints nothing for CPU1" {
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
     var tracers: rtos_hook.second.Tracers = .{};
-    try rtos_hook.second.print(&out.writer, std.testing.io, std.Io.Dir.cwd(), .{ .trace_rtos = true, .cpu_load = true }, &tracers, null);
+    try rtos_hook.second.print(&out.writer, std.testing.io, null, .{ .trace_rtos = true, .cpu_load = true }, &tracers, null);
     try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
 

@@ -24,7 +24,8 @@ test "plain Clock failed restore keeps C6 flow then commit closes it once" {
     defer std.testing.allocator.free(clean_path);
     const bad_path = try std.fs.path.join(std.testing.allocator, &.{ root, "bad" });
     defer std.testing.allocator.free(bad_path);
-    var clock: Clock = .{ .io = std.testing.io, .memory = .{ .store = &rig.store }, .board = &rig.board, .timebase = &rig.edge.timebase, .state = .{ .save = clean_path } };
+    const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
+    var clock: Clock = .{ .io = std.testing.io, .memory = .{ .store = &rig.store }, .board = &rig.board, .timebase = &rig.edge.timebase, .state = .{ .save = clean_path, .files = host_files } };
     defer clock.deinitSnapshot();
     const owner = clock.snapshotBinding();
     const at: ra8.components.endpoint.Endpoint = .{ .uart = .{ .channel = 4 } };

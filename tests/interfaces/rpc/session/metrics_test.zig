@@ -149,7 +149,7 @@ test "createReport synthesizes host and dual-core metrics" {
 }
 
 test "metrics RPC handler responds successfully on session harness" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
 
     var scratch: [64]u8 = undefined;
@@ -238,7 +238,7 @@ test "MetricsReport codec strictly rejects under-read and over-read" {
 }
 
 test "rapid repeated RPC queries stress test (10,000 iterations)" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
 
     var scratch: [64]u8 = undefined;

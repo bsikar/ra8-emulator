@@ -7,9 +7,10 @@
 //! instrumentation the reports read.
 //!
 //! It imports the board, the chip and the components, whose plug, fault
-//! and input types the Session API speaks. It never imports the host: a
-//! file it reads comes through the `std.Io` its caller hands in.
+//! and input types the Session API speaks. It never imports the host or opens
+//! host files: bytes and state storage come through caller slices or `file_ops`.
 pub const board = @import("board/board.zig");
+pub const file_ops = @import("file_ops.zig");
 pub const display = @import("display.zig");
 pub const panel = @import("panel/panel.zig");
 pub const boot_slots = @import("boot_slots.zig");

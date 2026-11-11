@@ -19,7 +19,7 @@ const history_elf = rig.history_elf;
 const image_path = rig.image_path;
 
 test "a backward step is refused without a bridge" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .step = .{ .core = .cpu0, .dir = .back } }));
@@ -36,6 +36,7 @@ test "a backward step queues against a bound bridge and reports its direction" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -68,6 +69,7 @@ test "a backward step replays to the stop before the cursor" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -104,6 +106,7 @@ test "a backward step at the log's beginning settles with history_start" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -122,7 +125,7 @@ test "a backward step at the log's beginning settles with history_start" {
 }
 
 test "a reverse-continue is refused without a bridge" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     try std.testing.expectError(transport.Error.NotReady, t.command(.rcont));
@@ -139,6 +142,7 @@ test "a reverse-continue replays to the latest hit before the cursor" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -187,6 +191,7 @@ test "a reverse-continue with no stops behind it settles with history_start" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
@@ -212,6 +217,7 @@ test "cancelling a reverse-continue restores the origin checkpoint" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -257,6 +263,7 @@ test "a backward step outside window falls back to checkpoint replay and reports
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();

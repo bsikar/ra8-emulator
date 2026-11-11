@@ -8,6 +8,7 @@
 const std = @import("std");
 const boot = @import("ra8_chip").core.cpu.boot;
 const api = @import("api.zig");
+const file_ops = @import("file_ops.zig");
 const Board = @import("ra8_board").board.Board;
 const session_plug = @import("board/plug.zig");
 const session_faults = @import("board/faults/faults.zig");
@@ -29,14 +30,25 @@ pub const Run = struct {
     session: api.Session,
     applier: Applier,
 
-    pub fn open(self: *Run, board: *Board, io: std.Io, dir: std.Io.Dir, path: []const u8) !void {
+    pub fn open(self: *Run, board: *Board, io: std.Io, reader: file_ops.Reader, path: []const u8) !void {
         self.arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         errdefer self.arena.deinit();
         const arena = self.arena.allocator();
-        const text = dir.readFileAlloc(io, path, arena, .limited(max_bytes)) catch |err| {
+        const text = reader.readAlloc(io, path, arena, max_bytes) catch |err| {
             std.debug.print("--faults {s}: {s}\n", .{ path, @errorName(err) });
             return err;
         };
+        try self.initParsed(board, arena, path, text);
+    }
+
+    pub fn openText(self: *Run, board: *Board, path: []const u8, text: []const u8) !void {
+        self.arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        errdefer self.arena.deinit();
+        if (text.len > max_bytes) return error.StreamTooLong;
+        try self.initParsed(board, self.arena.allocator(), path, text);
+    }
+
+    fn initParsed(self: *Run, board: *Board, arena: std.mem.Allocator, path: []const u8, text: []const u8) !void {
         var diag = fault_schedule.Diagnostic{};
         self.plan = fault_schedule.parse(arena, text, &diag) catch |err| {
             std.debug.print("--faults {s}:{d}: {s}\n", .{ path, diag.line, @errorName(err) });

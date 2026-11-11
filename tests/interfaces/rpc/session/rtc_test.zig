@@ -18,7 +18,7 @@ fn ask(context: *server.Context) !ra8.rpc.session.rpc.RtcReport {
 }
 
 test "a seeded clock reports its date and that it runs" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch };
@@ -36,7 +36,7 @@ test "a seeded clock reports its date and that it runs" {
 }
 
 test "a clock nobody started reports the reset date, stopped" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch };
@@ -50,7 +50,7 @@ test "a clock nobody started reports the reset date, stopped" {
 }
 
 test "counters firmware left invalid report no date" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch };
@@ -62,7 +62,7 @@ test "counters firmware left invalid report no date" {
 }
 
 test "a server without a clock refuses rtc" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch };

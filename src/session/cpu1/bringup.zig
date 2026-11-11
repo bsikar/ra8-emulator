@@ -11,6 +11,7 @@ const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const exclusive_peer = @import("ra8_chip").core.cpu.exclusive_peer;
 const second_core = @import("ra8_chip").core.second.core;
 const cpu1_image = @import("image.zig");
+const file_ops = @import("../file_ops.zig");
 const harness = @import("../harness/harness.zig");
 const step_hook = @import("../step_hook.zig");
 const stop_machine = @import("../stop_machine.zig");
@@ -37,11 +38,11 @@ pub const Cpu1 = struct {
     listener: rtos_hook.zig.Listener = undefined,
     publisher: rtos_publish.Publisher = undefined,
 
-    /// Bring CPU1 up from the ELF at `path` under `dir` beside `opened`,
-    /// park it in the session and give the session back to CPU0.
-    pub fn open(self: *Cpu1, allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, opened: *harness.Harness, path: []const u8) !void {
+    /// Bring CPU1 up from the ELF at `path` read through `reader` beside
+    /// `opened`, park it in the session and give the session back to CPU0.
+    pub fn open(self: *Cpu1, allocator: std.mem.Allocator, io: std.Io, reader: file_ops.Reader, opened: *harness.Harness, path: []const u8) !void {
         if (opened.session().root != null) return error.HistoryAlreadyRooted;
-        const bytes = try dir.readFileAlloc(io, path, allocator, .limited(second_core.limits.image_bytes));
+        const bytes = try reader.readAlloc(io, path, allocator, second_core.limits.image_bytes);
         defer allocator.free(bytes);
         try self.openBytes(allocator, opened, bytes);
     }

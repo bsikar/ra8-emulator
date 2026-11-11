@@ -38,8 +38,9 @@ pub fn hook(clock: *Clock) ?boot.Snapshot {
 
 fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const clock: *Clock = @ptrCast(@alignCast(context));
+    const ops = clock.state.files orelse return error.NoFileOps;
     const allocator = std.heap.page_allocator;
-    const bytes = try clock.state.host().readFileAlloc(clock.io, clock.state.load.?, allocator, .limited(max_bytes));
+    const bytes = try ops.reader.readAlloc(clock.io, clock.state.load.?, allocator, max_bytes);
     defer allocator.free(bytes);
     var bases = .{ clock.timebase.*, clock.ns_timebase };
     try systick.load(.{ &bases[0], &bases[1] }, bytes);
@@ -123,8 +124,30 @@ fn checkMode(bytes: []const u8, dual: bool) !void {
     if (cpu_count[0] != 1 or cpu_count[1] != @as(usize, if (dual) 1 else 0)) return error.BadValue;
 }
 
+const WriteJob = struct {
+    clock: *Clock,
+    binding: attachments.Binding,
+    stores: [2]*const Store,
+    cores: [2]*const Cpu,
+    count: usize,
+    image_ids: run_file.Identity,
+    owed: u32,
+};
+
+fn writeJob(context: *anyopaque, out: *std.Io.Writer) anyerror!void {
+    const job: *const WriteJob = @ptrCast(@alignCast(context));
+    const clock = job.clock;
+    try run_file.savePairAttached(out, job.stores[0..job.count], job.cores[0..job.count], clock.board, job.image_ids);
+    try systick.save(.{ clock.timebase, &clock.ns_timebase }, out);
+    try stretch.save(.{ .owed = job.owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (job.owed != 0) clock.boundary_hz else null }, out);
+    try stretch.saveGrid(clock.saved, out);
+    if (clock.cpu1) |second| try state.saveSecond(second, out);
+    try attachments.save(clock.board, job.binding, out);
+}
+
 fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     if (owed != clock.saved.stretch.carry or !clock.saved.valid()) return error.BadValue;
+    const ops = clock.state.files orelse return error.NoFileOps;
     const binding = clock.snapshotBinding();
     var graph: attachments.graph.Graph = .{};
     _ = try attachments.capture(clock.board, binding, &graph);
@@ -132,19 +155,16 @@ fn write(clock: *Clock, core: *const Cpu, path: []const u8, owed: u32) !void {
     const count: usize = if (pair != null) 2 else 1;
     const stores: [2]*const Store = .{ clock.memory.store, if (pair) |second| if (second.store != null) &second.store.? else return Error.SecondCoreNotSaved else clock.memory.store };
     const cores: [2]*const Cpu = .{ core, if (pair) |second| &second.core.cpu else core };
-    const image_ids = try identities(clock);
-    const file = try clock.state.host().createFile(clock.io, path, .{});
-    defer file.close(clock.io);
-    var staging: [4096]u8 = undefined;
-    var writer = file.writer(clock.io, &staging);
-    const out = &writer.interface;
-    try run_file.savePairAttached(out, stores[0..count], cores[0..count], clock.board, image_ids);
-    try systick.save(.{ clock.timebase, &clock.ns_timebase }, out);
-    try stretch.save(.{ .owed = owed, .cycle_remainder = clock.cycle_remainder, .boundary_hz = if (owed != 0) clock.boundary_hz else null }, out);
-    try stretch.saveGrid(clock.saved, out);
-    if (pair) |second| try state.saveSecond(second, out);
-    try attachments.save(clock.board, binding, out);
-    try out.flush();
+    var job: WriteJob = .{
+        .clock = clock,
+        .binding = binding,
+        .stores = stores,
+        .cores = cores,
+        .count = count,
+        .image_ids = try identities(clock),
+        .owed = owed,
+    };
+    try ops.writer.writeStream(clock.io, path, &job, writeJob);
 }
 
 fn identities(clock: *const Clock) Error!run_file.Identity {

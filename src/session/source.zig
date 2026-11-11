@@ -6,6 +6,7 @@
 //! refuses, answers the way gdb does for an address it has no line for.
 const std = @import("std");
 const elf = @import("ra8_board").image.elf;
+const file_ops = @import("file_ops.zig");
 const dwarf_line = @import("dwarf/line/line.zig");
 const dwarf_line_find = @import("dwarf/line/find.zig");
 const dwarf_info = @import("dwarf/info.zig");
@@ -17,6 +18,8 @@ pub const limits = struct {
     pub const after: u32 = 4;
     /// The longest source line printed whole; the rest of one is dropped.
     pub const line_bytes: usize = 1024;
+    pub const max_path_bytes: usize = 4096;
+    pub const max_source_bytes: usize = 16 * 1024 * 1024;
 };
 
 /// The line sections of the session's image, empty when there is none.
@@ -91,21 +94,20 @@ pub fn settle(sections: dwarf_line.Sections, found: u32, function: ?dwarf_info.F
 }
 
 /// `list`: the ten source lines around the one `address` belongs to, read
-/// from `dir` when the table's path is relative.
-pub fn list(out: anytype, sections: dwarf_line.Sections, io: std.Io, dir: std.Io.Dir, address: u32) !void {
+/// through `reader` when the table's path is relative.
+pub fn list(out: anytype, sections: dwarf_line.Sections, io: std.Io, reader: file_ops.Reader, address: u32) !void {
     const found = dwarf_line.lookup(sections, address) catch null;
     const place = found orelse {
         return out.print("No line number information available for address 0x{X:0>8}\n", .{address});
     };
-    var name: [std.fs.max_path_bytes]u8 = undefined;
+    var name: [limits.max_path_bytes]u8 = undefined;
     var spelled: std.Io.Writer = .fixed(&name);
     path(&spelled, place.file) catch return missing(out, place);
-    const file = dir.openFile(io, spelled.buffered(), .{}) catch return missing(out, place);
-    defer file.close(io);
-    var buffer: [4096]u8 = undefined;
-    var reader = file.reader(io, &buffer);
+    const bytes = reader.readAlloc(io, spelled.buffered(), std.heap.page_allocator, limits.max_source_bytes) catch return missing(out, place);
+    defer std.heap.page_allocator.free(bytes);
+    var source_reader: std.Io.Reader = .fixed(bytes);
     const first = if (place.line > limits.before) place.line - limits.before else 1;
-    try lines(out, &reader.interface, first, first + limits.before + limits.after);
+    try lines(out, &source_reader, first, first + limits.before + limits.after);
 }
 
 fn missing(out: anytype, place: dwarf_line.Place) !void {

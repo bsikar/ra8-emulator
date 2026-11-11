@@ -167,9 +167,10 @@ test "the timeline model matches the recorded both-cores trace" {
 
     // The same run, recorded exactly as --trace-rtos-out records it.
     const file = ra8.session.rtos.hook.file;
+    const host_writer = ra8.host.session_files.writer(ra8.session.file_ops.Writer);
     const path = "/tmp/ra8-timeline-840.txt";
-    try file.save(std.testing.io, std.Io.Dir.cwd(), path, 0, &t0.trace);
-    try file.save(std.testing.io, std.Io.Dir.cwd(), path, 1, &t1.trace);
+    try file.save(std.testing.io, host_writer, path, 0, &t0.trace);
+    try file.save(std.testing.io, host_writer, path, 1, &t1.trace);
 
     // Feed the wire events into the model, then close both cores' runs.
     var model = timeline_model.Model.init(gpa);

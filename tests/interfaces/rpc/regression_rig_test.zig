@@ -16,7 +16,7 @@ test "the single-core recording retains its explicit small profile" {
 }
 
 test "the replay fixture image fits its configured memory" {
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image, .board_profile = rig.small_profile });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image, .board_profile = rig.small_profile, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try std.testing.expectEqual(@as(u32, 1 << 20), opened.state.profile.memory.ospi.size);
     try std.testing.expectEqual(@as(u32, 1 << 20), opened.state.profile.memory.sdram.size);
@@ -43,7 +43,7 @@ test "the small replay profile changes only external memory sizes" {
 }
 
 test "replay fixture snapshots cover external memory endpoints and CPU and board state" {
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image, .board_profile = rig.small_profile });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image, .board_profile = rig.small_profile, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const base = try snapshot(&opened);
     defer gpa.free(base);

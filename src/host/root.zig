@@ -16,6 +16,7 @@ pub const pipe_pair = @import("pipe_pair.zig");
 pub const tape_dir = @import("tape_dir.zig");
 pub const worker = @import("worker.zig");
 pub const disk_file = @import("disk_file.zig");
+pub const session_files = @import("session_files.zig");
 pub const socket_flags = @import("socket_flags.zig");
 pub const folder = @import("folder.zig");
 pub const pipe = @import("camera/pipe/pipe.zig");

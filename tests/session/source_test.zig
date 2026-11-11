@@ -85,7 +85,8 @@ test "list keeps the start of an overlong line and carries on after it" {
 fn sourced(dir: std.Io.Dir, sections: ra8.session.dwarf.line.Sections, address: u32, expected: []const u8) !void {
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();
-    try session_source.list(&out.writer, sections, std.testing.io, dir, address);
+    const reader = ra8.host.session_files.readerInDir(ra8.session.file_ops.Reader, &dir);
+    try session_source.list(&out.writer, sections, std.testing.io, reader, address);
     try std.testing.expectEqualStrings(expected, out.written());
 }
 

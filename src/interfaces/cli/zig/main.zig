@@ -17,6 +17,8 @@ const zig_run = @import("run.zig");
 const dumps = @import("../report/dumps.zig");
 const Stop = @import("ra8_chip").core.stop.Stop;
 const fault_file = @import("ra8_session").fault_file;
+const file_ops = @import("ra8_session").file_ops;
+const session_files = @import("ra8_host").session_files;
 const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
 
 /// Fitting the board is shared with main's engine path.
@@ -53,7 +55,8 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     var timed = zig_run.stop_sym.deadline(options.ms);
     var swept = zig_run.undefined_sites.resolve(image, options.stop_on_undefined);
     var schedule: fault_file.Run = undefined;
-    if (options.faults) |path| schedule.open(&board, io, options.state.host(), path) catch return 2;
+    const fault_reader = if (options.state.files) |ops| ops.reader else session_files.reader(file_ops.Reader);
+    if (options.faults) |path| schedule.open(&board, io, fault_reader, path) catch return 2;
     defer if (options.faults != null) schedule.deinit();
     if (options.count_pc_len != 0) for (options.count_pc[0..options.count_pc_len]) |at| parts.hits.want(at & ~@as(u32, 1));
     const ends: zig_run.Ends = .{

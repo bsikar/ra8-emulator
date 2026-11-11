@@ -122,6 +122,7 @@ test "multi-initiator writes match forward scan on reverse-continue" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -216,6 +217,7 @@ test "reverse-continue with watchpoint propagates Error.Cancelled when cancelled
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -259,6 +261,7 @@ test "reverse-continue watchpoint search spans multiple slices and lands exactly
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();
@@ -327,6 +330,7 @@ test "reopened history loads touched-page records from persisted storage" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();

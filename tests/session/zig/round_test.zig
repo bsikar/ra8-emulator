@@ -13,9 +13,9 @@ const cases = [_]Case{
 };
 
 fn open(case: Case, second: *Cpu1) !Harness {
-    var harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
+    var harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     errdefer harness.deinit();
-    if (case.cpu1) |path| try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &harness, path);
+    if (case.cpu1) |path| try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &harness, path);
     harness.state.edge.idle_skip = false;
     return harness;
 }

@@ -15,9 +15,11 @@
 //! CPU0's tracer writes PATH and CPU1's writes PATH.cpu1, so the two cores
 //! never race on one file.
 const std = @import("std");
+const file_ops = @import("../file_ops.zig");
 const rtos_trace = @import("trace.zig");
 
 const Event = rtos_trace.Event;
+const max_path_bytes = 4096;
 
 pub const header = "# ra8 rtos trace v1";
 const trailer = "# dropped ";
@@ -54,16 +56,16 @@ pub fn nameFor(path: []const u8, core: u1, buffer: []u8) ![]const u8 {
     return std.fmt.bufPrint(buffer, "{s}.cpu1", .{path});
 }
 
-/// Write `trace` to the file `nameFor` gives, replacing what was there.
-pub fn save(io: std.Io, dir: std.Io.Dir, path: []const u8, core: u1, trace: *const rtos_trace.Trace) !void {
-    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+fn writeTraceStream(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
+    const trace: *const rtos_trace.Trace = @ptrCast(@alignCast(context));
+    try write(writer, trace);
+}
+
+/// Write `trace` through `writer` to the path `nameFor` gives.
+pub fn save(io: std.Io, writer: file_ops.Writer, path: []const u8, core: u1, trace: *const rtos_trace.Trace) !void {
+    var buffer: [max_path_bytes]u8 = undefined;
     const name = try nameFor(path, core, &buffer);
-    const file = try dir.createFile(io, name, .{});
-    defer file.close(io);
-    var staging: [4096]u8 = undefined;
-    var writer = file.writer(io, &staging);
-    try write(&writer.interface, trace);
-    try writer.interface.flush();
+    try writer.writeStream(io, name, @constCast(trace), writeTraceStream);
 }
 
 /// Take a written trace back into `into`. Anything after the trailer, a

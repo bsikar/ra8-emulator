@@ -304,7 +304,12 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.recording = null;
     state.window = null;
     state.persistent = null;
-    state.bytes = if (options.elf_bytes) |bytes| try allocator.dupe(u8, bytes) else try options.host().readFileAlloc(io, options.elf_path, allocator, .limited(limits.max_elf_bytes));
+    state.bytes = if (options.elf_bytes) |bytes|
+        try allocator.dupe(u8, bytes)
+    else blk: {
+        const ops = options.files orelse return error.NoFileOps;
+        break :blk try ops.reader.readAlloc(io, options.elf_path, allocator, limits.max_elf_bytes);
+    };
     errdefer allocator.free(state.bytes);
     state.image = try elf.Image.init(state.bytes);
     state.board = Board.init(allocator);
@@ -315,7 +320,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     try state.board.nor.resize(state.profile.memory.ospi.size);
     state.board.clock.pace.mode = .virtual;
     state.board.panel_vsync = options.panel_vsync;
-    try load_input.load(allocator, io, options.host(), &state.board, options.input_script);
+    try load_input.load(allocator, io, options.files, &state.board, options.input_script, options.input_script_bytes);
     state.cpu0 = .{};
     state.tracer = null;
     state.metrics_tracking = .{ .{}, .{} };
@@ -378,7 +383,7 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.landing_observer = state.landing.observer();
     state.board.input_landing = &state.landing_observer;
     state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .image_hash = @import("ra8_board").snapshot.run.imageIdentity(state.bytes), .images = &state.loading.loaded, .hashes = &state.loading.hashes, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
-    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir, .root = options.root };
+    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir, .store = if (options.files) |ops| ops.state else null };
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
     state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);

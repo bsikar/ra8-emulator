@@ -260,7 +260,7 @@ test "Dispatch with a Zig session reads the Zig core's registers and memory" {
 }
 
 test "the reverse packets walk the recorded window (RA8EMU-1170)" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf", .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };
@@ -288,7 +288,7 @@ test "the reverse packets walk the recorded window (RA8EMU-1170)" {
 }
 
 test "reverse-continue stops at a breakpoint in the recorded window (RA8EMU-1170)" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf", .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };
@@ -308,7 +308,7 @@ test "reverse-continue stops at a breakpoint in the recorded window (RA8EMU-1170
 
 test "GDB register and memory writes route through Session choke point" {
     const gpa = std.testing.allocator;
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf" });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/dfu/dfu_bootloader.elf", .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     var target: zig_run.Target = .{ .session = session, .wall = legacyWall() };

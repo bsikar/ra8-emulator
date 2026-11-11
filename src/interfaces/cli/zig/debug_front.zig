@@ -12,6 +12,8 @@ const debug_front = @import("../debug_front.zig");
 const rsp_dispatch = @import("ra8_gdb").rsp.dispatch;
 const rsp_poll = @import("ra8_gdb").rsp.poll;
 const harness = @import("ra8_session").harness;
+const file_ops = @import("ra8_session").file_ops;
+const session_files = @import("ra8_host").session_files;
 const transport_mod = @import("ra8_session").transport;
 const cpu1_bringup = @import("ra8_session").cpu1.bringup;
 
@@ -27,7 +29,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
         std.debug.print("{s}\n", .{why});
         return 2;
     }
-    var opened = harness.open(allocator, io, .{ .elf_path = request.image, .device = .ra8d2 }) catch |err| {
+    var opened = harness.open(allocator, io, .{ .elf_path = request.image, .device = .ra8d2, .files = session_files.cwd(file_ops.Ops) }) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ request.image, @errorName(err) });
         return 1;
     };
@@ -41,7 +43,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     target.session.speed = speed.hook();
     var other: cpu1_bringup.Cpu1 = .{};
     const named = request.cpu1 orelse return serve(allocator, io, &target, opened.transport(), request.mode, out);
-    other.open(allocator, io, std.Io.Dir.cwd(), &opened, named) catch |err| {
+    other.open(allocator, io, session_files.reader(file_ops.Reader), &opened, named) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return 1;
     };

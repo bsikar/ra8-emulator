@@ -23,7 +23,7 @@ fn read(opened: *ra8.session.harness.Harness, address: u7) ![2]u8 {
     return bytes;
 }
 test "snapshot owner restores mid-run topology and refuses an unbound owner or startup asks" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .history_frames = 2 });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var empty = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer empty.deinit();
@@ -54,7 +54,7 @@ test "snapshot owner restores mid-run topology and refuses an unbound owner or s
     try std.testing.expectError(error.Missing, read(&opened, 0x36));
 }
 test "snapshot owner restores a fault wrapper after clear" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .history_frames = 2 });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try opened.state.faults.set(fault_at, .{ .stuck = 0x33 });
     var faulted = std.Io.Writer.Allocating.init(std.testing.allocator);

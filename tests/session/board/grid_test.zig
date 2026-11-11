@@ -52,7 +52,7 @@ fn accepted(h: *Harness, before: []const u8, kind: anytype, payload: []const u8)
 
 /// A single-core run stopped 37 slots into a 64-slot interval.
 fn openSingle() !Harness {
-    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .history_frames = 2 });
+    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     errdefer h.deinit();
     h.state.edge.idle_skip = false;
     h.state.edge.timebase.per_chunk = 64;
@@ -179,10 +179,10 @@ test "grid repair G5 legal partial CPU0, cut and board states load and recapture
 }
 
 test "grid repair G5 closed turn cannot replace a genuine partial CPU1 turn" {
-    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
+    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer h.deinit();
     var second: Cpu1 = .{};
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     h.state.edge.idle_skip = false;
     h.state.edge.timebase.per_chunk = 64;
@@ -263,10 +263,10 @@ test "grid repair G5 closed board unrepresentable last ran is atomic" {
 }
 
 fn closedBoard(comptime variant: ClosedCase) !void {
-    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
+    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer h.deinit();
     var second: Cpu1 = .{};
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     h.state.edge.idle_skip = false;
     h.state.edge.timebase.per_chunk = 64;

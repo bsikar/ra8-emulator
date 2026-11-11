@@ -45,9 +45,11 @@ test "a malformed or missing schedule is refused before the run" {
     const bad = try writeFile(tmp.dir, "bad.faults", "2m unplug i2c:riic@0x36\n1m plug i2c:riic@0x36 max17048\n", &buffer);
     var board = ra8.board.board.Board.init(std.testing.allocator);
     defer board.deinit();
+    const reader = ra8.host.session_files.reader(ra8.session.file_ops.Reader);
     var run: fault_file.Run = undefined;
-    try std.testing.expectError(error.TimeBackwards, run.open(&board, std.testing.io, std.Io.Dir.cwd(), bad));
-    try std.testing.expectError(error.FileNotFound, run.open(&board, std.testing.io, std.Io.Dir.cwd(), "/nonexistent/ra8.faults"));
+    try std.testing.expectError(error.TimeBackwards, run.open(&board, std.testing.io, reader, bad));
+    try std.testing.expectError(error.FileNotFound, run.open(&board, std.testing.io, reader, "/nonexistent/ra8.faults"));
+    try std.testing.expectError(error.TimeBackwards, run.openText(&board, "inline.faults", "2m unplug i2c:riic@0x36\n1m plug i2c:riic@0x36 max17048\n"));
 }
 
 test "a soak run applies every scheduled event at its exact virtual time" {
@@ -70,7 +72,7 @@ test "a soak run applies every scheduled event at its exact virtual time" {
     asked.attach(&board);
 
     var run: fault_file.Run = undefined;
-    try run.open(&board, std.testing.io, std.Io.Dir.cwd(), path);
+    try run.open(&board, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), path);
     defer run.deinit();
     var applied: [5]u64 = .{ 0, 0, 0, 0, 0 };
     run.applier.applied_ns = &applied;

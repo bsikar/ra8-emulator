@@ -235,15 +235,15 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
         .{ .cpu0 = "tests/fixtures/threadx/threadx_stkof.elf", .cpu1 = null },
         .{ .cpu0 = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .cpu1 = "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf" },
     }) |case| {
-        var live = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
+        var live = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
         defer live.deinit();
         var live_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try live_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, path);
+        if (case.cpu1) |path| try live_second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &live, path);
         defer if (case.cpu1 != null) live_second.close(std.testing.allocator);
-        var reference = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
+        var reference = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
         defer reference.deinit();
         var reference_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try reference_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &reference, path);
+        if (case.cpu1) |path| try reference_second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &reference, path);
         defer if (case.cpu1 != null) reference_second.close(std.testing.allocator);
         std.debug.print("fixture start {s}\n", .{case.cpu0});
         try fixture.continued(&live, 100_000);
@@ -269,10 +269,10 @@ test "state strict actual ThreadX and dual IPC continue against an uninterrupted
         try std.testing.expectEqualSlices(u8, saved.written(), restored.written());
         try fixture.continued(&live, 20_000);
         try fixture.sameGuest(&live, &reference);
-        var fresh = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2 });
+        var fresh = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = case.cpu0, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
         defer fresh.deinit();
         var fresh_second: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (case.cpu1) |path| try fresh_second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &fresh, path);
+        if (case.cpu1) |path| try fresh_second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &fresh, path);
         defer if (case.cpu1 != null) fresh_second.close(std.testing.allocator);
         try fresh.state.files.readFrom(saved.written());
         var cold = try capture(&fresh);

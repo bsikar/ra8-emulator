@@ -116,7 +116,7 @@ test "disarm frees pending touched record" {
 }
 
 test "saveMachine failure during writeTo frees touched record and keeps manifest intact" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/display/ra8_ui.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/display/ra8_ui.elf", .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
 
     var context: u8 = 0;

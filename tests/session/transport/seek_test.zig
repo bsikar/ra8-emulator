@@ -109,12 +109,7 @@ test "a seek restores a checkpoint's base and lands on its round" {
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
-        .elf_path = history_elf,
-        .checkpoint_every = 1,
-        .history_storage = sink.storage(),
-        .history_objects = objects.objects(),
-    });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     _ = try session.run(.cpu0, .run);
@@ -148,12 +143,7 @@ test "a seek replays forward from a checkpoint base to a round past it" {
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
-        .elf_path = history_elf,
-        .checkpoint_every = 4,
-        .history_storage = sink.storage(),
-        .history_objects = objects.objects(),
-    });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 4, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     _ = try session.run(.cpu0, .run);
@@ -191,12 +181,7 @@ test "a running seek quotes its eta from its measured replay rate" {
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
-        .elf_path = history_elf,
-        .checkpoint_every = 4,
-        .history_storage = sink.storage(),
-        .history_objects = objects.objects(),
-    });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 4, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     _ = try session.run(.cpu0, .run);
@@ -264,12 +249,7 @@ test "a seek to a later phase of the checkpoint's round runs past the restore" {
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{
-        .elf_path = history_elf,
-        .checkpoint_every = 1,
-        .history_storage = sink.storage(),
-        .history_objects = objects.objects(),
-    });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     _ = try session.run(.cpu0, .run);
@@ -307,7 +287,7 @@ test "a seek to a later phase of the checkpoint's round runs past the restore" {
 
 test "a seek without a bridge, on a pending kind, or past the log stays refused" {
     const gpa = std.testing.allocator;
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     try std.testing.expectError(transport.Error.NotReady, t.command(.{ .seek = .{ .target = "3:cpu1:4:polled" } }));
@@ -336,7 +316,7 @@ fn directSeek(gpa: std.mem.Allocator, text: []const u8) !struct { pos: seek_engi
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects() });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     _ = try opened.session().run(.cpu0, .run);
     var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };
@@ -355,7 +335,7 @@ test "a backward seek with window underrun restores checkpoint base and lands on
     defer sink.deinit();
     var objects: fakes.Objects = .{ .gpa = gpa };
     defer objects.deinit();
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects() });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = history_elf, .checkpoint_every = 1, .history_storage = sink.storage(), .history_objects = objects.objects(), .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     _ = try opened.session().run(.cpu0, .run);
     var state = TestBridge{ .gpa = gpa, .opened = &opened, .sink = &sink, .objects = &objects };

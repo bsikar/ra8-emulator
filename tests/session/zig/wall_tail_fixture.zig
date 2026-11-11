@@ -16,6 +16,7 @@ fn open() !Harness {
     return ra8.session.harness.open(alloc, std.testing.io, .{
         .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
         .history_frames = 2,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
 }
 
@@ -81,7 +82,7 @@ pub fn atomicControl() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try stop(&h, false);
     var before = try capture(&h);
@@ -164,7 +165,7 @@ pub fn stmCase(plain: bool, initial_current: u32) !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try setup(&h, true);
     try h.guest().writeWord(map.syst.cvr, initial_current);
@@ -216,7 +217,7 @@ pub fn stoppedStm() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     const before1 = second.cpu().slots;
     try stop(&h, true);
@@ -250,7 +251,7 @@ pub fn canonical() !void {
     var second: Cpu1 = .{};
     var h = try open();
     defer h.deinit();
-    try second.open(alloc, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(alloc, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(alloc);
     try stop(&h, true);
     var before = try capture(&h);

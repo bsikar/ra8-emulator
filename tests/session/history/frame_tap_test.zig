@@ -204,13 +204,13 @@ test "tap never perturbs guest state" {
     const gpa = std.testing.allocator;
 
     // Run 1: Tap disabled (baseline)
-    var h1 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf });
+    var h1 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer h1.deinit();
 
     // Run 2: Tap enabled (with active queue)
     var q = frame_queue.Queue.init(std.testing.io, gpa, 64 * 1024 * 1024);
     defer q.deinit();
-    var h2 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf });
+    var h2 = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = elf, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer h2.deinit();
 
     // Actively configure GLCDC display controller on both boards identically

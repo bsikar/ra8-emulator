@@ -11,6 +11,7 @@ const std = @import("std");
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const elf = @import("ra8_board").image.elf;
 const second_core = @import("ra8_chip").core.second.core;
+const file_ops = @import("../file_ops.zig");
 const rtos_hook = @import("hook.zig");
 
 /// CPU1's tracer state, owned by the run that armed it: a run has at most
@@ -25,14 +26,14 @@ pub const Tracers = struct {
 
 /// CPU1's trace and load, names read through CPU1's memory. Nothing when
 /// there is no CPU1 or it was not traced.
-pub fn print(out: anytype, io: std.Io, dir: std.Io.Dir, options: anytype, tracers: *const Tracers, second: ?Guest) !void {
-    try printOn(out, io, dir, options, tracers, second orelse return);
+pub fn print(out: anytype, io: std.Io, writer: ?file_ops.Writer, options: anytype, tracers: *const Tracers, second: ?Guest) !void {
+    try printOn(out, io, writer, options, tracers, second orelse return);
 }
 
 /// `print` for a CPU1 whose memory is `memory`, engine or store (RA8EMU-588).
-pub fn printOn(out: anytype, io: std.Io, dir: std.Io.Dir, options: anytype, tracers: *const Tracers, memory: Guest) !void {
+pub fn printOn(out: anytype, io: std.Io, writer: ?file_ops.Writer, options: anytype, tracers: *const Tracers, memory: Guest) !void {
     const tracer = tracers.tracer orelse return;
-    try rtos_hook.report.all(out, io, dir, options, tracer, rtos_hook.Memory{ .guest = memory });
+    try rtos_hook.report.all(out, io, writer, options, tracer, rtos_hook.Memory{ .guest = memory });
 }
 
 /// CPU1's tracer and the memory its names are read through, for
@@ -46,10 +47,11 @@ pub fn sideOn(tracers: *const Tracers, memory: Guest) ?rtos_hook.report.Side {
 /// The listener sits in front of CPU1's bus and exception source, as
 /// rtos_zig.zig does for CPU0; stamps come from CPU1's own SysTick count
 /// and load from its retired count. `print` then reports it as cpu1.
-pub fn armZig(pair: *second_core.zig.run.Driver, io: std.Io, dir: std.Io.Dir, wanted: ?rtos_hook.load.Window, path: ?[]const u8, tracers: *Tracers) void {
+pub fn armZig(pair: *second_core.zig.run.Driver, io: std.Io, reader: file_ops.Reader, wanted: ?rtos_hook.load.Window, path: ?[]const u8, tracers: *Tracers) void {
     const named = path orelse return;
     if (wanted == null) return;
-    const bytes = dir.readFileAlloc(io, named, std.heap.page_allocator, .limited(second_core.limits.image_bytes)) catch return;
+    const bytes = reader.readAlloc(io, named, std.heap.page_allocator, second_core.limits.image_bytes) catch return;
+    defer std.heap.page_allocator.free(bytes);
     const image = elf.Image.init(bytes) catch return;
     tracers.zig_tracer = rtos_hook.resolveOn(image, wanted, 1) orelse return;
     listenZig(pair, &tracers.zig_tracer, tracers);

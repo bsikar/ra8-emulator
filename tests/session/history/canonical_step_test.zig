@@ -160,10 +160,11 @@ const DualRig = struct {
         self.gpa = gpa;
         self.opened = try ra8.session.harness.open(gpa, std.testing.io, .{
             .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
+            .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
         });
         errdefer self.opened.deinit();
         self.second = .{};
-        try self.second.open(gpa, std.testing.io, std.Io.Dir.cwd(), &self.opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+        try self.second.open(gpa, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &self.opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
         self.opened.state.edge.idle_skip = false;
         self.opened.state.edge.timebase.per_chunk = 64;
         self.opened.session().live.boundary.?.chunk = 64;

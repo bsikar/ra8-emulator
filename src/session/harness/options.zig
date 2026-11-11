@@ -1,18 +1,21 @@
 //! The harness's open options: what an image runs with. Split out of
 //! the harness file so the file stays small; harness.zig re-exports it.
-const std = @import("std");
 const part = @import("ra8_chip").core.part;
 const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
+const file_ops = @import("../file_ops.zig");
 const history_recorder = @import("../history/recorder.zig");
 
 pub const Options = struct {
-    elf_path: []const u8,
+    elf_path: []const u8 = "",
     /// The image's bytes when the caller already read them: the harness
-    /// copies these and does not open `elf_path`, so the run is of the
+    /// copies these and does not read `elf_path`, so the run is of the
     /// bytes the caller looked at.
     elf_bytes: ?[]const u8 = null,
     device: part.Part = .ra8p1,
     input_script: ?[]const u8 = null,
+    /// Caller-supplied input script text; when set, `input_script` is not read
+    /// through `files`.
+    input_script_bytes: ?[]const u8 = null,
     /// The persistent history's host side (RA8EMU-1196), as the application
     /// fills it: the log segment's storage and the checkpoint objects' space,
     /// both over the application's history root. Both set arm the closed-round
@@ -41,11 +44,7 @@ pub const Options = struct {
     idle_skip: bool = true,
     /// The run's `panel_vsync` config (RA8EMU R9), stored the way a plain run's fit stores it.
     panel_vsync: ?glcdc_vsync.Config = null,
-    /// The host directory the run's file reads and writes open against
-    /// (RA8EMU-968); null falls back to the process cwd for host tests.
-    root: ?std.Io.Dir = null,
-    /// The directory host file access resolves through, never `cwd()` directly.
-    pub fn host(self: Options) std.Io.Dir {
-        return self.root orelse std.Io.Dir.cwd();
-    }
+    /// Host-backed file and state callbacks (ADR 0004 D20). Null keeps the
+    /// harness purely in-memory (`elf_bytes` required, state files unavailable).
+    files: ?file_ops.Ops = null,
 };

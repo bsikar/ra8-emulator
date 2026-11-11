@@ -8,6 +8,8 @@ const boot = @import("ra8_chip").core.cpu.boot;
 const elf = @import("ra8_board").image.elf;
 const clocks = @import("ra8_chip").periph.clocks;
 const fault_file = @import("ra8_session").fault_file;
+const file_ops = @import("ra8_session").file_ops;
+const session_files = @import("ra8_host").session_files;
 const cli = @import("../cli.zig");
 const Board = @import("ra8_board").board.Board;
 const board_wiring = @import("ra8_board").wiring;
@@ -70,11 +72,12 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
     var pair: second_core.zig.run.Driver = undefined;
     var cpu1: ?*second_core.zig.run.Driver = null;
     var cpu1_identity: ?[16]u8 = null;
+    const host_files = options.state.files orelse session_files.cwd(file_ops.Ops);
     var second_tracers: rtos_hook.second.Tracers = .{};
     if (if (options.cpu == .zig) options.cpu1_path else null) |named| {
-        cpu1_identity = openSecond(&pair, io, board, named, memory, options.blocks, options.state.host()) orelse return 1;
+        cpu1_identity = openSecond(&pair, io, board, named, memory, options.blocks, host_files.reader) orelse return 1;
         cpu1 = &pair;
-        rtos_hook.second.armZig(&pair, io, options.state.host(), options.rtosWanted(), named, &second_tracers);
+        rtos_hook.second.armZig(&pair, io, host_files.reader, options.rtosWanted(), named, &second_tracers);
     }
     defer if (cpu1) |second| second.close();
     var loop: run_loop.Loop = .{};
@@ -113,9 +116,9 @@ pub fn run(out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timeba
         try report_run.cpu1(out, if (clock.cpu1) |second| &second.second else null);
         // Globals a memory-probe verdict reads, out of the Zig core's memory.
         if (!options.report_json) try textDumps(out, io, board, clock.memory, final, image, options, watched);
-        if (tracer.*) |*found| try rtos_hook.report.all(out, io, options.state.host(), options, found, rtos_hook.Memory{ .guest = clock.memory });
+        if (tracer.*) |*found| try rtos_hook.report.all(out, io, host_files.writer, options, found, rtos_hook.Memory{ .guest = clock.memory });
         if (!options.report_json) try txm_report.write(out, &modules);
-        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, options.state.host(), options, &second_tracers, second.guest());
+        if (clock.cpu1) |second| try rtos_hook.second.printOn(out, io, host_files.writer, options, &second_tracers, second.guest());
         try finishFrames(out, io, board, options, &frames, &audio);
     } else if (options.ctl_cpu_load) {
         return ctlLoad(out, .{}, status);
@@ -134,7 +137,9 @@ fn profileOut(out: *std.Io.Writer, io: std.Io, image: elf.Image, table: profile.
 
 /// The loop's options, read off the CLI's.
 fn loopOptions(options: cli.Options, budget: usize) run_loop.Options {
-    return .{ .cpu = options.cpu, .blocks = options.blocks, .rtos = options.rtosWanted(), .watch_place = options.watch_place, .idle_skip = options.idle_skip, .state = options.state, .console = options.console, .bus_errors = options.bus_errors, .budget = budget };
+    var state = options.state;
+    if (state.wanted() and state.files == null) state.files = session_files.cwd(file_ops.Ops);
+    return .{ .cpu = options.cpu, .blocks = options.blocks, .rtos = options.rtosWanted(), .watch_place = options.watch_place, .idle_skip = options.idle_skip, .state = state, .console = options.console, .bus_errors = options.bus_errors, .budget = budget };
 }
 
 fn postBootReport(out: *std.Io.Writer, clock: *Clock, watcher: *zig_watch.Recorder, final: *const boot.Regs, image: elf.Image, options: cli.Options, ends: Ends, retire_at: u32, budget: usize) !?watchpoint.Watched {
@@ -157,8 +162,8 @@ fn finishEinkLog(out: *std.Io.Writer, io: std.Io, options: cli.Options, recorder
 
 /// Bring CPU1 up from `named`, with its block cache when asked; false once
 /// the reason it could not is printed.
-fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool, dir: std.Io.Dir) ?[16]u8 {
-    const identity = @import("ra8_session").cpu1.image.openIdentified(pair, std.heap.page_allocator, io, dir, board_wiring.cpu1(board), named, memory) catch |err| {
+fn openSecond(pair: *second_core.zig.run.Driver, io: std.Io, board: *Board, named: []const u8, memory: Guest, blocks: bool, reader: file_ops.Reader) ?[16]u8 {
+    const identity = @import("ra8_session").cpu1.image.openIdentified(pair, std.heap.page_allocator, io, reader, board_wiring.cpu1(board), named, memory) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return null;
     };

@@ -30,7 +30,7 @@ fn press(e: *edit.Edit, code: u32, session: *ra8.session.api.Session) !edit.Stat
 }
 
 test "a click on r4's value and DEADBEEF then Enter writes r4" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     const at = edit.registerOrigin(registers_area, r4).?;
@@ -44,7 +44,7 @@ test "a click on r4's value and DEADBEEF then Enter writes r4" {
 }
 
 test "a click on an SRAM byte and A5 then Enter writes that byte" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     const snapshot = try gui_app.memory_capture.capture(session, .cpu0, spare, 2);
@@ -61,7 +61,7 @@ test "a click on an SRAM byte and A5 then Enter writes that byte" {
 }
 
 test "escape leaves the register alone" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const session = opened.session();
     const before = try session.register(.cpu0, .r5);

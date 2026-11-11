@@ -8,7 +8,7 @@ const rig = @import("../history/window_rig.zig");
 const gpa = std.testing.allocator;
 
 test "a window planted before the first run starts at the boundary's saved round" {
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image_path, .board_profile = rig.profile });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = rig.image_path, .board_profile = rig.profile, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try opened.openWindow(16 * 1024 * 1024);
     const session = opened.session();

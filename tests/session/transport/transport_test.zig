@@ -64,7 +64,7 @@ fn loopFixture(opened: *ra8.session.harness.Harness) !void {
 }
 
 test "command queues a job and runs nothing" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     const before = try opened.session().now();
@@ -78,7 +78,7 @@ test "command queues a job and runs nothing" {
 }
 
 test "the report carries the running job's state payloads" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     try std.testing.expect(t.report().state == null); // nothing queued yet
@@ -93,7 +93,7 @@ test "the report carries the running job's state payloads" {
 }
 
 test "reads are quiet until a job actually moves" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     try std.testing.expect(t.busy() == null); // nothing queued yet
@@ -102,7 +102,7 @@ test "reads are quiet until a job actually moves" {
 }
 
 test "reads return the running job's state while it moves" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try loopFixture(&opened);
     var fake = FakeWall{};
@@ -118,7 +118,7 @@ test "reads return the running job's state while it moves" {
 }
 
 test "a paced play drives bounded slices and outlives the wall" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try loopFixture(&opened);
     var fake = FakeWall{};
@@ -131,7 +131,7 @@ test "a paced play drives bounded slices and outlives the wall" {
 }
 
 test "pause stops at the gap and the machine goes nowhere after" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try loopFixture(&opened);
     var fake = FakeWall{};
@@ -146,7 +146,7 @@ test "pause stops at the gap and the machine goes nowhere after" {
 }
 
 test "the newest command preempts the running job" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try loopFixture(&opened);
     var fake = FakeWall{};
@@ -162,7 +162,7 @@ test "the newest command preempts the running job" {
 }
 
 test "a malformed or backward play is refused and changes nothing" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var t = transport.Transport{ .session = opened.session() };
     _ = try t.command(.{ .cont = .{} });
@@ -181,7 +181,7 @@ test "a malformed or backward play is refused and changes nothing" {
 }
 
 test "advance runs to its virtual target and finishes its ticket" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try loopFixture(&opened);
     var fake = FakeWall{};
@@ -197,7 +197,7 @@ test "advance runs to its virtual target and finishes its ticket" {
 
 test "pause then play equals never pausing" {
     // Straight: twelve slices in three wall-bounded pumps, then pause.
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try countFixture(&opened);
     var fake = FakeWall{};
@@ -212,7 +212,7 @@ test "pause then play equals never pausing" {
     // then pause again. The Stage 0 oracle in miniature: the guest counter,
     // the virtual time and the PC must land exactly where the straight run
     // left them.
-    var reopened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var reopened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer reopened.deinit();
     try countFixture(&reopened);
     var fake2 = FakeWall{};
@@ -233,7 +233,7 @@ test "pause then play equals never pausing" {
 }
 
 test "backward play runs bounded slices through transport pump" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
 
     const session = opened.session();

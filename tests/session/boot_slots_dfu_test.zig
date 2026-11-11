@@ -58,7 +58,7 @@ const Outcome = struct {
 };
 
 fn boot(console: *Console, corrupt: Corrupt) !Outcome {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const guest = opened.guest();
     try stage(guest, .a, signed_a, 1, false);
@@ -121,7 +121,7 @@ fn readWindow(view: anytype, offset: u32) !u32 {
 }
 
 fn enumerate(skip: bool, inspect: bool) !Landing {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path, .idle_skip = skip });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = elf_path, .idle_skip = skip, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     opened.board().usb.device.connectVbus();
     const guest = opened.guest();

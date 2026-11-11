@@ -121,7 +121,8 @@ test "plain Clock restore transfers named panel owner and keeps recorder and fai
     defer std.testing.allocator.free(bad_path);
     const after_path = try std.fs.path.join(std.testing.allocator, &.{ root, "after" });
     defer std.testing.allocator.free(after_path);
-    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = .{ .store = &rig.store }, .board = &rig.board, .timebase = &rig.edge.timebase, .state = .{ .save = save_path } };
+    const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
+    var clock: zig_run.Clock = .{ .io = std.testing.io, .memory = .{ .store = &rig.store }, .board = &rig.board, .timebase = &rig.edge.timebase, .state = .{ .save = save_path, .files = host_files } };
     defer clock.deinitSnapshot();
     var recorder = cli_app.eink_log.Run.init(std.testing.allocator, &rig.board);
     defer recorder.deinit();

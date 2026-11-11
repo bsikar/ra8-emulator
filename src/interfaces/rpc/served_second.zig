@@ -1,6 +1,7 @@
 //! CPU1 startup ownership, before the history root is frozen.
-const std = @import("std");
 const Cpu1 = @import("ra8_session").cpu1.bringup.Cpu1;
+const file_ops = @import("ra8_session").file_ops;
+const session_files = @import("ra8_host").session_files;
 const Served = @import("served_setup.zig").Served;
 
 pub const Image = union(enum) { path: []const u8, bytes: []const u8 };
@@ -12,7 +13,7 @@ pub fn open(self: *Served, image: Image) !void {
     errdefer self.gpa.destroy(cpu1);
     cpu1.* = .{};
     switch (image) {
-        .path => |path| try cpu1.open(self.gpa, self.io, std.Io.Dir.cwd(), &self.owner, path),
+        .path => |path| try cpu1.open(self.gpa, self.io, session_files.reader(file_ops.Reader), &self.owner, path),
         .bytes => |bytes| try cpu1.openBytes(self.gpa, &self.owner, bytes),
     }
     self.second = cpu1;

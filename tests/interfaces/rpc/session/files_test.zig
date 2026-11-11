@@ -31,7 +31,7 @@ test "restore puts pc, guest memory and virtual time back where snapshot left th
     defer std.testing.allocator.free(dir);
     const path = "run.ra8snap";
 
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };
@@ -57,7 +57,7 @@ test "restore puts pc, guest memory and virtual time back where snapshot left th
 }
 
 test "snapshot and restore are refused with no state hook or no such file" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var bare: server.Context = .{ .session = opened.session(), .scratch = &scratch };
@@ -72,7 +72,7 @@ test "snapshot and restore refuse every path that leaves the state directory (RA
     const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
 
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image, .state_dir = dir, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var scratch: [64]u8 = undefined;
     var context: server.Context = .{ .session = opened.session(), .scratch = &scratch, .state = opened.stateFiles() };

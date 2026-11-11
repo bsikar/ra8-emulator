@@ -145,7 +145,7 @@ fn liveMarks(opened: *ra8.session.harness.Harness) !map_layout.Marks {
 }
 
 test "a run's live stack draws the band and no red" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     opened.session().live.budget = 2_000;
     _ = try opened.session().run(.cpu0, .cont);
@@ -158,7 +158,7 @@ test "a run's live stack draws the band and no red" {
 }
 
 test "an MSP set under the base draws the stack block red and the band runs on under it" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try opened.session().setRegister(.cpu0, .msp, stack.base - 0x40);
     try opened.session().setRegister(.cpu0, .msp, stack.base + 0x100);

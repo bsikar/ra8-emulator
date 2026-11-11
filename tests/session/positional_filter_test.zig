@@ -47,6 +47,7 @@ test "a committed log's walk filters its records by position" {
         .checkpoint_every = 1,
         .history_storage = sink.storage(),
         .history_objects = objects.objects(),
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer opened.deinit();
     const session = opened.session();

@@ -29,10 +29,11 @@ fn fileAt(dir: std.Io.Dir, name: []const u8, bytes: []const u8) ![]u8 {
 test "plain dual wrong CPU1 ELF preserves guest provider and future continuation" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
+    const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
     var source1: Cpu1 = .{};
-    var source = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2 });
+    var source = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2, .files = host_files });
     defer source.deinit();
-    try source1.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &source, second_path);
+    try source1.open(std.testing.allocator, std.testing.io, host_files.reader, &source, second_path);
     defer source1.close(std.testing.allocator);
     var saved = try capture(&source);
     defer saved.deinit();
@@ -46,13 +47,13 @@ test "plain dual wrong CPU1 ELF preserves guest provider and future continuation
     const alt_path = try fileAt(tmp.dir, "alternate.elf", alternate);
     defer std.testing.allocator.free(alt_path);
     var wrong1: Cpu1 = .{};
-    var wrong = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2 });
+    var wrong = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = source_path, .history_frames = 2, .files = host_files });
     defer wrong.deinit();
-    try wrong1.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &wrong, alt_path);
+    try wrong1.open(std.testing.allocator, std.testing.io, host_files.reader, &wrong, alt_path);
     defer wrong1.close(std.testing.allocator);
     var before = try capture(&wrong);
     defer before.deinit();
-    var clock: Clock = .{ .io = std.testing.io, .memory = wrong.guest(), .board = wrong.board(), .timebase = &wrong.state.edge.timebase, .cpu1 = wrong.state.files.pair, .state = .{ .load = path }, .image_identity = snapshot.imageIdentity(source_bytes), .cpu1_image_identity = snapshot.imageIdentity(alternate) };
+    var clock: Clock = .{ .io = std.testing.io, .memory = wrong.guest(), .board = wrong.board(), .timebase = &wrong.state.edge.timebase, .cpu1 = wrong.state.files.pair, .state = .{ .load = path, .files = host_files }, .image_identity = snapshot.imageIdentity(source_bytes), .cpu1_image_identity = snapshot.imageIdentity(alternate) };
     defer clock.deinitSnapshot();
     const hook = snapshot.hook(&clock).?;
     try std.testing.expectError(error.ImageMismatch, hook.loadFn.?(hook.context, wrong.primaryCpu()));

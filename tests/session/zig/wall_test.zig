@@ -39,9 +39,10 @@ fn check(target: Target, old_start: u32, old_end: u32, wrapped: bool) !void {
     var live: Harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
         .history_frames = 2,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer live.deinit();
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     live.state.edge.idle_skip = false;
 
@@ -127,9 +128,10 @@ fn rearm(plain: bool, old_start: u32, old_end: u32, wrapped: bool) !void {
     var live: Harness = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
         .history_frames = 2,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer live.deinit();
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     live.state.edge.idle_skip = false;
     const at = map.sram_base + 0x6000;
@@ -205,9 +207,10 @@ fn multiStore(plain: bool, diagnostic: bool) !void {
     var live = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
         .history_frames = 2,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer live.deinit();
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     live.state.edge.idle_skip = false;
     const at = map.sram_base + 0x6000;
@@ -283,9 +286,10 @@ test "grid G6 stopped store restores its pending close without double charge" {
     var live = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf",
         .history_frames = 2,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
     });
     defer live.deinit();
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &live, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(std.testing.allocator);
     live.state.edge.idle_skip = false;
     const at = map.sram_base + 0x6000;

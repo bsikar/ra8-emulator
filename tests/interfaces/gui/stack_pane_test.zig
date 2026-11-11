@@ -30,7 +30,7 @@ const golden: u64 = 4316658740216549600;
 
 /// The fixture stopped on ra8_sci_init's first instruction.
 fn stopped() !ra8.session.harness.Harness {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     errdefer opened.deinit();
     const session = opened.session();
     _ = try session.setBreakpoint(.cpu0, .{ .address = sci_init });

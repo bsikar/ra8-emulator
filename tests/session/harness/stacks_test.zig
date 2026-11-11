@@ -15,7 +15,7 @@ fn runFor(opened: *harness.Harness, instructions: u64) !void {
 }
 
 test "a session nobody asked samples nothing and keeps its retire path" {
-    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try std.testing.expect(opened.primaryCpu().retire_listener == null);
     try runFor(&opened, 50_000);
@@ -23,7 +23,7 @@ test "a session nobody asked samples nothing and keeps its retire path" {
 }
 
 test "sampled stacks are CPU0's, in virtual-time order, inside the run" {
-    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const stacks = try std.testing.allocator.create(harness.stacks.Stacks);
     defer std.testing.allocator.destroy(stacks);
@@ -47,7 +47,7 @@ test "sampled stacks are CPU0's, in virtual-time order, inside the run" {
 }
 
 test "unsampling gives the retire path back and stops the samples" {
-    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const stacks = try std.testing.allocator.create(harness.stacks.Stacks);
     defer std.testing.allocator.destroy(stacks);

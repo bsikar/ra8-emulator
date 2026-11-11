@@ -7,7 +7,11 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
     const image = if (args.len > 1) args[1] else "../fixtures/plug/gauge_poll.elf";
     const input: ?[]const u8 = if (args.len > 2) args[2] else null;
-    var opened = try ra8.session.harness.open(allocator, io, .{ .elf_path = image, .input_script = input });
+    var opened = try ra8.session.harness.open(allocator, io, .{
+        .elf_path = image,
+        .input_script = input,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
+    });
     defer opened.deinit();
     if (input == null) {
         if (opened.session().currentCore() != .cpu0) return error.WrongCore;

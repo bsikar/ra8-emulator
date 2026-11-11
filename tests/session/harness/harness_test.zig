@@ -7,10 +7,11 @@ const ra8 = @import("ra8");
 
 const image_path = "tests/fixtures/display/ra8_ui.elf";
 const input_path = "tests/fixtures/display/tap.input";
+const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
 
 test "grid repair G2 installed advance accepts tiny open interval and WFI progress" {
     for ([_]bool{ false, true }) |sleep| {
-        var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+        var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = host_files });
         defer opened.deinit();
         opened.state.edge.idle_skip = false;
         opened.state.edge.timebase.per_chunk = 64;
@@ -32,7 +33,7 @@ test "grid repair G2 installed advance accepts tiny open interval and WFI progre
 }
 
 test "grid repair G2 partial calls and snapshot continuation keep exact elapsed slots" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .history_frames = 2 });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .history_frames = 2, .files = host_files });
     defer opened.deinit();
     opened.state.edge.idle_skip = false;
     opened.state.edge.timebase.per_chunk = 64;
@@ -70,7 +71,7 @@ test "grid repair G2 partial calls and snapshot continuation keep exact elapsed 
 }
 
 test "grid repair G2 installed advance still refuses a guest stopped before progress" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = host_files });
     defer opened.deinit();
     opened.session().history = null;
     const at = ra8.chip.core.memmap.sram_base + 0x6000;
@@ -88,7 +89,7 @@ test "grid repair G2 installed advance still refuses a guest stopped before prog
 }
 
 test "grid repair G2 public tiny settle uses projected progress" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = host_files });
     defer opened.deinit();
     opened.state.edge.idle_skip = false;
     opened.state.edge.timebase.per_chunk = 64;
@@ -108,6 +109,7 @@ test "public harness opens real display firmware, taps, settles, and frames" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = image_path,
         .input_script = input_path,
+        .files = host_files,
     });
     defer opened.deinit();
 
@@ -133,7 +135,7 @@ test "RA8EMU-768: restore returns the session to a saved screen, frame for frame
     const dir = try tmp.dir.realPathFileAlloc(std.testing.io, ".", std.testing.allocator);
     defer std.testing.allocator.free(dir);
     const path = "screen.ra8snap";
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path, .state_dir = dir });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .input_script = input_path, .state_dir = dir, .files = host_files });
     defer opened.deinit();
 
     try opened.session().waitSettled(2_000_000_000);
@@ -171,7 +173,7 @@ test "public harness cleans up an invalid ELF" {
     try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "bad.elf", .data = "not an elf" });
     var path_buffer: [128]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/bad.elf", .{tmp.sub_path});
-    const result = ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = path });
+    const result = ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = path, .files = host_files });
     if (result) |opened_value| {
         var opened = opened_value;
         opened.deinit();
@@ -180,7 +182,7 @@ test "public harness cleans up an invalid ELF" {
 }
 
 test "public harness streams ThreadX switches and exceptions in time order" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .files = host_files });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();
@@ -209,7 +211,7 @@ test "public harness streams ThreadX switches and exceptions in time order" {
 }
 
 test "public harness reports no RTOS trace for an image without ThreadX" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path, .files = host_files });
     defer opened.deinit();
     try std.testing.expect(!opened.traceRtos());
 }
@@ -224,7 +226,7 @@ fn isRtos(event: StreamEvent) bool {
 }
 
 test "public harness streams the same RTOS events --trace-rtos records" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .files = host_files });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();
@@ -264,7 +266,7 @@ test "public harness streams the same RTOS events --trace-rtos records" {
 }
 
 fn retiredAfter(stall: bool) !struct { retired: u64, recorded: usize, dropped: u64, total: usize } {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .files = host_files });
     defer opened.deinit();
     try std.testing.expect(opened.traceRtos());
     const session = opened.session();
@@ -288,6 +290,7 @@ test "a subscriber that never reads does not change the run" {
 test "RA8EMU-950: a session core sees CPACR, so fp_basic's first VADD lands" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = "tests/fixtures/fpu/fp_basic.elf",
+        .files = host_files,
     });
     defer opened.deinit();
     const first_result: u32 = 0x2200_0100;
@@ -302,7 +305,7 @@ test "RA8EMU-950: a session core sees CPACR, so fp_basic's first VADD lands" {
 }
 
 test "RA8EMU-1148: a session core runs under the MPU check a plain run arms" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf" });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/threadx/threadx_stkof.elf", .files = host_files });
     defer opened.deinit();
     const cpu = opened.primaryCpu();
     const check = cpu.mpu orelse return error.NoMpuCheck;
@@ -312,7 +315,7 @@ test "RA8EMU-1148: a session core runs under the MPU check a plain run arms" {
 
 test "RA8EMU-959: an image loaded over another is the one a firmware reset restarts" {
     const gpa = std.testing.allocator;
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf" });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf", .files = host_files });
     defer opened.deinit();
     const reboot = opened.board().reboot.?;
     try std.testing.expectEqual(@as(u32, 0x0200_0000), reboot.vector_base);
@@ -338,6 +341,7 @@ test "RA8EMU-1152: the harness opens on the board profile it is given" {
     var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
         .elf_path = image_path,
         .board_profile = custom,
+        .files = host_files,
     });
     defer opened.deinit();
 
@@ -350,10 +354,10 @@ test "RA8EMU-1152: the harness opens on the board profile it is given" {
 
 test "CPU VTOR regression: repeated Session CPU1 loads expose the loaded vector base" {
     const gpa = std.testing.allocator;
-    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf" });
+    var opened = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "tests/fixtures/gpio/blink.elf", .files = host_files });
     defer opened.deinit();
     var second: ra8.session.cpu1.bringup.Cpu1 = .{};
-    try second.open(gpa, std.testing.io, std.Io.Dir.cwd(), &opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(gpa, std.testing.io, host_files.reader, &opened, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     defer second.close(gpa);
     const cpu = second.cpu();
     const first = second.image.?.vectorBase().?;

@@ -60,7 +60,7 @@ pub const Rig = struct {
         self.fail_side_at = null;
         self.side_calls = 0;
         self.fail_load_side = false;
-        self.opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile });
+        self.opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
         errdefer self.opened.deinit();
         try countFixture(&self.opened);
         const session = self.opened.session();
@@ -242,7 +242,7 @@ pub fn digestOf(gpa: std.mem.Allocator, opened: *harness_mod.Harness) ![32]u8 {
 /// the run has a grid; with `window` it also records into a reverse
 /// window of `budget` bytes, planted at that state.
 pub fn openCounting(gpa: std.mem.Allocator, window: ?usize) !harness_mod.Harness {
-    var opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile });
+    var opened = try harness_mod.open(gpa, std.testing.io, .{ .elf_path = image_path, .board_profile = profile, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     errdefer opened.deinit();
     try countFixture(&opened);
     const session = opened.session();

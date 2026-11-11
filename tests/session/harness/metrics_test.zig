@@ -11,10 +11,10 @@ fn threadTicks(snapshot: ra8.session.device_metrics.Snapshot, id: u32) u64 {
 }
 
 test "device metrics auto-arm independent CPU0 and CPU1 RTOS owners" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     var secondary: ra8.session.cpu1.bringup.Cpu1 = .{};
-    try secondary.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &opened, fixture);
+    try secondary.open(std.testing.allocator, std.testing.io, ra8.host.session_files.reader(ra8.session.file_ops.Reader), &opened, fixture);
     defer secondary.close(std.testing.allocator);
     const other = secondary.cpu();
     const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, fixture, std.testing.allocator, .limited(8 * 1024 * 1024));
@@ -39,7 +39,7 @@ test "device metrics auto-arm independent CPU0 and CPU1 RTOS owners" {
 }
 
 test "device metrics replaces RTOS symbol after reload without nesting listeners" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     try std.testing.expect(opened.session().deviceMetrics(.cpu0).rtos);
     const original_inner = opened.state.metrics_tracking[0].listener.inner_bus.ctx;
@@ -68,7 +68,7 @@ test "explicitly armed RTOS metrics discard future attribution after restore" {
 }
 
 fn restoredOwnership(explicit: bool) !void {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const address = ra8.session.symbols.addressOf(opened.image(), ra8.session.rtos.hook.symbol).?;
     const cpu = opened.primaryCpu();
@@ -98,7 +98,7 @@ fn restoredOwnership(explicit: bool) !void {
 }
 
 test "late metrics sampling seeds an already active ISR" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = fixture, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer opened.deinit();
     const cpu = opened.primaryCpu();
     cpu.retired = 100;

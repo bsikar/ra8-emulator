@@ -47,7 +47,8 @@ test "path and offline CPU1 startup register the published widget tree and permi
         var h = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "absent.elf", .elf_bytes = first });
         defer h.deinit();
         var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
-        if (offline) try cpu1.openBytes(gpa, &h, bytes) else try cpu1.open(gpa, std.testing.io, std.Io.Dir.cwd(), &h, path);
+        const reader = ra8.host.session_files.reader(ra8.session.file_ops.Reader);
+        if (offline) try cpu1.openBytes(gpa, &h, bytes) else try cpu1.open(gpa, std.testing.io, reader, &h, path);
         defer cpu1.close(gpa);
         try capabilities(&h, &cpu1);
         try std.testing.expectEqual(@as(?u32, tree_address), ra8.session.symbols.addressOf(cpu1.image.?, ra8.session.widget_tree.symbol));

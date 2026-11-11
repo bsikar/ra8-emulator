@@ -2,6 +2,7 @@
 test {
     _ = @import("console_test.zig");
     _ = @import("read_test.zig");
+    _ = @import("session_files_test.zig");
     _ = @import("camera/pipe/windows_test.zig");
     _ = @import("camera/av/delegate_test.zig");
     _ = @import("camera/ppm_decode_test.zig");

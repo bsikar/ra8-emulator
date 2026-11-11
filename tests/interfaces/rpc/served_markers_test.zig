@@ -142,9 +142,9 @@ test "a marker indexed over a shorter log is armed again once the history grew" 
 
 test "the DFU marker prefix preserves the default board's execution with smaller external memory" {
     const gpa = std.testing.allocator;
-    var reference = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = image, .history_frames = 2 });
+    var reference = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = image, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer reference.deinit();
-    var reduced = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = image, .board_profile = rig.small_profile, .history_frames = 2 });
+    var reduced = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = image, .board_profile = rig.small_profile, .history_frames = 2, .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops) });
     defer reduced.deinit();
     // The equivalence guard compares guest execution, not legacy capture cost.
     // The two marker scenarios above still capture all 300 actual stops.

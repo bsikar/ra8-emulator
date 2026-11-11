@@ -213,9 +213,10 @@ test "no flag, no hook" {
 }
 
 fn dual(second: *Cpu1) !Harness {
-    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2 });
+    const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
+    var h = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf", .history_frames = 2, .files = host_files });
     errdefer h.deinit();
-    try second.open(std.testing.allocator, std.testing.io, std.Io.Dir.cwd(), &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+    try second.open(std.testing.allocator, std.testing.io, host_files.reader, &h, "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
     h.state.edge.idle_skip = false;
     return h;
 }
@@ -237,7 +238,8 @@ fn fileAt(tmp: std.Io.Dir, name: []const u8, bytes: []const u8) ![]u8 {
 }
 
 fn restorePlain(h: *Harness, clock: *Clock, path: []const u8) !void {
-    clock.* = .{ .io = std.testing.io, .memory = h.guest(), .board = h.board(), .timebase = &h.state.edge.timebase, .cpu1 = h.state.files.pair, .state = .{ .load = path }, .image_identity = zig_run.zig_snapshot.imageIdentity(dual0), .cpu1_image_identity = zig_run.zig_snapshot.imageIdentity(dual1) };
+    const host_files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops);
+    clock.* = .{ .io = std.testing.io, .memory = h.guest(), .board = h.board(), .timebase = &h.state.edge.timebase, .cpu1 = h.state.files.pair, .state = .{ .load = path, .files = host_files }, .image_identity = zig_run.zig_snapshot.imageIdentity(dual0), .cpu1_image_identity = zig_run.zig_snapshot.imageIdentity(dual1) };
     const hook = zig_run.zig_snapshot.hook(clock).?;
     const owed = try hook.loadFn.?(hook.context, h.primaryCpu());
     try std.testing.expectEqual(clock.saved.stretch.carry, owed);
