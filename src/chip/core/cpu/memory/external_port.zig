@@ -94,6 +94,7 @@ pub const Port = struct {
     sdram: []u8,
     flash: mapped.Mapped,
     meter: Meter,
+    demand_zero: bool = false,
 };
 
 fn holds(base: u32, size: u32, address: u32, len: usize) bool {

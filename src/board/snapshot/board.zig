@@ -103,6 +103,11 @@ pub fn Prepared(comptime B: type) type {
             self.next.c6.wire.bridge = live.c6.wire.bridge;
             rebaseUsb(self.next, live);
             @memcpy(live.usb.stick.disk, self.disk);
+            if (self.next.nor.inverted.len == 0 and live.nor.inverted.len == self.next.nor.capacity) {
+                live.nor.clearDirtySectors();
+                self.next.nor.inverted = live.nor.inverted;
+                live.nor.inverted = &.{};
+            }
             resourcesFree(live);
             live.* = self.next.*;
             if (self.reboot) |saved| live.reboot.?.* = saved;

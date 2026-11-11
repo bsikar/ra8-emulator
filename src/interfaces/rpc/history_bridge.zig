@@ -16,6 +16,13 @@ const seek_engine = ra8_session.history_seek_engine;
 const seek_facts = ra8_session.history_seek_facts;
 const touched_pages = ra8_session.history_touched_pages;
 
+const CacheKey = struct {
+    rec: usize,
+    history_bytes: u64,
+    branch: u32,
+    index: u32,
+};
+
 /// The bridge a served session binds: it reads the committed log for the
 /// transport's planner and restores checkpoint objects into the session's
 /// history. `disk` and `ram` are the two history kinds a served open
@@ -28,9 +35,11 @@ pub const Bridge = struct {
     /// The facts the last gather returned; the bridge owns their memory
     /// until the next gather (the transport's bridge contract).
     facts_scratch: ?seek_facts.Facts = null,
+    cached_key: ?CacheKey = null,
     /// The disk log's bytes the last logBytes read, owned until the next
     /// read or teardown.
     log_scratch: ?[]u8 = null,
+    log_cached_key: ?CacheKey = null,
     touched_scratch: std.ArrayList(*touched_pages.Touched) = .empty,
     /// The prefetch pool a disk history opened; a restore takes the
     /// checkpoint's snapshot from it when a worker already loaded it.
@@ -40,8 +49,10 @@ pub const Bridge = struct {
     pub fn deinit(self: *Bridge) void {
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
+        self.cached_key = null;
         if (self.log_scratch) |old| self.gpa.free(old);
         self.log_scratch = null;
+        self.log_cached_key = null;
         for (self.touched_scratch.items) |t| {
             t.deinit();
             self.gpa.destroy(t);
@@ -54,7 +65,15 @@ pub const Bridge = struct {
     /// grid (the log proves the rest; the cursor is the run's own).
     pub fn facts(context: *anyopaque) anyerror!seek_engine.Facts {
         const self: *Bridge = @ptrCast(@alignCast(context));
-        if (self.session.persistent_recorder) |rec| try rec.force();
+        if (self.session.persistent_recorder) |rec| {
+            try rec.force();
+            const key = cacheKeyOf(rec);
+            if (self.cached_key) |prev| if (std.meta.eql(prev, key)) if (self.facts_scratch) |cached| {
+                const cur: ra8_session.api.Position = if (self.session.grid) |grid| grid.at else .{};
+                return .{ .current = cur, .checkpoints = cached.checkpoints, .window = windowFacts(self.session) };
+            };
+        }
+        self.cached_key = null;
         if (self.facts_scratch) |old| self.gpa.free(old.checkpoints);
         self.facts_scratch = null;
         for (self.touched_scratch.items) |t| {
@@ -77,6 +96,7 @@ pub const Bridge = struct {
         const gathered = try seek_facts.gather(self.gpa, bytes);
         self.facts_scratch = gathered;
         try self.loadTouchedRecords(gathered.checkpoints);
+        if (self.session.persistent_recorder) |rec| self.cached_key = cacheKeyOf(rec);
         // A never-run machine has no grid: its cursor sits at or before
         // every checkpoint, which a zeroed position says. A session with
         // no log still refuses above.
@@ -185,15 +205,29 @@ pub const Bridge = struct {
         const self: *Bridge = @ptrCast(@alignCast(context));
         // Interventions stage between commits; a replay needs every one
         // the line holds, so the staged ones commit before the read.
-        if (self.session.persistent_recorder) |rec| try rec.force();
+        if (self.session.persistent_recorder) |rec| {
+            try rec.force();
+            const key = cacheKeyOf(rec);
+            if (self.log_cached_key) |prev| if (std.meta.eql(prev, key)) if (self.log_scratch) |cached| return cached;
+        }
         if (self.ram) |r| return r.log_bytes.items;
         const d = self.disk orelse return error.NoHistory;
         const bytes = try history_segments.readAll(self.gpa, history.storage.Store.from(&d.session));
         if (self.log_scratch) |old| self.gpa.free(old);
         self.log_scratch = bytes;
+        self.log_cached_key = if (self.session.persistent_recorder) |rec| cacheKeyOf(rec) else null;
         return bytes;
     }
 };
+
+fn cacheKeyOf(rec: anytype) CacheKey {
+    return .{
+        .rec = @intFromPtr(rec),
+        .history_bytes = rec.history_bytes,
+        .branch = rec.segment.branch,
+        .index = rec.segment.index,
+    };
+}
 
 /// Read the file's bytes into `buf` from its start; a short file stops
 /// at its end.

@@ -21,8 +21,12 @@ pub const Located = struct { base: u32, offset: usize, bytes: []const u8 };
 /// Mutable backing resolution reserved for hooked writers and raw restore.
 pub const LocatedMut = struct { base: u32, offset: usize, bytes: []u8 };
 
+pub const SdramSet = std.StaticBitSet(128 * 1024 * 1024 / 4096);
+
 pub const Store = struct {
     touched: @import("touched.zig").Tracker = .{},
+    sdram_resident: SdramSet = .empty,
+    sdram_demand_zero: bool = false,
     pages: [memmap.ram.len]?[]u8 = @splat(null),
     owned: [memmap.ram.len]bool = @splat(false),
     extra: extra.Extra = .{},
@@ -54,7 +58,10 @@ pub const Store = struct {
             const secure = viewOf(entry.base) orelse continue;
             self.pages[index] = self.pages[indexOf(secure).?];
         }
-        if (lender) |first| self.port = first.port;
+        if (lender) |first| {
+            self.port = first.port;
+            self.sdram_demand_zero = first.sdram_demand_zero;
+        }
         self.lender = lender;
         return self;
     }
@@ -63,12 +70,14 @@ pub const Store = struct {
     /// The board owns the backing and frees it after this store is gone.
     pub fn attachExternal(self: *Store, port: external_port.Port) void {
         const secure_index = indexOf(memmap.sdram_base).?;
-        if (self.owned[secure_index]) if (self.pages[secure_index]) |old| std.heap.page_allocator.free(old);
+        if (self.owned[secure_index]) if (self.pages[secure_index]) |old| std.heap.PageAllocator.unmap(@alignCast(old));
         self.pages[secure_index] = port.sdram;
         self.owned[secure_index] = false;
         self.pages[indexOf(memmap.ns_sdram_base).?] = port.sdram;
         self.port = port;
         self.owns_port = true;
+        self.sdram_demand_zero = port.demand_zero;
+        self.sdram_resident = .empty;
         self.barrier(.attach_external);
     }
 
@@ -78,7 +87,7 @@ pub const Store = struct {
             self.pages[indexOf(memmap.ns_sdram_base).?] = null;
         }
         for (&self.pages, &self.owned) |*held, *mine| {
-            if (mine.*) if (held.*) |bytes| std.heap.page_allocator.free(bytes);
+            if (mine.*) if (held.*) |bytes| std.heap.PageAllocator.unmap(@alignCast(bytes));
             held.* = null;
             mine.* = false;
         }
@@ -93,14 +102,39 @@ pub const Store = struct {
     /// so a live store reads as a fresh one before a snapshot fills it
     /// (RA8EMU-768). Borrowed regions are the lender's to clear.
     pub fn wipe(self: *Store) void {
+        if (self.owns_port) {
+            const sdram = self.port.?.sdram;
+            if (self.sdram_demand_zero and sdram.len <= 128 * 1024 * 1024) {
+                var it = self.sdram_resident.iterator(.{});
+                while (it.next()) |page| {
+                    const off = page * 4096;
+                    if (off < sdram.len) @memset(sdram[off..@min(off + 4096, sdram.len)], 0);
+                }
+                self.sdram_resident = .empty;
+            } else {
+                @memset(sdram, 0);
+            }
+        }
         self.touched = .{};
         self.barrier(.wipe);
         for (self.pages, self.owned) |held, mine| {
             if (mine) if (held) |bytes| @memset(bytes, 0);
         }
-        if (self.owns_port) @memset(self.port.?.sdram, 0);
         self.extra.deinit();
         self.notifyCodeRanges();
+    }
+
+    pub fn sdramResident(self: *const Store) *const SdramSet {
+        if (self.lender) |first| return first.sdramResident();
+        return &self.sdram_resident;
+    }
+
+    pub fn noteSdramResident(self: *Store, offset: usize, len: usize) void {
+        if (len == 0) return;
+        if (self.lender) |first| return first.noteSdramResident(offset, len);
+        const end = @min((offset + len - 1) / 4096 + 1, self.sdram_resident.capacity());
+        var page = offset / 4096;
+        while (page < end) : (page += 1) self.sdram_resident.set(page);
     }
 
     pub fn touches(self: *const Store) *const @import("touched.zig").Tracker {
@@ -217,7 +251,10 @@ pub const Store = struct {
         if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
             switch (hit.kind) {
                 .ospi => port.flash.rawWrite(hit.offset, bytes),
-                .sdram => @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes),
+                .sdram => {
+                    self.noteSdramResident(hit.offset, bytes.len);
+                    @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
+                },
             }
             return;
         };
@@ -285,6 +322,7 @@ pub const Store = struct {
     }
 
     inline fn hookBytes(self: *Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8, new: []const u8) void {
+        if (base == memmap.sdram_base) self.noteSdramResident(offset, new.len);
         self.touchesMut().note(base, offset, new.len);
         if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new });
     }
@@ -307,7 +345,6 @@ fn indexOf(base: u32) ?usize {
 }
 
 fn allocate(size: u32) Error![]u8 {
-    const bytes = std.heap.page_allocator.alloc(u8, size) catch return Error.OutOfMemory;
-    @memset(bytes, 0);
-    return bytes;
+    const ptr = std.heap.PageAllocator.map(size, .fromByteUnits(std.heap.page_size_min)) orelse return Error.OutOfMemory;
+    return ptr[0..size];
 }

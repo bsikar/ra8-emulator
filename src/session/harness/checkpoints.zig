@@ -12,6 +12,8 @@ const checkpoint_engine = @import("../history/checkpoint_engine.zig");
 const dirty_pages = @import("../history/dirty_pages.zig");
 const manifest_mod = @import("../history/manifest.zig");
 const observer_mod = @import("ra8_chip").core.cpu.memory.observer;
+const snap_file = @import("ra8_board").snapshot.run.file;
+const snap_memory = @import("ra8_board").snapshot.memory;
 
 /// The armed pair in one heap-stable box: the recorder owns the staging,
 /// the controller owns the policy, and the boundary's hook points here,
@@ -102,13 +104,19 @@ fn saveMachine(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
         armed.sink_ctx = .{ .objects = objs };
         sink = .{ .context = &armed.sink_ctx, .putFn = SinkContext.putFn };
     }
-    const cap_res = try armed.engine.captureFromFiles(
+    var full_snap: std.Io.Writer.Allocating = try .initCapacity(armed.allocator, 65536);
+    defer full_snap.deinit();
+    try armed.files.writeTo(&full_snap.writer);
+    var run_state = try spliceRunState(armed.allocator, armed.files.store, full_snap.written());
+    defer run_state.deinit();
+    const cap_res = try armed.engine.captureFromFilesWithRunState(
         armed.files,
         &armed.dirty,
         if (armed.prev_manifest) |*m| m else null,
         armed.checkpoints.saved.at,
         armed.checkpoints.next_id,
         null,
+        run_state.written(),
         sink,
         null,
     );
@@ -116,7 +124,7 @@ fn saveMachine(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
     errdefer cap_manifest.deinit(armed.allocator);
     var touched = armed.engine.takeTouched();
     errdefer if (touched) |*t| t.deinit();
-    try armed.files.writeTo(writer);
+    try writer.writeAll(full_snap.written());
     if (armed.prev_manifest) |*m| m.deinit(armed.allocator);
     var encoded: std.Io.Writer.Allocating = try .initCapacity(armed.allocator, 4096);
     errdefer encoded.deinit();
@@ -125,6 +133,26 @@ fn saveMachine(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
     armed.checkpoints.manifest_record = try encoded.toOwnedSlice();
     armed.prev_manifest = cap_manifest;
     armed.checkpoints.touched_record = touched;
+}
+
+fn spliceRunState(
+    allocator: std.mem.Allocator,
+    store: *const @import("ra8_chip").core.cpu.memory.store.Store,
+    full_bytes: []const u8,
+) !std.Io.Writer.Allocating {
+    var out: std.Io.Writer.Allocating = try .initCapacity(allocator, 8192);
+    errdefer out.deinit();
+    var reader = try snap_file.Reader.open(full_bytes);
+    try snap_file.writeHeader(&out.writer);
+    var section_start = reader.at;
+    while (try reader.next()) |section| : (section_start = reader.at) {
+        if (section.kind == .memory) {
+            try snap_memory.saveFabric(store, &out.writer);
+        } else if (section.kind != .second_memory) {
+            try out.writer.writeAll(full_bytes[section_start..reader.at]);
+        }
+    }
+    return out;
 }
 
 const SinkContext = struct {

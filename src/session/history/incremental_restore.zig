@@ -44,14 +44,14 @@ pub fn getSpaceSlice(files: *Files, space: manifest_mod.SpaceId, accessor: ?Spac
         if (acc.getSlice(space)) |slice| return slice;
     }
     return switch (space) {
-        .cpu0_mram => if (files.store.pages[0]) |p| p else null,
-        .cpu0_dtcm => if (files.store.pages[1]) |p| p else null,
-        .cpu0_sram => if (files.store.pages[2]) |p| p else null,
-        .cpu0_ppb => if (files.store.pages[3]) |p| p else null,
-        .cpu0_sdram => if (files.store.port) |port| port.sdram else null,
-        .cpu1_mram => if (files.pair) |pair| if (pair.store) |s| s.pages[0] else null else null,
-        .cpu1_dtcm => if (files.pair) |pair| if (pair.store) |s| s.pages[1] else null else null,
-        .cpu1_ppb => if (files.pair) |pair| if (pair.store) |s| s.pages[3] else null else null,
+        .cpu0_mram => files.store.mutRegion(memmap.mram_base),
+        .cpu0_dtcm => files.store.mutRegion(memmap.dtcm_base),
+        .cpu0_sram => files.store.mutRegion(memmap.sram_base),
+        .cpu0_ppb => files.store.mutRegion(memmap.ppb_base),
+        .cpu0_sdram => if (files.store.port) |port| port.sdram else files.store.mutRegion(memmap.sdram_base),
+        .cpu1_mram => if (files.pair) |pair| if (pair.store) |*s| s.mutRegion(memmap.mram_base) else null else null,
+        .cpu1_dtcm => if (files.pair) |pair| if (pair.store) |*s| s.mutRegion(memmap.dtcm_base) else null else null,
+        .cpu1_ppb => if (files.pair) |pair| if (pair.store) |*s| s.mutRegion(memmap.ppb_base) else null else null,
         .store_extra => blk: {
             for (files.store.extra.windows) |w| {
                 if (w) |win| break :blk win.bytes;
@@ -82,13 +82,26 @@ pub fn capture(
         .store_extra, .nor_flash, .sd_card,   .eink_buffer,
     };
 
+    const zero_page: [page_size]u8 = @splat(0);
+    const zero_id = ObjectId.compute(&zero_page);
+    var zero_stored = false;
+
     for (paged_spaces) |space| {
         const slice = getSpaceSlice(files, space, accessor) orelse continue;
         const total_pages = slice.len / page_size;
         for (0..total_pages) |p_idx| {
             const page_data = slice[p_idx * page_size .. (p_idx + 1) * page_size];
-            const obj_id = ObjectId.compute(page_data);
-            try objects.put(objects.context, obj_id, page_data);
+            const obj_id = if (isZeroPage(page_data)) blk: {
+                if (!zero_stored) {
+                    try objects.put(objects.context, zero_id, page_data);
+                    zero_stored = true;
+                }
+                break :blk zero_id;
+            } else blk: {
+                const id = ObjectId.compute(page_data);
+                try objects.put(objects.context, id, page_data);
+                break :blk id;
+            };
             try p_list.append(allocator, .{
                 .space = space,
                 .page_index = @intCast(p_idx),
@@ -179,9 +192,19 @@ pub fn applyDiff(
         const offset = @as(usize, p_ref.page_index) * page_size;
         const page_bytes = objects.get(objects.context, p_ref.object).?;
         @memcpy(space_slice[offset .. offset + page_size], page_bytes);
+        if (p_ref.space == .cpu0_sdram) files.store.noteSdramResident(offset, page_size);
     }
     if (diff_manifest.pages.len > 0) {
         files.store.notifyCodeRanges();
         if (files.pair) |pair| if (pair.store) |s| s.notifyCodeRanges();
     }
+}
+
+pub fn isZeroPage(bytes: []const u8) bool {
+    var at: usize = 0;
+    while (bytes.len - at >= 32) : (at += 32) {
+        const block: @Vector(32, u8) = bytes[at..][0..32].*;
+        if (@reduce(.Or, block) != 0) return false;
+    }
+    return std.mem.allEqual(u8, bytes[at..], 0);
 }

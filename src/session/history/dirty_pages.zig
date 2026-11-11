@@ -29,11 +29,14 @@ pub const SpaceMap = struct {
         .eink_buffer,
     };
 
-    pub fn indexOf(space: SpaceId) ?usize {
-        inline for (tracked, 0..) |s, i| {
-            if (s == space) return i;
+    pub inline fn indexOf(space: SpaceId) ?usize {
+        comptime {
+            for (tracked, 0..) |s, i| {
+                if (@backingInt(s) != i) @compileError("SpaceMap.tracked order mismatch");
+            }
         }
-        return null;
+        const idx = @backingInt(space);
+        return if (idx < space_count) idx else null;
     }
 };
 
@@ -92,10 +95,18 @@ pub const DirtyPages = struct {
 
     pub fn markRangeDirty(self: *DirtyPages, space: SpaceId, offset: u64, size: u64) void {
         if (size == 0) return;
-        const start = @as(u32, @intCast(offset / page_size));
-        const end = @as(u32, @intCast((offset + size + page_size - 1) / page_size));
+        const start = @as(u32, @intCast(offset >> 12));
+        const last = @as(u32, @intCast((offset + size - 1) >> 12));
+        if (start == last) {
+            const s_idx = SpaceMap.indexOf(space) orelse return;
+            const word_idx = start >> 6;
+            if (word_idx < self.masks[s_idx].len) {
+                self.masks[s_idx][word_idx] |= @as(u64, 1) << @intCast(start & 63);
+                return;
+            }
+        }
         var p = start;
-        while (p < end) : (p += 1) {
+        while (p <= last) : (p += 1) {
             self.markDirty(space, p);
         }
     }

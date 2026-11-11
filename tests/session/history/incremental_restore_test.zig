@@ -55,15 +55,12 @@ const MemoryObjectStore = struct {
 
 test "Incremental restore produces byte-identical machine state vs full restore" {
     const allocator = std.testing.allocator;
-
     var mem_store = MemoryObjectStore.init(allocator);
     defer mem_store.deinit();
     const obj_store = mem_store.store();
-
     const live = try Rig.create();
     defer live.destroy();
     try populated(live);
-
     const pos1 = scheduler.Position{ .branch = 1, .r = 10, .phase = .cpu0, .o = 0, .gap = .retired };
 
     // 1. Capture initial manifest and full snapshot
@@ -345,4 +342,56 @@ test "Incremental restore late run_state failure preserves entire state and cont
     var s_ref = try ref.save();
     defer s_ref.deinit();
     try std.testing.expectEqualSlices(u8, s_ref.written(), s_live.written());
+}
+
+test "getSpaceSlice resolves all 8 CPU0 and CPU1 RAM spaces distinctly with DirtyPages parity" {
+    const allocator = std.testing.allocator;
+    var mem_store = MemoryObjectStore.init(allocator);
+    defer mem_store.deinit();
+    const obj_store = mem_store.store();
+    const live = try Rig.create();
+    defer live.destroy();
+    try populated(live);
+    var dirty = try ra8.session.history_dirty_pages.DirtyPages.init(allocator);
+    defer dirty.deinit();
+    const obs = dirty.storeObserver();
+    live.store.observer = &obs;
+    defer live.store.observer = null;
+    const spaces = [_]manifest_mod.SpaceId{
+        .cpu0_mram, .cpu0_dtcm, .cpu0_sram, .cpu0_sdram, .cpu0_ppb,
+        .cpu1_mram, .cpu1_dtcm, .cpu1_ppb,
+    };
+    for (spaces, 0..) |sp_a, i| {
+        const a = incremental_restore.getSpaceSlice(&live.files, sp_a, null).?;
+        for (spaces[i + 1 ..]) |sp_b| {
+            const b = incremental_restore.getSpaceSlice(&live.files, sp_b, null).?;
+            try std.testing.expect(@intFromPtr(a.ptr) != @intFromPtr(b.ptr));
+        }
+    }
+    const pos1 = scheduler.Position{ .branch = 1, .r = 1, .phase = .cpu0, .o = 0, .gap = .retired };
+    var snap1 = try live.save();
+    defer snap1.deinit();
+    var m1 = try incremental_restore.capture(allocator, &live.files, pos1, 1, null, obj_store, null);
+    defer m1.deinit(allocator);
+    dirty.clearAll();
+    try live.store.write(.cpu0, memmap.mram_base + 0x2000, &.{ 0x11, 0x22 });
+    try live.store.write(.cpu0, memmap.dtcm_base + 0x2000, &.{ 0x33, 0x44 });
+    try live.store.write(.cpu0, memmap.sram_base + 0x3000, &.{ 0x55, 0x66 });
+    try live.store.write(.cpu0, memmap.sdram_base + 0x4000, &.{ 0x77, 0x88 });
+    try live.store.write(.cpu0, memmap.ppb_base + 0x5000, &.{ 0x99, 0xaa });
+    try live.pair.store.?.write(.cpu1, memmap.mram_base + 0x2000, &.{ 0xbb, 0xcc });
+    try live.pair.store.?.write(.cpu1, memmap.dtcm_base + 0x2000, &.{ 0xdd, 0xee });
+    try live.pair.store.?.write(.cpu1, memmap.ppb_base + 0x5000, &.{ 0xf1, 0xf2 });
+    try std.testing.expect(dirty.isDirty(.cpu0_mram, 2) and dirty.isDirty(.cpu0_dtcm, 2));
+    try std.testing.expect(dirty.isDirty(.cpu0_sram, 3) and dirty.isDirty(.cpu0_sdram, 4) and dirty.isDirty(.cpu0_ppb, 5));
+    try std.testing.expect(dirty.isDirty(.cpu1_mram, 2) and dirty.isDirty(.cpu1_dtcm, 2) and dirty.isDirty(.cpu1_ppb, 5));
+    var m2 = try incremental_restore.capture(allocator, &live.files, pos1, 2, null, obj_store, null);
+    defer m2.deinit(allocator);
+    var diff = try manifest_mod.diff(allocator, &m2, &m1);
+    defer diff.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 8), diff.pages.len);
+    try incremental_restore.applyDiff(&live.files, diff, obj_store, null);
+    var snap_after = try live.save();
+    defer snap_after.deinit();
+    try std.testing.expectEqualSlices(u8, snap1.written(), snap_after.written());
 }

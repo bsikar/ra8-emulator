@@ -50,9 +50,16 @@ pub const Staged = struct {
         var built = Flash.init(live.allocator);
         errdefer built.deinit();
         built.capacity = live.capacity;
-        try built.resize(built.capacity);
-        var i: u32 = 0;
-        while (i < self.sectors.count) : (i += 1) try built.loadSector(self.sectors.number(i), self.sectors.value(i));
+        if (self.sectors.count > 0) {
+            try built.resize(built.capacity);
+            var i: u32 = 0;
+            while (i < self.sectors.count) : (i += 1) try built.loadSector(self.sectors.number(i), self.sectors.value(i));
+        } else if (built.capacity > 0) {
+            const sectors = built.capacity / sector_len;
+            const bits = try built.allocator.alloc(u8, (sectors + 7) / 8);
+            @memset(bits, 0);
+            built.dirty = bits;
+        }
         return built;
     }
 };
@@ -66,6 +73,14 @@ pub fn read(cursor: *fields.Cursor) fields.Error!Staged {
 pub fn install(live: *Flash, built: Flash) void {
     if (live.obs) |o| o.barrier(.{ .component = .{ .owner = live, .what = .install } });
     const obs = live.obs;
+    if (built.inverted.len == 0 and live.inverted.len == built.capacity) {
+        live.clearDirtySectors();
+        if (live.dirty.len != 0) live.allocator.free(live.dirty);
+        live.dirty = built.dirty;
+        live.allocator = built.allocator;
+        live.obs = obs;
+        return;
+    }
     live.deinit();
     live.* = built;
     live.obs = obs;

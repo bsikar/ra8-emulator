@@ -37,7 +37,7 @@ pub fn saveAs(store: *const Store, kind: file.Kind, writer: anytype) !void {
         if (!store.owned[index]) continue;
         try saveRegion(entry.base, store.pages[index].?, live[index], writer);
     }
-    if (store.owns_port) try saveRegion(memmap.sdram_base, store.region(memmap.sdram_base).?, live[memmap.ram.len], writer);
+    if (store.owns_port) try saveSdramRegion(store, live[memmap.ram.len], writer);
     for (store.extra.windows, 0..) |held, index| {
         const window = held orelse continue;
         try saveRegion(window.base, window.bytes, live[memmap.ram.len + 1 + index], writer);
@@ -94,7 +94,20 @@ pub const Prepared = struct {
         for (store.pages, store.owned) |held, mine| if (mine) {
             if (held) |bytes| @memset(bytes, 0);
         };
-        if (store.owns_port) @memset(store.port.?.sdram, 0);
+        if (store.owns_port) {
+            const sdram = store.port.?.sdram;
+            if (store.sdram_demand_zero and sdram.len <= 128 * 1024 * 1024) {
+                var it = store.sdram_resident.iterator(.{});
+                while (it.next()) |p| {
+                    const offset = p * page;
+                    if (offset >= sdram.len) break;
+                    @memset(sdram[offset..@min(offset + page, sdram.len)], 0);
+                }
+                store.sdram_resident = .empty;
+            } else {
+                @memset(sdram, 0);
+            }
+        }
         store.extra.deinit();
         store.extra = self.extra;
         self.extra = .{};
@@ -139,6 +152,7 @@ fn apply(store: *Store, payload: []const u8) void {
             const offset = int(payload, &at) catch unreachable;
             const size = @min(page, len - offset);
             @memcpy(bytes[offset..][0..size], payload[at..][0..size]);
+            if (base == memmap.sdram_base) store.noteSdramResident(offset, size);
             at += size;
         }
     }
@@ -238,12 +252,63 @@ fn payloadLen(store: *const Store, live: *LiveCounts) u64 {
     for (memmap.ram, 0..) |_, index| {
         if (store.owned[index]) len += regionLen(store.pages[index].?, &live[index]);
     }
-    if (store.owns_port) len += regionLen(store.region(memmap.sdram_base).?, &live[memmap.ram.len]);
+    if (store.owns_port) len += sdramRegionLen(store, &live[memmap.ram.len]);
     for (store.extra.windows, 0..) |held, index| {
         if (held) |window| len += regionLen(window.bytes, &live[memmap.ram.len + 1 + index]);
     }
     len += stateLen(store);
     return len;
+}
+
+fn sdramRegionLen(store: *const Store, live: *u32) u64 {
+    const bytes = store.region(memmap.sdram_base).?;
+    const tracker = store.touches();
+    const set = if (store.sdram_demand_zero and bytes.len <= 128 * 1024 * 1024)
+        store.sdramResident()
+    else if (tracker.valid)
+        &tracker.sdram
+    else
+        return regionLen(bytes, live);
+    var len: u64 = 12;
+    live.* = 0;
+    var it = set.iterator(.{});
+    while (it.next()) |p| {
+        const offset = p * page;
+        if (offset >= bytes.len) break;
+        const chunk = bytes[offset..@min(offset + page, bytes.len)];
+        if (!zero(chunk)) {
+            len += 4 + chunk.len;
+            live.* += 1;
+        }
+    }
+    return len;
+}
+
+fn saveSdramRegion(store: *const Store, live: u32, writer: anytype) !void {
+    const bytes = store.region(memmap.sdram_base).?;
+    const tracker = store.touches();
+    const set = if (store.sdram_demand_zero and bytes.len <= 128 * 1024 * 1024)
+        store.sdramResident()
+    else if (tracker.valid)
+        &tracker.sdram
+    else
+        return saveRegion(memmap.sdram_base, bytes, live, writer);
+    try writer.writeInt(u32, memmap.sdram_base, .little);
+    try writer.writeInt(u32, @intCast(bytes.len), .little);
+    try writer.writeInt(u32, live, .little);
+    if (live == 0) return;
+    var left: u32 = live;
+    var it = set.iterator(.{});
+    while (left > 0) {
+        const p = it.next() orelse break;
+        const offset = p * page;
+        if (offset >= bytes.len) break;
+        const chunk = bytes[offset..@min(offset + page, bytes.len)];
+        if (zero(chunk)) continue;
+        try writer.writeInt(u32, @intCast(offset), .little);
+        try writer.writeAll(chunk);
+        left -= 1;
+    }
 }
 
 fn stateLen(store: *const Store) u64 {

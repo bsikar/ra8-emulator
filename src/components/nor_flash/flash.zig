@@ -49,7 +49,7 @@ pub const Flash = struct {
     }
 
     pub fn deinit(self: *Flash) void {
-        if (self.inverted.len != 0) self.allocator.free(self.inverted);
+        if (self.inverted.len != 0) std.heap.PageAllocator.unmap(@alignCast(self.inverted));
         if (self.dirty.len != 0) self.allocator.free(self.dirty);
         self.inverted = &.{};
         self.dirty = &.{};
@@ -58,14 +58,20 @@ pub const Flash = struct {
     /// Select the profile capacity and establish all access storage before a
     /// CPU or bus initiator can touch the part.
     pub fn resize(self: *Flash, capacity: u32) !void {
+        if (capacity == 0) {
+            self.deinit();
+            self.capacity = 0;
+            if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .resize } });
+            return;
+        }
         if (self.capacity == capacity and self.inverted.len != 0) return;
-        const bytes = try self.allocator.alloc(u8, capacity);
-        errdefer self.allocator.free(bytes);
+        const ptr = std.heap.PageAllocator.map(capacity, .fromByteUnits(std.heap.page_size_min)) orelse return error.OutOfMemory;
+        const bytes = ptr[0..capacity];
+        errdefer std.heap.PageAllocator.unmap(@alignCast(bytes));
         const sectors = capacity / part.sector_len;
         const bits = try self.allocator.alloc(u8, (sectors + 7) / 8);
-        if (self.inverted.len != 0) self.allocator.free(self.inverted);
+        if (self.inverted.len != 0) std.heap.PageAllocator.unmap(@alignCast(self.inverted));
         if (self.dirty.len != 0) self.allocator.free(self.dirty);
-        @memset(bytes, 0);
         @memset(bits, 0);
         self.capacity = capacity;
         self.inverted = bytes;
@@ -122,15 +128,44 @@ pub const Flash = struct {
 
     pub fn reset(self: *Flash) void {
         if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .reset } });
-        if (self.inverted.len != 0) @memset(self.inverted, 0);
-        if (self.dirty.len != 0) @memset(self.dirty, 0);
+        self.clearDirtySectors();
+    }
+
+    pub fn clearDirtySectors(self: *Flash) void {
+        if (self.inverted.len == 0) return;
+        for (self.dirty, 0..) |*bits, byte_index| {
+            var mask = bits.*;
+            if (mask == 0) continue;
+            while (mask != 0) {
+                const bit: u32 = @ctz(mask);
+                const first = (@as(u32, @intCast(byte_index)) * 8 + bit) * part.sector_len;
+                @memset(self.inverted[first..][0..part.sector_len], 0);
+                mask &= mask - 1;
+            }
+            bits.* = 0;
+        }
     }
 
     /// The undo trail's restore: bytes land past NOR program semantics and
     /// record nothing; the sectors they touch re-execute through the
     /// store's fanout.
     pub fn rawWrite(self: *Flash, address: u32, bytes: []const u8) void {
-        if (bytes.len == 0 or !self.holds(address, @intCast(bytes.len)) or self.inverted.len == 0) return;
+        if (bytes.len == 0 or !self.holds(address, @intCast(bytes.len))) return;
+        if (self.inverted.len == 0) {
+            var all_erased = true;
+            for (bytes) |b| if (b != part.erased) {
+                all_erased = false;
+                break;
+            };
+            if (all_erased) return;
+            const ptr = std.heap.PageAllocator.map(self.capacity, .fromByteUnits(std.heap.page_size_min)) orelse return;
+            self.inverted = ptr[0..self.capacity];
+            if (self.dirty.len == 0) {
+                const sectors = self.capacity / part.sector_len;
+                self.dirty = self.allocator.alloc(u8, (sectors + 7) / 8) catch return;
+                @memset(self.dirty, 0);
+            }
+        }
         // The array holds the read view's complement, so the restore lands
         // the bytes' inverse: a restored 0xFF reads back as 0xFF.
         for (bytes, 0..) |restored, i| self.inverted[address + i] = ~restored;

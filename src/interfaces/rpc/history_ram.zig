@@ -21,6 +21,8 @@ pub const RamHistory = struct {
     share: u64,
     log_bytes: std.ArrayList(u8) = .empty,
     objects: std.ArrayList(Named) = .empty,
+    index: std.AutoHashMap([32]u8, usize),
+    object_bytes: u64 = 0,
     /// The shapes the harness's open options take; all point into this
     /// history, which stays put until deinit.
     storage: session_recorder.Storage = undefined,
@@ -32,9 +34,9 @@ pub const RamHistory = struct {
     pub fn open(gpa: std.mem.Allocator, share: u64) !*RamHistory {
         const self = try gpa.create(RamHistory);
         errdefer gpa.destroy(self);
-        self.* = .{ .gpa = gpa, .share = share };
+        self.* = .{ .gpa = gpa, .share = share, .index = std.AutoHashMap([32]u8, usize).init(gpa) };
         self.storage = .{ .context = self, .append = &appendLog, .flush = &flushLog, .truncate = &truncateLog };
-        self.object_space = .{ .context = self, .put = &putObject, .sync = &syncObjects };
+        self.object_space = .{ .context = self, .put = &putObject, .sync = &syncObjects, .putPacked = &putPackedObject };
         self.budget = .{ .context = self, .free = &freeRam, .cap = share, .floor = 0, .relief = null };
         return self;
     }
@@ -43,22 +45,21 @@ pub const RamHistory = struct {
         self.log_bytes.deinit(self.gpa);
         for (self.objects.items) |one| self.gpa.free(one.bytes);
         self.objects.deinit(self.gpa);
+        self.index.deinit();
         self.gpa.destroy(self);
     }
 
     /// The bytes this history holds, its log and its objects together.
     pub fn used(self: *const RamHistory) u64 {
-        var total: u64 = self.log_bytes.items.len;
-        for (self.objects.items) |one| total += one.bytes.len;
-        return total;
+        return self.log_bytes.items.len + self.object_bytes;
     }
 
     /// The bytes one name holds, or null when nothing was put under it.
     pub fn get(self: *const RamHistory, name: []const u8) ?[]const u8 {
-        for (self.objects.items) |one| {
-            if (std.mem.eql(u8, &one.name, name)) return one.bytes;
-        }
-        return null;
+        if (name.len != 32) return null;
+        const key: *const [32]u8 = @ptrCast(name.ptr);
+        const idx = self.index.get(key.*) orelse return null;
+        return self.objects.items[idx].bytes;
     }
 
     fn appendLog(context: *anyopaque, bytes: []const u8) anyerror!void {
@@ -78,11 +79,29 @@ pub const RamHistory = struct {
     fn putObject(context: *anyopaque, kind: session_recorder.Objects.Kind, name: []const u8, bytes: []const u8) anyerror!void {
         const self: *RamHistory = @ptrCast(@alignCast(context));
         if (self.get(name)) |old| return object_reuse.validate(self.gpa, kind, old, bytes);
+        try self.insertNamed(name, bytes);
+    }
+
+    fn putPackedObject(context: *anyopaque, id: [16]u8, bytes: []const u8) anyerror!void {
+        const self: *RamHistory = @ptrCast(@alignCast(context));
+        const hex = std.fmt.bytesToHex(id, .lower);
+        if (self.get(&hex)) |old| {
+            if (!std.mem.eql(u8, old, bytes)) return error.ObjectConflict;
+            return;
+        }
+        try self.insertNamed(&hex, bytes);
+    }
+
+    fn insertNamed(self: *RamHistory, name: []const u8, bytes: []const u8) !void {
         var slot: Named = .{ .name = undefined, .bytes = try self.gpa.dupe(u8, bytes) };
         errdefer self.gpa.free(slot.bytes);
         std.debug.assert(name.len == slot.name.len);
         @memcpy(&slot.name, name);
+        const idx = self.objects.items.len;
+        try self.index.ensureUnusedCapacity(1);
         try self.objects.append(self.gpa, slot);
+        self.index.putAssumeCapacity(slot.name, idx);
+        self.object_bytes += bytes.len;
     }
 
     fn syncObjects(context: *anyopaque) anyerror!void {

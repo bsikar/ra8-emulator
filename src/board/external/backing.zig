@@ -19,18 +19,18 @@ pub const Backing = struct {
     /// Size the OSPI device and allocate zeroed SDRAM for the layout.
     pub fn init(layout: external.Layout, flash: mapped.Mapped) Error!Backing {
         try flash.resize(layout.size(.ospi));
-        const allocator = std.heap.page_allocator;
-        const sdram = allocator.alloc(u8, layout.size(.sdram)) catch return Error.OutOfMemory;
-        errdefer allocator.free(sdram);
-        @memset(sdram, 0);
-        const fabric = allocator.create(external.Fabric) catch return Error.OutOfMemory;
+        const sdram_len = layout.size(.sdram);
+        const ptr = std.heap.PageAllocator.map(sdram_len, .fromByteUnits(std.heap.page_size_min)) orelse return Error.OutOfMemory;
+        const sdram = ptr[0..sdram_len];
+        errdefer std.heap.PageAllocator.unmap(@alignCast(sdram));
+        const fabric = std.heap.page_allocator.create(external.Fabric) catch return Error.OutOfMemory;
         fabric.* = external.Fabric.init(layout);
         return .{ .sdram = sdram, .fabric = fabric, .flash = flash };
     }
 
     /// Free the backing. Every store that attached it must be gone first.
     pub fn deinit(self: *Backing) void {
-        std.heap.page_allocator.free(self.sdram);
+        std.heap.PageAllocator.unmap(@alignCast(self.sdram));
         std.heap.page_allocator.destroy(self.fabric);
         self.* = undefined;
     }
@@ -41,6 +41,7 @@ pub const Backing = struct {
             .sdram = self.sdram,
             .flash = self.flash,
             .meter = .{ .context = self.fabric, .charge = charge },
+            .demand_zero = true,
         };
     }
 };

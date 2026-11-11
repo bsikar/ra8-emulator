@@ -377,6 +377,7 @@ test {
     _ = @import("interfaces/rpc/served_nav_feed_test.zig");
     _ = @import("interfaces/rpc/served_rewind_test.zig");
     _ = @import("interfaces/gui/smooth_rewind_gui_test.zig");
+    _ = @import("interfaces/rpc/history_metrics_test.zig");
     _ = @import("tools/memory_writer_guard_test.zig");
     _ = @import("interfaces/rpc/ws_all_test.zig");
 }
