@@ -191,31 +191,75 @@ fn preventReplace(dir: std.Io.Dir) !std.os.windows.HANDLE {
 }
 
 test "write back: a write that fails leaves the original image intact" {
-    if (@import("builtin").os.tag == .linux and std.os.linux.geteuid() == 0) return error.SkipZigTest;
+    const builtin = @import("builtin");
+    const windows = builtin.os.tag == .windows;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
+    var rand: [8]u8 = undefined;
+    io.random(&rand);
+    var sub_buf: [48]u8 = undefined;
+    const sub = try std.fmt.bufPrint(&sub_buf, "ra8-sd-ro-{x}", .{rand});
+    var slash_tmp: std.Io.Dir = if (!windows) try std.Io.Dir.openDirAbsolute(io, "/tmp", .{}) else undefined;
+    defer if (!windows) {
+        slash_tmp.deleteTree(io, sub) catch {};
+        slash_tmp.close(io);
+    };
+    var ldir: std.Io.Dir = if (!windows) try slash_tmp.createDirPathOpen(io, sub, .{ .open_options = .{ .iterate = true } }) else undefined;
+    defer if (!windows) ldir.close(io);
+    if (!windows) try ldir.setPermissions(io, .fromMode(0o755));
+    const work_dir = if (windows) tmp.dir else ldir;
     const bytes = try patterned(std.testing.allocator);
     defer std.testing.allocator.free(bytes);
-    try tmp.dir.createDir(io, "ro", .default_dir);
-    try tmp.dir.writeFile(io, .{ .sub_path = "ro/card.img", .data = bytes });
+    try work_dir.createDir(io, "ro", .default_dir);
+    try work_dir.writeFile(io, .{ .sub_path = "ro/card.img", .data = bytes });
     var img = unit();
     defer img.deinit();
     try img.loadBytes(bytes);
     const written: image.Block = @splat(0x5A);
     try std.testing.expect(img.write(3, &written));
-    var ro = try tmp.dir.openDir(io, "ro", .{ .iterate = true });
+    var ro = try work_dir.openDir(io, "ro", .{ .iterate = true });
     defer ro.close(io);
-    const windows = @import("builtin").os.tag == .windows;
-    const held: ?std.os.windows.HANDLE = if (windows) try preventReplace(tmp.dir) else null;
+    const held: ?std.os.windows.HANDLE = if (windows) try preventReplace(work_dir) else null;
     defer if (held) |handle| @import("ra8").host.read.close(handle);
     if (!windows) try ro.setPermissions(io, .fromMode(0o555));
     defer if (!windows) ro.setPermissions(io, .fromMode(0o755)) catch {};
-    // Zig 0.17 maps NTSTATUS SHARING_VIOLATION during rename to Unexpected.
-    const refusal = if (windows) error.Unexpected else error.AccessDenied;
-    try std.testing.expectError(refusal, disk_file.replace(io, tmp.dir, "ro/card.img", &img));
-    const back = try tmp.dir.readFileAlloc(io, "ro/card.img", std.testing.allocator, .limited(bytes.len + 1));
+    const keep: usize = @bitCast(@as(isize, -1));
+    const dropped = if (builtin.os.tag == .linux and std.os.linux.geteuid() == 0) blk: {
+        try std.testing.expectEqual(std.os.linux.E.SUCCESS, std.os.linux.errno(std.os.linux.syscall3(.setresuid, keep, 65534, keep)));
+        break :blk true;
+    } else false;
+    defer if (builtin.os.tag == .linux and dropped) {
+        _ = std.os.linux.syscall3(.setresuid, keep, 0, keep);
+    };
+    try std.testing.expectError(if (windows) error.Unexpected else error.AccessDenied, disk_file.replace(io, work_dir, "ro/card.img", &img));
+    const back = try work_dir.readFileAlloc(io, "ro/card.img", std.testing.allocator, .limited(bytes.len + 1));
     defer std.testing.allocator.free(back);
     try std.testing.expectEqualSlices(u8, bytes, back);
+}
+
+test "write back: mid-write and pre-replace faults leave original image intact and remove temp" {
+    var tmp = std.testing.tmpDir(.{ .iterate = true });
+    defer tmp.cleanup();
+    const bytes = try patterned(std.testing.allocator);
+    defer std.testing.allocator.free(bytes);
+    try tmp.dir.writeFile(io, .{ .sub_path = "card.img", .data = bytes });
+    var img = unit();
+    defer img.deinit();
+    try img.loadBytes(bytes);
+    const written: image.Block = @splat(0xA5);
+    try std.testing.expect(img.write(1, &written));
+    const faults = [_]disk_file.Fault{ .mid_write, .before_sync, .before_replace };
+    const errs = [_]anyerror{ error.InjectedWriteFailure, error.InjectedSyncFailure, error.InjectedReplaceFailure };
+    for (faults, errs) |fault, err| {
+        try std.testing.expectError(err, disk_file.replaceFault(io, tmp.dir, "card.img", &img, fault));
+        const back = try tmp.dir.readFileAlloc(io, "card.img", std.testing.allocator, .limited(bytes.len + 1));
+        defer std.testing.allocator.free(back);
+        try std.testing.expectEqualSlices(u8, bytes, back);
+        var it = tmp.dir.iterate();
+        var count: usize = 0;
+        while (try it.next(io)) |entry| : (count += 1) try std.testing.expectEqualStrings("card.img", entry.name);
+        try std.testing.expectEqual(@as(usize, 1), count);
+    }
 }
 
 const observer = @import("ra8").chip.core.cpu.memory.observer;
