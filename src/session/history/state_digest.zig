@@ -2,19 +2,21 @@
 //! builds of one program.
 //!
 //! A checkpoint's object is the run's whole save stream, which names the
-//! image it ran and holds the image's own bytes in guest memory. Two builds
-//! that behave alike must still digest alike, so the image section is left
-//! out and memory is compared without the images' own read-only bytes
-//! (state_memory.zig). Everything else, every core's registers and every
-//! board section, is hashed as written.
+//! image it ran and holds the image's own bytes in guest memory and OSPI
+//! NOR. Two builds that behave alike must still digest alike, so the image
+//! section is left out and guest memory and OSPI NOR normalize unmutated
+//! read-only and load-copy image bytes while catching post-load guest writes
+//! (state_memory.zig, state_storage.zig). Everything else, every core's
+//! registers and every board section, is hashed as written.
 const std = @import("std");
 const file = @import("ra8_board").snapshot.run.file;
 const fields = @import("ra8_board").snapshot.run.fields;
 const regs_mod = @import("ra8_chip").core.cpu.regs;
 const memory = @import("state_memory.zig");
+const storage = @import("state_storage.zig");
 
 pub const Digest = [16]u8;
-pub const Error = file.Error || fields.Error || memory.Error || error{WriteFailed};
+pub const Error = file.Error || fields.Error || memory.Error || storage.Error || error{WriteFailed};
 
 const Units = @import("../board/state.zig").Units;
 
@@ -42,8 +44,8 @@ fn isMemory(kind: file.Kind) bool {
     return kind == .memory or kind == .second_memory;
 }
 
-/// Blake3-128 over the stream's sections but the image's, memory read
-/// under `mask`: the same one for both runs being compared.
+/// Blake3-128 over the stream's sections but the image's, with memory and
+/// OSPI NOR normalized under `mask` (`mask.a` is this stream's image).
 pub fn digest(stream: []const u8, mask: memory.Mask) Error!Digest {
     var hasher = std.crypto.hash.Blake3.init(.{});
     var reader = try file.Reader.open(stream);
@@ -52,6 +54,8 @@ pub fn digest(stream: []const u8, mask: memory.Mask) Error!Digest {
         hasher.update(std.mem.asBytes(&std.mem.nativeToLittle(u32, @backingInt(section.kind))));
         if (isMemory(section.kind)) {
             memory.hash(&hasher, try memory.parse(section.payload), mask.forCore(if (section.kind == .second_memory) 1 else 0));
+        } else if (section.kind == .storage) {
+            storage.hash(&hasher, try storage.parse(section.payload), mask.forCore(0));
         } else if (section.kind == .debug_units) {
             var scratch: [debug_scratch]u8 = undefined;
             hasher.update(try withoutRunBookkeeping(section.payload, &scratch));
@@ -62,6 +66,12 @@ pub fn digest(stream: []const u8, mask: memory.Mask) Error!Digest {
     var full: [32]u8 = undefined;
     hasher.final(&full);
     return full[0..16].*;
+}
+
+/// Whether `expected` (under `mask`) and `actual` (under `mask.flipped()`)
+/// digest alike.
+pub fn equal(expected: []const u8, actual: []const u8, mask: memory.Mask) Error!bool {
+    return std.mem.eql(u8, &(try digest(expected, mask)), &(try digest(actual, mask.flipped())));
 }
 
 /// What first differs: a register, a byte of memory, or a whole section
@@ -135,6 +145,12 @@ pub fn first(expected: []const u8, actual: []const u8, mask: memory.Mask) Error!
             const pb = try memory.parse(two.payload);
             if (memory.firstDifference(pa, pb, mask.forCore(core))) |spot| return try finish(expected, actual, core, .{ .memory = spot });
             if (!std.mem.eql(u8, pa.tail, pb.tail)) return try finish(expected, actual, core, .{ .section = one.kind });
+        } else if (one.kind == .storage) {
+            switch (storage.compare(try storage.parse(one.payload), try storage.parse(two.payload), mask.forCore(0))) {
+                .none => {},
+                .section => return try finish(expected, actual, 0, .{ .section = .storage }),
+                .memory => |spot| return try finish(expected, actual, 0, .{ .memory = spot }),
+            }
         } else if (one.kind == .debug_units) {
             var scratch: [2][debug_scratch]u8 = undefined;
             const left = try withoutRunBookkeeping(one.payload, &scratch[0]);

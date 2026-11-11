@@ -68,7 +68,13 @@ pub const Pipe = struct {
         return make(allocator, fd, owns_fd, arg);
     }
 
-    fn make(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, arg: raw.Arg) !*Pipe {
+    fn make(allocator: std.mem.Allocator, fd: posix.fd_t, owns_fd: bool, parsed: raw.Arg) !*Pipe {
+        // The path outlives the caller's spec text (a served change parses
+        // it from a short-lived buffer), so the pipe keeps its own copy.
+        const path = try allocator.dupe(u8, parsed.path);
+        errdefer allocator.free(path);
+        var arg = parsed;
+        arg.path = path;
         const image = try decoded.Image.alloc(allocator, arg.width, arg.height);
         errdefer image.deinit(allocator);
         const pending = try allocator.alloc(u8, arg.frameBytes());
@@ -132,6 +138,7 @@ pub const Pipe = struct {
     pub fn close(self: *Pipe) void {
         const allocator = self.allocator;
         if (self.owns_fd) host_read.close(self.fd);
+        allocator.free(self.arg.path);
         allocator.free(self.pending);
         allocator.free(self.latest);
         self.image.deinit(allocator);

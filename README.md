@@ -95,10 +95,13 @@ both image identities checked before rebuilt-image or host preparation.
 The normal scheduler preserves CPU1 reset hold and firmware release. Both
 cores' registers, private/shared memory and board state are compared;
 divergence PCs and symbols belong to the reported core. Branch-line replay
-and a rebuilt CPU1 image remain unsupported. CPU0 ELF-loaded read-only
-bytes and load-time copies are masked only in CPU0 memory, so writes to those
-addresses, including RAM code and flash programming, remain unchecked.
-CPU1 memory has no image exclusions. Served dual recordings must supply
+and a rebuilt CPU1 image remain unsupported. Unmutated CPU0 ELF-loaded
+read-only bytes and load-time copies may differ between builds, while any
+post-load guest writes to those addresses (including RAM-resident code,
+constants, load-copy sources, and OSPI NOR flash programming) are checked.
+CPU1 memory has no image exclusions. Plain CLI `--camera-source` runs
+through Session history (refusing unrecordable raw-board flag combinations).
+Served dual recordings must supply
 both images at creation (`serve --cpu1`, or `Served.openInitial`); attaching
 CPU1 after a history root is frozen fails with `HistoryAlreadyRooted`.
 Existing histories are never upgraded or rewritten to add CPU1.

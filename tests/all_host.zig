@@ -372,6 +372,7 @@ test {
     _ = @import("interfaces/rpc/recorder_acceptance_test.zig");
     _ = @import("interfaces/rpc/session/nav_rpc_test.zig");
     _ = @import("interfaces/cli/nav_cli_test.zig");
+    _ = @import("interfaces/cli/session_run_test.zig");
     _ = @import("interfaces/rpc/served_markers_test.zig");
     _ = @import("interfaces/rpc/served_nav_feed_test.zig");
     _ = @import("interfaces/rpc/served_rewind_test.zig");

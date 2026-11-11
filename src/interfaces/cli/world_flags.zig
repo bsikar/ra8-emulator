@@ -19,9 +19,27 @@ const timebase = @import("ra8_chip").periph.timebase;
 const Options = cli.Options;
 const card_setup = cli.card.setup;
 
+/// Session-history flags shared by plain `--camera-source` / `--history` runs.
+pub const HistoryFlags = struct {
+    camera_set: bool = false,
+    requested: bool = false,
+    root: ?[]const u8 = null,
+    off: bool = false,
+    kept: bool = false,
+    checkpoint_every: ?u32 = null,
+    budget: ?u64 = null,
+    ram_budget: ?u64 = null,
+
+    pub fn active(self: HistoryFlags) bool {
+        return self.camera_set or self.requested or self.kept or
+            self.checkpoint_every != null or self.budget != null or self.ram_budget != null;
+    }
+};
+
 /// Whether the argument at `index` was one of these flags. True walks
 /// `index` past any value it took; false leaves it where it was.
 pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    if (try parseHistory(options, argv, index)) return true;
     if (try parseSplit(options, argv, index)) return true;
     if (try parseSdhi(options, argv, index)) return true;
     if (try @import("audio_out.zig").parse(&options.audio, argv, index)) return true;
@@ -74,8 +92,10 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         const allow = options.camera.allow_webcam;
         options.camera = try camera(try next(argv, index));
         options.camera.allow_webcam = allow;
+        options.history.camera_set = true;
     } else if (std.mem.eql(u8, flag, "--allow-webcam")) {
         options.camera.allow_webcam = true;
+        options.history.camera_set = true;
     } else if (std.mem.eql(u8, flag, "--board-profile")) {
         options.board_profile = try next(argv, index);
     } else if (std.mem.eql(u8, flag, "--detach")) {
@@ -95,6 +115,25 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.input_script = try next(argv, index);
     } else if (touch_spec.claims(flag)) {
         try touch_spec.take(options, flag, try next(argv, index));
+    } else return false;
+    return true;
+}
+
+fn parseHistory(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    const flag = argv[index.*];
+    if (std.mem.eql(u8, flag, "--history")) {
+        if (options.history.requested) return error.HistoryTwice;
+        const val = try next(argv, index);
+        options.history.requested = true;
+        if (std.mem.eql(u8, val, "off")) options.history.off = true else options.history.root = val;
+    } else if (std.mem.eql(u8, flag, "--kept")) {
+        options.history.kept = true;
+    } else if (std.mem.eql(u8, flag, "--checkpoint-every")) {
+        options.history.checkpoint_every = try std.fmt.parseInt(u32, try next(argv, index), 10);
+    } else if (std.mem.eql(u8, flag, "--history-budget")) {
+        options.history.budget = try std.fmt.parseInt(u64, try next(argv, index), 10);
+    } else if (std.mem.eql(u8, flag, "--ram-budget")) {
+        options.history.ram_budget = try std.fmt.parseInt(u64, try next(argv, index), 10);
     } else return false;
     return true;
 }

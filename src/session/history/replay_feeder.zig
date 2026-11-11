@@ -221,6 +221,24 @@ pub const ReplayFeeder = struct {
             try apply.applyAction(session, item.action);
         }
     }
+
+    /// Fails replay if the session strictly passed a recorded camera capture
+    /// or C6 landing without consuming it.
+    pub fn checkMissed(self: *ReplayFeeder, session: *api.Session) void {
+        const pos = session.currentPosition();
+        if (self.frame_cursor < self.frames.items.len and
+            branch_mod.scalarOrder(self.frames.items[self.frame_cursor].position, pos) == .lt)
+        {
+            self.frame_cursor += 1;
+            session.failReplay(.camera, error.MissedFrame);
+        }
+        if (self.c6_cursor < self.c6.items.len and
+            branch_mod.scalarOrder(self.c6.items[self.c6_cursor].position, pos) == .lt)
+        {
+            self.c6_cursor += 1;
+            session.failReplay(.c6, error.MissedLanding);
+        }
+    }
 };
 
 /// Where a load starts delivering, relative to the session's position.

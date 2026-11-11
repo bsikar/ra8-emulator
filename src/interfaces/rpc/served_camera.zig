@@ -80,6 +80,8 @@ fn keep(self: *served_setup.Served, spec: source_spec.Spec) !recorded_camera.Lat
     return .{ .context = copy, .openFn = Reopen.open, .freeFn = Reopen.free };
 }
 
+threadlocal var live_allow_webcam: bool = false;
+
 /// set_camera_source: with a history on, the change goes through the fork
 /// router, which forks when the cursor is before the recorded end.
 pub fn set(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
@@ -90,6 +92,8 @@ pub fn set(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
             @tagName(spec.kind)
         else
             try std.fmt.bufPrint(&buf, "{s}:{s}", .{ @tagName(spec.kind), spec.arg });
+        live_allow_webcam = spec.allow_webcam;
+        defer live_allow_webcam = false;
         try self.owner.session().changeCamera(.cpu0, text);
         return;
     }
@@ -100,5 +104,7 @@ pub fn set(context: *anyopaque, spec: source_spec.Spec) anyerror!void {
 /// here, replay included.
 pub fn setDirect(context: *anyopaque, spec_text: []const u8) anyerror!void {
     const self: *served_setup.Served = @ptrCast(@alignCast(context));
-    try install(self, try source_spec.parse(spec_text));
+    var parsed = try source_spec.parse(spec_text);
+    parsed.allow_webcam = live_allow_webcam;
+    try install(self, parsed);
 }

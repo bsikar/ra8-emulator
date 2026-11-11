@@ -61,3 +61,29 @@ test "CPU1 registers and private memory under CPU0 code remain visible with CPU1
     try std.testing.expectEqual(ra8.snapshot.file.Kind.debug_units, d.place.section);
     try std.testing.expectEqual(pc, d.pc_actual);
 }
+
+test "CPU0 post-load write to its own read-only segment is caught by digest.equal and digest.first" {
+    var h = try ra8.session.harness.open(gpa, std.testing.io, .{ .elf_path = "absent-cpu0.elf", .elf_bytes = first });
+    defer h.deinit();
+    const image = try ra8.board.image.elf.Image.init(first);
+    const mask: ra8.session.history_state_memory.Mask = .{ .a = image, .b = image };
+
+    var baseline = try save(&h);
+    defer baseline.deinit();
+    try std.testing.expect(try digest.equal(baseline.written(), baseline.written(), mask));
+
+    const ro_addr = image.vectorBase().?;
+    var orig: [1]u8 = undefined;
+    try h.guest().read(ro_addr, &orig);
+    const mutated_byte = orig[0] ^ 0x5A;
+    try h.guest().write(ro_addr, &.{mutated_byte});
+
+    var mutated = try save(&h);
+    defer mutated.deinit();
+    try std.testing.expect(!(try digest.equal(baseline.written(), mutated.written(), mask)));
+    const diff = (try digest.first(baseline.written(), mutated.written(), mask)).?;
+    try std.testing.expectEqual(@as(u8, 0), diff.core);
+    try std.testing.expectEqual(ro_addr, diff.place.memory.address);
+    try std.testing.expectEqual(orig[0], diff.place.memory.expected);
+    try std.testing.expectEqual(mutated_byte, diff.place.memory.actual);
+}

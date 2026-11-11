@@ -35,13 +35,15 @@ pub const usage =
     \\       thin drops checkpoints so none are more than ROUNDS apart
     \\       (default 4096) and reroot drops the history before a checkpoint;
     \\       both then reclaim the dropped objects and compact the packs;
-    \\       replay-elf runs the session's recorded inputs against the rebuilt
-    \\       ELF at PATH without writing the history, and exits 0 when every
-    \\       root-line checkpoint matches (at least one) and 3 at the first
-    \\       that does not. CPU1 runs offline from its recorded root bytes.
+    \\       replay-elf runs the session's root-line (branch 0) recorded inputs
+    \\       against the rebuilt CPU0 ELF at PATH without writing the history,
+    \\       and exits 0 when every root-line checkpoint matches (at least one)
+    \\       and 3 at the first that does not (including post-load writes to
+    \\       read-only or load-copy memory). CPU1 runs offline from its recorded
+    \\       root bytes; CPU1 override and non-root branch replay are unsupported.
     \\       Exit 1
     \\       reports invalid build/model/snapshot identity, unsupported root
-    \\       configuration or no root checkpoints; only ELF identity is overridden.
+    \\       configuration or no root checkpoints; only CPU0 ELF identity is overridden.
     \\
 ;
 

@@ -42,6 +42,10 @@ pub const Error = validity.Error || error{
     UnsupportedCheckpointPosition,
     CheckpointObjectMismatch,
     CheckpointPositionMismatch,
+    /// A root-line CPU0 `.load` intervention would overwrite the rebuilt ELF.
+    UnsupportedLoadIntervention,
+    /// Recorded USB/IP traffic requires a replay USB/IP hook in `options.prepare`.
+    UnattachedUsbipReplay,
 };
 
 pub const Verdict = enum { compatible, diverged };
@@ -130,6 +134,12 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, base: *const history.base.B
     if (options.prepare) |hook| try hook.prepareFn(hook.context, &served, log);
     const session = served.owner.session();
     try session.loadReplayInterventions(log);
+    if (session.replay_feeder) |*feeder| {
+        for (feeder.items.items) |item| {
+            if (item.action == .load and item.action.load.core == .cpu0) return Error.UnsupportedLoadIntervention;
+        }
+        if (feeder.traffic.items.len > 0 and served.owner.board().usb.bridge == null) return Error.UnattachedUsbipReplay;
+    }
     session.setReplaying(true);
 
     var result: Result = .{
@@ -220,7 +230,7 @@ fn compareAt(allocator: std.mem.Allocator, keep: std.mem.Allocator, served: *ser
     // a machine that never got there, or is already there, is taken as it stands.
     if (stream.written().len == 0) try session.history.?.files.writeTo(&stream.writer);
     const have = stream.written();
-    if (stopped == null and std.mem.eql(u8, &(try state_digest.digest(recorded, images.mask())), &(try state_digest.digest(have, images.mask())))) {
+    if (stopped == null and try state_digest.equal(recorded, have, images.mask())) {
         result.matched += 1;
         return false;
     }
@@ -231,7 +241,7 @@ fn compareAt(allocator: std.mem.Allocator, keep: std.mem.Allocator, served: *ser
     const pc_actual = if (found) |f| f.pc_actual else try state_digest.pcOf(have, 0);
     result.divergence = .{
         .checkpoint = checkpoint.id,
-        .position = checkpoint.position,
+        .position = if (stopped != null) session.currentPosition() else checkpoint.position,
         .core = core,
         .pc_expected = pc_expected,
         .pc_actual = pc_actual,

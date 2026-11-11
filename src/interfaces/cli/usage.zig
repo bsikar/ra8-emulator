@@ -20,7 +20,8 @@ pub const text =
     \\                    [--profile] [--profile-folded FILE] [--profile-thread TCB]
     \\                    [--cpu1 IMAGE.elf] [--cpu zig]
     \\                    [--ns IMAGE.elf] [--no-bus-errors]
-    \\                    [--camera-source KIND[:ARG]]
+    \\                    [--camera-source KIND[:ARG]] [--history DIR|off] [--kept]
+    \\                    [--checkpoint-every N] [--history-budget BYTES] [--ram-budget BYTES]
     \\
     \\  --instructions N   stop after N instructions (default 2000000,
     \\                     or 200000000 when --stop-sym is watching)
@@ -175,13 +176,19 @@ pub const text =
     \\                     crosses every boundary instead of running
     \\                     straight to its next edge (the default;
     \\                     --idle-skip is still accepted)
-    \\  --camera-source K  where the camera engine's pixels come from:
+    \\  --camera-source K  where the camera engine's pixels come from (runs on
+    \\                     Session history: RAM by default, or --history DIR):
     \\                     gradient (the default, no argument),
     \\                     image:PATH, video:PATH[,loop] (a Y4M clip), or
     \\                     pipe:PATH|-,WxH,rgb24|yuyv|rgb565 (raw frames),
     \\                     or webcam[:N|PATH] (Linux, asks before opening),
     \\                     webcam[:N] (Windows/macOS, asks before opening)
     \\  --allow-webcam     open the webcam without asking (unattended runs)
+    \\  --history DIR|off  record Session history in DIR, or RAM-only with off
+    \\  --kept             preserve the Session history in DIR after exit
+    \\  --checkpoint-every N write a closed-round checkpoint every N rounds (default 64)
+    \\  --history-budget B cap persistent Session history share in bytes (with --history DIR)
+    \\  --ram-budget B     cap RAM-only Session history share in bytes
     \\  --no-blocks        the Zig core steps one instruction at a time instead
     \\                     of running formed blocks (the default; --blocks
     \\                     is still accepted)

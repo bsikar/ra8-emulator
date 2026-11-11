@@ -37,6 +37,10 @@ pub fn policy(board: *const Board, io: std.Io, options: cli.Options) RunPolicy {
 }
 
 pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli.Options) !void {
+    if (options.history.camera_set or options.camera.kind != .gradient) {
+        std.debug.print("--camera-source requires Session history; raw Board keeps no camera history\n", .{});
+        return error.CameraRequiresSession;
+    }
     board.part = options.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;

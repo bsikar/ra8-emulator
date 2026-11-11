@@ -33,6 +33,9 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     line.notePosition(self, line.currentPosition(self));
     if (self.window_driver) |driver| driver.settleFn(driver.context, self);
     try deliverDue(self);
+    if (self.replaying) {
+        if (self.replay_feeder) |*feeder| feeder.checkMissed(self);
+    }
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
     self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
     if (self.history) |h| if (command != .cont or !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);

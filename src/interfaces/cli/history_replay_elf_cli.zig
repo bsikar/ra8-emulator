@@ -47,9 +47,9 @@ pub fn writeText(out: *std.Io.Writer, session: []const u8, elf_path: []const u8,
     if (e.first_changed_address) |address| try out.print("  first changed byte at 0x{x}\n", .{address});
     try out.print("  symbols {d} -> {d}: {d} added, {d} removed, {d} moved, {d} resized\n", .{ e.original.symbols, e.rebuilt.symbols, e.symbols_added, e.symbols_removed, e.symbols_moved, e.symbols_resized });
     try out.print("checkpoints: {d} of {d} match, last round {d}\n", .{ result.matched, result.checkpoints, result.round });
-    try out.writeAll("  (addresses either image loads as read-only, or as a load-time copy, are not compared: RAM-resident code and flash programming go unchecked)\n");
+    try out.writeAll("  (scope: root branch 0, CPU0 --elf override; CPU1 runs recorded root bytes; post-load writes to read-only and load-copy memory are checked)\n");
     const d = result.divergence orelse return out.writeAll("compatible\n");
-    try out.print("diverged at checkpoint {d}, round {d} ({s} +{d}), core {d}, pc 0x{x} (recorded 0x{x})", .{ d.checkpoint, d.position.r, @tagName(d.position.phase), d.position.o, d.core, d.pc_actual, d.pc_expected });
+    try out.print("diverged at checkpoint {d}, round {d} (branch {d}, {s} +{d} {s}), core {d}, pc 0x{x} (recorded 0x{x})", .{ d.checkpoint, d.position.r, d.position.branch, @tagName(d.position.phase), d.position.o, @tagName(d.position.gap), d.core, d.pc_actual, d.pc_expected });
     if (d.symbol) |s| try out.print(" in {s}+0x{x}", .{ s.name, s.offset });
     try out.writeAll("\n");
     if (d.stopped) |reason| return out.print("the rebuilt run stopped first: {s}\n", .{reason});
@@ -63,7 +63,7 @@ pub fn writeText(out: *std.Io.Writer, session: []const u8, elf_path: []const u8,
 
 pub fn writeJson(out: *std.Io.Writer, result: replay.Result) !void {
     const e = result.elf;
-    try out.print("{{\"verdict\":\"{s}\",\"checkpoints\":{d},\"matched\":{d},\"round\":{d},", .{ @tagName(result.verdict), result.checkpoints, result.matched, result.round });
+    try out.print("{{\"verdict\":\"{s}\",\"scope\":{{\"branch\":0,\"override\":\"cpu0\"}},\"checkpoints\":{d},\"matched\":{d},\"round\":{d},", .{ @tagName(result.verdict), result.checkpoints, result.matched, result.round });
     try out.print("\"elf\":{{\"original\":\"{s}\",\"rebuilt\":\"{s}\",\"identical\":{},", .{ hex(e.original.identity), hex(e.rebuilt.identity), e.identical() });
     try out.print("\"entry\":[{d},{d}],\"flags\":[{d},{d}],\"segments\":[{d},{d}],\"segments_moved\":{d},\"segments_changed\":{d},", .{ e.original.entry, e.rebuilt.entry, e.original.flags, e.rebuilt.flags, e.original.segments, e.rebuilt.segments, e.segments_moved, e.segments_changed });
     try out.writeAll("\"first_changed_address\":");
@@ -80,7 +80,7 @@ fn writeName(out: *std.Io.Writer, name: ?[]const u8) !void {
 }
 
 fn writeDivergence(out: *std.Io.Writer, d: replay.Divergence) !void {
-    try out.print("{{\"checkpoint\":{d},\"round\":{d},\"position\":{{\"r\":{d},\"phase\":\"{s}\",\"o\":{d}}},\"core\":{d},\"pc_expected\":{d},\"pc_actual\":{d},\"symbol\":", .{ d.checkpoint, d.position.r, d.position.r, @tagName(d.position.phase), d.position.o, d.core, d.pc_expected, d.pc_actual });
+    try out.print("{{\"checkpoint\":{d},\"round\":{d},\"position\":{{\"branch\":{d},\"r\":{d},\"phase\":\"{s}\",\"o\":{d},\"gap\":\"{s}\"}},\"core\":{d},\"pc_expected\":{d},\"pc_actual\":{d},\"symbol\":", .{ d.checkpoint, d.position.r, d.position.branch, d.position.r, @tagName(d.position.phase), d.position.o, @tagName(d.position.gap), d.core, d.pc_expected, d.pc_actual });
     if (d.symbol) |s| {
         try out.writeAll("{\"name\":");
         try writeName(out, s.name);

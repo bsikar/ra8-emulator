@@ -6,6 +6,8 @@
 //! to stderr.
 const std = @import("std");
 const served_setup = @import("ra8_rpc").served_setup;
+const served_camera = @import("ra8_rpc").served_camera;
+const source_spec = @import("ra8_host").camera.source_spec;
 const loop = @import("loop.zig");
 const listen = @import("listen.zig");
 const card_setup = @import("../card/setup.zig");
@@ -28,90 +30,120 @@ pub const usage =
     \\       --history-budget BYTES caps the served session's history share (with --history DIR; minimum 128 MiB)
     \\       --frame-hz N caps the frame tap at N captures per host second (0 captures every change; default 60)
     \\       --ram-budget BYTES caps the RAM-only history's share (with --history off; minimum 128 MiB)
+    \\       --camera-source KIND[:ARG] and --allow-webcam select the served session's camera source
     \\
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
+
+const ParsedFlags = struct {
+    folded: bool = false,
+    allow_state: bool = false,
+    cpu1: ?[]const u8 = null,
+    sdhi: card_setup.Sdhi = .{},
+    history_root: ?[]const u8 = null,
+    history_off: bool = false,
+    kept: bool = false,
+    reopen: ?[]const u8 = null,
+    frame_hz: ?u32 = null,
+    usbip: ?u16 = null,
+    camera: ?source_spec.Spec = null,
+    allow_webcam: bool = false,
+    checkpoint_every: u32 = 64,
+    history_budget: ?u64 = null,
+    ram_budget: ?u64 = null,
+    checkpoint_set: bool = false,
+};
 
 /// The transport and image `argv` asks for, or null for a malformed line.
 /// The options come first, in any order, each at most once.
 pub fn parse(argv: []const []const u8) ?Asked {
     if (argv.len < 2) return null;
-    var folded = false;
-    var allow_state = false;
-    var cpu1: ?[]const u8 = null;
-    var sdhi: card_setup.Sdhi = .{};
-    var history_root: ?[]const u8 = null;
-    var history_off = false;
-    var kept = false;
-    var reopen: ?[]const u8 = null;
-    var frame_hz: ?u32 = null;
-    var usbip: ?u16 = null;
-    var checkpoint_every: u32 = 64;
-    var history_budget: ?u64 = null;
-    var ram_budget: ?u64 = null;
-    var checkpoint_set = false;
+    var flags: ParsedFlags = .{};
     var at: usize = 2;
     while (at < argv.len) : (at += 1) {
-        const valued = at + 1 < argv.len;
-        if (std.mem.eql(u8, argv[at], "--profile-folded") and !folded) {
-            folded = true;
-        } else if (std.mem.eql(u8, argv[at], "--allow-state-files") and !allow_state) {
-            allow_state = true;
-        } else if (std.mem.eql(u8, argv[at], "--cpu1") and cpu1 == null and valued) {
-            at += 1;
-            cpu1 = argv[at];
-        } else if (std.mem.eql(u8, argv[at], "--sd-dir") and sdhi.dir == null and valued) {
-            at += 1;
-            sdhi.dir = argv[at];
-        } else if (std.mem.eql(u8, argv[at], "--app") and valued) {
-            at += 1;
-            sdhi.addApp(argv[at]) catch return null;
-        } else if (std.mem.eql(u8, argv[at], "--history") and history_root == null and !history_off and valued) {
-            at += 1;
-            if (std.mem.eql(u8, argv[at], "off")) history_off = true else history_root = argv[at];
-        } else if (std.mem.eql(u8, argv[at], "--kept") and !kept) {
-            kept = true;
-        } else if (std.mem.eql(u8, argv[at], "--frame-hz") and frame_hz == null and valued) {
-            at += 1;
-            frame_hz = std.fmt.parseInt(u32, argv[at], 10) catch return null;
-        } else if (std.mem.eql(u8, argv[at], "--usbip") and usbip == null and valued) {
-            at += 1;
-            usbip = std.fmt.parseInt(u16, argv[at], 10) catch return null;
-        } else if (std.mem.eql(u8, argv[at], "--reopen") and reopen == null and valued) {
-            at += 1;
-            reopen = argv[at];
-        } else if (std.mem.eql(u8, argv[at], "--checkpoint-every") and !checkpoint_set and valued) {
-            at += 1;
-            checkpoint_every = std.fmt.parseInt(u32, argv[at], 10) catch return null;
-            checkpoint_set = true;
-        } else if (std.mem.eql(u8, argv[at], "--history-budget") and history_budget == null and valued) {
-            at += 1;
-            history_budget = std.fmt.parseInt(u64, argv[at], 10) catch return null;
-        } else if (std.mem.eql(u8, argv[at], "--ram-budget") and ram_budget == null and valued) {
-            at += 1;
-            ram_budget = std.fmt.parseInt(u64, argv[at], 10) catch return null;
-        } else break;
+        switch (parseFlag(&flags, argv, &at)) {
+            .taken => {},
+            .stop => break,
+            .bad => return null,
+        }
     }
     var asked = parseTail(argv, at) orelse return null;
-    asked.folded = folded;
-    asked.allow_state_files = allow_state;
-    asked.history = history_root;
-    asked.history_off = history_off;
-    asked.history_budget = history_budget;
-    asked.ram_budget = ram_budget;
-    asked.checkpoint_every = checkpoint_every;
-    asked.cpu1 = cpu1;
-    asked.sdhi = sdhi;
-    asked.kept = kept;
-    asked.reopen = reopen;
-    asked.frame_hz = frame_hz;
-    asked.usbip = usbip;
+    asked.folded = flags.folded;
+    asked.allow_state_files = flags.allow_state;
+    asked.history = flags.history_root;
+    asked.history_off = flags.history_off;
+    asked.history_budget = flags.history_budget;
+    asked.ram_budget = flags.ram_budget;
+    asked.checkpoint_every = flags.checkpoint_every;
+    asked.cpu1 = flags.cpu1;
+    asked.sdhi = flags.sdhi;
+    asked.kept = flags.kept;
+    asked.reopen = flags.reopen;
+    asked.frame_hz = flags.frame_hz;
+    asked.usbip = flags.usbip;
+    asked.allow_webcam = flags.allow_webcam;
+    if (flags.camera) |cam| {
+        var c = cam;
+        c.allow_webcam = flags.allow_webcam;
+        asked.camera = c;
+    }
     return if (consistent(asked)) asked else null;
+}
+
+const FlagStep = enum { taken, stop, bad };
+
+fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
+    const idx = at.*;
+    const valued = idx + 1 < argv.len;
+    if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
+        flags.folded = true;
+    } else if (std.mem.eql(u8, argv[idx], "--allow-state-files") and !flags.allow_state) {
+        flags.allow_state = true;
+    } else if (std.mem.eql(u8, argv[idx], "--cpu1") and flags.cpu1 == null and valued) {
+        at.* += 1;
+        flags.cpu1 = argv[at.*];
+    } else if (std.mem.eql(u8, argv[idx], "--sd-dir") and flags.sdhi.dir == null and valued) {
+        at.* += 1;
+        flags.sdhi.dir = argv[at.*];
+    } else if (std.mem.eql(u8, argv[idx], "--app") and valued) {
+        at.* += 1;
+        flags.sdhi.addApp(argv[at.*]) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--history") and flags.history_root == null and !flags.history_off and valued) {
+        at.* += 1;
+        if (std.mem.eql(u8, argv[at.*], "off")) flags.history_off = true else flags.history_root = argv[at.*];
+    } else if (std.mem.eql(u8, argv[idx], "--kept") and !flags.kept) {
+        flags.kept = true;
+    } else if (std.mem.eql(u8, argv[idx], "--frame-hz") and flags.frame_hz == null and valued) {
+        at.* += 1;
+        flags.frame_hz = std.fmt.parseInt(u32, argv[at.*], 10) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--usbip") and flags.usbip == null and valued) {
+        at.* += 1;
+        flags.usbip = std.fmt.parseInt(u16, argv[at.*], 10) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--reopen") and flags.reopen == null and valued) {
+        at.* += 1;
+        flags.reopen = argv[at.*];
+    } else if (std.mem.eql(u8, argv[idx], "--checkpoint-every") and !flags.checkpoint_set and valued) {
+        at.* += 1;
+        flags.checkpoint_every = std.fmt.parseInt(u32, argv[at.*], 10) catch return .bad;
+        flags.checkpoint_set = true;
+    } else if (std.mem.eql(u8, argv[idx], "--history-budget") and flags.history_budget == null and valued) {
+        at.* += 1;
+        flags.history_budget = std.fmt.parseInt(u64, argv[at.*], 10) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--ram-budget") and flags.ram_budget == null and valued) {
+        at.* += 1;
+        flags.ram_budget = std.fmt.parseInt(u64, argv[at.*], 10) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--camera-source") and flags.camera == null and valued) {
+        at.* += 1;
+        flags.camera = source_spec.parse(argv[at.*]) catch return .bad;
+    } else if (std.mem.eql(u8, argv[idx], "--allow-webcam") and !flags.allow_webcam) {
+        flags.allow_webcam = true;
+    } else return .stop;
+    return .taken;
 }
 
 /// The transport and image after the options: they are dropped, so the
@@ -181,6 +213,12 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         return 1;
     };
     defer setup.deinit();
+    if (asked.camera) |cam| {
+        served_camera.set(&setup, cam) catch |err| {
+            std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+    }
     if (asked.usbip) |port| {
         usbip_run.install(&setup.owner.board().usb, bridges.allocator(), io, port) catch |err| {
             std.debug.print("serve: cannot export the FS device: {s}\n", .{@errorName(err)});

@@ -54,6 +54,8 @@ pub const Options = struct {
     /// Which part the run models. Both share a register map; the RA8P1 also
     /// carries the Ethos-U55, so this decides whether that window answers.
     part: part.Part = .ra8d2,
+    part_set: bool = false,
+    history: world_flags.HistoryFlags = .{},
     /// CMSAMON.CMS and SFSAMON.SFS, the Secure code MRAM and SiP flash in
     /// 32 KB units. Null leaves the part unprogrammed (RA8EMU-428).
     cms: ?u9 = null,
@@ -293,6 +295,7 @@ fn parseRun(argv: []const []const u8) !Options {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
             options.part = part.Part.parse(argv[index]) orelse return error.UnknownPart;
+            options.part_set = true;
         } else if (std.mem.eql(u8, argv[index], "--dump-mem")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
