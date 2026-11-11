@@ -120,6 +120,7 @@ pub fn writeAtomic(session: *const Session, leaf: []const u8, bytes: []const u8)
     tmp_file.close(io);
 
     try dir.rename(tmp_name, dir, leaf, io);
+    if (@import("builtin").os.tag == .linux) try @import("move/file.zig").syncDir(dir);
 }
 
 fn vtableAppend(context: *anyopaque, leaf: []const u8, bytes: []const u8) anyerror!void {

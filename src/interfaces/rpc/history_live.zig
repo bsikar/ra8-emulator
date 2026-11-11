@@ -34,9 +34,12 @@ pub fn addManifestObjects(store: history.storage.Store, allocator: std.mem.Alloc
     for (held.items) |hex| {
         const object = session_object_id.ObjectId.fromHex(hex) catch continue;
         const manifest_name = session_manifest.objectName(object.bytes);
-        const bytes = object_read.read(store, allocator, &manifest_name) catch continue;
+        const bytes = object_read.read(store, allocator, &manifest_name) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
         defer allocator.free(bytes);
-        var decoded = session_manifest.decode(allocator, bytes) catch continue;
+        var decoded = try session_manifest.decode(allocator, bytes);
         defer decoded.deinit(allocator);
         var last_page: ?session_object_id.ObjectId = null;
         for (decoded.pages) |page| {

@@ -100,3 +100,94 @@ test "Pack robustness: forged identity refuses with ForgedIdentity" {
     // Decoding must reject with ForgedIdentity because computed hash does not match genuine_id
     try std.testing.expectError(error.ForgedIdentity, pack.decodeRecordFromSlice(allocator, &forged_buf));
 }
+
+test "Pack and index deterministic bitflip and truncate corpus never panics or leaks" {
+    const allocator = std.testing.allocator;
+    const pack_index = ra8.session.history_pack_index;
+
+    const payload = "Deterministic fuzz target payload for pack, index, and manifest codecs";
+    const id = ObjectId.compute(payload);
+    var pack_buf: std.Io.Writer.Allocating = .init(allocator);
+    defer pack_buf.deinit();
+    try pack.writeHeader(&pack_buf.writer, 7);
+    _ = try pack.encodeRecord(allocator, &pack_buf.writer, id, pack.flags.page, payload);
+    const valid_pack = pack_buf.written();
+
+    for (0..valid_pack.len) |cut| {
+        if (pack_index.rebuildFromPack(allocator, valid_pack[0..cut])) |*idx| {
+            var mut = idx.*;
+            mut.deinit(allocator);
+            return error.UnexpectedSuccessOnTruncatedPack;
+        } else |_| {}
+    }
+    for (0..valid_pack.len) |pos| {
+        const mutated = try allocator.dupe(u8, valid_pack);
+        defer allocator.free(mutated);
+        mutated[pos] ^= 0x80;
+        if (pack_index.rebuildFromPack(allocator, mutated)) |*idx| {
+            var mut = idx.*;
+            const ok = (pos >= 12 and pos < 16 and mut.pack_id != 7) or (pos >= 16 and pos < pack.header_len and mut.pack_id == 7);
+            mut.deinit(allocator);
+            if (!ok) return error.UnexpectedSuccessOnBitflippedPack;
+        } else |_| {}
+    }
+}
+
+test "Manifest bitflip/truncate and seeded PRNG fuzz corpus never panics or leaks" {
+    const allocator = std.testing.allocator;
+    const pack_index = ra8.session.history_pack_index;
+    const manifest = ra8.session.history_manifest;
+    const id = ObjectId.compute("Deterministic fuzz target payload for pack, index, and manifest codecs");
+
+    var pages = [_]manifest.PageRef{.{ .space = .cpu0_sram, .page_index = 0, .object = id }};
+    const pos0 = ra8.chip.core.scheduler.Position{ .branch = 0, .r = 5 };
+    const m = manifest.Manifest{
+        .position = pos0,
+        .checkpoint_id = 1,
+        .picture = null,
+        .pages = &pages,
+        .blobs = &.{},
+        .root_hash = manifest.computeMerkleRoot(pos0, 1, null, &pages, &.{}),
+    };
+    var man_buf: std.Io.Writer.Allocating = .init(allocator);
+    defer man_buf.deinit();
+    try manifest.encode(&m, &man_buf.writer);
+    const valid_man = man_buf.written();
+    for (0..valid_man.len) |cut| {
+        if (manifest.decode(allocator, valid_man[0..cut])) |*dec| {
+            var mut = dec.*;
+            mut.deinit(allocator);
+            return error.UnexpectedSuccessOnTruncatedManifest;
+        } else |_| {}
+    }
+    for (0..valid_man.len) |pos| {
+        const mutated = try allocator.dupe(u8, valid_man);
+        defer allocator.free(mutated);
+        mutated[pos] ^= 0x01;
+        if (manifest.decode(allocator, mutated)) |*dec| {
+            var mut = dec.*;
+            mut.deinit(allocator);
+            return error.UnexpectedSuccessOnBitflippedManifest;
+        } else |_| {}
+    }
+
+    var prng = std.Random.DefaultPrng.init(0x5EED_CAFE_1234_5678);
+    const rng = prng.random();
+    var noise: [160]u8 = undefined;
+    for (0..128) |len_seed| {
+        const n = len_seed % (noise.len + 1);
+        rng.bytes(noise[0..n]);
+        if (pack.decodeRecordFromSlice(allocator, noise[0..n])) |res| {
+            var r = res.record;
+            r.deinit(allocator);
+        } else |_| {}
+        if (pack_index.decode(allocator, noise[0..n])) |*idx| {
+            var mut = idx.*;
+            mut.deinit(allocator);
+        } else |_| {}
+        if (manifest.decode(allocator, noise[0..n])) |*dec| {
+            var mut = dec.*;
+            mut.deinit(allocator);
+        } else |_| {}
+    }
+}

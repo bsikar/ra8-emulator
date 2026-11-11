@@ -56,7 +56,7 @@ fn checkpoints(allocator: std.mem.Allocator, store: history.storage.Store) ![]Fo
     if (gather.failed) |err| return err;
     std.mem.sort(Found, gather.list.items, {}, struct {
         fn less(_: void, a: Found, b: Found) bool {
-            return a.position.r < b.position.r;
+            return branch_mod.scalarOrder(a.position, b.position) == .lt;
         }
     }.less);
     return gather.list.toOwnedSlice(allocator);

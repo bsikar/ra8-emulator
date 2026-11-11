@@ -143,3 +143,24 @@ test "a done reply from another peer or over other pins is refused" {
     bad.target_root += 1;
     try std.testing.expectError(error.BadFrame, verify.pair(reply(.bound), bad));
 }
+
+test "replayed commit or reply from an earlier exchange or mismatched root is refused" {
+    const old_req = request();
+    var new_req = request();
+    new_req.nonce = @splat('d');
+    new_req.operation = @splat('e');
+    new_req.proof = .{ .anchor = @splat('8'), .note = @splat('9') };
+    const new_sent: verify.Sent = .{ .nonce = new_req.nonce, .operation = new_req.operation, .proof = new_req.proof };
+
+    // Replaying an authentic COMMIT or Reply from old_req into new_req is refused.
+    try verify.commit(old_req, commit());
+    try std.testing.expectError(error.BadFrame, verify.commit(new_req, commit()));
+    try verify.reply(sent, reply(.bound), .bound);
+    try std.testing.expectError(error.BadFrame, verify.reply(new_sent, reply(.bound), .bound));
+
+    // A request whose proved root paths swapped source and target is refused.
+    var swapped = proved();
+    swapped.source = "D:\\kept";
+    swapped.target = "C:\\cache";
+    try std.testing.expectError(error.IdentityConflict, verify.bound(request(), swapped));
+}

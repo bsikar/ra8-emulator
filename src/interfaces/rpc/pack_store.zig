@@ -37,12 +37,13 @@ pub const PackStore = struct {
     /// pack's index and rebuilding one that is missing or damaged.
     pub fn open(gpa: std.mem.Allocator, session: *history.session.Session) !*PackStore {
         const self = try gpa.create(PackStore);
-        errdefer gpa.destroy(self);
         self.* = .{ .gpa = gpa, .store = history.storage.Store.from(session), .bytes = pack_file.storage(session) };
         errdefer self.close();
         var names: Names = .{ .gpa = gpa };
         defer names.deinit();
         try self.store.vtable.list(self.store.context, .objects, .{ .context = &names, .visit = &Names.visit });
+        for (names.tmps.items) |tmp| try self.store.vtable.remove(self.store.context, .objects, tmp);
+        std.mem.sort(u32, names.packs.items, {}, std.sort.asc(u32));
         for (names.packs.items) |id| try self.load(id);
         return self;
     }
@@ -91,13 +92,13 @@ pub const PackStore = struct {
         });
     }
 
-    /// Makes the pending objects durable: the pack first, then its index.
+    /// Makes the pending objects durable: atomic pack temp+sync+rename first, then its index.
     pub fn seal(self: *PackStore) !void {
         if (self.entries.items.len == 0) return;
         var leaf: [32]u8 = undefined;
         const pack_leaf = try packName(&leaf, self.next_id, "pack");
-        try self.bytes.append(self.bytes.context, pack_leaf, self.building.items);
-        try self.bytes.sync(self.bytes.context, pack_leaf);
+        try self.bytes.writeAtomic(self.bytes.context, pack_leaf, self.building.items);
+        if (try self.bytes.length(self.bytes.context, pack_leaf) != self.building.items.len) return error.TruncatedPack;
         try self.writeIndex(self.next_id, self.entries.items);
         const owned = try self.gpa.dupe(pack_index.Entry, self.entries.items);
         errdefer self.gpa.free(owned);
@@ -177,8 +178,10 @@ pub const PackStore = struct {
             var leaf: [32]u8 = undefined;
             const pack_leaf = try packName(&leaf, plan.new_pack_id, "pack");
             try self.bytes.writeAtomic(self.bytes.context, pack_leaf, pack.items);
+            if (try self.bytes.length(self.bytes.context, pack_leaf) != pack.items.len) return error.TruncatedPack;
             try self.writeIndex(plan.new_pack_id, entries.items);
             const owned = try self.gpa.dupe(pack_index.Entry, entries.items);
+            errdefer self.gpa.free(owned);
             std.mem.sort(pack_index.Entry, owned, {}, pack_index.Entry.order);
             try self.sealed.append(self.gpa, .{ .pack_id = plan.new_pack_id, .entries = owned });
             self.next_id = plan.new_pack_id + 1;
@@ -215,9 +218,33 @@ pub const PackStore = struct {
     fn load(self: *PackStore, pack_id: u32) !void {
         var leaf: [32]u8 = undefined;
         const idx_leaf = try packName(&leaf, pack_id, "idx");
-        const index = self.readIndex(pack_id, idx_leaf) catch try self.rebuild(pack_id);
+        var index = self.readIndex(pack_id, idx_leaf) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            else => try self.rebuild(pack_id),
+        };
+        errdefer index.deinit(self.gpa);
+        try self.validatePack(pack_id, index.entries);
         try self.sealed.append(self.gpa, index);
         self.next_id = @max(self.next_id, pack_id + 1);
+    }
+
+    fn validatePack(self: *PackStore, pack_id: u32, entries: []const pack_index.Entry) !void {
+        var leaf: [32]u8 = undefined;
+        const pack_leaf = try packName(&leaf, pack_id, "pack");
+        const len = try self.bytes.length(self.bytes.context, pack_leaf);
+        if (len < session_pack.header_len) return error.TruncatedPack;
+        var hdr: [session_pack.header_len]u8 = undefined;
+        if (try self.bytes.readAt(self.bytes.context, pack_leaf, 0, &hdr) != hdr.len) return error.TruncatedPack;
+        if (try session_pack.readHeader(&hdr) != pack_id) return error.CorruptPack;
+        var expected_len: u64 = session_pack.header_len;
+        for (entries) |entry| {
+            if (entry.pack_offset < session_pack.header_len) return error.CorruptIndex;
+            const span: u64 = @as(u64, session_pack.record_overhead) + entry.compressed_len;
+            if (entry.pack_offset > len or span > len - entry.pack_offset) return error.TruncatedPack;
+            expected_len += span;
+        }
+        if (len < expected_len) return error.TruncatedPack;
+        if (len != expected_len) return error.CorruptPack;
     }
 
     fn readIndex(self: *PackStore, pack_id: u32, leaf: []const u8) !pack_index.Index {
@@ -259,15 +286,25 @@ pub fn isPackLeaf(name: []const u8) bool {
 const Names = struct {
     gpa: std.mem.Allocator,
     packs: std.ArrayList(u32) = .empty,
+    tmps: std.ArrayList([]u8) = .empty,
 
     fn deinit(self: *Names) void {
+        for (self.tmps.items) |leaf| self.gpa.free(leaf);
+        self.tmps.deinit(self.gpa);
         self.packs.deinit(self.gpa);
     }
 
     fn visit(context: *anyopaque, name: []const u8, size: u64) anyerror!void {
         _ = size;
         const self: *Names = @ptrCast(@alignCast(context));
-        if (!std.mem.startsWith(u8, name, "pack-") or !std.mem.endsWith(u8, name, ".pack")) return;
+        if (!std.mem.startsWith(u8, name, "pack-")) return;
+        if (std.mem.endsWith(u8, name, ".tmp")) {
+            const copy = try self.gpa.dupe(u8, name);
+            errdefer self.gpa.free(copy);
+            try self.tmps.append(self.gpa, copy);
+            return;
+        }
+        if (!std.mem.endsWith(u8, name, ".pack")) return;
         const id = std.fmt.parseInt(u32, name[5 .. name.len - 5], 10) catch return;
         try self.packs.append(self.gpa, id);
     }

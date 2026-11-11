@@ -172,6 +172,7 @@ pub fn rebuildFromPack(allocator: std.mem.Allocator, pack_bytes: []const u8) Err
         at += decoded.consumed;
     }
 
+    if (list.items.len == 0) return Error.CorruptPack;
     const entries = list.toOwnedSlice(allocator) catch return Error.OutOfMemory;
     errdefer allocator.free(entries);
     std.mem.sort(Entry, entries, {}, Entry.order);
