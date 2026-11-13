@@ -144,6 +144,7 @@ const Libraries = struct {
     render: *std.Build.Module,
     rpc: *std.Build.Module,
     gdb: *std.Build.Module,
+    dap: *std.Build.Module,
     usbip: *std.Build.Module,
 
     /// Every library, under its own name, into `module`.
@@ -189,9 +190,8 @@ fn libraries(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
         .{ .name = "ra8_chip", .module = chip },
         .{ .name = "ra8_host", .module = host },
     });
-    // The host listener (RA8EMU-1156) serves a session's gdb port, so it
-    // drives the remote protocol through ra8_gdb. A library edge, never a
-    // CLI import: the GUI still never sees the CLI.
+    const dap = library(b, target, optimize, "ra8_dap", "src/interfaces/dap/root.zig", &.{.{ .name = "ra8_session", .module = session }});
+    // The host listener (RA8EMU-1156) serves GDB through the library adapter.
     rpc.addImport("ra8_gdb", gdb);
     rpc.addOptions("history_build", @import("tools/history_build.zig").options(b));
     const usbip = library(b, target, optimize, "ra8_usbip", "src/interfaces/usbip/root.zig", &.{
@@ -199,7 +199,7 @@ fn libraries(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
         .{ .name = "ra8_chip", .module = chip },
         .{ .name = "ra8_host", .module = host },
     });
-    return .{ .host = host, .snapshot = snapshot, .chip = chip, .components = components, .board = board, .session = session, .render = render, .rpc = rpc, .gdb = gdb, .usbip = usbip };
+    return .{ .host = host, .snapshot = snapshot, .chip = chip, .components = components, .board = board, .session = session, .render = render, .rpc = rpc, .gdb = gdb, .dap = dap, .usbip = usbip };
 }
 
 /// One library module, importable by its name from this build and from a
