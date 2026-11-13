@@ -70,7 +70,7 @@ test "a narrow store leaves the lanes it does not name alone" {
     var unit = pfs.Pfs.init();
     unlock(&unit);
     const at = pfs.Pfs.pinAddress(2, 5);
-    unit.write(at, 4, 0xAABB_CCDD);
+    unit.write(at, 4, 0xAABB_4CDD);
     unit.write(at + 1, 1, 0x11);
     try std.testing.expectEqual(@as(u32, 0xAABB_11DD), unit.pin(2, 5));
 }
@@ -82,13 +82,13 @@ test "pins are addressed flat, port times sixteen plus pin" {
     try std.testing.expectEqual(@as(u32, 0x4040_0800 + 0x100), pfs.Pfs.pinAddress(4, 0));
 }
 
-test "the last pin of the last port is still inside the array" {
+test "the reserved final port stays zero inside the register window" {
     var unit = pfs.Pfs.init();
     unlock(&unit);
     const at = pfs.Pfs.pinAddress(14, 15);
     try std.testing.expect(at - pfs.win_base < pfs.region.pfs_end);
     unit.write(at, 4, 0x0000_0002);
-    try std.testing.expectEqual(@as(u32, 0x0000_0002), unit.pin(14, 15));
+    try std.testing.expectEqual(@as(u32, 0), unit.pin(14, 15));
 }
 
 test "the rest of PMISC is a shadow that reads back" {
@@ -111,4 +111,31 @@ test "a run that never touched a pin says nothing" {
     try std.testing.expect(unit.quiet());
     unlock(&unit);
     try std.testing.expect(unit.quiet());
+}
+
+test "PFS clears reserved IRQ and analog enables without refusing the store" {
+    var unit = pfs.Pfs.init();
+    unlock(&unit);
+    const enables = pfs.capabilities.field.isel | pfs.capabilities.field.asel;
+    unit.write(pfs.Pfs.pinAddress(2, 0), 4, enables | 0x10);
+    try std.testing.expectEqual(@as(u32, 0x10), unit.pin(2, 0));
+    unit.write(pfs.Pfs.pinAddress(1, 12), 4, enables | 4);
+    try std.testing.expectEqual(pfs.capabilities.field.isel | 4, unit.pin(1, 12));
+    unit.write(pfs.Pfs.pinAddress(0, 9), 4, enables);
+    try std.testing.expectEqual(enables, unit.pin(0, 9));
+    try std.testing.expectEqual(@as(u32, 3), unit.programmed);
+    try std.testing.expectEqual(@as(u32, 0), unit.guard.refused);
+}
+
+test "byte and halfword PFS writes also mask reserved enables" {
+    var unit = pfs.Pfs.init();
+    unlock(&unit);
+    const at = pfs.Pfs.pinAddress(2, 0);
+    unit.write(at, 1, 0x10);
+    unit.write(at + 1, 1, 0xC0);
+    try std.testing.expectEqual(@as(u32, 0x10), unit.read(at, 4));
+    unit.write(at, 2, 0xC010);
+    try std.testing.expectEqual(@as(u32, 0x10), unit.read(at, 2));
+    unit.write(pfs.Pfs.pinAddress(11, 8), 4, 0xFFFF_FFFF);
+    try std.testing.expectEqual(@as(u32, 0), unit.pin(11, 8));
 }
