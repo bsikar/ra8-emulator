@@ -16,6 +16,7 @@ const txm_debug = @import("ra8_session").txm.debug;
 const session_api = @import("ra8_session").api;
 const elf = @import("ra8_board").image.elf;
 const usbip_run = @import("ra8_usbip").exported.run;
+const workspace_mod = @import("ra8_host").workspace;
 
 pub const usage =
     \\usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
@@ -24,6 +25,7 @@ pub const usage =
     \\       --cpu1 brings CPU1 up from its own image, parked until it is run
     \\       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the SDHI card, as for a run
     \\       --allow-state-files lets snapshot and restore run on a non-loopback listener
+    \\       --workspace DIR enables rooted workbench file operations for connected clients
     \\       --history DIR puts the session's persistent history in DIR; --history off keeps it RAM only
     \\       --kept preserves the session on disk after exit (with --history DIR)
     \\       --checkpoint-every N writes a closed-round checkpoint every N rounds (default 64)
@@ -35,12 +37,13 @@ pub const usage =
 ;
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false };
+const Asked = struct { where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false, workspace: ?[]const u8 = null };
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
 
 const ParsedFlags = struct {
+    workspace: ?[]const u8 = null,
     folded: bool = false,
     allow_state: bool = false,
     cpu1: ?[]const u8 = null,
@@ -74,6 +77,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
     }
     var asked = parseTail(argv, at) orelse return null;
     asked.folded = flags.folded;
+    asked.workspace = flags.workspace;
     asked.allow_state_files = flags.allow_state;
     asked.history = flags.history_root;
     asked.history_off = flags.history_off;
@@ -104,6 +108,10 @@ fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep
         flags.folded = true;
     } else if (std.mem.eql(u8, argv[idx], "--allow-state-files") and !flags.allow_state) {
         flags.allow_state = true;
+    } else if (std.mem.eql(u8, argv[idx], "--workspace") and flags.workspace == null and valued) {
+        at.* += 1;
+        if (argv[at.*].len == 0) return .bad;
+        flags.workspace = argv[at.*];
     } else if (std.mem.eql(u8, argv[idx], "--cpu1") and flags.cpu1 == null and valued) {
         at.* += 1;
         flags.cpu1 = argv[at.*];
@@ -213,6 +221,15 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         return 1;
     };
     defer setup.deinit();
+    var workspace: ?workspace_mod.Workspace = null;
+    defer if (workspace) |*root| root.close();
+    if (asked.workspace) |root| {
+        workspace = workspace_mod.Workspace.open(io, root) catch |err| {
+            std.debug.print("serve: cannot open workspace: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        setup.context.workspace = &workspace.?;
+    }
     if (asked.camera) |cam| {
         served_camera.set(&setup, cam) catch |err| {
             std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});

@@ -109,6 +109,17 @@ jobs:
         run: |
           timeout 240 bash tools/gdb_batch.sh --conformance --emulator ./zig-out/bin/ra8_emulator --fixture ./zig-out/bin/debug_conformance.elf --oracle "$RUNNER_TEMP/debug-conformance/oracle.json" --output "$RUNNER_TEMP/debug-conformance/gdb" --gdb gdb-multiarch --expected-gdb-version 15.0.50.20240403 --cpu1-fixture ./zig-out/bin/debug_cpu1.elf --fault-fixture ./zig-out/bin/debug_fault.elf --peripheral-fixture ./zig-out/bin/debug_peripheral.elf
 
+      - name: Workspace filesystem through public RPC
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $workspaceArgs = @('-B', 'tools/workspace_smoke/run.py', '--emulator', "zig-out/bin/ra8_emulator$suffix", '--fixture', 'zig-out/bin/debug_conformance.elf', '--output', "$env:RUNNER_TEMP/debug-conformance/workspace", '--timeout', '120')
+          if (-not $IsWindows) { $workspaceArgs += '--require-native-links' }
+          python @workspaceArgs
+          if ($LASTEXITCODE -ne 0) { throw 'Workspace filesystem conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

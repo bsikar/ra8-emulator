@@ -1,5 +1,5 @@
 //! The session RPC handlers: one thin adapter per method onto the Session
-//! API (RA8EMU-735). Handlers never see bytes; server.zig routes.
+//! API (RA8EMU-735); server.zig routes decoded messages.
 const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
@@ -50,8 +50,7 @@ pub const Listing = struct {
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
 };
 
-/// Turns RTOS tracing on (RA8EMU-832); nothing on the trace topic without
-/// it. Reads a thread's name from its TX_THREAD; empty without it.
+/// Turns RTOS tracing on (RA8EMU-832); reads names from TX_THREAD.
 pub const TraceOn = struct {
     context: *anyopaque,
     onFn: *const fn (*anyopaque) bool,
@@ -75,6 +74,8 @@ const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,
+    workspace: ?*@import("ra8_host").workspace.Workspace = null,
+    workspace_watches: @import("../workspace_watch.zig").Table = .{},
     /// Holds read_memory replies; its length caps one read.
     scratch: []u8,
     /// The last run's stop, until Host.poll sends it.
@@ -330,6 +331,7 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
 
 /// Drop every subscription, as a new connection starts with none.
 pub fn forget(context: *Context) void {
+    context.workspace_watches.clear();
     context.topics = .{ 0, 0 };
     context.pending = null;
     context.advance_ticket = null;

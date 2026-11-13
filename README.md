@@ -143,6 +143,56 @@ Editor results identify extension-host/headless automation and set
 `manual_ui_verified` to false. Human UI acceptance is recorded separately
 from these reproducible client checks.
 
+## Workspace filesystem
+
+An explicit workspace root enables the backend file service for connected
+RPC clients. The root stays open for the lifetime of `serve`:
+
+```sh
+ra8_emulator serve --workspace /path/to/project --listen tcp::0 firmware.elf
+```
+
+Without `--workspace`, file methods refuse and capability bit 16 is absent.
+The typed contract is `ra8.rpc.workspace_wire`: methods `0x0140`–`0x0145`
+list, stat, read, write, watch and unwatch. Listing returns a bounded page of
+JSON name/kind entries; read supports byte offsets. Paths are relative to
+the selected root, accept slash or backslash separators, and refuse parent
+traversal, absolute paths, alternate streams and descendant symlinks.
+This grants trusted connected clients read/write access within that root.
+
+Stat and read supply a version containing file kind, size, modification
+time and identity. `encodeVersion` makes the 25-byte token a write request
+must return; `decodeVersion` reads tokens in read/change replies. A missing
+version means exclusive creation. Existing-file saves check the version,
+stage and sync a sibling file, recheck, then atomically replace. Stale saves
+refuse without truncating the original. Advisory locks coordinate cooperating
+writers; this is optimistic conflict detection, not a transaction against
+external programs that ignore locks or deliberately preserve metadata.
+
+Limits are 4096 path bytes, 256 KiB per read/write, 64 entries per listing
+page and an offset of at most 65,536 entries. Each connection can watch eight
+paths. Watches reconcile one path every 100 ms and send `Change` events on
+topic `0x0180`; directory watches inspect at most 1024 direct children,
+including metadata changes to existing children. They coalesce changes and
+are nonrecursive. A directory that exceeds the bound refuses registration;
+later observation failures emit `unavailable` and release the watch.
+Unwatch/disconnect clears the connection's watches; stale IDs are refused.
+File size, time and identity changes are observed; edits preserving all
+those metadata fields are outside this polling contract.
+
+The public-client smoke test builds no code and records assertions, protocol
+transcripts and owned-process cleanup in a fresh evidence directory:
+
+```sh
+python -B tools/workspace_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture tests/fixtures/uart/uart_irq_echo.elf --output /tmp/workspace-proof
+```
+
+Append `.exe` on Windows. `--require-native-links` requires native final-file
+and ancestor-link containment proof; Linux CI enables it. Windows records
+unavailable symlink privileges separately and still tests a native directory
+junction. Both platforms run the public-client check in CI.
+
 ## Rebuilt-ELF replay
 
 `ra8_emulator history --root DIR replay-elf SESSION --elf REBUILT.elf [--json]`
