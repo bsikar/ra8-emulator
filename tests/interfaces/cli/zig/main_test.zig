@@ -70,3 +70,92 @@ test "fit puts the command line's part on the board" {
     try main_path.fit(&board, std.testing.allocator, std.testing.io, options);
     try std.testing.expectEqual(options.part, board.part);
 }
+
+const test_paths = @import("test_paths");
+const io = std.testing.io;
+const gpa = std.testing.allocator;
+
+/// Keep an idle stdin writer open to prove a console poll never waits for EOF.
+fn pipeRun(argv: []const []const u8, bytes: ?[]const u8) !std.json.Parsed(std.json.Value) {
+    var child = try std.process.spawn(io, .{ .argv = argv, .stdin = .pipe, .stdout = .pipe, .stderr = .inherit });
+    defer child.kill(io);
+    if (bytes) |text| {
+        try child.stdin.?.writeStreamingAll(io, text);
+        child.stdin.?.close(io);
+        child.stdin = null;
+    }
+    var buffers: std.Io.File.MultiReader.Buffer(1) = undefined;
+    var output: std.Io.File.MultiReader = undefined;
+    output.init(gpa, io, buffers.toStreams(), &.{child.stdout.?});
+    defer output.deinit();
+    const deadline = (std.Io.Timeout{ .duration = .{ .raw = .fromSeconds(30), .clock = .awake } }).toDeadline(io);
+    while (output.fill(4096, deadline)) |_| {
+        if (output.reader(0).buffered().len > 1024 * 1024) return error.StreamTooLong;
+    } else |err| if (err != error.EndOfStream) return err;
+    try output.checkAnyError();
+    try std.testing.expectEqual(std.process.Child.Term{ .exited = 0 }, try child.wait(io));
+    const text = output.reader(0).buffered();
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var found: ?[]const u8 = null;
+    while (lines.next()) |line| {
+        if (!std.mem.startsWith(u8, line, "{\"schema\":")) continue;
+        if (found != null) return error.DuplicateReport;
+        found = line;
+    }
+    return std.json.parseFromSlice(std.json.Value, gpa, found orelse return error.MissingReport, .{ .allocate = .alloc_always });
+}
+
+fn field(value: std.json.Value, name: []const u8) std.json.Value {
+    return value.object.get(name).?;
+}
+
+fn words(doc: std.json.Value) []std.json.Value {
+    return field(field(field(doc, "dumps"), "memory"), "words").array.items;
+}
+
+test "CLI inherited pipe reaches polled SCI firmware only with --console" {
+    const common = [_][]const u8{ test_paths.emulator, "tests/fixtures/console/echo.elf", "--cpu", "zig", "--instructions", "1000000", "--report", "json", "--dump-mem", "0x22000100", "1" };
+    var without = try pipeRun(&common, "Pipe725!\n");
+    defer without.deinit();
+    try std.testing.expectEqual(@as(i64, 0), words(without.value)[0].integer);
+    var with = try pipeRun(&(common ++ .{"--console"}), "Pipe725!\n");
+    defer with.deinit();
+    try std.testing.expectEqual(@as(i64, 9), words(with.value)[0].integer);
+    const serial = field(with.value, "serial");
+    try std.testing.expectEqualStrings("Pipe725!", field(field(serial, "console"), "last").string);
+    const channels = field(serial, "sci").array.items;
+    try std.testing.expectEqual(@as(usize, 1), channels.len);
+    try std.testing.expectEqual(@as(i64, 8), field(channels[0], "index").integer);
+    try std.testing.expectEqual(@as(i64, 9), field(channels[0], "received").integer);
+    try std.testing.expectEqual(@as(i64, 0), field(channels[0], "rx_dropped").integer);
+}
+
+test "CLI console with an open idle pipe still finishes its guest budget" {
+    var doc = try pipeRun(&.{ test_paths.emulator, "tests/fixtures/console/echo.elf", "--console", "--instructions", "1000000", "--report", "json", "--dump-mem", "0x22000100", "1" }, null);
+    defer doc.deinit();
+    try std.testing.expectEqual(@as(i64, 0), words(doc.value)[0].integer);
+    try std.testing.expect(field(field(doc.value, "run"), "elapsed_instructions").integer > 0);
+}
+
+test "CLI --touch @file delivers contacts through I3C into firmware memory" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{ .sub_path = "touch input.txt", .data = "down 300,400\r\nmove 12,34\nup\n99,77\n" });
+    const path = try tmp.dir.realPathFileAlloc(io, "touch input.txt", gpa);
+    defer gpa.free(path);
+    const spec = try std.fmt.allocPrint(gpa, "@{s}", .{path});
+    defer gpa.free(spec);
+    const common = [_][]const u8{ test_paths.emulator, "tests/fixtures/touch/touch.elf", "--instructions", "1000000", "--report", "json", "--dump-mem", "0x22000100", "2" };
+    var without = try pipeRun(&common, null);
+    defer without.deinit();
+    try std.testing.expectEqual(@as(i64, 0), words(without.value)[1].integer);
+    var with = try pipeRun(&(common ++ .{ "--touch", spec }), null);
+    defer with.deinit();
+    const stored = words(with.value);
+    try std.testing.expectEqual(@as(i64, (77 << 16) | 99), stored[0].integer);
+    try std.testing.expectEqual(@as(i64, 3), stored[1].integer);
+    const touch = field(field(field(with.value, "network"), "i2c_parts"), "touch");
+    try std.testing.expectEqual(@as(i64, 3), field(touch, "contacts_drained").integer);
+    try std.testing.expectEqual(@as(i64, 3), field(touch, "frames_acked").integer);
+    try std.testing.expectEqual(@as(i64, 0), field(touch, "refused_phantom_reads").integer);
+}
