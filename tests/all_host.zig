@@ -286,6 +286,7 @@ test {
     _ = @import("interfaces/cli/report/unmodelled_test.zig");
     _ = @import("interfaces/cli/report/watchdog_test.zig");
     _ = @import("interfaces/cli/report/dtc1_test.zig");
+    _ = @import("interfaces/cli/report/pinfunc_test.zig");
     _ = @import("interfaces/cli/report/usb/usb_test.zig");
     _ = @import("interfaces/cli/report/part_test.zig");
     _ = @import("interfaces/cli/report/run_test.zig");

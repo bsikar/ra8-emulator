@@ -28,7 +28,9 @@ pub const magic = "RA8SNAP\x00".*;
 /// Version 13 widens the external fabric to one timed port per bus initiator
 /// (DMAC, both DTCs, GLCDC, DRW, CEU and Ethernet) beside the CPUs and the
 /// NPU. Version 12 files carry three ports and are refused before decoding.
-pub const version: u32 = 13;
+/// Version 14 saves the PFS/GPIO pad-direction refusal counters. Version 13
+/// signals/datapath sections lack those fields and are refused before decode.
+pub const version: u32 = 14;
 
 pub const Error = error{ BadMagic, BadVersion, Truncated, DuplicateSection };
 

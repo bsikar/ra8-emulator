@@ -31,6 +31,7 @@ fn busy() Stand {
     board.links.armed[2] = true;
     board.pinfunc.entries[3] = 0x0001_0004;
     board.pinfunc.programmed = 9;
+    board.pinfunc.direction_refused = 2;
     board.checksum.dor = 0xA5A5_0F0F;
     board.dataops.docr = 0x41;
     board.dataops.flag = true;

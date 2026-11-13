@@ -5,6 +5,7 @@
 pub const pads = @import("pads.zig");
 
 pub const field = struct {
+    pub const pdr: u32 = 1 << 2;
     pub const isel: u32 = 1 << 14;
     pub const asel: u32 = 1 << 15;
 };
@@ -21,10 +22,17 @@ pub const Pad = struct {
         return self.functions & (@as(u32, 1) << select) != 0;
     }
 
-    /// Direction enforcement at both PDR write paths belongs to RA8EMU-1253.
+    /// Input/output capability applies to both independent PDR write paths.
+    /// Absent pads and input-only pads cannot drive; output-only pads cannot
+    /// switch to input (none occur in the current RA8P1 table).
+    pub fn direction(self: Pad, output: bool) bool {
+        return self.present and self.output and (output or !self.input);
+    }
+
     pub fn sanitize(self: Pad, value: u32) u32 {
         if (!self.present) return 0;
         var next = value;
+        if (self.direction(value & field.pdr != 0)) next |= field.pdr else next &= ~field.pdr;
         if (self.irq == null) next &= ~field.isel;
         if (!self.analog) next &= ~field.asel;
         return next;

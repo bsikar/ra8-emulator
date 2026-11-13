@@ -35,6 +35,8 @@ test "a wrong magic or an unknown version is refused" {
     list.written()[0] = file.magic[0];
     std.mem.writeInt(u32, list.written()[file.magic.len..][0..4], file.version + 1, .little);
     try std.testing.expectError(error.BadVersion, file.Reader.open(list.written()));
+    std.mem.writeInt(u32, list.written()[file.magic.len..][0..4], file.version - 1, .little);
+    try std.testing.expectError(error.BadVersion, file.Reader.open(list.written()));
 }
 
 test "a cut-off file is truncated, not misread" {
