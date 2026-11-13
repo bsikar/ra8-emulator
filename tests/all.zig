@@ -115,6 +115,12 @@ test {
     _ = @import("chip/core/cadence_test.zig");
     _ = @import("session/all.zig");
     _ = @import("interfaces/gdb/all.zig");
+    _ = @import("interfaces/dap/framing_test.zig");
+    _ = @import("interfaces/dap/protocol_test.zig");
+    _ = @import("interfaces/dap/adapter_test.zig");
+    _ = @import("interfaces/dap/inspection_test.zig");
+    _ = @import("interfaces/dap/points_test.zig");
+    _ = @import("session/run_slice_test.zig");
     _ = @import("board/image/elf_test.zig");
     _ = @import("chip/core/idle_test.zig");
     _ = @import("chip/core/pend_clear_test.zig");

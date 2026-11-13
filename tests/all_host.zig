@@ -2,6 +2,7 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("interfaces/cli/dap_test.zig");
     _ = @import("session/harness/metrics_test.zig");
     _ = @import("interfaces/gui/device_metrics_pane_test.zig");
     _ = @import("interfaces/gui/ui/host_metrics_pane_test.zig");

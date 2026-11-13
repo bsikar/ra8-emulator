@@ -25,5 +25,6 @@ pub const debug_front = @import("debug_front.zig");
 pub const zig = @import("zig/zig.zig");
 pub const sweep = @import("sweep/sweep.zig");
 pub const image_file = @import("image_file.zig");
+pub const dap = @import("dap.zig");
 pub const parts = @import("parts.zig");
 pub const report = @import("report.zig");

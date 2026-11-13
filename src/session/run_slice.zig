@@ -16,6 +16,18 @@ const Session = api.Session;
 const Core = api.Core;
 
 pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
+    return drive(self, core, command);
+}
+
+/// Continue a budget-limited command without rearming its step or resume grace.
+pub fn continueRun(self: *Session, core: Core) anyerror!api.Ended {
+    // Window drivers own their instruction recording and have no continuation hook.
+    if (self.window_driver != null) return error.UnsupportedContinuation;
+    if ((try self.machine(core)).mode == .halted) return error.NotRunning;
+    return drive(self, core, null);
+}
+
+fn drive(self: *Session, core: Core, command: ?api.Run) anyerror!api.Ended {
     try self.select(core);
     self.grid = if (self.live.boundary) |edge| edge.saved orelse &self.live.saved else null;
     line.stampLine(self);
@@ -28,7 +40,9 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     defer self.live.budget = budget;
     clampToNextItem(self);
     const retired_before = self.live.core.cpu.retired;
-    const ended = if (self.window_driver) |driver| try driver.goFn(driver.context, self, command) else try self.live.go(command);
+    const ended = if (command) |cmd| blk: {
+        break :blk if (self.window_driver) |driver| try driver.goFn(driver.context, self, cmd) else try self.live.go(cmd);
+    } else try self.live.goOn();
     if (self.live.boundary == null) try advanceBoard(self, core, self.live.core.cpu.retired - retired_before);
     line.notePosition(self, line.currentPosition(self));
     if (self.window_driver) |driver| driver.settleFn(driver.context, self);
@@ -38,7 +52,7 @@ pub fn run(self: *Session, core: Core, command: api.Run) anyerror!api.Ended {
     }
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
     self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-    if (self.history) |h| if (command != .cont or !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);
+    if (self.history) |h| if ((command != null and command != .cont) or !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);
     if (ended == .core) {
         const address: ?u32 = switch (ended.core) {
             .count => null,
