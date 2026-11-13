@@ -1,0 +1,119 @@
+name: debug-conformance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  public-clients:
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+
+      - name: Install verified Zig 0.17.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $platform = if ($IsWindows) { 'x86_64-windows' } else { 'x86_64-linux' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $expected = if ($IsWindows) { 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428' } else { '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026' }
+          $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
+          curl -fsSL --retry 3 -o $archive "https://ziglang.org/download/0.17.0/zig-$platform-0.17.0.$extension"
+          if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Zig SHA256 mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'debug-zig'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          tar -xf $archive -C $destination
+          if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' }
+          Join-Path $destination "zig-$platform-0.17.0" | Add-Content -Path $env:GITHUB_PATH
+
+      - name: Record exact checkout and tools
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'debug-conformance'
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot identify checkout' }
+          $zigVersion = (zig version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $zigVersion -ne '0.17.0') { throw 'Wrong Zig version' }
+          $pythonVersion = (python --version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $pythonVersion -ne 'Python 3.12.10') { throw 'Wrong Python version' }
+          @{git_head=$head; zig=$zigVersion; python=$pythonVersion; runner_os=$env:RUNNER_OS; runner_arch=$env:RUNNER_ARCH} |
+            ConvertTo-Json | Set-Content -Path (Join-Path $output 'environment.json')
+
+      - name: Build emulator
+        id: emulator
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          zig build -j1 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/debug-conformance/build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Emulator build failed' }
+
+      - name: Build deterministic firmware separately
+        id: fixtures
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          zig build debug-fixtures -j1 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/debug-conformance/fixture-build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture build failed' }
+
+      - name: Derive independent ELF oracle
+        id: oracle
+        shell: pwsh
+        run: |
+          python tools/gdb_conformance/oracle.py --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf --output "$env:RUNNER_TEMP/debug-conformance/oracle.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture oracle failed' }
+
+      - name: Public DAP end-to-end matrix
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          python tools/dap_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf --oracle "$env:RUNNER_TEMP/debug-conformance/oracle.json" --output "$env:RUNNER_TEMP/debug-conformance/dap" --overall-timeout 180 --request-timeout 5 --startup-timeout 15 --pause-timeout 2
+          if ($LASTEXITCODE -ne 0) { throw 'DAP conformance failed' }
+
+      - name: Install pinned real GDB on Linux
+        id: gdb
+        if: always() && runner.os == 'Linux' && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success' && steps.oracle.outcome == 'success'
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb=15.0.50.20240403-0ubuntu1 gdb-multiarch=15.0.50.20240403-0ubuntu1
+          test "$(dpkg-query -W -f='${Version}' gdb-multiarch)" = '15.0.50.20240403-0ubuntu1'
+          gdb-multiarch --version > "$RUNNER_TEMP/debug-conformance/gdb-version.txt"
+
+      - name: Real GDB through existing batch harness
+        if: always() && runner.os == 'Linux' && steps.gdb.outcome == 'success'
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          timeout 240 bash tools/gdb_batch.sh --conformance --emulator ./zig-out/bin/ra8_emulator --fixture ./zig-out/bin/debug_conformance.elf --oracle "$RUNNER_TEMP/debug-conformance/oracle.json" --output "$RUNNER_TEMP/debug-conformance/gdb" --gdb gdb-multiarch --expected-gdb-version 15.0.50.20240403 --cpu1-fixture ./zig-out/bin/debug_cpu1.elf --fault-fixture ./zig-out/bin/debug_fault.elf --peripheral-fixture ./zig-out/bin/debug_peripheral.elf
+
+      - name: Preserve terminal results and sanitized transcripts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debug-conformance-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/debug-conformance
+          if-no-files-found: error
+          retention-days: 14

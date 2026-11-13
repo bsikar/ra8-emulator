@@ -1,0 +1,18 @@
+{
+  "name": "ra8-editor-conformance",
+  "publisher": "ra8",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.100.0" },
+  "main": "./extension.js",
+  "activationEvents": ["onDebug:ra8-conformance"],
+  "contributes": {
+    "debuggers": [{
+      "type": "ra8-conformance",
+      "label": "RA8 conformance",
+      "configurationAttributes": {
+        "launch": { "properties": { "program": { "type": "string" } } },
+        "attach": { "properties": {} }
+      }
+    }]
+  }
+}

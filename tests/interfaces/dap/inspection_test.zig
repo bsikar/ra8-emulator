@@ -15,7 +15,7 @@ test "stop handles read Session registers and expire on resume" {
         \\{"seq":5,"type":"request","command":"variables","arguments":{"variablesReference":256}}
     , "0x0000002A");
     try fixture.expectSend(&f.adapter,
-        \\{"seq":6,"type":"request","command":"stepIn","arguments":{"threadId":1}}
+        \\{"seq":6,"type":"request","command":"stepIn","arguments":{"threadId":1,"granularity":"instruction"}}
     , "\"success\":true");
     var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer out.deinit();

@@ -25,3 +25,19 @@ test "interrupt poll consumes 03 once and preserves an ordinary GDB packet" {
     }
     try std.testing.expect(!check.check(check.context));
 }
+
+test "debugger EOF requests a halt instead of leaving a continue running forever" {
+    var listener = try (std.Io.net.IpAddress{ .ip4 = .loopback(0) }).listen(io, .{});
+    defer listener.deinit(io);
+    const client = try listener.socket.address.connect(io, .{ .mode = .stream });
+    var client_live = true;
+    defer if (client_live) client.close(io);
+    const peer = try listener.accept(io);
+    defer peer.close(io);
+    var socket: ra8.gdb.rsp.poll.Socket = .{ .handle = peer.socket.handle, .io = io };
+    const check = socket.poll();
+    client.close(io);
+    client_live = false;
+    try std.testing.expect((try ready.wait(io, peer.socket.handle, 1000)).any());
+    try std.testing.expect(check.check(check.context));
+}

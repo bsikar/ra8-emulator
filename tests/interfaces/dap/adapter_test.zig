@@ -29,6 +29,7 @@ test "scripted initialize attach break step stack scopes variables continue paus
     , "\"allThreadsContinued\":true");
     try f.adapter.pump(&out.writer);
     try std.testing.expectEqual(@as(u32, 12), f.cpu.regs.pc);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "\"reason\":\"instruction breakpoint\"") != null);
     try std.testing.expect(f.adapter.pending == null);
     try fixture.expectSend(&f.adapter,
         \\{"seq":9,"type":"request","command":"continue","arguments":{"threadId":1}}
@@ -109,6 +110,26 @@ test "launch invokes application loader and defers running until configurationDo
         \\{"seq":3,"type":"request","command":"configurationDone"}
     , "\"success\":true");
     try std.testing.expect(f.adapter.pending != null);
+}
+
+test "implicit and explicit statement stepping refuse without advancing the machine" {
+    var f: fixture.Fixture = .{};
+    try f.init();
+    defer f.deinit();
+    try fixture.connect(&f.adapter);
+    for ([_][]const u8{ "stepIn", "next", "stepOut" }) |command| {
+        for ([_][]const u8{ "", ",\"granularity\":\"statement\"" }) |granularity| {
+            const request = try std.fmt.allocPrint(
+                std.testing.allocator,
+                "{{\"seq\":4,\"type\":\"request\",\"command\":\"{s}\",\"arguments\":{{\"threadId\":1{s}}}}}",
+                .{ command, granularity },
+            );
+            defer std.testing.allocator.free(request);
+            try fixture.expectSend(&f.adapter, request, "UnsupportedGranularity");
+            try std.testing.expect(f.adapter.pending == null);
+            try std.testing.expectEqual(@as(u32, 8), f.cpu.regs.pc);
+        }
+    }
 }
 
 test "next preserves the Session call target across multiple bounded slices" {

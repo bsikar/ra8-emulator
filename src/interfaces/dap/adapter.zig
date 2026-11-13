@@ -96,7 +96,8 @@ pub const Adapter = struct {
         if (!self.configured) return error.NotConfigured;
         const core = try inspection.Inspection.thread(target, args);
         const granularity = p.get(args, "granularity");
-        if (granularity != .null and !equal(try p.text(granularity), "instruction")) return error.UnsupportedGranularity;
+        // Omission means statement stepping in DAP, which Session does not provide here.
+        if (run != .cont and (granularity == .null or !equal(try p.text(granularity), "instruction"))) return error.UnsupportedGranularity;
         try self.start(core, run);
         if (run == .cont) try out.writeAll("{\"allThreadsContinued\":true}");
     }
@@ -151,7 +152,8 @@ pub const Adapter = struct {
         const reason: []const u8 = switch (ended) {
             .stop => |stop| switch (stop) {
                 .stepped => "step",
-                .breakpoint, .unit_break => "breakpoint",
+                .breakpoint => |id| if (self.points.isInstruction(core, id)) "instruction breakpoint" else "breakpoint",
+                .unit_break => "breakpoint",
                 .watchpoint, .unit_watch => "data breakpoint",
                 .halt_requested => "pause",
                 else => "exception",

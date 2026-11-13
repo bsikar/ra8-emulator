@@ -83,9 +83,8 @@ pub fn build(b: *std.Build) void {
     run.addPassthruArgs();
     b.step("run", "Run the emulator").dependOn(&run.step);
 
-    // The gate is a program of its own: build.zig owns the formatter check,
-    // tools/gate.zig owns the length checks, and the tests cover its scanner
-    // through the same module the gate executable is built from.
+    @import("tools/debug_build.zig").add(b);
+    // The gate executable and its tests share the scanner modules.
     const gate_mod = toolModule(b, target, optimize, "tools/gate.zig");
     // tools/terms.zig is the terminology half, tested the same way.
     const terms_mod = toolModule(b, target, optimize, "tools/terms.zig");
