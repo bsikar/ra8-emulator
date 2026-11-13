@@ -97,6 +97,9 @@ tools read: README.md, this file, fixture provenance READMEs under
 `tests/fixtures/`, and test goldens such as `tools/*_expected.md` and
 `tests/chip/core/cpu/conformance/coverage.md`.
 
+For hardware facts, query RA8EMU-A-30 first: it indexes the complete searchable
+RA8D2/RA8P1 datasheets, M85/M33/NPU summaries, source revisions and package limits.
+
 ## One file, one purpose
 
 A file holds one thing, the way a Kotlin class or a DTO gets its own file. A

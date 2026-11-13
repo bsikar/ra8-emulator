@@ -35,6 +35,7 @@ const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 pub const protect = @import("protect.zig");
 pub const route = @import("route.zig");
+pub const capabilities = @import("capabilities.zig");
 
 pub const win_base: u32 = 0x4040_0800;
 pub const win_span: u32 = 0x580;
@@ -112,7 +113,8 @@ pub const Pfs = struct {
             }
             const index = offset / 4;
             const standing = self.entries[index];
-            const merged = lanes.merge(standing, lanes.lane(offset), width, value);
+            const requested = lanes.merge(standing, lanes.lane(offset), width, value);
+            const merged = capabilities.get(index / limits.pin_count, index % limits.pin_count).sanitize(requested);
             self.ordering.observe(standing, merged);
             self.entries[index] = merged;
             self.programmed +%= 1;
