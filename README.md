@@ -67,7 +67,8 @@ without a preloaded image. `stopOnEntry` defaults to true. Send
 `configurationDone` after setting breakpoints. Source breakpoints use the
 ELF's DWARF paths. Instruction breakpoints take hexadecimal address strings.
 Stepping is at instruction granularity, with call-aware `next` and
-`stepOut`; request `granularity: "instruction"` when the client supplies it.
+`stepOut`. Clients must request `granularity: "instruction"`; omitted
+granularity and source-level stepping are explicitly refused.
 Registers and supported DWARF locals are read at the innermost frame.
 Unavailable local locations and caller scopes are left unavailable.
 Conditional/log breakpoints, expression evaluation, URI source paths and
@@ -88,6 +89,59 @@ LEDs; SW1, SW2 and the panel take clicks. Cmd+O (Ctrl+O on Windows and
 Linux) picks another image in the OS's own file dialog, and it opens halted
 the same way. `serve` and `ctl` run a
 session in one process and drive it from another, locally or over TCP.
+
+## Debugger conformance
+
+Build the emulator and deterministic firmware separately before running the
+public-client checks. These commands use Python 3.12 and a real
+`gdb-multiarch` (or an explicit path to `arm-none-eabi-gdb`). On Windows,
+append `.exe` to the emulator path and run the shell commands in Git Bash.
+
+```sh
+zig build -j1
+zig build debug-fixtures -j1
+proof=$(mktemp -d)
+python -B tools/gdb_conformance/oracle.py \
+  --fixture zig-out/bin/debug_conformance.elf \
+  --fault-fixture zig-out/bin/debug_fault.elf \
+  --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf \
+  --output "$proof/oracle.json"
+python -B tools/dap_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf \
+  --oracle "$proof/oracle.json" --output "$proof/dap"
+bash tools/gdb_batch.sh --conformance --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf \
+  --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf \
+  --oracle "$proof/oracle.json" \
+  --output "$proof/gdb" --gdb gdb-multiarch
+```
+
+The independent ELF oracle binds assertions to fixture bytes, exported
+instruction labels, DWARF source rows and known values. Each driver starts
+fresh emulator processes, records bounded expected-versus-actual checks and
+sanitized transcripts, and writes a terminal `result.json`. The DAP driver
+checks launch/attach, breakpoints, calls across execution slices, inspection,
+pause, framing errors and connection loss. The existing GDB batch entry
+point also checks real-GDB memory access, call frames and CPU1. Unsupported
+combinations are recorded explicitly. The `debug-conformance` CI workflow
+runs portable DAP on Linux and Windows and pinned real GDB on Linux, keeping
+its transcripts as artifacts.
+
+The separate editor harness uses VS Code's native debug client in an
+isolated extension host and Neovim's real `nvim-dap` client. It preserves
+normal editor settings and requires an explicit native VS Code executable
+and a checkout of `nvim-dap` at the revision its runner checks:
+
+```sh
+python -B tools/editor_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --oracle "$proof/oracle.json" \
+  --editor both --code /path/to/Code --nvim-dap /path/to/nvim-dap \
+  --output "$proof/editors"
+```
+
+Editor results identify extension-host/headless automation and set
+`manual_ui_verified` to false. Human UI acceptance is recorded separately
+from these reproducible client checks.
 
 ## Rebuilt-ELF replay
 

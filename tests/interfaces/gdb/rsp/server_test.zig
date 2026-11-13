@@ -61,3 +61,47 @@ test "the other end closing" {
     try std.testing.expectEqual(server.End.closed, try play(&rig, "+", &sent));
     try std.testing.expectEqual(@as(usize, 0), sent.written().len);
 }
+
+const FlushProbe = struct {
+    writer: std.Io.Writer,
+    sent_ack: bool = false,
+    observed_during_run: bool = false,
+
+    fn drain(writer: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+        const self: *FlushProbe = @fieldParentPtr("writer", writer);
+        if (std.mem.indexOfScalar(u8, writer.buffered(), packet.ack) != null) self.sent_ack = true;
+        writer.end = 0;
+        var consumed = data[data.len - 1].len * splat;
+        for (data[0 .. data.len - 1]) |part| consumed += part.len;
+        return consumed;
+    }
+    fn check(context: *anyopaque) bool {
+        const self: *FlushProbe = @ptrCast(@alignCast(context));
+        self.observed_during_run = self.sent_ack;
+        return true;
+    }
+    fn now(_: *anyopaque) u64 {
+        return 0;
+    }
+};
+
+test "a resume ACK reaches the client before execution asks for an interrupt" {
+    var rig: Rig = .{};
+    rig.wire();
+    try rig.view().write(memmap.sram_base, &.{ 0xFE, 0xE7 });
+    try rig.view().setRegister(.pc, memmap.sram_base);
+    try rig.view().setRegister(.xpsr, ra8.chip.core.cpu.regs.xpsr_bits.thumb);
+    var machine: ra8.session.stop_machine.Machine = .{};
+    var live: ra8.session.api.Session = .{ .live = .{ .core = .{ .cpu = &rig.cpu }, .machine = &machine, .budget = 8 } };
+    var out: [256]u8 = undefined;
+    var probe: FlushProbe = .{ .writer = .{ .buffer = &out, .vtable = &.{ .drain = FlushProbe.drain } } };
+    var target: dispatch.zig_run.Target = .{
+        .session = &live,
+        .poll = .{ .context = &probe, .check = FlushProbe.check },
+        .wall = .{ .context = &probe, .nowFn = FlushProbe.now },
+    };
+    var input: [64]u8 = undefined;
+    var reader: std.Io.Reader = .fixed(try wire(&input, &.{ "c", "D" }, ""));
+    try std.testing.expectEqual(server.End.detached, try server.serve(.{ .zig = &target }, &reader, &probe.writer));
+    try std.testing.expect(probe.observed_during_run);
+}

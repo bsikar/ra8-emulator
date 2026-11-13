@@ -6,6 +6,13 @@ pub const Points = struct {
     entries: std.ArrayList(Entry) = .empty,
     const Entry = struct { source: []u8, core: session.api.Core, id: session.api.BreakId };
 
+    pub fn isInstruction(self: *const Points, core: session.api.Core, id: session.api.BreakId) bool {
+        for (self.entries.items) |entry| {
+            if (entry.core == core and entry.id == id) return entry.source.len == 0;
+        }
+        return false;
+    }
+
     pub fn deinit(self: *Points, allocator: std.mem.Allocator, live: ?*session.api.Session) void {
         for (self.entries.items) |entry| {
             if (live) |s| s.clearBreakpoint(entry.core, entry.id) catch {};
