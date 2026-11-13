@@ -139,3 +139,34 @@ test "byte and halfword PFS writes also mask reserved enables" {
     unit.write(pfs.Pfs.pinAddress(11, 8), 4, 0xFFFF_FFFF);
     try std.testing.expectEqual(@as(u32, 0), unit.pin(11, 8));
 }
+
+test "input-only pads refuse output direction through PFS" {
+    var unit = pfs.Pfs.init();
+    unlock(&unit);
+    for ([_]u32{ 0, 14, 15 }) |pin| {
+        unit.write(pfs.Pfs.pinAddress(2, pin), 4, 0x14);
+        try std.testing.expectEqual(@as(u32, 0x10), unit.pin(2, pin));
+    }
+}
+
+test "PFS direction refusals count written bits separately from protection" {
+    var unit = pfs.Pfs.init();
+    const at = pfs.Pfs.pinAddress(2, 0);
+    unit.write(at, 1, 4);
+    try std.testing.expectEqual(@as(u32, 1), unit.guard.refused);
+    try std.testing.expectEqual(@as(u32, 0), unit.direction_refused);
+    unlock(&unit);
+    unit.write(at, 1, 0x14);
+    unit.write(at, 2, 0x14);
+    try std.testing.expectEqual(@as(u32, 2), unit.direction_refused);
+    try std.testing.expectEqual(@as(u32, 0x10), unit.read(at, 2));
+    unit.write(at + 2, 2, 0x0100);
+    unit.write(at, 1, 0x10);
+    try std.testing.expectEqual(@as(u32, 2), unit.direction_refused);
+    // Normal input/output pads still accept both directions.
+    unit.write(pfs.Pfs.pinAddress(2, 1), 1, 4);
+    try std.testing.expectEqual(@as(u32, 4), unit.pin(2, 1));
+    unit.write(pfs.Pfs.pinAddress(2, 1), 1, 0);
+    try std.testing.expectEqual(@as(u32, 0), unit.pin(2, 1));
+    try std.testing.expectEqual(@as(u32, 2), unit.direction_refused);
+}

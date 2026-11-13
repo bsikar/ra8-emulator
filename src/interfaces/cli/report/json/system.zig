@@ -11,7 +11,7 @@ const json_options = @import("options.zig");
 /// The five objects, keyed inside the document after `capture`.
 pub fn section(j: anytype, board: *Board) !void {
     try icu(j, board);
-    try pinfunc(j, &board.pinfunc);
+    try pinfunc(j, board);
     try json_options.section(j, &board.options);
     try partInfo(j, board.part);
     try backup(j, board);
@@ -29,10 +29,13 @@ fn icu(j: anytype, board: *Board) !void {
     try j.close('}');
 }
 
-fn pinfunc(j: anytype, unit: anytype) !void {
+fn pinfunc(j: anytype, board: *Board) !void {
+    const unit = &board.pinfunc;
     try j.open("pinfunc", '{');
     try j.field("programmed", unit.programmed);
     try j.field("refused_unlocked", unit.guard.refused);
+    try j.field("refused_direction", unit.direction_refused);
+    try j.field("gpio_refused_direction", board.pins.direction_refused);
     try j.field("glitched", unit.ordering.glitched);
     try j.field("ignored_keys", unit.guard.ignored_keys);
     try j.close('}');
