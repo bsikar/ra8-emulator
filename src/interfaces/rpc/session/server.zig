@@ -35,6 +35,9 @@ const session_branch = @import("branch.zig");
 const session_intervene = @import("intervene.zig");
 const session_nav = @import("nav_handlers.zig");
 const rewind_feed = @import("rewind_feed.zig");
+const workspace = @import("../workspace.zig");
+const workspace_wire = @import("../workspace_wire.zig");
+const workspace_watch = @import("../workspace_watch.zig");
 const session_marker = @import("nav_marker.zig");
 const session_diff = @import("diff.zig");
 pub const session_metrics = @import("metrics.zig");
@@ -109,7 +112,7 @@ pub const routes = .{
     .{ @backingInt(M.marker_set), session_marker.markerSet },
     .{ @backingInt(M.frame_status), session_nav.frameStatus },
     .{ @backingInt(M.diff), session_diff.diff },
-};
+} ++ workspace.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -129,8 +132,13 @@ pub const Host = struct {
         // A host whose own loop pumps between frames advertises bit 15, so
         // its clients know `advance_async` queues and completes on the
         // transport topic (RA8EMU-1196, slice 14).
-        const caps = proto.capabilities | (if (context.transport_async) proto.transport_cap else 0);
+        const caps = proto.capabilities | (if (context.transport_async) proto.transport_cap else 0) |
+            (if (context.workspace != null) workspace_wire.capability else 0);
         return .{ .server = Server.init(wire, rx, context, caps) };
+    }
+
+    pub fn deinit(self: *Host) void {
+        handlers.forget(self.server.context);
     }
 
     /// Answer at most one frame, then send the UART bytes, the LCD dirty
@@ -155,6 +163,7 @@ pub const Host = struct {
 /// bounded pump of the transport plane's active job. `Host.poll` and the
 /// native local GUI link (slice 15) both use this order.
 pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
+    try workspace_watch.pump(context, server, tx);
     try uart_feed.pump(context, server, tx);
     try lcd_feed.pump(context, server, tx);
     try event_feed.pump(context, server, tx);

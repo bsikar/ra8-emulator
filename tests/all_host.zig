@@ -2,6 +2,15 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("host/workspace/path_test.zig");
+    _ = @import("host/workspace/entry_test.zig");
+    _ = @import("host/workspace/observe_test.zig");
+    _ = @import("host/workspace/save_test.zig");
+    _ = @import("host/workspace/workspace_test.zig");
+    _ = @import("interfaces/rpc/workspace_wire_test.zig");
+    _ = @import("interfaces/rpc/workspace_watch_test.zig");
+    _ = @import("interfaces/rpc/workspace_test.zig");
+    _ = @import("interfaces/cli/serve/main_test.zig");
     _ = @import("interfaces/cli/dap_test.zig");
     _ = @import("session/harness/metrics_test.zig");
     _ = @import("interfaces/gui/device_metrics_pane_test.zig");

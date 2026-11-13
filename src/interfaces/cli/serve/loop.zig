@@ -26,6 +26,7 @@ pub fn answerStdio(io: std.Io, context: *served.Context, buffers: Buffers) !void
 /// Answer frames on `wire` until the peer behind `fd` closes or a stop is asked.
 pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
     var host = served.Host.init(wire, buffers.rx, context);
+    defer host.deinit();
     while (true) {
         const polled = host.poll(buffers.tx) catch |err| {
             if (err == error.LinkDown and try closed(io, fd, link)) return;
