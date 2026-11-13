@@ -135,3 +135,58 @@ test "a full queue drops and counts" {
     try std.testing.expectEqual(pin_irq.capacity, queue.take().len);
     try std.testing.expectEqual(@as(usize, 0), queue.take().len);
 }
+
+fn offer(rig: *Rig, core: *FakeCore, edge: pin_irq.Edge) !void {
+    rig.input.edges.push(edge);
+    try rig.boundary(core);
+}
+
+test "wrong physical IRQ channel and NMI-only pad never pend an IRQ" {
+    var core = FakeCore.init(std.testing.allocator);
+    defer core.deinit();
+    var rig = Rig{};
+    armSw1(&rig, pin_irq.sense.falling);
+    rig.sw1Isel(true);
+    rig.pinfunc.entries[pfs.Pfs.indexOf(2, 0)] = pin_irq.isel;
+    try offer(&rig, &core, .{ .channel = 13, .port = 2, .pin = 0, .falling = true });
+    try std.testing.expect(!try pended(&core));
+    try std.testing.expect(!rig.events.latched(slot));
+    // P008 is IRQ12, even with ISEL standing; it cannot feed IRQ13.
+    rig.pinfunc.entries[pfs.Pfs.indexOf(0, 8)] = pin_irq.isel;
+    try offer(&rig, &core, .{ .channel = 13, .port = 0, .pin = 8, .falling = true });
+    try std.testing.expect(!try pended(&core));
+    try std.testing.expect(!rig.events.latched(slot));
+    try offer(&rig, &core, .{ .channel = 13, .port = 0, .pin = 9, .falling = true });
+    try std.testing.expect(try pended(&core));
+}
+
+test "analog mode suppresses digital IRQ and clearing ASEL restores it" {
+    var core = FakeCore.init(std.testing.allocator);
+    defer core.deinit();
+    var rig = Rig{};
+    armSw1(&rig, pin_irq.sense.falling);
+    rig.sw1Isel(true);
+    rig.pinfunc.entries[pfs.Pfs.indexOf(0, 9)] |= pfs.capabilities.field.asel;
+    const edge = pin_irq.Edge{ .channel = 13, .port = 0, .pin = 9, .falling = true };
+    try offer(&rig, &core, edge);
+    try std.testing.expect(!try pended(&core));
+    rig.sw1Isel(true);
+    try offer(&rig, &core, edge);
+    try std.testing.expect(try pended(&core));
+}
+
+test "IRQ31 reaches the NVIC but invalid pad and channel bounds are silent" {
+    var core = FakeCore.init(std.testing.allocator);
+    defer core.deinit();
+    var rig = Rig{};
+    rig.events.write(icu.slotAddress(slot), 4, pin_irq.eventOf(.{ .channel = 31 }));
+    rig.pinfunc.entries[pfs.Pfs.indexOf(1, 15)] = pin_irq.isel;
+    try offer(&rig, &core, .{ .channel = 255, .port = 1, .pin = 15, .falling = true });
+    try offer(&rig, &core, .{ .channel = 31, .port = 255, .falling = true });
+    rig.pinfunc.entries[pfs.Pfs.indexOf(11, 8)] = pin_irq.isel;
+    try offer(&rig, &core, .{ .channel = 31, .port = 11, .pin = 8, .falling = true });
+    try std.testing.expect(!try pended(&core));
+    try offer(&rig, &core, .{ .channel = 31, .port = 1, .pin = 15, .falling = true });
+    try std.testing.expect(try pended(&core));
+    try std.testing.expect(rig.events.latched(slot));
+}

@@ -156,6 +156,8 @@ test {
     _ = @import("ipc/sync_test.zig");
     _ = @import("ipc/attr_test.zig");
     _ = @import("pfs/pfs_test.zig");
+    _ = @import("pfs/capabilities_test.zig");
+    _ = @import("pfs/pads_test.zig");
     _ = @import("syrstmsk_test.zig");
     _ = @import("sysclk/sysclk_test.zig");
     _ = @import("systick_arm_test.zig");

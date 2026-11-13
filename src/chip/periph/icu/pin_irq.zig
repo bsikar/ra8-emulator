@@ -18,7 +18,7 @@ const pfs = @import("../pfs/pfs.zig");
 const irqcr = @import("irqcr.zig");
 
 /// PmnPFS.ISEL: the pin is an IRQ input.
-pub const isel: u32 = 1 << 14;
+pub const isel: u32 = pfs.capabilities.field.isel;
 
 /// Edges one boundary can hold. More are dropped and counted.
 pub const capacity: usize = 8;
@@ -74,10 +74,15 @@ pub fn senses(mode: u8, falling: bool) bool {
     };
 }
 
-/// Whether the edge raises its channel's event: ISEL set on the pin and the
-/// direction matching the channel's sense.
+/// A pad can reach only its physical IRQ channel. Analog mode disables the
+/// digital input; a wrong pad/channel quietly produces no event.
 pub fn fires(pins: *const pfs.Pfs, modes: *const irqcr.Irqcr, edge: Edge) bool {
-    if (pins.pin(edge.port, edge.pin) & isel == 0) return false;
+    if (edge.channel >= irqcr.channels) return false;
+    const pad = pfs.capabilities.get(edge.port, edge.pin);
+    const channel = pad.irq orelse return false;
+    if (channel != edge.channel) return false;
+    const entry = pins.pin(edge.port, edge.pin);
+    if (entry & isel == 0 or entry & pfs.capabilities.field.asel != 0) return false;
     return senses(modes.pins[edge.channel], edge.falling);
 }
 
