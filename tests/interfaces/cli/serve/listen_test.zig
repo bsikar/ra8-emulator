@@ -21,8 +21,10 @@ fn listen(spec: []const u8, line: []u8) !serve_peer.Listening {
     const wide = try std.unicode.utf8ToUtf16LeAllocZ(gpa, command);
     defer gpa.free(wide);
     const ends = try ra8.host.pipe_pair.create(.{});
-    errdefer ra8.host.read.close(ends[0]);
-    defer ra8.host.read.close(ends[1]);
+    var reader_owned = true;
+    errdefer if (reader_owned) ra8.host.read.close(ends[0]);
+    var writer_open = true;
+    defer if (writer_open) ra8.host.read.close(ends[1]);
     try std.testing.expect(win32.SetHandleInformation(ends[1], 1, 1).toBool());
     var startup: std.os.windows.STARTUPINFOW = std.mem.zeroes(std.os.windows.STARTUPINFOW);
     startup.cb = @sizeOf(@TypeOf(startup));
@@ -31,7 +33,10 @@ fn listen(spec: []const u8, line: []u8) !serve_peer.Listening {
     startup.hStdError = ends[1];
     var info: win32.ProcessInfo = undefined;
     try std.testing.expect(win32.CreateProcessW(null, wide, null, null, .TRUE, @bitCast(std.os.windows.CreateProcessFlags{ .create_new_console = true, .create_new_process_group = true }), null, null, &startup, &info).toBool());
+    ra8.host.read.close(ends[1]);
+    writer_open = false;
     var child: std.process.Child = .{ .id = info.process, .thread_handle = info.thread, .stdin = null, .stdout = null, .stderr = .{ .handle = ends[0], .flags = .{ .nonblocking = false } }, .request_resource_usage_statistics = false };
+    reader_owned = false; // Child now owns stderr, including cleanup on error.
     errdefer child.kill(std.testing.io);
     const prefix = "serve: listening on ";
     var at: usize = 0;
@@ -77,6 +82,12 @@ fn sessionStoppedBy(gpa: std.mem.Allocator, child: *std.process.Child, connectio
     connection.close();
     try stop(child, signal);
     try std.testing.expectEqual(Term{ .exited = 0 }, try child.wait(std.testing.io));
+}
+
+test "Windows listen startup failure reports EOF instead of retaining the pipe writer" {
+    if (!on_windows) return error.SkipZigTest;
+    var line: [256]u8 = undefined;
+    try std.testing.expectError(error.EndOfStream, listen("udp::1", &line));
 }
 
 test "serve --listen tcp::0 binds localhost, serves a client and exits 0 on SIGTERM" {
