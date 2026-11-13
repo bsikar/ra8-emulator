@@ -26,6 +26,7 @@ ra8_session     src/session/            ra8_board, ra8_chip, ra8_components
 ra8_render      src/interfaces/render/  ra8_session, ra8_widget, ra8_widget_host
 ra8_rpc         src/interfaces/rpc/     ra8_session, ra8_components, ra8_host, ra8_rpc_wire
 ra8_gdb         src/interfaces/gdb/     ra8_session, ra8_chip, ra8_host
+ra8_dap         src/interfaces/dap/     ra8_session
 ra8_usbip       src/interfaces/usbip/   ra8_board, ra8_chip, ra8_host
 cli_app         src/interfaces/cli/     every library and ra8_rpc_wire, never gui_app
 gui_app         src/interfaces/gui/     ra8_session, ra8_rpc, ra8_render, ra8_components, ra8_host,

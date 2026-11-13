@@ -54,9 +54,26 @@ arguments to list every option.
 ra8_emulator app.elf --debug                 # interactive, at the terminal
 ra8_emulator app.elf --debug-script run.gdb  # play a script, print the transcript
 ra8_emulator app.elf --gdb 3333              # serve gdb, each core a thread
+ra8_emulator dap 4711 app.elf               # DAP attach on 127.0.0.1:4711
+ra8_emulator dap 4711                       # DAP launch supplies program
 ```
 
-`--cpu1` brings up the second core in any of them, and `core 1` selects it.
+`--cpu1` brings up the second core in the terminal and GDB modes, and
+`core 1` selects it.
+The DAP listener serves one TCP client, then exits on disconnect or EOF.
+Configure an editor's DAP client to connect to that port with `request:
+"attach"`, or use `request: "launch"` and `program: "/path/to/app.elf"`
+without a preloaded image. `stopOnEntry` defaults to true. Send
+`configurationDone` after setting breakpoints. Source breakpoints use the
+ELF's DWARF paths. Instruction breakpoints take hexadecimal address strings.
+Stepping is at instruction granularity, with call-aware `next` and
+`stepOut`; request `granularity: "instruction"` when the client supplies it.
+Registers and supported DWARF locals are read at the innermost frame.
+Unavailable local locations and caller scopes are left unavailable.
+Conditional/log breakpoints, expression evaluation, URI source paths and
+reverse execution are unsupported. This adapter does not enable history
+recording. The listener uses Session directly and does not connect to a
+separate `serve` process. Editor-specific extension packaging is separate.
 An ordinary run takes breakpoints and dumps too: `--break-sym`, `--watch`,
 `--dump-regs` and `--dump-mem`. A `-Dgui` build adds a second executable, `ra8_gui`:
 `ra8_gui <elf>` opens the windowed debugger on the image, with its session

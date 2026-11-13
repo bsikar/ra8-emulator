@@ -280,8 +280,8 @@ pub const Session = struct {
     pub fn step(self: *Session, core: Core) anyerror!Ended {
         return self.run(core, .step);
     }
+    pub const continueRun = @import("run_slice.zig").continueRun;
 
-    /// Puts the run back `back` recorded stops; window-backed when covered.
     pub const rewind = session_window.rewind;
     pub const stepBack = session_window.stepBack;
     pub const attachWindow = session_window.attachWindow;

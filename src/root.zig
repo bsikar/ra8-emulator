@@ -11,4 +11,5 @@ pub const session = @import("ra8_session");
 pub const render = @import("ra8_render");
 pub const rpc = @import("ra8_rpc");
 pub const gdb = @import("ra8_gdb");
+pub const dap = @import("ra8_dap");
 pub const usbip = @import("ra8_usbip");
