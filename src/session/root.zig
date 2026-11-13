@@ -140,6 +140,7 @@ pub const state_options = @import("state_options.zig");
 pub const step_hook = @import("step_hook.zig");
 pub const stop_machine = @import("stop_machine.zig");
 pub const symbols = @import("symbols.zig");
+pub const annotate = @import("annotate.zig");
 pub const transport = @import("transport/transport.zig");
 pub const transport_play = @import("transport/play.zig");
 pub const transport_marker_scan = @import("transport/marker_scan.zig");
