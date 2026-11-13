@@ -31,6 +31,7 @@ const FakeWall = struct {
 /// epoch while a worker is mid-load.
 const Gate = struct {
     inner: prefetch.ObjectSource,
+    object: ?pool_mod.ObjectId = null,
     entered: std.atomic.Value(u32) = .init(0),
     released: std.atomic.Value(bool) = .init(false),
 
@@ -40,6 +41,7 @@ const Gate = struct {
 
     fn read(context: *anyopaque, allocator: std.mem.Allocator, object: pool_mod.ObjectId) prefetch.Error![]u8 {
         const self: *Gate = @ptrCast(@alignCast(context));
+        if (self.object) |held| if (!held.eql(object)) return self.inner.read(self.inner.context, allocator, object);
         _ = self.entered.fetchAdd(1, .acq_rel);
         while (!self.released.load(.acquire)) std.Io.sleep(std.testing.io, .fromMilliseconds(1), .awake) catch {};
         return self.inner.read(self.inner.context, allocator, object);
@@ -50,6 +52,16 @@ fn waitFor(pool: *pool_mod.Pool, comptime field: []const u8, want: u64) !void {
     for (0..5000) |_| {
         if (@field(pool.counts(), field) >= want) return;
         std.Io.sleep(std.testing.io, .fromMilliseconds(2), .awake) catch {};
+    }
+    return error.Timeout;
+}
+
+/// Completion counts do not identify which concurrently loaded object is ready.
+fn takeWhenReady(pool: *pool_mod.Pool, object: pool_mod.ObjectId) ![]u8 {
+    for (0..5000) |_| {
+        if (pool.take(object)) |bytes| return bytes;
+        if (pool.counts().failed != 0) return error.PrefetchLoadFailed;
+        try std.Io.sleep(std.testing.io, .fromMilliseconds(2), .awake);
     }
     return error.Timeout;
 }
@@ -135,12 +147,19 @@ test "a seek loads the neighbouring checkpoints verified against their digest" {
     defer gpa.free(facts.checkpoints);
     try std.testing.expect(facts.checkpoints.len >= 3);
 
+    const behind = pool_mod.ObjectId{ .bytes = facts.checkpoints[0].object };
+    var gate: Gate = .{ .inner = pool.source, .object = behind };
+    pool.source = gate.source();
+    defer gate.released.store(true, .release);
     try seekTo(&served, gpa, 1);
+    // Force the ahead object to finish first: aggregate progress cannot
+    // establish that the behind object is ready.
     try waitFor(pool, "kept", 1);
+    try std.testing.expect(pool.take(behind) == null);
+    gate.released.store(true, .release);
     // The checkpoint behind the base came back verified against the digest
     // the recorder filed it under, and a restore consumes it once.
-    const behind = pool_mod.ObjectId{ .bytes = facts.checkpoints[0].object };
-    const bytes = pool.take(behind).?;
+    const bytes = try takeWhenReady(pool, behind);
     defer gpa.free(bytes);
     try std.testing.expect(pool_mod.digest(bytes).eql(behind));
     try std.testing.expect(pool.take(behind) == null);
