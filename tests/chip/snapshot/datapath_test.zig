@@ -49,6 +49,7 @@ fn busy() Stand {
     board.dma.refused = 1;
     board.pins.led_edges[1] = 4;
     board.pins.refused = 2;
+    board.pins.direction_refused = 3;
     board.backup.data[3] = 0x5A;
     board.backup.writes = 6;
     board.battery_switch.value = 1;

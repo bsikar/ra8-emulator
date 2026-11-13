@@ -26,6 +26,7 @@
 //! pin reads high with nothing driving it.
 const std = @import("std");
 const periph = @import("../registry.zig");
+const capabilities = @import("../pfs/capabilities.zig");
 pub const regs = @import("regs.zig");
 
 /// Pin models (RA8EMU-497), reached through here because root.zig is full.
@@ -105,6 +106,8 @@ pub const Gpio = struct {
     led_edges: [led_count]u32 = @splat(0),
     /// Stores into PCNTR2, which the pads drive and firmware does not.
     refused: u32 = 0,
+    /// Stores asking for a direction that a written pad cannot support.
+    direction_refused: u32 = 0,
     observer: ?Observer = null,
     event_tap: ?EventTap = null,
     /// Device models wired to single pins with --attach.
@@ -127,6 +130,7 @@ pub const Gpio = struct {
         self.led_level = @splat(0);
         self.led_edges = @splat(0);
         self.refused = 0;
+        self.direction_refused = 0;
         for (&self.ports, self.pull_ups) |*port, high| {
             port.in_ovr = high;
             port.in_lvl = high;
@@ -257,6 +261,16 @@ pub const Gpio = struct {
         return regs.part(self.wordValue(index, regs.word(local)), regs.lane(local), width);
     }
 
+    fn setDirection(self: *Gpio, index: u32, requested: u16, written: u16) void {
+        var next: u16 = 0;
+        for (0..pins_per_port) |pin| {
+            const bit = @as(u16, 1) << @as(u4, @intCast(pin));
+            if (capabilities.get(index, @intCast(pin)).direction(requested & bit != 0)) next |= bit;
+        }
+        if ((next ^ requested) & written != 0) self.direction_refused +%= 1;
+        self.ports[index].pdr = next;
+    }
+
     /// What a whole PCNTR word reads as.
     fn wordValue(self: *const Gpio, index: u32, word: u32) u32 {
         const port = self.ports[index];
@@ -289,7 +303,7 @@ pub const Gpio = struct {
                 const current = (@as(u32, self.ports[index].podr) << half_shift) |
                     @as(u32, self.ports[index].pdr);
                 const next = regs.merge(current, lane, width, value);
-                self.ports[index].pdr = @truncate(next & half_mask);
+                self.setDirection(index, @truncate(next), @truncate(regs.merge(0, lane, width, 0xFFFF_FFFF)));
                 self.setLatch(index, @truncate((next >> half_shift) & half_mask));
                 self.notify(@intCast(index), before, .firmware);
             },

@@ -33,7 +33,7 @@ test "a quiet board has every icu, pinfunc, options, part, backup and analog key
     defer doc.deinit();
     const root = doc.value;
     try has(root.object.get("icu").?, &.{ "raised", "pended", "unrouted", "repended", "irq_pins_configured", "irq_pin_rewrites_while_routed" });
-    try has(root.object.get("pinfunc").?, &.{ "programmed", "refused_unlocked", "glitched", "ignored_keys" });
+    try has(root.object.get("pinfunc").?, &.{ "programmed", "refused_unlocked", "glitched", "ignored_keys", "refused_direction", "gpio_refused_direction" });
     try has(root.object.get("options").?, &.{ "programs", "config_sets", "live_cells", "rejected_outside_window", "refused_command_locked", "refused_paused", "refused_outside_mode", "refused_malformed", "refused_otp_rewrites", "refused_mentryr_keyless", "refused_mentryr_narrow", "setup_inits", "refused_msuinitr_keyless", "refused_msuinitr_narrow", "refused_status_stores", "refused_mrcps_stores", "lost_programs" });
     const part = root.object.get("part").?;
     try has(part, &.{ "name", "mram_base", "mram_bytes", "sram_base", "sram_bytes", "cpu0_tcm_bytes", "cpu0_cache_bytes", "cpu1_tcm_bytes", "cpu1_cache_bytes", "source" });
@@ -54,10 +54,14 @@ test "event and pin counts carry through" {
     defer fix.close();
     fix.board.events.raised = 4;
     fix.board.pinfunc.programmed = 9;
+    fix.board.pinfunc.direction_refused = 2;
+    fix.board.pins.direction_refused = 3;
     var buf: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer buf.deinit();
     const doc = try render(&fix.board, &buf);
     defer doc.deinit();
     try std.testing.expectEqual(@as(i64, 4), doc.value.object.get("icu").?.object.get("raised").?.integer);
+    try std.testing.expectEqual(@as(i64, 2), doc.value.object.get("pinfunc").?.object.get("refused_direction").?.integer);
+    try std.testing.expectEqual(@as(i64, 3), doc.value.object.get("pinfunc").?.object.get("gpio_refused_direction").?.integer);
     try std.testing.expectEqual(@as(i64, 9), doc.value.object.get("pinfunc").?.object.get("programmed").?.integer);
 }

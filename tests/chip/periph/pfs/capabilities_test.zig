@@ -59,3 +59,15 @@ test "analog enables and PSEL values follow the per-pad tables" {
     // Undefined PSEL encodings and direction stay visible; do not invent a refusal.
     try std.testing.expectEqual(@as(u32, 0x1F01_0004), caps.get(0, 9).sanitize(0x1F01_0004));
 }
+
+test "direction normalization handles input-only output-only and absent pads" {
+    const input = caps.Pad{ .present = true, .input = true };
+    const output = caps.Pad{ .present = true, .output = true };
+    const both = caps.Pad{ .present = true, .input = true, .output = true };
+    try std.testing.expect(!input.direction(true) and !input.direction(false));
+    try std.testing.expect(output.direction(true) and output.direction(false));
+    try std.testing.expect(both.direction(true) and !both.direction(false));
+    try std.testing.expect(!caps.get(14, 0).direction(true));
+    try std.testing.expectEqual(@as(u32, 0), input.sanitize(caps.field.pdr));
+    try std.testing.expectEqual(caps.field.pdr, output.sanitize(0));
+}
