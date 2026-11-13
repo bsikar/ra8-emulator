@@ -33,7 +33,7 @@ test "the halt reason, qSupported and qAttached" {
     const stub = dispatch.Dispatch{ .view = rig.view() };
     var out: [128]u8 = undefined;
     try std.testing.expectEqualStrings("S05", try stub.answer("?", &out));
-    try std.testing.expectEqualStrings("PacketSize=1000;qXfer:features:read+;ReverseContinue+;ReverseStep+", try stub.answer("qSupported:multiprocess+;swbreak+", &out));
+    try std.testing.expectEqualStrings("PacketSize=1000;qXfer:features:read+", try stub.answer("qSupported:multiprocess+;swbreak+", &out));
     try std.testing.expectEqualStrings("1", try stub.answer("qAttached", &out));
     try std.testing.expectEqualStrings("OK", try stub.answer("Hg0", &out));
 }

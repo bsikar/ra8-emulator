@@ -50,8 +50,7 @@ pub fn at(out: anytype, sections: dwarf_line.Sections, address: u32) !void {
 
 /// A file's name, under its directory unless the name is already absolute.
 pub fn path(out: anytype, file: dwarf_line.File) !void {
-    const absolute = std.mem.startsWith(u8, file.name, "/");
-    if (file.directory.len != 0 and !absolute) try out.print("{s}/", .{file.directory});
+    if (file.directory.len != 0 and !dwarf_line_find.absolute(file.name)) try out.print("{s}/", .{file.directory});
     try out.print("{s}", .{file.name});
 }
 

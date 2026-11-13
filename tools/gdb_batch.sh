@@ -25,6 +25,12 @@
 
 set -euo pipefail
 
+# Public-client conformance uses separately built known-state fixtures.
+if [ "${1:-}" = --conformance ]; then
+    shift
+    exec "${PYTHON:-python3}" "$(dirname "$0")/gdb_conformance/run.py" "$@"
+fi
+
 if [ $# -lt 1 ]; then
     echo "usage: $0 EMULATOR [GDB]" >&2
     exit 2

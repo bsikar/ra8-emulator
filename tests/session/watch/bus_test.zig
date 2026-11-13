@@ -18,6 +18,42 @@ const dwt = ra8.chip.periph.dwt;
 const watch_table = ra8.session.watch.table;
 const Store = ra8.chip.core.cpu.memory.store.Store;
 
+const PeekProbe = struct {
+    reads: usize = 0,
+    peeks: usize = 0,
+    fn read(ctx: *anyopaque, _: u32, into: []u8) bus.Error!void {
+        const self: *PeekProbe = @ptrCast(@alignCast(ctx));
+        self.reads += 1;
+        @memset(into, 0);
+    }
+    fn write(_: *anyopaque, _: u32, _: []const u8) bus.Error!void {}
+    fn peek(ctx: *anyopaque, _: u32, into: []u8) bool {
+        const self: *PeekProbe = @ptrCast(@alignCast(ctx));
+        self.peeks += 1;
+        @memset(into, 0xA5);
+        return true;
+    }
+};
+
+test "debugger peeks pass through an armed watch bus without guest reads or watch hits" {
+    var probe: PeekProbe = .{};
+    var machine: stop_machine.Machine = .{};
+    _ = try machine.addWatch(.{ .first = 0x40358100, .last = 0x40358103, .kind = .read });
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .driver = &driver, .inner = .{
+        .ctx = &probe,
+        .vtable = &.{ .read = PeekProbe.read, .write = PeekProbe.write, .peek = PeekProbe.peek },
+    } };
+    watching.arm(0x22000000, 2);
+    var bytes: [4]u8 = undefined;
+    try std.testing.expect(watching.view().peek(0x40358100, &bytes));
+    try std.testing.expect(watching.view().peek(0x40358100, &bytes));
+    try std.testing.expectEqualSlices(u8, &.{ 0xA5, 0xA5, 0xA5, 0xA5 }, &bytes);
+    try std.testing.expectEqual(@as(usize, 0), probe.reads);
+    try std.testing.expectEqual(@as(usize, 2), probe.peeks);
+    try std.testing.expectEqual(@as(usize, 0), machine.hits_len);
+}
+
 /// The program tests/session/zig/script_test.zig uses: a loop at +0x18
 /// calling a helper at +0x8 that adds r0 into the word at 0x22000054.
 const image = struct {

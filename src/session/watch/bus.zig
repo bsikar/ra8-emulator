@@ -30,7 +30,7 @@ pub const WatchBus = struct {
     quiet: bool = false,
 
     pub fn view(self: *WatchBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch }, .lines = self.inner.lines };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .peek = peek, .latch = latch }, .lines = self.inner.lines };
     }
 
     /// Listen to the instruction at `pc`, `size` bytes wide.
@@ -56,6 +56,12 @@ pub const WatchBus = struct {
         unit_view.overlay(self.driver.machine, address, into);
         self.driver.loaded(address);
         _ = self.driver.machine.onAccess(address, width(into.len), .read, value(into));
+    }
+
+    /// Debugger inspection preserves peripheral data and never reports a guest access.
+    fn peek(ctx: *anyopaque, address: u32, into: []u8) bool {
+        const self: *WatchBus = @ptrCast(@alignCast(ctx));
+        return self.inner.peek(address, into);
     }
 
     /// The core raising a fault status bit is not a guest access: no
