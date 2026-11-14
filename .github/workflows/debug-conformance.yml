@@ -140,6 +140,17 @@ jobs:
           python -B tools/source_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/source-directory" --timeout 300
           if ($LASTEXITCODE -ne 0) { throw 'Fresh source-directory conformance failed' }
 
+      - name: Toolchain policy and clean compiler build/debug flow
+        if: always() && steps.emulator.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 9
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
+          python -B tools/toolchain_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --archive $archive --output "$env:RUNNER_TEMP/debug-conformance/toolchain" --timeout 480
+          if ($LASTEXITCODE -ne 0) { throw 'Clean toolchain policy/build/debug conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

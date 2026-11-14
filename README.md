@@ -35,6 +35,42 @@ zig build -Dgui                 # also the windowed debugger (fetches SDL3)
 zig build gate                  # zig fmt --check, file and function length, terms
 ```
 
+## Toolchain planning
+
+The backend executable and firmware compiler are separate installations.
+Export the versioned toolchain decision and requirements for a host/target:
+
+```sh
+ra8_emulator toolchain plan x86_64-linux ra8d2 --cache-root /private/cache --offline
+ra8_emulator toolchain plan x86_64-windows fpb-ra8e1 --backend-zig C:/tools/zig.exe
+```
+
+Initial baseline hosts are `x86_64-linux` and `x86_64-windows`; targets are
+`ra8d2`, `ra8p1`, `fpb-ra8e1`, `fpb-ra4t1` and `grove-vision-ai-v2`.
+This prints a plan and performs no installation, tool execution or device
+operation. An offline plan does not certify an installed compiler or SDK.
+The output names pinned Zig archives, full-distribution requirements and
+the separate SDK, probe, driver, flash-image and model-tool gates.
+
+`--project-zig` takes precedence over `--backend-zig`, then the proposed
+verified managed cache. Explicit paths are absolute for the selected host;
+Windows requires a drive or UNC share. Invalid explicit overrides refuse
+without fallback. Baseline archive hashes do not authenticate custom tools.
+Managed provisioning is separate; physical flashing remains blocked until
+the selected target's tools, access and reservation are verified.
+
+The distribution decision and offline/remote limits are recorded in
+RA8EMU-A-65. The public clean-toolchain test accepts a pinned archive or an
+explicit download and records real firmware-build and DAP source checks:
+
+```sh
+python -B tools/toolchain_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --download --output /tmp/toolchain-proof --timeout 480
+```
+
+Append `.exe` on Windows. This test installs only into its fresh evidence
+directory; it performs no physical flashing or production provisioning.
+
 ## Emulator
 
 ```sh
