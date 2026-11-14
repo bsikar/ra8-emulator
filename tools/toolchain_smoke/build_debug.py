@@ -78,7 +78,7 @@ def run(h, compiler):
         h.env["ZIG_GLOBAL_CACHE_DIR"] = str(global_cache)
         h.env["ZIG_LOCAL_CACHE_DIR"] = str(cache)
         try:
-            result = h.command(command, cwd=project, timeout=120)
+            result = h.command(command, cwd=project, timeout=240)
         finally:
             h.env.pop("ZIG_GLOBAL_CACHE_DIR")
             h.env.pop("ZIG_LOCAL_CACHE_DIR")

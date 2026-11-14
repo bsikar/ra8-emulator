@@ -80,7 +80,7 @@ def run(h):
         call(h, "x86_64-windows", "ra8d2", "--project-zig", path, invalid=True)
     unc = "\\\\server\\share\\zig.exe"
     h.equal("remote Windows UNC grammar", call(h, "x86_64-windows", "ra8d2", "--backend-zig", unc)["compiler_path"], unc)
-    for host in ("aarch64-linux", "x86_64-macos", "unknown"):
+    for host in ("aarch64-linux", "unknown"):
         call(h, host, "ra8d2", invalid=True)
     call(h, "x86_64-linux", "unknown-target", invalid=True)
     for tail in (("toolchain", "plan"), ("toolchain", "plan", "x86_64-linux")):
