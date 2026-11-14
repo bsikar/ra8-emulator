@@ -120,6 +120,16 @@ jobs:
           python @workspaceArgs
           if ($LASTEXITCODE -ne 0) { throw 'Workspace filesystem conformance failed' }
 
+      - name: Backend builds through public RPC with real Zig
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          python -B tools/build_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/builds" --timeout 360
+          if ($LASTEXITCODE -ne 0) { throw 'Backend build conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

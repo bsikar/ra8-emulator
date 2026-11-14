@@ -133,33 +133,10 @@ pub const Builder = struct {
         strings_head.sh_size = @intCast(strings.items.len);
         strings_head.sh_name = 9;
 
-        const info_head: *align(1) symbols.SectionHeader =
-            std.mem.bytesAsValue(symbols.SectionHeader, buffer[sh_off + shent * 3 ..][0..shent]);
-        info_head.sh_type = 1;
-        info_head.sh_offset = info_off;
-        info_head.sh_size = @intCast(info.len);
-        info_head.sh_name = 17;
-
-        const abbrev_head: *align(1) symbols.SectionHeader =
-            std.mem.bytesAsValue(symbols.SectionHeader, buffer[sh_off + shent * 4 ..][0..shent]);
-        abbrev_head.sh_type = 1;
-        abbrev_head.sh_offset = abbrev_off;
-        abbrev_head.sh_size = @intCast(abbrev.len);
-        abbrev_head.sh_name = 29;
-
-        const str_head: *align(1) symbols.SectionHeader =
-            std.mem.bytesAsValue(symbols.SectionHeader, buffer[sh_off + shent * 5 ..][0..shent]);
-        str_head.sh_type = 1;
-        str_head.sh_offset = str_sec_off;
-        str_head.sh_size = @intCast(str.len);
-        str_head.sh_name = 43;
-
-        const shstr_head: *align(1) symbols.SectionHeader =
-            std.mem.bytesAsValue(symbols.SectionHeader, buffer[sh_off + shent * 6 ..][0..shent]);
-        shstr_head.sh_type = 3;
-        shstr_head.sh_offset = shstr_off;
-        shstr_head.sh_size = @intCast(shstr.len);
-        shstr_head.sh_name = 54;
+        section(buffer, 3, 1, info_off, info.len, 17);
+        section(buffer, 4, 1, abbrev_off, abbrev.len, 29);
+        section(buffer, 5, 1, str_sec_off, str.len, 43);
+        section(buffer, 6, 3, shstr_off, shstr.len, 54);
 
         for (names, 0..) |_, index| {
             const at = table_off + @sizeOf(symbols.Symbol) * index;
@@ -174,5 +151,13 @@ pub const Builder = struct {
         @memcpy(buffer[str_sec_off..][0..str.len], str);
         @memcpy(buffer[shstr_off..][0..shstr.len], shstr);
         return buffer[0..end];
+    }
+
+    fn section(buffer: []u8, index: usize, kind: u32, offset: u32, size: usize, name: u32) void {
+        const head = std.mem.bytesAsValue(symbols.SectionHeader, buffer[sh_off + shent * index ..][0..shent]);
+        head.sh_type = kind;
+        head.sh_offset = offset;
+        head.sh_size = @intCast(size);
+        head.sh_name = name;
     }
 };
