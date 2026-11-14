@@ -45,6 +45,14 @@ pub fn line(image: elf.Image, into: *text.Text) void {
     while (end < slice.len and std.ascii.isHex(slice[end])) : (end += 1) {}
     if (end == digits or end - digits > 8) return;
     const address = std.fmt.parseInt(u32, slice[digits..end], 16) catch return;
-    const name = symbolAt(image, address) orelse return;
-    into.put(" ; {s}", .{name});
+    if (symbolAt(image, address)) |name| {
+        into.put(" ; {s}", .{name});
+        return;
+    }
+    // No exact symbol: a covering function symbol still names the address,
+    // relatively. Zero-sized symbols never reach here, so the offset is
+    // always real.
+    if (symbols.inside(image, address)) |site| {
+        into.put(" ; {s}+0x{x}", .{ site.name, site.offset });
+    }
 }
