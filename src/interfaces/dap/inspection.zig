@@ -52,7 +52,7 @@ pub const Inspection = struct {
             if (place) |found| {
                 var path: [4096]u8 = undefined;
                 var writer: std.Io.Writer = .fixed(&path);
-                try session.source.path(&writer, found.file);
+                try session.source.qualifiedPath(&writer, found.file);
                 try out.writeAll(",\"source\":");
                 try p.quote(out, .{ .name = std.fs.path.basename(found.file.name), .path = writer.buffered() });
             }

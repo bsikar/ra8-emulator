@@ -10,6 +10,8 @@ const elf = @import("ra8_board").image.elf;
 const symbols = @import("../../symbols.zig");
 const dwarf_cursor = @import("../cursor.zig");
 const line_header = @import("header.zig");
+const compilation = @import("../compilation.zig");
+pub const path = @import("path.zig");
 pub const find = @import("find.zig");
 
 const Cursor = dwarf_cursor.Cursor;
@@ -21,6 +23,7 @@ pub const Header = line_header.Header;
 pub const Sections = struct {
     line: []const u8 = &.{},
     strings: line_header.Strings = .{},
+    units: compilation.Sections = .{},
 };
 
 /// Where an address's source line is, and the addresses its row covers.
@@ -133,11 +136,14 @@ pub const Rows = struct {
 pub fn lookup(sections: Sections, address: u32) Error!?Place {
     var offset: usize = 0;
     while (offset < sections.line.len) {
+        const line_offset = offset;
         const unit = try line_header.read(sections.line, offset);
         offset = unit.end;
         const span = try covering(unit.header, address) orelse continue;
+        var file = try line_header.file(unit.header, span.row.file, sections.strings);
+        file.compilation_directory = compilation.directory(sections.units, line_offset) catch "";
         return .{
-            .file = try line_header.file(unit.header, span.row.file, sections.strings),
+            .file = file,
             .line = span.row.line,
             .address = span.row.address,
             .end = span.end,
@@ -176,6 +182,7 @@ pub fn ofImage(image: elf.Image) Sections {
     return .{
         .line = section(image, ".debug_line"),
         .strings = .{ .line_str = section(image, ".debug_line_str"), .str = section(image, ".debug_str") },
+        .units = .{ .info = section(image, ".debug_info"), .abbrev = section(image, ".debug_abbrev"), .strings = section(image, ".debug_str"), .line_strings = section(image, ".debug_line_str"), .string_offsets = section(image, ".debug_str_offsets") },
     };
 }
 
