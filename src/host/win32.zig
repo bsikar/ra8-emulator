@@ -55,3 +55,29 @@ pub extern "kernel32" fn GetProcessId(handle: HANDLE) callconv(.winapi) DWORD;
 pub extern "kernel32" fn AttachConsole(process_id: DWORD) callconv(.winapi) BOOL;
 pub extern "kernel32" fn FreeConsole() callconv(.winapi) BOOL;
 pub extern "kernel32" fn GenerateConsoleCtrlEvent(event: DWORD, group: DWORD) callconv(.winapi) BOOL;
+
+pub extern "kernel32" fn CreateJobObjectW(security: ?*anyopaque, name: ?[*:0]const u16) callconv(.winapi) ?HANDLE;
+pub extern "kernel32" fn AssignProcessToJobObject(job: HANDLE, process: HANDLE) callconv(.winapi) BOOL;
+pub extern "kernel32" fn SetInformationJobObject(job: HANDLE, class: c_int, info: *const anyopaque, length: DWORD) callconv(.winapi) BOOL;
+pub extern "kernel32" fn TerminateJobObject(job: HANDLE, code: DWORD) callconv(.winapi) BOOL;
+pub extern "kernel32" fn GetComputerNameW(name: [*]u16, length: *DWORD) callconv(.winapi) BOOL;
+
+/// Win32 JOBOBJECT_EXTENDED_LIMIT_INFORMATION (information class 9).
+pub const JobLimits = extern struct {
+    basic: extern struct {
+        process_time: i64 = 0,
+        job_time: i64 = 0,
+        flags: DWORD = 0,
+        min_working_set: usize = 0,
+        max_working_set: usize = 0,
+        active_processes: DWORD = 0,
+        affinity: usize = 0,
+        priority: DWORD = 0,
+        scheduling: DWORD = 0,
+    } = .{},
+    io_counters: [6]u64 = @splat(0),
+    process_memory: usize = 0,
+    job_memory: usize = 0,
+    peak_process_memory: usize = 0,
+    peak_job_memory: usize = 0,
+};

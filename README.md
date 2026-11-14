@@ -143,6 +143,51 @@ Editor results identify extension-host/headless automation and set
 `manual_ui_verified` to false. Human UI acceptance is recorded separately
 from these reproducible client checks.
 
+## Backend builds
+
+`serve --workspace DIR --build-zig /absolute/path/to/zig` enables trusted
+RPC clients to run Zig builds on the backend host. On Windows pass the
+absolute path to `zig.exe`. Build scripts execute with the backend user's
+permissions; enable this only for trusted projects and clients. Use the
+existing secured remote transport for a server reached from another device.
+The compiler is explicitly configured; managed provisioning is separate.
+
+Capability bit 17 advertises `ra8.rpc.build_wire`: start/status/cancel at
+`0x0160` through `0x0162`, output/diagnostic events on `0x0181`, and one
+completion on `0x0182`. A start supplies an optional step name, a JSON array
+of at most 16 `-D` options, an optional output-relative ELF path, and a
+100 ms through 600 s deadline. The owning connection can cancel its job;
+disconnect terminates the owned process tree and joins its worker.
+One job runs per backend, while file and control RPC remain responsive.
+
+Each job gets an exclusive `.ra8-builds/<id>/out` prefix, stdout/stderr logs,
+and `result.json`. The result records host, platform, explicit compiler and
+reported version, exact arguments, source content revision, exit/cleanup
+status, and the selected ELF's SHA256. Only a successful build with matching
+before/after workspace content revisions publishes an artifact. This is an
+optimistic change check, not an immutable source snapshot. Nothing automatically loads it into Session.
+Failed/canceled jobs never fall back to earlier artifacts; previous job
+directories remain available. Compilation without artifact selection is
+supported by an empty artifact path.
+
+Source hashing covers at most 10,000 regular workspace entries, 32 directory
+levels and 256 MiB, rejecting links and special files. `.git`, `.zig-cache`,
+`zig-out` and `.ra8-builds` are excluded. External package dependencies are
+not sealed by this revision. ELF hashing is capped at 64 MiB. Live output
+uses a 64-chunk queue with sequence gaps and an explicit truncation flag;
+retained output is capped at 16 MiB, with excess output failing the job.
+Diagnostics give workspace-relative file/line/column when available and mark
+external paths explicitly. Linux process groups and Windows job objects
+provide cancellation; other host platforms do not advertise this service.
+
+The public real-compiler harness runs on Linux and Windows CI:
+
+```sh
+python -B tools/build_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --zig /absolute/path/to/zig \
+  --output /tmp/build-proof
+```
+
 ## Workspace filesystem
 
 An explicit workspace root enables the backend file service for connected
