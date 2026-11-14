@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import signal
@@ -159,7 +160,14 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     h = Harness(args.emulator.resolve(), output, args.timeout)
-    host = "x86_64-windows" if sys.platform == "win32" else "x86_64-linux"
+    if sys.platform == "darwin":
+        host = {"arm64": "aarch64-macos", "x86_64": "x86_64-macos"}.get(platform.machine())
+    else:
+        host = {"win32": "x86_64-windows", "linux": "x86_64-linux"}.get(sys.platform)
+        if platform.machine().lower() not in ("amd64", "x86_64"):
+            host = None
+    if host not in archive.PINS:
+        parser.error("unqualified host OS/architecture")
     summary = dict(status="FAIL", host=host, physical_flash="NOTRUN", production_provisioning="NOTIMPLEMENTED",
                    offline_scope="dependency-free baseline project with local-only Zig package lookup; no OS network blockade or vendor SDK closure claimed",
                    head=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=build_debug.REPO, text=True, timeout=5).strip(),

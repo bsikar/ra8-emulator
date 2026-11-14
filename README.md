@@ -45,7 +45,8 @@ ra8_emulator toolchain plan x86_64-linux ra8d2 --cache-root /private/cache --off
 ra8_emulator toolchain plan x86_64-windows fpb-ra8e1 --backend-zig C:/tools/zig.exe
 ```
 
-Initial baseline hosts are `x86_64-linux` and `x86_64-windows`; targets are
+Baseline host plans are `x86_64-linux`, `x86_64-windows`, `aarch64-macos`
+and `x86_64-macos`; targets are
 `ra8d2`, `ra8p1`, `fpb-ra8e1`, `fpb-ra4t1` and `grove-vision-ai-v2`.
 This prints a plan and performs no installation, tool execution or device
 operation. An offline plan does not certify an installed compiler or SDK.
@@ -160,7 +161,7 @@ checks launch/attach, breakpoints, calls across execution slices, inspection,
 pause, framing errors and connection loss. The existing GDB batch entry
 point also checks real-GDB memory access, call frames and CPU1. Unsupported
 combinations are recorded explicitly. The `debug-conformance` CI workflow
-runs portable DAP on Linux and Windows and pinned real GDB on Linux, keeping
+runs portable DAP on Linux, Windows and macOS and pinned real GDB on Linux, keeping
 its transcripts as artifacts.
 
 The separate editor harness uses VS Code's native debug client in an
@@ -213,10 +214,10 @@ not sealed by this revision. ELF hashing is capped at 64 MiB. Live output
 uses a 64-chunk queue with sequence gaps and an explicit truncation flag;
 retained output is capped at 16 MiB, with excess output failing the job.
 Diagnostics give workspace-relative file/line/column when available and mark
-external paths explicitly. Linux process groups and Windows job objects
+external paths explicitly. Linux/macOS process groups and Windows job objects
 provide cancellation; other host platforms do not advertise this service.
 
-The public real-compiler harness runs on Linux and Windows CI:
+The public real-compiler harness runs on Linux, Windows, and Apple Silicon/Intel macOS CI:
 
 ```sh
 python -B tools/build_smoke/run.py --emulator zig-out/bin/ra8_emulator \

@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -33,9 +33,16 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $platform = if ($IsWindows) { 'x86_64-windows' } else { 'x86_64-linux' }
+          $platform = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
           $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
-          $expected = if ($IsWindows) { 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428' } else { '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026' }
+          $expected = @{
+            'x86_64-windows' = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+            'x86_64-linux' = '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+            'aarch64-macos' = 'b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a'
+            'x86_64-macos' = '4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6'
+          }[$platform]
           $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
           curl -fsSL --retry 3 -o $archive "https://ziglang.org/download/0.17.0/zig-$platform-0.17.0.$extension"
           if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
@@ -75,6 +82,14 @@ jobs:
         run: |
           zig build debug-fixtures -j1 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/debug-conformance/fixture-build.log"
           if ($LASTEXITCODE -ne 0) { throw 'Fixture build failed' }
+
+      - name: Native macOS process ownership and output tests
+        if: runner.os == 'macOS'
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          zig build ra8_host_tests -j1 -Dtest-filter=host.build
+          if ($LASTEXITCODE -ne 0) { throw 'Native macOS build-process tests failed' }
 
       - name: Derive independent ELF oracle
         id: oracle
