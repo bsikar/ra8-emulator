@@ -74,3 +74,52 @@ test "a hex immediate that is not a symbol address is untouched" {
     annotate.line(image, &into);
     try std.testing.expectEqualStrings("adds r0, r0, #0x10", into.slice());
 }
+
+// A unit carrying one function and one local with fixed storage, so
+// the annotator can name a load from it: a variable whose location is
+// DW_OP_addr 0x2000.
+const debug_abbrev = [_]u8{
+    0x01, 0x11, 0x01, 0x03, 0x08, 0x00, 0x00,
+    0x02, 0x2e, 0x01, 0x11, 0x01, 0x12, 0x06,
+    0x00, 0x00, 0x04, 0x34, 0x00, 0x03, 0x08,
+    0x02, 0x18, 0x00, 0x00,
+};
+
+const debug_dies = [_]u8{
+    0x01, 'f',  '.',  'c',  0x00,
+    0x02, 0x00, 0x01, 0x00, 0x08,
+    0x20, 0x00, 0x00, 0x00, 0x04,
+    's',  'l',  'o',  't',  0x00,
+    0x05, 0x03, 0x00, 0x20, 0x00,
+    0x00, 0x00, 0x00,
+};
+
+fn debugImage(buffer: []u8) !elf.Image {
+    var info: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer info.deinit();
+    try info.writer.writeInt(u32, @intCast(7 + debug_dies.len), .little);
+    try info.writer.writeInt(u16, 4, .little);
+    try info.writer.writeInt(u32, 0, .little);
+    try info.writer.writeByte(4);
+    try info.writer.writeAll(&debug_dies);
+    const bytes = Builder.buildDebug(buffer, &.{"uart_echo"}, &.{0x0800_0100}, info.written(), &debug_abbrev, "");
+    return elf.Image.init(bytes);
+}
+
+test "a local with fixed storage names its address" {
+    var buffer: [2048]u8 = undefined;
+    const image = try debugImage(&buffer);
+    var into: text.Text = .{};
+    into.put("ldr r0, #0x{x}", .{@as(u32, 0x2000)});
+    annotate.line(image, &into);
+    try std.testing.expectEqualStrings("ldr r0, #0x2000 ; slot", into.slice());
+}
+
+test "an address no symbol and no local carries stays alone" {
+    var buffer: [2048]u8 = undefined;
+    const image = try debugImage(&buffer);
+    var into: text.Text = .{};
+    into.put("ldr r0, #0x{x}", .{@as(u32, 0x2004)});
+    annotate.line(image, &into);
+    try std.testing.expectEqualStrings("ldr r0, #0x2004", into.slice());
+}

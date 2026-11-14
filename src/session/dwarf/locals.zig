@@ -122,6 +122,58 @@ pub fn inFunction(sections: Sections, address: u32, into: []Local) Error!usize {
     return written;
 }
 
+/// The name of the local that lives at the fixed address `address`, or
+/// null when none does. A DW_OP_addr location is the image's own static
+/// storage, absolute by definition, so the walk reads every unit and
+/// every scope and stops at the first match.
+pub fn atAddress(sections: Sections, address: u32) Error!?[]const u8 {
+    var offset: usize = 0;
+    while (offset < sections.info.len) {
+        var cursor = Cursor{ .bytes = sections.info, .at = offset };
+        const length = try cursor.int(u32);
+        if (length >= 0xFFFF_FFF0) return Error.Unsupported;
+        const end = cursor.at + length;
+        if (end > sections.info.len) return Error.Truncated;
+        cursor.bytes = sections.info[0..end];
+        if (try dwarf_info.header(&cursor, sections.abbrev)) |table| {
+            if (try scanFixed(&cursor, table, sections, address)) |name| return name;
+        }
+        offset = end;
+    }
+    return null;
+}
+
+/// Every variable and parameter DIE in the unit, matched on a fixed
+/// address location. No scope gating: a DW_OP_addr address is absolute,
+/// so a local anywhere in the tree can answer.
+fn scanFixed(cursor: *Cursor, table: []const u8, sections: Sections, address: u32) Error!?[]const u8 {
+    while (!cursor.done()) {
+        const code = try cursor.uleb();
+        if (code == 0) continue;
+        const spec = try specOf(table, code);
+        var die = Die{};
+        var abbrev_cursor = spec.cursor;
+        while (true) {
+            const name = try abbrev_cursor.uleb();
+            const kind = try abbrev_cursor.uleb();
+            if (name == 0 and kind == 0) break;
+            const implicit: i64 = if (kind == form.implicit_const) try abbrev_cursor.sleb() else 0;
+            die.take(name, try read(cursor, kind, implicit, sections.str));
+        }
+        if (spec.tag == tag.variable or spec.tag == tag.formal_parameter) {
+            if (die.name) |name| {
+                if (die.location) |bytes| {
+                    if (where(bytes)) |place| switch (place) {
+                        .address => |at| if (at == address) return name,
+                        else => {},
+                    };
+                }
+            }
+        }
+    }
+    return null;
+}
+
 /// One DIE's gathered attributes.
 const Die = struct {
     low: ?u64 = null,
