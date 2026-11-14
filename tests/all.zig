@@ -35,6 +35,7 @@ test {
     _ = @import("chip/core/cpu/fpu/all_test.zig");
     _ = @import("chip/core/cpu/mve/all_test.zig");
     _ = @import("chip/core/cpu/board_bus_test.zig");
+    _ = @import("chip/core/cpu/nvic_registers_test.zig");
     _ = @import("chip/core/cpu/boot_test.zig");
     _ = @import("chip/core/cpu/fp_corpus_test.zig");
     _ = @import("chip/core/cpu/fp_cmp_corpus_test.zig");
