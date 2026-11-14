@@ -70,3 +70,27 @@ test "a range only touching a window's edge still splits" {
     try std.testing.expect(!debug_read.touchesWindow(0x6000_0000, 4));
     try std.testing.expect(!debug_read.touchesWindow(0x4000_0000, 0));
 }
+
+test "debugger NVIC reads assemble multiple words and partial words through architectural views" {
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    var periph = ra8.chip.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: ra8.chip.core.cpu.board_bus.BoardBus = .{ .memory = .{ .store = .{ .store = &store } }, .periph = &periph };
+    const through = board.view();
+    const iser: u32 = 0xE000_E100;
+    for ([_]u32{ 0x1122_3344, 0xAABB_CCDD, 0x5566_7788 }, 0..) |value, index| {
+        try through.writeWord(iser + @as(u32, @intCast(index * 4)), value);
+    }
+    var whole: [12]u8 = undefined;
+    try debug_read.read(through, iser, &whole);
+    try std.testing.expectEqualSlices(u8, &.{ 0x44, 0x33, 0x22, 0x11, 0xDD, 0xCC, 0xBB, 0xAA, 0x88, 0x77, 0x66, 0x55 }, &whole);
+    var part: [6]u8 = undefined;
+    try debug_read.read(through, iser + 1, &part);
+    try std.testing.expectEqualSlices(u8, whole[1..7], &part);
+    try through.writeWord(0xE000_E380, 0x00FF_0000);
+    var ns: [3]u8 = undefined;
+    try debug_read.read(through, iser + 0x20001, &ns);
+    try std.testing.expectEqualSlices(u8, &.{ 0, 0x22, 0 }, &ns);
+    try std.testing.expectError(error.Unmapped, through.read(iser, part[0..1]));
+}

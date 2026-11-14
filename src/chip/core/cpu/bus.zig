@@ -109,6 +109,17 @@ pub const Bus = struct {
     /// a bus with no store behind it (RA8EMU-D1).
     lines: ?*code_lines.Fanout = null,
 
+    /// Absolute NVIC state for the exception model, not firmware commands.
+    /// Wrappers retain this capability; flat test RAM needs no separate view.
+    register_state: ?RegisterState = null,
+
+    pub const RegisterState = struct { ctx: *anyopaque, vtable: *const VTable };
+
+    pub fn registers(self: Bus) Bus {
+        const state = self.register_state orelse return self;
+        return .{ .ctx = state.ctx, .vtable = state.vtable };
+    }
+
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
         write: *const fn (ctx: *anyopaque, address: u32, bytes: []const u8) Error!void,

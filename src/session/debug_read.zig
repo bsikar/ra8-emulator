@@ -5,15 +5,30 @@
 //! of those widths. Each piece is peeked first, so a block that can show a
 //! register without popping a FIFO or clearing a status bit does, and it is
 //! read the way a load reads it only when its block keeps no peek. A range
-//! that touches no window is one access, as it always was.
+//! that touches no window is one access, as it always was. NVIC command
+//! register inspections assemble bytes from aligned words, since those
+//! registers refuse narrow firmware accesses.
 const bus = @import("ra8_chip").core.cpu.bus;
+const nvic_registers = @import("ra8_chip").core.cpu.board_bus.nvic_registers;
 const registry = @import("ra8_chip").periph.registry;
 
 pub fn read(b: bus.Bus, address: u32, into: []u8) bus.Error!void {
-    if (!touchesWindow(address, into.len)) return b.read(address, into);
+    if (into.len == 0) return;
+    if (!touchesWindow(address, into.len) and !nvic_registers.touches(address, into.len)) return b.read(address, into);
     var done: usize = 0;
     while (done < into.len) {
         const at = address +% @as(u32, @truncate(done));
+        if (nvic_registers.covers(at)) {
+            // Debugger byte ranges do not issue narrow firmware commands.
+            var word: [4]u8 = undefined;
+            const aligned = at & ~@as(u32, 3);
+            if (!b.peek(aligned, &word)) try b.read(aligned, &word);
+            const within = at & 3;
+            const count = @min(4 - within, into.len - done);
+            @memcpy(into[done..][0..count], word[within..][0..count]);
+            done += count;
+            continue;
+        }
         const part = into[done..][0..piece(at, into.len - done)];
         if (!b.peek(at, part)) try b.read(at, part);
         done += part.len;
