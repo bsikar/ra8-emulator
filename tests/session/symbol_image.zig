@@ -17,6 +17,12 @@ pub const Builder = struct {
     pub const sym_off = sh_off + shent * sh_count;
 
     pub fn build(buffer: []u8, names: []const []const u8, values: []const u32) []u8 {
+        return buildSized(buffer, names, values, null);
+    }
+
+    /// The same image with sized function symbols: st_size and STT_FUNC set,
+    /// so the relative-name lookups can see function extents.
+    pub fn buildSized(buffer: []u8, names: []const []const u8, values: []const u32, sizes: ?[]const u32) []u8 {
         @memset(buffer, 0);
         // The string table: a leading null, then each name terminated.
         var strings: std.ArrayListUnmanaged(u8) = .empty;
@@ -63,6 +69,10 @@ pub const Builder = struct {
                 std.mem.bytesAsValue(symbols.Symbol, buffer[at..][0..@sizeOf(symbols.Symbol)]);
             entry.st_name = offsets[index];
             entry.st_value = values[index];
+            if (sizes) |given| {
+                entry.st_size = given[index];
+                entry.st_info = symbols.symbol_type.func;
+            }
         }
         @memcpy(buffer[str_off..][0..strings.items.len], strings.items);
         return buffer[0 .. str_off + strings.items.len];

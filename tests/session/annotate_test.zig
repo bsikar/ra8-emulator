@@ -20,6 +20,16 @@ test "an exact symbol names its address" {
     try std.testing.expectEqual(@as(?[]const u8, null), annotate.symbolAt(image, 0x0800_0500));
 }
 
+test "an address inside a sized function is named relative to it" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.buildSized(&buffer, &.{"uart_echo"}, &.{0x0800_0100}, &.{0x20});
+    const image = try elf.Image.init(bytes);
+    var into: text.Text = .{};
+    into.put("b.w #0x{x}", .{@as(u32, 0x0800_0108)});
+    annotate.line(image, &into);
+    try std.testing.expectEqualStrings("b.w #0x8000108 ; uart_echo+0x8", into.slice());
+}
+
 test "a branch to a named function is annotated" {
     var buffer: [1024]u8 = undefined;
     const image = try testingImage(&buffer);
