@@ -237,6 +237,77 @@ python -B tools/source_conformance/run.py --emulator zig-out/bin/ra8_emulator \
 Append `.exe` on Windows. The compiler is explicitly selected; this test
 requires Zig 0.17.0 and records the actual compiler, source and ELF hashes.
 
+## Projects and verified debug handoff
+
+Project capability bit 18 is enabled by `serve --workspace DIR`. Project RPC
+open/close/build/prepare use `0x0170` through `0x0173`. Open takes a
+workspace-relative config filename, build selects a named recipe, and
+prepare takes the successful current build ID. Existing build status,
+cancel and output events apply to project jobs. While a project is open,
+raw build-start requests are refused so they cannot bypass its recipes.
+Close or disconnect cancels and joins the project build and restores the
+base workspace. The base directory is the authorized boundary; a project's
+root is relative to it and never follows descendant links.
+Project builds require a regular `build.zig` at that root and pass an
+explicit `--build-file`, preventing Zig's implicit search through parents.
+
+A version-one config can contain:
+
+```json
+{
+  "version": 1,
+  "root": "firmware",
+  "target": "ra8d2",
+  "recipes": [
+    {"name": "debug", "artifact": "bin/firmware.elf", "timeout_ms": 300000}
+  ],
+  "source_mappings": [
+    {"host": ".", "client": "C:/client-only/project"}
+  ]
+}
+```
+
+Optional config `compiler` overrides the explicit backend compiler without
+PATH discovery or fallback after an invalid override. A recipe can also
+specify `step` and `options`, the latter a JSON-encoded array of at most
+16 `-D` arguments, as in the build wire contract. Configs are bounded to
+64 KiB, 16 recipes and 16 source mappings. Unknown versions, targets,
+duplicate recipes/mappings and escaping paths are refused.
+
+Prepare retains `.ra8-builds/<id>/project.json` beside the original result.
+The receipt binds config SHA256, target, recipe, build ID, compiler/version,
+source revision and exact ELF SHA256. Failed, canceled or active builds
+cannot prepare a receipt or substitute an older selection. Loading verifies
+the paired original successful result, recipe arguments, current config,
+source and actual ELF bytes before Session receives them. Explicitly
+loading an earlier receipt in a newly opened project still requires the
+matching config and sources. Receipts are provenance records in the trusted
+workspace, not signed attestations for untrusted files.
+
+The local CLI calls the same host API without an RPC roundtrip:
+
+```sh
+ra8_emulator project build /server/workspace project.json debug --zig /absolute/path/to/zig
+ra8_emulator project dap 0 /server/workspace project.json --zig /absolute/path/to/zig
+```
+
+Build prints the relative receipt path and ID as JSON. The second command
+opens a loopback DAP listener; launch supplies that receipt path as
+`program`, relative to the configured project root. The application or
+remote host controller owns this DAP process. Source breakpoints and stack
+paths translate between configured client and server prefixes. Missing,
+changed or unmapped sources produce explicit errors, without presenting an
+older file as current. Source revisions remain optimistic content checks,
+with the build service's limits and dependency exclusions above. Rebuilds
+use distinct artifacts; disconnect and relaunch against the chosen receipt
+to reload Session. Existing plain `dap` behavior and locals availability
+are preserved.
+
+Targets describe build profiles. Project DAP currently accepts `ra8d2`;
+other profiles return `UnsupportedProjectDebugTarget` until their machine
+profiles are implemented. Compiler/SDK provisioning and physical flashing
+are separate services. This adds no frontend or editor UI.
+
 ## Workspace filesystem
 
 An explicit workspace root enables the backend file service for connected

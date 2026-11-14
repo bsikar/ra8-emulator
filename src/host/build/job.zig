@@ -2,11 +2,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const request = @import("request.zig");
+const store_file = @import("store.zig");
 const Queue = @import("queue.zig").Queue;
 const Store = @import("store.zig").Store;
 const source = @import("source.zig");
 const execute = @import("execute.zig");
 const Output = @import("output.zig").Output;
+
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
     io: std.Io,
@@ -60,7 +62,7 @@ pub const Job = struct {
         store.* = try Store.open(self.root, self.io);
         const saved = &store.*.?;
         record.directory = try allocator.dupe(u8, &saved.relative);
-        record.host = try @import("store.zig").hostname(allocator);
+        record.host = try store_file.hostname(allocator);
         var root_buffer: [4096]u8 = undefined;
         const root_path = root_buffer[0..try self.root.realPath(self.io, &root_buffer)];
         var version: std.ArrayList(u8) = .empty;
@@ -72,6 +74,7 @@ pub const Job = struct {
         const prefix = try std.fmt.allocPrint(allocator, "{s}/out", .{saved.relative});
         var argv: std.ArrayList([]const u8) = .empty;
         try argv.appendSlice(allocator, &.{ self.compiler, "build", "-j1", "--color=off", "--prefix", prefix });
+        if (self.recipe.pin_build_file) try argv.appendSlice(allocator, &.{ "--build-file", "build.zig" });
         if (self.recipe.step.len != 0) try argv.append(allocator, self.recipe.step);
         try argv.appendSlice(allocator, self.recipe.options);
         record.argv = argv.items;
