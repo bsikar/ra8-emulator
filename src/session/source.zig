@@ -48,10 +48,15 @@ pub fn at(out: anytype, sections: dwarf_line.Sections, address: u32) !void {
     try out.print(":{d}", .{place.line});
 }
 
-/// A file's name, under its directory unless the name is already absolute.
+/// A line-table path for callers that already supply their own source root.
 pub fn path(out: anytype, file: dwarf_line.File) !void {
     if (file.directory.len != 0 and !dwarf_line_find.absolute(file.name)) try out.print("{s}/", .{file.directory});
     try out.print("{s}", .{file.name});
+}
+
+/// A compilation-qualified path for clients resolving source on the build host.
+pub fn qualifiedPath(out: anytype, file: dwarf_line.File) !void {
+    try dwarf_line.path.write(out, file);
 }
 
 /// A place spelled FILE:LINE, as `break fw.zig:8` takes it.

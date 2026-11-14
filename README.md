@@ -188,6 +188,18 @@ python -B tools/build_smoke/run.py --emulator zig-out/bin/ra8_emulator \
   --output /tmp/build-proof
 ```
 
+The fresh-source regression builds a dependency-free firmware project in a
+new directory and checks absolute source breakpoints and stack paths through
+public DAP, including a wrong-directory filename control:
+
+```sh
+python -B tools/source_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --zig /absolute/path/to/zig --output /tmp/source-directory-proof
+```
+
+Append `.exe` on Windows. The compiler is explicitly selected; this test
+requires Zig 0.17.0 and records the actual compiler, source and ELF hashes.
+
 ## Workspace filesystem
 
 An explicit workspace root enables the backend file service for connected
