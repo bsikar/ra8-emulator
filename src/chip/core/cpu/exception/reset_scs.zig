@@ -18,7 +18,7 @@ fn bank(memory: bus.Bus, offset: u32) bus.Error!void {
     };
     const lines = [_]u32{ memmap.nvic.iser, memmap.nvic.icer, memmap.nvic.ispr, memmap.nvic.icpr, memmap.nvic.iabr };
     for (lines) |base| {
-        for (0..nvic.irq_words) |i| try memory.writeWord(base + offset + @as(u32, @intCast(i * 4)), 0);
+        for (0..nvic.irq_words) |i| try memory.registers().writeWord(base + offset + @as(u32, @intCast(i * 4)), 0);
     }
     for (0..nvic.irq_lines / 4) |i| try memory.writeWord(memmap.nvic.ipr + offset + @as(u32, @intCast(i * 4)), 0);
     const words = [_]u32{
