@@ -120,10 +120,10 @@ fn scan(cursor: *Cursor, abbrev: []const u8, address: u32, best: *?Function) Err
     }
 }
 
-const Spec = struct { tag: u64, cursor: Cursor };
+pub const Spec = struct { tag: u64, cursor: Cursor };
 
 /// The abbreviation `code`, its cursor on the first attribute spec.
-fn find(abbrev: []const u8, code: u64) Error!Spec {
+pub fn find(abbrev: []const u8, code: u64) Error!Spec {
     var cursor = Cursor{ .bytes = abbrev };
     while (true) {
         const at = try cursor.uleb();

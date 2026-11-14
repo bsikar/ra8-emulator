@@ -5,6 +5,8 @@
 //! all_host.zig; the rest go here.
 const std = @import("std");
 test {
+    _ = @import("session/dwarf/compilation_test.zig");
+    _ = @import("session/dwarf/line/path_test.zig");
     _ = @import("session/device_metrics_test.zig");
     _ = @import("chip/core/cpu/memory/touched_test.zig");
     _ = @import("session/run/all.zig");
