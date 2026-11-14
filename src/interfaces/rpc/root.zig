@@ -42,3 +42,5 @@ pub const stdio_transport = @import("stdio_transport.zig");
 pub const ws_transport = @import("ws_transport.zig");
 pub const ws_handshake = @import("ws_handshake.zig");
 pub const ws_frame = @import("ws_frame.zig");
+pub const build = @import("build.zig");
+pub const build_wire = @import("build_wire.zig");

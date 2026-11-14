@@ -1,7 +1,13 @@
-//! The host-side test root (RA8EMU-785): the gui, interfaces and snapshot
-//! tests, built as their own binary so neither half of `zig build test` needs
-//! the memory of the whole suite. The rest are listed in all.zig.
+//! Host-side GUI, interface and snapshot tests (RA8EMU-785).
 test {
+    _ = @import("interfaces/rpc/build_test.zig");
+    _ = @import("host/build/request_test.zig");
+    _ = @import("host/build/queue_test.zig");
+    _ = @import("host/build/runner_test.zig");
+    _ = @import("host/build/source_test.zig");
+    _ = @import("host/build/diagnostic_test.zig");
+    _ = @import("host/build/pipe_test.zig");
+    _ = @import("host/build/process_test.zig");
     _ = @import("host/workspace/path_test.zig");
     _ = @import("host/workspace/entry_test.zig");
     _ = @import("host/workspace/observe_test.zig");

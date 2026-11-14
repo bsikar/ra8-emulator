@@ -112,7 +112,7 @@ pub const routes = .{
     .{ @backingInt(M.marker_set), session_marker.markerSet },
     .{ @backingInt(M.frame_status), session_nav.frameStatus },
     .{ @backingInt(M.diff), session_diff.diff },
-} ++ workspace.routes;
+} ++ workspace.routes ++ @import("../build.zig").routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -133,7 +133,8 @@ pub const Host = struct {
         // its clients know `advance_async` queues and completes on the
         // transport topic (RA8EMU-1196, slice 14).
         const caps = proto.capabilities | (if (context.transport_async) proto.transport_cap else 0) |
-            (if (context.workspace != null) workspace_wire.capability else 0);
+            (if (context.workspace != null) workspace_wire.capability else 0) |
+            (if (context.build_runner != null) @import("../build_wire.zig").capability else 0);
         return .{ .server = Server.init(wire, rx, context, caps) };
     }
 
@@ -163,6 +164,7 @@ pub const Host = struct {
 /// bounded pump of the transport plane's active job. `Host.poll` and the
 /// native local GUI link (slice 15) both use this order.
 pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
+    try @import("../build.zig").pump(context, server, tx);
     try workspace_watch.pump(context, server, tx);
     try uart_feed.pump(context, server, tx);
     try lcd_feed.pump(context, server, tx);

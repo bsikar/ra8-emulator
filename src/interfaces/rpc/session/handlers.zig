@@ -1,5 +1,4 @@
-//! The session RPC handlers: one thin adapter per method onto the Session
-//! API (RA8EMU-735); server.zig routes decoded messages.
+//! Session RPC handlers and per-connection resources (RA8EMU-735).
 const std = @import("std");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
@@ -38,8 +37,7 @@ pub const Peripherals = struct {
     listFn: *const fn (*anyopaque, usize, []const u8, bool, []u8) anyerror![]const u8,
 };
 
-/// Folds sampled call stacks (RA8EMU-833); error.NothingSampled on an
-/// empty window and thread.
+/// Folds stacks; error.NothingSampled on an empty window/thread (RA8EMU-833).
 pub const Folding = struct {
     context: *anyopaque,
     foldFn: *const fn (*anyopaque, usize, ?u32, u64, u64, []u8) anyerror![]const u8,
@@ -76,6 +74,9 @@ pub const Context = struct {
     session: *api.Session,
     workspace: ?*@import("ra8_host").workspace.Workspace = null,
     workspace_watches: @import("../workspace_watch.zig").Table = .{},
+    build_runner: ?*@import("ra8_host").build.Runner = null,
+    build_id: u64 = 0,
+    build_completion_sent: bool = false,
     /// Holds read_memory replies; its length caps one read.
     scratch: []u8,
     /// The last run's stop, until Host.poll sends it.
@@ -245,9 +246,7 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
     return ack;
 }
 
-/// `break NAME` (RA8EMU-1141): placed where the name resolves now, the
-/// module table asked before the image; an unknown name waits for its
-/// module to load.
+/// `break NAME` resolves modules before the image, waiting if unknown (RA8EMU-1141).
 pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome(proto.NamedPoint) {
     const which = core(args.core);
     if (context.modules) |table| if (table.addressOf(args.name)) |address|
@@ -331,6 +330,7 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
 
 /// Drop every subscription, as a new connection starts with none.
 pub fn forget(context: *Context) void {
+    @import("../build.zig").forget(context);
     context.workspace_watches.clear();
     context.topics = .{ 0, 0 };
     context.pending = null;
