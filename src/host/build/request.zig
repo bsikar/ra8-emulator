@@ -1,8 +1,9 @@
 //! A bounded Zig recipe. The backend chooses the compiler and output directories.
 const std = @import("std");
 const path = @import("../workspace/path.zig");
-pub const Request = struct { step: []const u8, options: []const u8, artifact: []const u8, timeout_ms: u32 };
-pub const Recipe = struct { step: []const u8, options: []const []const u8, artifact: []const u8, timeout_ms: u32 };
+
+pub const Request = struct { step: []const u8, options: []const u8, artifact: []const u8, timeout_ms: u32, pin_build_file: bool = false };
+pub const Recipe = struct { step: []const u8, options: []const []const u8, artifact: []const u8, timeout_ms: u32, pin_build_file: bool = false };
 
 pub fn parse(allocator: std.mem.Allocator, request: Request) !Recipe {
     if (request.step.len > 64 or request.options.len > 4096 or request.artifact.len > 512 or request.timeout_ms < 100 or request.timeout_ms > 600_000) return error.InvalidRecipe;
@@ -19,7 +20,7 @@ pub fn parse(allocator: std.mem.Allocator, request: Request) !Recipe {
     }
     var buffer: [512]u8 = undefined;
     const artifact = try path.normalize(request.artifact, &buffer);
-    return .{ .step = try allocator.dupe(u8, request.step), .options = options, .artifact = try allocator.dupe(u8, artifact), .timeout_ms = request.timeout_ms };
+    return .{ .step = try allocator.dupe(u8, request.step), .options = options, .artifact = try allocator.dupe(u8, artifact), .timeout_ms = request.timeout_ms, .pin_build_file = request.pin_build_file };
 }
 
 pub const Budget = struct {

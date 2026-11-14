@@ -5,6 +5,7 @@
 //! (--listen). Frames are the only thing written to stdout; complaints go
 //! to stderr.
 const std = @import("std");
+const host = @import("ra8_host");
 const served_setup = @import("ra8_rpc").served_setup;
 const served_camera = @import("ra8_rpc").served_camera;
 const source_spec = @import("ra8_host").camera.source_spec;
@@ -113,7 +114,7 @@ fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep
         flags.allow_state = true;
     } else if (std.mem.eql(u8, argv[idx], "--build-zig") and flags.build_zig == null and valued) {
         at.* += 1;
-        @import("ra8_host").build.Runner.validateCompiler(argv[at.*]) catch return .bad;
+        host.build.Runner.validateCompiler(argv[at.*]) catch return .bad;
         flags.build_zig = argv[at.*];
     } else if (std.mem.eql(u8, argv[idx], "--workspace") and flags.workspace == null and valued) {
         at.* += 1;
@@ -236,6 +237,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     };
     defer workbench.close();
     workbench.bind(&setup.context);
+    defer workbench.unbind(&setup.context);
     if (asked.camera) |cam| {
         served_camera.set(&setup, cam) catch |err| {
             std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});

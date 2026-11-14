@@ -4,6 +4,7 @@ const session = @import("ra8_session");
 const p = @import("protocol.zig");
 const inspection = @import("inspection.zig");
 const Points = @import("points.zig").Points;
+
 pub const Target = inspection.Target;
 pub const Open = struct {
     context: *anyopaque,
@@ -87,7 +88,7 @@ pub const Adapter = struct {
             return out.writeAll("]}");
         }
         if (equal(command, "setBreakpoints") or equal(command, "setInstructionBreakpoints")) {
-            return self.points.replace(self.allocator, target.session, target.images[@backingInt(target.session.currentCore())], args, equal(command, "setInstructionBreakpoints"), out, self.inspect.lines_start_at_one);
+            return self.points.replaceMapped(self.allocator, target.session, target.images[@backingInt(target.session.currentCore())], args, equal(command, "setInstructionBreakpoints"), out, self.inspect.lines_start_at_one, target.sources);
         }
         if (equal(command, "stackTrace")) return self.inspect.stackTrace(target, args, out);
         if (equal(command, "scopes")) return self.inspect.scopes(target, args, out);

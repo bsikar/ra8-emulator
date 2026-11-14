@@ -44,3 +44,5 @@ pub const ws_handshake = @import("ws_handshake.zig");
 pub const ws_frame = @import("ws_frame.zig");
 pub const build = @import("build.zig");
 pub const build_wire = @import("build_wire.zig");
+pub const project = @import("project.zig");
+pub const project_wire = @import("project_wire.zig");

@@ -166,6 +166,24 @@ jobs:
           python -B tools/toolchain_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --archive $archive --output "$env:RUNNER_TEMP/debug-conformance/toolchain" --timeout 600
           if ($LASTEXITCODE -ne 0) { throw 'Clean toolchain policy/build/debug conformance failed' }
 
+      - name: Project lifecycle and verified handoff unit tests
+        if: always() && steps.emulator.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          zig build ra8_host_tests -j1 '-Dtest-filter=project'
+          if ($LASTEXITCODE -ne 0) { throw 'Project lifecycle unit tests failed' }
+
+      - name: Projects through public RPC and receipt-only DAP
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 11
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          python -B tools/project_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/projects" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Project build/debug conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

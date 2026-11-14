@@ -34,14 +34,18 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     var adapter: dap.adapter.Adapter = .{ .allocator = allocator, .opener = .{ .context = &owner, .openFn = Owner.open } };
     defer adapter.deinit();
     if (argv.len == 4) adapter.target = try Owner.open(&owner, argv[3]);
+    try listen(allocator, io, port, &adapter);
+    return 0;
+}
+
+pub fn listen(allocator: std.mem.Allocator, io: std.Io, port: u16, adapter: *dap.adapter.Adapter) !void {
     const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
     var server = try address.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     std.debug.print("dap: listening on tcp:{f}\n", .{server.socket.address});
     const stream = try server.accept(io);
     defer stream.close(io);
-    try serve(allocator, io, stream, &adapter);
-    return 0;
+    try serve(allocator, io, stream, adapter);
 }
 
 fn serve(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.net.Stream, adapter: *dap.adapter.Adapter) !void {

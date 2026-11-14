@@ -2,6 +2,8 @@
 const std = @import("std");
 const session = @import("ra8_session");
 const p = @import("protocol.zig");
+const inspection = @import("inspection.zig");
+
 pub const Points = struct {
     entries: std.ArrayList(Entry) = .empty,
     const Entry = struct { source: []u8, core: session.api.Core, id: session.api.BreakId };
@@ -22,10 +24,17 @@ pub const Points = struct {
     }
 
     pub fn replace(self: *Points, allocator: std.mem.Allocator, live: *session.api.Session, image: ?session.symbols.Image, args: p.Value, instructions: bool, out: *std.Io.Writer, lines_start_at_one: bool) !void {
+        return self.replaceMapped(allocator, live, image, args, instructions, out, lines_start_at_one, null);
+    }
+
+    pub fn replaceMapped(self: *Points, allocator: std.mem.Allocator, live: *session.api.Session, image: ?session.symbols.Image, args: p.Value, instructions: bool, out: *std.Io.Writer, lines_start_at_one: bool, sources: ?inspection.Sources) !void {
         const key = if (instructions) "" else try p.text(p.get(p.get(args, "source"), "path"));
         const value = p.get(args, "breakpoints");
         const asked = if (value == .null) &.{} else try p.list(value);
         if (asked.len > session.breaks.table.limits.capacity) return error.TooManyBreakpoints;
+        var path_buffer: [4096]u8 = undefined;
+        const host_key = if (!instructions and asked.len != 0 and sources != null) try sources.?.pathFn(sources.?.context, key, false, &path_buffer) else key;
+        if (!instructions and asked.len != 0) if (sources) |access| try access.check();
         for (asked) |item| {
             if (item != .object) return error.InvalidArguments;
             if (!instructions) {
@@ -53,7 +62,7 @@ pub const Points = struct {
                 continue;
             }
             const line = if (instructions) 0 else try p.number(p.get(item, "line"));
-            const address = if (instructions) instruction(item) catch null else session.source.breakAt(image, .{ .file = key, .line = line +| @intFromBool(!lines_start_at_one) });
+            const address = if (instructions) instruction(item) catch null else session.source.breakAt(image, .{ .file = host_key, .line = line +| @intFromBool(!lines_start_at_one) });
             try self.install(allocator, live, core, key, address, line, out);
         }
         try out.writeAll("]}");
