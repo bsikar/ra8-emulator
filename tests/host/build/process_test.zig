@@ -36,3 +36,16 @@ test "build cancellation terminates its owned process tree and reaps the root" {
     try process.close();
     try std.testing.expect(process.child.id == null and process.job == null);
 }
+
+test "build process refuses ownership loss before signalling a potentially reused process id" {
+    if (@import("builtin").os.tag != .macos and @import("builtin").os.tag != .linux) return error.SkipZigTest;
+    var process = try Process.spawn(io, &.{ "/bin/sh", "-c", "exit 0" }, .cwd());
+    defer process.close() catch @panic("lost build cleanup failed");
+    const id = process.child.id.?;
+    var status: c_int = 0;
+    try std.testing.expectEqual(id, std.c.waitpid(id, &status, 0));
+    try std.testing.expectError(error.ChildOwnershipLost, process.exited());
+    try std.testing.expectError(error.ChildOwnershipLost, process.stopTree());
+    try std.testing.expectError(error.ChildOwnershipLost, process.close());
+    try std.testing.expect(process.child.id == null);
+}

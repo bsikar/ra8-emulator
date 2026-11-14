@@ -12,5 +12,6 @@ test "toolchain baseline names complete pinned host archives and refuses unvalid
     try std.testing.expectEqual(@as(u64, 57_332_648), (try artifacts.forHost("x86_64-linux")).archive_bytes);
     try std.testing.expectEqual(@as(u64, 100_268_137), (try artifacts.forHost("x86_64-windows")).archive_bytes);
     try std.testing.expectError(error.UnsupportedHost, artifacts.forHost("aarch64-linux"));
-    try std.testing.expectError(error.UnsupportedHost, artifacts.forHost("x86_64-macos"));
+    try std.testing.expectEqual(@as(u64, 53_985_220), (try artifacts.forHost("aarch64-macos")).archive_bytes);
+    try std.testing.expectEqual(@as(u64, 59_317_572), (try artifacts.forHost("x86_64-macos")).archive_bytes);
 }
