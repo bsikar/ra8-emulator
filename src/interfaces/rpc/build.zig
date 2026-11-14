@@ -3,9 +3,11 @@ const rpc = @import("ra8_rpc_wire");
 const wire = @import("build_wire.zig");
 const Context = @import("session/handlers.zig").Context;
 const Ack = @import("session/rpc.zig").Ack;
+
 pub const routes = .{ .{ @backingInt(wire.Method.start), start }, .{ @backingInt(wire.Method.status), status }, .{ @backingInt(wire.Method.cancel), cancel } };
 
 pub fn start(context: *Context, args: wire.Start) rpc.Outcome(wire.Id) {
+    if (context.project) |project| if (project.parsed != null) return .{ .err = .bad_args };
     const runner = context.build_runner orelse return refuse(wire.Id, error.Unavailable);
     const id = runner.start(.{ .step = args.step, .options = args.options, .artifact = args.artifact, .timeout_ms = args.timeout_ms }) catch |err| return refuse(wire.Id, err);
     context.build_id = id;

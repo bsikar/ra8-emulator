@@ -2,9 +2,19 @@
 const std = @import("std");
 const session = @import("ra8_session");
 const p = @import("protocol.zig");
+
+pub const Sources = struct {
+    context: *anyopaque,
+    pathFn: *const fn (*anyopaque, []const u8, bool, []u8) anyerror![]const u8,
+    checkFn: ?*const fn (*anyopaque) anyerror!void = null,
+    pub fn check(self: Sources) !void {
+        if (self.checkFn) |check_fn| try check_fn(self.context);
+    }
+};
 pub const Target = struct {
     session: *session.api.Session,
     images: [2]?session.symbols.Image = .{ null, null },
+    sources: ?Sources = null,
 };
 pub const Inspection = struct {
     epoch: u32 = 1,
@@ -53,11 +63,14 @@ pub const Inspection = struct {
                 var path: [4096]u8 = undefined;
                 var writer: std.Io.Writer = .fixed(&path);
                 try session.source.qualifiedPath(&writer, found.file);
+                var mapped: [4096]u8 = undefined;
+                const visible = if (target.sources) |sources| try sources.pathFn(sources.context, writer.buffered(), true, &mapped) else writer.buffered();
                 try out.writeAll(",\"source\":");
-                try p.quote(out, .{ .name = std.fs.path.basename(found.file.name), .path = writer.buffered() });
+                try p.quote(out, .{ .name = std.fs.path.basename(found.file.name), .path = visible });
             }
             try out.writeByte('}');
         }
+        if (target.sources) |sources| try sources.check();
         try out.print("],\"totalFrames\":{d}}}", .{count});
     }
 
