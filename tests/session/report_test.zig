@@ -4,6 +4,7 @@ const ra8 = @import("ra8");
 const bus = ra8.chip.core.cpu.bus;
 const Cpu = ra8.chip.core.cpu.cpu.Cpu;
 const session_report = ra8.session.step_hook.report;
+const Builder = @import("symbol_image.zig").Builder;
 
 /// 64 bytes of RAM at address 0, the vector table first.
 const Ram = struct {
@@ -49,6 +50,21 @@ test "a stop line names the address and the instruction there on the Zig core" {
     var stream: std.Io.Writer = .fixed(&text);
     try session_report.line(.{ .zig = .{ .cpu = &cpu } }, null, 0x08, &stream);
     try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "0x00000008: nop"));
+}
+
+test "a stop line names the instruction's target from the image" {
+    var buffer: [1024]u8 = undefined;
+    _ = Builder.build(&buffer, &.{"uart_echo"}, &.{0x100});
+    const image = try ra8.board.image.elf.Image.init(&buffer);
+    var memory: Ram = .{ .bytes = @as([64]u8, @splat(0)) };
+    // b #0x100 at 0x08: a 16-bit branch, imm11 = 0x7A (offset 0xF4).
+    @memcpy(memory.bytes[8..10], &[_]u8{ 0x7A, 0xE0 });
+    var cpu: Cpu = .{ .bus = memory.view() };
+    var text: [128]u8 = undefined;
+    var stream: std.Io.Writer = .fixed(&text);
+    try session_report.line(.{ .zig = .{ .cpu = &cpu } }, image, 0x08, &stream);
+    try std.testing.expect(std.mem.startsWith(u8, stream.buffered(), "0x00000008: b #0x100"));
+    try std.testing.expect(std.mem.endsWith(u8, stream.buffered(), " ; uart_echo\n"));
 }
 
 test "a backtrace without unwind tables is the pc and lr" {
