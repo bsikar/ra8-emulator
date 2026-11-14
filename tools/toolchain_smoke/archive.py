@@ -9,6 +9,12 @@ import urllib.request
 import zipfile
 
 PINS = {
+    "aarch64-macos": dict(url="https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz",
+        sha256="b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a", archive_bytes=53985220,
+        executable="zig-aarch64-macos-0.17.0/zig"),
+    "x86_64-macos": dict(url="https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz",
+        sha256="4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6", archive_bytes=59317572,
+        executable="zig-x86_64-macos-0.17.0/zig"),
     "x86_64-linux": dict(url="https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
         sha256="1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026", archive_bytes=57332648,
         executable="zig-x86_64-linux-0.17.0/zig"),
