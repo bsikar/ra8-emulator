@@ -73,6 +73,16 @@ test "a function's locals come out with the four answerable locations" {
     try expectLocal(into[0..], 5, "y", null);
 }
 
+test "a local with fixed storage answers by its address" {
+    var list: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer list.deinit();
+    try unit(&list.writer, 4);
+    const sections = locals.Sections{ .info = list.written(), .abbrev = &abbrev, .str = str };
+    try std.testing.expectEqualStrings("slot", (try locals.atAddress(sections, 0x2000)).?);
+    try std.testing.expectEqual(@as(?[]const u8, null), try locals.atAddress(sections, 0x2004));
+    try std.testing.expectEqual(@as(?[]const u8, null), try locals.atAddress(sections, 0x1000));
+}
+
 test "a smaller buffer takes the first locals and says how many fit" {
     var list: std.Io.Writer.Allocating = .init(std.testing.allocator);
     defer list.deinit();

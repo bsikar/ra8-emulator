@@ -16,6 +16,7 @@ const std = @import("std");
 const elf = @import("ra8_board").image.elf;
 const text = @import("ra8_chip").core.cpu.text.text;
 const symbols = @import("symbols.zig");
+const dwarf = @import("dwarf/dwarf.zig");
 
 /// The name the image puts on `address`, or null when none matches. An
 /// exact symbol wins whichever kind it is: a branch target needs a
@@ -54,5 +55,12 @@ pub fn line(image: elf.Image, into: *text.Text) void {
     // always real.
     if (symbols.inside(image, address)) |site| {
         into.put(" ; {s}+0x{x}", .{ site.name, site.offset });
+        return;
+    }
+    // No symbol names it: a local with fixed storage still can. A
+    // DW_OP_addr location is absolute, so the walk matches it directly;
+    // an image without debug sections answers null at once.
+    if (dwarf.locals.atAddress(dwarf.locals.ofImage(image), address) catch null) |name| {
+        into.put(" ; {s}", .{name});
     }
 }
