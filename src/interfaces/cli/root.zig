@@ -5,6 +5,7 @@
 pub const cli = @import("cli.zig");
 pub const eink_log = @import("eink_log.zig");
 pub const probe_ctl = @import("probe_ctl.zig");
+pub const toolchain = @import("toolchain.zig");
 pub const serve = @import("serve/serve.zig");
 pub const camera_source = @import("camera_source.zig");
 pub const usb_disk_option = @import("usb_disk_option.zig");
