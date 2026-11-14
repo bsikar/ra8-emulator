@@ -2,8 +2,26 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const windows = @import("../win32.zig");
-pub const supported = builtin.os.tag == .windows or builtin.os.tag == .linux;
+pub const supported = builtin.os.tag == .windows or builtin.os.tag == .linux or builtin.os.tag == .macos;
 const on_windows = builtin.os.tag == .windows;
+const darwin = struct {
+    // Darwin sys/wait.h: P_PID, WEXITED and WNOWAIT. Zig's std.c does not
+    // expose waitid or these constants on macOS yet. No status is reaped here.
+    extern "c" fn waitid(c_uint, c_uint, *std.c.siginfo_t, c_int) c_int;
+    extern "c" fn proc_listpids(u32, u32, *anyopaque, c_int) c_int;
+    const pid = 1;
+    const exited = 0x04;
+    const nowait = 0x20;
+
+    fn onlyRoot(group: std.posix.pid_t) !bool {
+        var ids: [1024]std.posix.pid_t = undefined;
+        // PROC_PGRP_ONLY returns bytes; a full buffer cannot establish completeness.
+        const size = proc_listpids(2, @intCast(group), &ids, @sizeOf(@TypeOf(ids)));
+        if (size <= 0 or size >= @sizeOf(@TypeOf(ids)) or @mod(size, @sizeOf(std.posix.pid_t)) != 0) return error.ProcessGroupInspectionFailed;
+        for (ids[0..@intCast(@divExact(size, @sizeOf(std.posix.pid_t)))]) |id| if (id != group) return false;
+        return true;
+    }
+};
 
 pub const Process = struct {
     child: std.process.Child,
@@ -16,7 +34,7 @@ pub const Process = struct {
         if (!supported) return error.UnsupportedPlatform;
         const job: ?windows.HANDLE = if (on_windows) try makeJob() else null;
         errdefer if (on_windows) if (job) |handle| std.os.windows.CloseHandle(handle);
-        var child = try std.process.spawn(io, .{ .argv = argv, .cwd = .{ .dir = cwd }, .stdin = .ignore, .stdout = .pipe, .stderr = .pipe, .pgid = if (on_windows) null else 0, .start_suspended = on_windows, .create_no_window = true });
+        var child = try std.process.spawn(io, .{ .argv = argv, .cwd = if (builtin.os.tag == .macos and cwd.handle == std.Io.Dir.cwd().handle) .inherit else .{ .dir = cwd }, .stdin = .ignore, .stdout = .pipe, .stderr = .pipe, .pgid = if (on_windows) null else 0, .start_suspended = on_windows, .create_no_window = true });
         errdefer child.kill(io);
         if (on_windows) {
             if (!windows.AssignProcessToJobObject(job.?, child.id.?).toBool()) return error.JobAssignmentFailed;
@@ -47,6 +65,18 @@ pub const Process = struct {
                 },
                 else => error.ProcessWaitFailed,
             };
+        } else if (builtin.os.tag == .macos) {
+            var info = std.mem.zeroes(std.c.siginfo_t);
+            const rc = darwin.waitid(darwin.pid, @intCast(id), &info, darwin.exited | std.c.W.NOHANG | darwin.nowait);
+            return switch (std.c.errno(rc)) {
+                .SUCCESS => info.pid != 0,
+                .INTR => false,
+                .CHILD => blk: {
+                    self.lost = true;
+                    break :blk error.ChildOwnershipLost;
+                },
+                else => error.ProcessWaitFailed,
+            };
         } else return error.UnsupportedPlatform;
     }
 
@@ -57,6 +87,9 @@ pub const Process = struct {
             if (!windows.TerminateJobObject(self.job.?, 1).toBool()) return error.TreeStopFailed;
         } else std.posix.kill(-self.child.id.?, .KILL) catch |err| switch (err) {
             error.ProcessNotFound => {},
+            // Darwin filters zombies from group signalling and reports EPERM
+            // for an otherwise empty group. Do not hide a live-member denial.
+            error.PermissionDenied => if (builtin.os.tag != .macos or !try self.exited() or !try darwin.onlyRoot(self.child.id.?)) return err,
             else => return err,
         };
         self.tree_stopped = true;
