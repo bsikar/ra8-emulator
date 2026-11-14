@@ -44,6 +44,7 @@ pub const Unit = struct {
 /// A source file: the directory it was named relative to, and its name.
 /// Either may be empty when the table does not say.
 pub const File = struct {
+    compilation_directory: []const u8 = "",
     directory: []const u8 = "",
     name: []const u8 = "",
 };
