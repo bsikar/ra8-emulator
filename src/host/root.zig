@@ -7,6 +7,7 @@
 pub const profiles = @import("profiles.zig");
 pub const build = @import("build/root.zig");
 pub const workspace = @import("workspace/workspace.zig");
+pub const toolchain = @import("toolchain/root.zig");
 pub const app_dirs = @import("app_dirs.zig");
 pub const history = @import("history/root.zig");
 pub const stops = @import("stops.zig");

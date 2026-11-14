@@ -1,4 +1,3 @@
-//! Host-side GUI, interface and snapshot tests (RA8EMU-785).
 test {
     _ = @import("interfaces/rpc/build_test.zig");
     _ = @import("host/build/request_test.zig");
@@ -8,6 +7,7 @@ test {
     _ = @import("host/build/diagnostic_test.zig");
     _ = @import("host/build/pipe_test.zig");
     _ = @import("host/build/process_test.zig");
+    _ = @import("toolchain.zig");
     _ = @import("host/workspace/path_test.zig");
     _ = @import("host/workspace/entry_test.zig");
     _ = @import("host/workspace/observe_test.zig");
