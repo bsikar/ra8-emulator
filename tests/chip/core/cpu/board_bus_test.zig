@@ -252,3 +252,68 @@ test "a byte stored to STIM0 lands in the ITM and STIM0 reads FIFOREADY again" {
     try std.testing.expectEqualStrings("hi", port.output());
     try std.testing.expectEqual(itm.fifo_ready, try board.view().readWord(itm.base));
 }
+
+test "NVIC set writes accumulate and clear commands preserve unrelated lines" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: BoardBus = .{ .memory = .{ .store = .{ .store = &store } }, .periph = &periph };
+    const through = board.view();
+    for ([_]u32{ memmap.nvic.iser, memmap.nvic.ispr }) |address| {
+        try through.writeWord(address, 1);
+        try through.writeWord(address, 2);
+        try through.writeWord(address, 4);
+        try through.writeWord(address, 0);
+        try std.testing.expectEqual(@as(u32, 7), try through.readWord(address));
+        try through.writeWord(address + 0x80, 2);
+        try std.testing.expectEqual(@as(u32, 5), try through.readWord(address));
+        try std.testing.expectEqual(@as(u32, 5), try through.readWord(address + 0x80));
+    }
+}
+
+test "NVIC exception acknowledgments replace backing state through the quiet bus" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: BoardBus = .{ .memory = .{ .store = .{ .store = &store } }, .periph = &periph };
+    var pending: ra8.chip.core.cpu.exception.nvic_source.NvicSource = .{};
+    var quiet: ra8.chip.core.cpu.exception.quiet_source.QuietSource = .{ .inner = pending.source(), .memory = board.view() };
+    pending.clear_due = &quiet.clear_due;
+    const through = quiet.bus();
+    try through.writeWord(memmap.nvic.iser, 1);
+    try through.writeWord(memmap.nvic.iser, 2);
+    try through.writeWord(memmap.nvic.ispr, 1);
+    try through.writeWord(memmap.nvic.ispr, 2);
+    const source = quiet.source();
+    const first = (try source.winner(through)).?;
+    try std.testing.expectEqual(@as(u9, 16), first.number);
+    try source.taken(through, first.number);
+    try std.testing.expectEqual(@as(u32, 2), try through.readWord(memmap.nvic.ispr));
+    try source.returned(through, first.number);
+    try through.writeWord(memmap.nvic.icer, 2);
+    try std.testing.expect((try source.winner(through)) == null);
+    try through.writeWord(memmap.nvic.iser, 2);
+    try std.testing.expectEqual(@as(u9, 17), (try source.winner(through)).?.number);
+    try through.registers().writeWord(memmap.nvic.ispr, 0);
+    try std.testing.expectEqual(@as(u32, 0), try through.readWord(memmap.nvic.ispr));
+}
+
+test "Non-secure IRQ selected through the alias acknowledges its shared pending bit" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var periph = registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var state: ra8.chip.core.banked.Banked = .{};
+    var board: BoardBus = .{ .memory = .{ .store = .{ .store = &store } }, .periph = &periph, .security = &state };
+    var pending: ra8.chip.core.cpu.exception.nvic_source.NvicSource = .{ .banked = &state };
+    const through = board.view();
+    try through.writeWord(0xE000_E380, 1);
+    try through.writeWord(memmap.nvic.iser + 0x20000, 1);
+    try through.writeWord(memmap.nvic.ispr + 0x20000, 1);
+    const found = (try pending.source().winner(through)).?;
+    try std.testing.expectEqual(@as(u9, 16), found.number);
+    try pending.source().taken(through, found.number);
+    try std.testing.expectEqual(@as(u32, 0), try through.readWord(memmap.nvic.ispr));
+}

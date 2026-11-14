@@ -159,3 +159,21 @@ test "CLI --touch @file delivers contacts through I3C into firmware memory" {
     try std.testing.expectEqual(@as(i64, 3), field(touch, "frames_acked").integer);
     try std.testing.expectEqual(@as(i64, 0), field(touch, "refused_phantom_reads").integer);
 }
+
+test "CLI IRQ echo keeps all three NVIC lines enabled through plain and watched runs" {
+    const common = [_][]const u8{ test_paths.emulator, "tests/fixtures/uart/uart_irq_echo.elf", "--console", "--instructions", "100000000", "--report", "json", "--dump-sym", "g_uart_irq_echoes" };
+    for ([_][]const []const u8{ &.{}, &.{ "--watch", "g_uart_irq_echoes" } }) |extra| {
+        var argv: [common.len + 2][]const u8 = undefined;
+        @memcpy(argv[0..common.len], &common);
+        @memcpy(argv[common.len..][0..extra.len], extra);
+        var doc = try pipeRun(argv[0 .. common.len + extra.len], "X");
+        defer doc.deinit();
+        const symbols = field(field(doc.value, "dumps"), "symbols").array.items;
+        try std.testing.expectEqual(@as(i64, 1), field(symbols[0], "value").integer);
+        const channels = field(field(doc.value, "serial"), "sci").array.items;
+        try std.testing.expectEqual(@as(i64, 1), field(channels[0], "received").integer);
+        // 21 banner bytes followed by the one byte echoed by the RX ISR.
+        try std.testing.expectEqual(@as(i64, 22), field(channels[0], "transmitted").integer);
+        try std.testing.expectEqual(@as(i64, 0), field(channels[0], "rx_dropped").integer);
+    }
+}

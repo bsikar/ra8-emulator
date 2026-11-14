@@ -285,3 +285,29 @@ test "a quiet bus listens only to the PPB, and a store there ends the stretch" {
     try view.write(image.base + 0x100, &[_]u8{ 2, 0, 0, 0 });
     try std.testing.expect(machine.arrivals().len > 0);
 }
+
+test "NVIC acknowledgment crosses quiet, cut and watch adapters without a guest write" {
+    var rig: Board = .{};
+    try rig.open();
+    defer rig.close();
+    var machine: stop_machine.Machine = .{};
+    _ = try machine.addWatch(.{ .first = memmap.nvic.ispr, .last = memmap.nvic.ispr + 3, .kind = .write });
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .inner = rig.board.view(), .driver = &driver };
+    var clock: ra8.chip.periph.clocks.Clocks = .{};
+    var cut: ra8.chip.core.cpu.cpu.systick_cut.Cut = .{ .clocks = .{ &clock, null } };
+    var cutting: ra8.session.zig.cut_bus.CutBus = .{ .inner = watching.view(), .cut = &cut };
+    var pending: ra8.chip.core.cpu.exception.nvic_source.NvicSource = .{};
+    var quiet: ra8.chip.core.cpu.exception.quiet_source.QuietSource = .{ .inner = pending.source(), .memory = cutting.view() };
+    pending.clear_due = &quiet.clear_due;
+    const through = quiet.bus();
+    try through.writeWord(memmap.nvic.iser, 3);
+    try through.writeWord(memmap.nvic.ispr, 3);
+    machine.begin();
+    watching.arm(0x22000000, 2);
+    const first = (try quiet.source().winner(through)).?;
+    try std.testing.expectEqual(@as(u9, 16), first.number);
+    try quiet.source().taken(through, first.number);
+    try std.testing.expectEqual(@as(u32, 2), try through.readWord(memmap.nvic.ispr));
+    try std.testing.expectEqual(@as(usize, 0), machine.hits_len);
+}

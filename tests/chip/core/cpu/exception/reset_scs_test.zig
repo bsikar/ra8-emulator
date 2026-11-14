@@ -26,3 +26,23 @@ test "CPU foundation SCS reset clears last IRQ and priority words in both banks"
         try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.icsr + offset));
     }
 }
+
+test "SCS reset bypasses firmware NVIC commands on a board bus" {
+    var store = try ra8.chip.core.cpu.memory.store.Store.init(null);
+    defer store.deinit();
+    var periph = ra8.chip.periph.registry.Bus.init(std.testing.allocator);
+    defer periph.deinit();
+    var board: ra8.chip.core.cpu.board_bus.BoardBus = .{ .memory = .{ .store = .{ .store = &store } }, .periph = &periph };
+    const through = board.view();
+    for ([_]u32{ 0, 0x20000 }) |offset| {
+        for ([_]u32{ memmap.nvic.iser, memmap.nvic.ispr }) |base| {
+            for (0..3) |i| try through.registers().writeWord(base + offset + @as(u32, @intCast(i * 4)), 0xFFFF_FFFF);
+        }
+    }
+    try reset.clear(through);
+    for ([_]u32{ 0, 0x20000 }) |offset| {
+        for ([_]u32{ memmap.nvic.iser, memmap.nvic.ispr }) |base| {
+            for (0..3) |i| try std.testing.expectEqual(@as(u32, 0), try through.registers().readWord(base + offset + @as(u32, @intCast(i * 4))));
+        }
+    }
+}
