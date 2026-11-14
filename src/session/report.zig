@@ -26,7 +26,7 @@ pub fn where(image: ?elf.Image, address: u32, out: anytype) !void {
 pub fn line(view: core_view.View, image: ?elf.Image, address: u32, out: anytype) !void {
     try where(image, address, out);
     try out.print(": ", .{});
-    _ = try session_view.instruction(out, view, address);
+    _ = try session_view.instruction(out, view, image, address);
     try out.print("\n", .{});
 }
 
