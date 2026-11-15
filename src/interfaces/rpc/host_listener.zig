@@ -85,6 +85,7 @@ pub const Listener = struct {
         context.session_feed = null;
         context.trace_feed = null;
         context.chunks = .{};
+        context.artifact_transfer = .{};
         return context;
     }
 

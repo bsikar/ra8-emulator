@@ -5,6 +5,7 @@ const project = @import("../project.zig");
 
 /// Drop every subscription, as a new connection starts with none.
 pub fn forget(context: *Context) void {
+    context.artifact_transfer.drop();
     project.forget(context);
     build.forget(context);
     context.workspace_watches.clear();

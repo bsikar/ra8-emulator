@@ -22,3 +22,14 @@ test "serve workspace access requires one explicit nonempty root" {
     try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--workspace", "one", "--workspace", "two", "--stdio", "fw.elf" }) == null);
     try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--workspace" }) == null);
 }
+
+test "artifact serving requires one explicit nonempty spool root" {
+    const plain = cli.parse(&.{ "ra8", "serve", "--stdio", "fw.elf" }).?;
+    try std.testing.expect(plain.artifacts_root == null);
+    const enabled = cli.parse(&.{ "ra8", "serve", "--artifacts-root", "bundle cache", "--stdio", "fw.elf" }).?;
+    try std.testing.expectEqualStrings("bundle cache", enabled.artifacts_root.?);
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--artifacts-root", "", "--stdio", "fw.elf" }) == null);
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--artifacts-root" }) == null);
+    const duplicate = &.{ "ra8", "serve", "--artifacts-root", "one", "--artifacts-root", "two", "--stdio", "fw.elf" };
+    try std.testing.expect(cli.parse(duplicate) == null);
+}

@@ -32,6 +32,7 @@ pub const Client = struct {
     io: std.Io,
     /// The code of the last refusal, for the error line.
     refused: u16 = 0,
+    wait_ms: i64 = answer_wait_ms,
 
     /// Reach `target` and finish the handshake. Buffers come from
     /// `allocator`, which ctl runs as an arena.
@@ -85,7 +86,7 @@ pub const Client = struct {
 
     /// The next frame from the server, or error.ServerSilent.
     fn next(self: *Client) !Incoming {
-        const deadline = self.nowMs() + answer_wait_ms;
+        const deadline = self.nowMs() + self.wait_ms;
         while (self.nowMs() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| return incoming;
             try self.io.sleep(.fromMilliseconds(1), .awake);
@@ -96,7 +97,12 @@ pub const Client = struct {
     /// Call `method` and decode its `Reply`, skipping events on the way.
     /// A slice in the reply lives until the next call.
     pub fn call(self: *Client, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
-        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
+        return self.callCode(Reply, Args, @backingInt(method), args);
+    }
+
+    /// Extension methods share the session framing and refusal handling.
+    pub fn callCode(self: *Client, comptime Reply: type, comptime Args: type, method: u16, args: Args) !Reply {
+        _ = try self.client.call(Args, method, args, 0, self.tx);
         while (true) {
             switch (try self.next()) {
                 .response => |response| switch (response.result) {

@@ -1,4 +1,7 @@
 test {
+    _ = @import("interfaces/cli/artifacts/main_test.zig");
+    _ = @import("snapshot/all.zig");
+    _ = @import("interfaces/rpc/artifacts/all.zig");
     _ = @import("interfaces/rpc/bundle/all.zig");
     _ = @import("interfaces/rpc/build_test.zig");
     _ = @import("host/build/request_test.zig");
@@ -100,16 +103,9 @@ test {
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("interfaces/cli/serve_parse_test.zig");
     _ = @import("interfaces/cli/map_main_test.zig");
-    _ = @import("snapshot/bundle/header_test.zig");
-    _ = @import("snapshot/bundle/manifest_test.zig");
-    _ = @import("snapshot/bundle/reader_test.zig");
-    _ = @import("snapshot/bundle/writer_test.zig");
-    _ = @import("snapshot/file_test.zig");
     _ = @import("board/snapshot/memory_test.zig");
-    _ = @import("snapshot/fields_test.zig");
     _ = @import("chip/core/cpu/snapshot_test.zig");
     _ = @import("chip/snapshot/time_test.zig");
-    _ = @import("snapshot/units_test.zig");
     _ = @import("chip/snapshot/timers_test.zig");
     _ = @import("chip/periph/sci/snapshot_test.zig");
     _ = @import("board/snapshot/sd_test.zig");
