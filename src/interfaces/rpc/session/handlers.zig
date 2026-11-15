@@ -2,6 +2,8 @@
 const std = @import("std");
 
 const api = @import("ra8_session").api;
+const artifact_service = @import("../artifacts/service.zig");
+const artifact_transfer = @import("../artifacts/transfer.zig");
 const board_lib = @import("ra8_board");
 const host = @import("ra8_host");
 const load_chunks = @import("load_chunks.zig");
@@ -77,6 +79,8 @@ const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,
+    artifacts: ?*artifact_service.Service = null,
+    artifact_transfer: artifact_transfer.Transfer = .{},
     project: ?*host.project.Project = null,
     project_base_workspace: ?*host.workspace.Workspace = null,
     project_base_runner: ?*host.build.Runner = null,

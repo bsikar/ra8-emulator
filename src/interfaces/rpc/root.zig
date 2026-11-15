@@ -7,6 +7,7 @@
 //! It imports the session, the components (whose endpoint, request and
 //! fault types the wire carries), the host, and the firmware's wire library
 //! as `ra8_rpc_wire`.
+pub const artifacts = @import("artifacts/root.zig");
 pub const backtrace_wire = @import("backtrace_wire.zig");
 pub const build = @import("build.zig");
 pub const build_wire = @import("build_wire.zig");

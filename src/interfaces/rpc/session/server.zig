@@ -7,6 +7,8 @@
 //! after any `uart` events the run produced (RA8EMU-758).
 
 const api = @import("ra8_session").api;
+const artifact_handlers = @import("../artifacts/handlers.zig");
+const artifact_wire = @import("../artifacts/wire.zig");
 const build = @import("../build.zig");
 const build_wire = @import("../build_wire.zig");
 const event_feed = @import("event_feed.zig");
@@ -122,7 +124,7 @@ const session_routes = .{
     .{ @backingInt(M.set_var), session_set_var.setVar },
 };
 
-pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes;
+pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++ artifact_handlers.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -147,6 +149,7 @@ pub const Host = struct {
         if (context.workspace != null) caps |= workspace_wire.capability;
         if (context.build_runner != null) caps |= build_wire.capability;
         if (context.project != null) caps |= project_wire.capability;
+        if (context.artifacts != null) caps |= artifact_wire.capability;
 
         return .{ .server = Server.init(wire, rx, context, caps) };
     }
@@ -161,6 +164,7 @@ pub const Host = struct {
     pub fn poll(self: *Host, tx: []u8) anyerror!rpc.Step {
         const step = try self.server.poll(tx);
         const context = self.server.context;
+        if (context.artifacts) |service| if (service.pending != null) return step;
         try pumpFeeds(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;

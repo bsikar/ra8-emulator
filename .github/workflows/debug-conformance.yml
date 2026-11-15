@@ -184,6 +184,17 @@ jobs:
           python -B tools/project_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/projects" --timeout 600
           if ($LASTEXITCODE -ne 0) { throw 'Project build/debug conformance failed' }
 
+      - name: Session artifacts through CLI, TCP and WebSocket
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          zig build ra8_host_tests -j1 '-Dtest-filter=interfaces.rpc.artifacts'
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact service tests failed' }
+          python -B tools/artifact_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --output "$env:RUNNER_TEMP/debug-conformance/artifacts" --timeout 180
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact transfer conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
