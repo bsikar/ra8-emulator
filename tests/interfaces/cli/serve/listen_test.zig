@@ -120,6 +120,25 @@ test "serve --listen unix:PATH serves a client and removes the path on SIGTERM" 
     try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(std.testing.io, path, .{}));
 }
 
+test "serve --listen unix:PATH unlinks a stale socket file before binding and removes it on exit" {
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try serve_peer.socketPath(gpa, &tmp.sub_path, "stale.sock");
+    defer gpa.free(path);
+    defer std.Io.Dir.cwd().deleteFile(std.testing.io, path) catch {};
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = "stale" });
+    const spec = try std.fmt.allocPrint(gpa, "unix:{s}", .{path});
+    defer gpa.free(spec);
+    var line: [256]u8 = undefined;
+    var started = try listen(spec, &line);
+    errdefer started.child.kill(std.testing.io);
+    try std.testing.expectEqualStrings(spec, started.bound);
+    var connection = try Connection.unix(std.testing.io, path);
+    try session(gpa, &started.child, &connection);
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.cwd().access(std.testing.io, path, .{}));
+}
+
 test "serve --listen unix:PATH exits 0 and removes the path on SIGHUP and SIGQUIT" {
     if (on_windows) return error.SkipZigTest; // POSIX signals do not exist on Windows
     const gpa = std.testing.allocator;

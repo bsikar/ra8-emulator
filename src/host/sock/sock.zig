@@ -14,6 +14,7 @@ const socket_flags = @import("../socket_flags.zig");
 pub const ready = @import("ready.zig");
 pub const afd = @import("afd.zig");
 pub const path = @import("path.zig");
+pub const unix = @import("unix.zig");
 
 pub const Fd = posix.socket_t;
 pub const invalid: Fd = if (on_windows) @import("../win32.zig").invalid_handle else -1;

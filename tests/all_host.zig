@@ -61,11 +61,7 @@ test {
     _ = @import("host/history/pack_file_test.zig");
     _ = @import("host/pipe_pair_test.zig");
     _ = @import("host/socket_flags_test.zig");
-    _ = @import("host/sock/sock_test.zig");
-    _ = @import("host/sock/windows_test.zig");
-    _ = @import("host/sock/ready_test.zig");
-    _ = @import("host/sock/afd_test.zig");
-    _ = @import("host/sock/path_test.zig");
+    _ = @import("host/sock/all_test.zig");
     _ = @import("host/win32_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/host/bytes_test.zig");
