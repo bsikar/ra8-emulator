@@ -31,3 +31,5 @@ pub const diff_wire = @import("diff_wire.zig");
 pub const disasm = @import("disasm.zig");
 pub const disasm_wire = @import("disasm_wire.zig");
 pub const locals_wire = @import("locals_wire.zig");
+pub const set_var = @import("set_var.zig");
+pub const set_var_wire = @import("set_var_wire.zig");

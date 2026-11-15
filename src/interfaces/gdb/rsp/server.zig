@@ -46,6 +46,7 @@ pub fn serve(dispatch: rsp_dispatch.Dispatch, reader: *std.Io.Reader, writer: *s
                 .corrupt, .overflow => try writer.writeByte(packet.resend),
                 .packet => |request| {
                     try writer.writeByte(packet.ack);
+                    try writer.flush();
                     if (std.mem.eql(u8, request, "k")) return .killed;
                     const detach = request.len > 0 and request[0] == 'D';
                     const reply = if (detach) "OK" else try dispatch.answer(request, &payload);

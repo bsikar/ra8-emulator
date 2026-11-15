@@ -26,6 +26,7 @@ ra8_session     src/session/            ra8_board, ra8_chip, ra8_components
 ra8_render      src/interfaces/render/  ra8_session (board composition and encoders)
 ra8_rpc         src/interfaces/rpc/     ra8_session, ra8_components, ra8_host, ra8_rpc_wire
 ra8_gdb         src/interfaces/gdb/     ra8_session, ra8_chip, ra8_host
+ra8_dap         src/interfaces/dap/     ra8_session
 ra8_usbip       src/interfaces/usbip/   ra8_board, ra8_chip, ra8_host
 cli_app         src/interfaces/cli/     every library and ra8_rpc_wire
 Angular PWA     src/interfaces/gui/     browser client of WebSocket RPC; no Zig module
@@ -91,6 +92,9 @@ None of that belongs in the repository. It keeps only what code, tests or
 tools read: README.md, this file, fixture provenance READMEs under
 `tests/fixtures/`, and test goldens such as `tools/*_expected.md` and
 `tests/chip/core/cpu/conformance/coverage.md`.
+
+For hardware facts, query RA8EMU-A-30 first: it indexes the complete searchable
+RA8D2/RA8P1 datasheets, M85/M33/NPU summaries, source revisions and package limits.
 
 ## One file, one purpose
 

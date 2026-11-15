@@ -25,6 +25,7 @@ const fault_status = @import("../../periph/fault/status.zig");
 /// Public so its tests reach it without a root export.
 pub const mpu_check = @import("mpu_check.zig");
 const systick_cut = @import("systick_cut.zig");
+pub const nvic_registers = @import("nvic_registers.zig");
 const itm_port = @import("../../periph/itm.zig");
 
 /// CFSR's banked bits, UFSR and MMFSR (src/chip/periph/scb/bank.zig).
@@ -65,7 +66,22 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct, .lines = memory.lines };
+        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct, .lines = memory.lines, .register_state = .{ .ctx = self, .vtable = &.{ .read = readState, .write = writeState } } };
+    }
+
+    fn readState(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        return self.memory.view().read(address, into);
+    }
+
+    fn writeState(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (self.touched) |t| t.touch(address, true);
+        return self.memory.view().write(address, bytes);
+    }
+
+    fn isSecure(self: *const BoardBus) bool {
+        return if (self.security) |state| state.current == .secure else true;
     }
 
     /// Whether the whole access sits in either peripheral window.
@@ -86,6 +102,10 @@ pub const BoardBus = struct {
 
     fn read(ctx: *anyopaque, given: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (nvic_registers.covers(given)) {
+            if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
+            return nvic_registers.read(self.memory.view(), given, self.isSecure(), into);
+        }
         if (scs_route.wired(self.security, given)) |halves| return self.readSplit(halves, given, into);
         const address = self.landing(given) orelse return @memset(into, 0);
         if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
@@ -136,6 +156,11 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (nvic_registers.covers(given)) {
+            if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
+            if (self.touched) |t| t.touch(given, true);
+            return nvic_registers.write(self.memory.view(), given, self.isSecure(), bytes);
+        }
         if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
         const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;

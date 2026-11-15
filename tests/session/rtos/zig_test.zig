@@ -100,3 +100,15 @@ test "the listener passes the core's fault latch through as a latch" {
     try std.testing.expectEqual(@as(u32, 1 << 25), under.latched);
     try std.testing.expectEqual(@as(u32, 0), under.writes);
 }
+
+test "hardware register state crosses the RTOS listener without becoming a guest store" {
+    var memory: Memory = .{};
+    var registers: Memory = .{};
+    var under = memory.view();
+    under.register_state = .{ .ctx = &registers, .vtable = registers.view().vtable };
+    var tracer = rtos_hook.Tracer{ .address = 0x2200_0000 };
+    var listener = Listener{ .tracer = &tracer };
+    try listener.onBus(under).registers().writeWord(0xE000_E200, 0);
+    try std.testing.expectEqual(@as(u32, 0xE000_E200), registers.last);
+    try std.testing.expectEqual(@as(u32, 0), memory.last);
+}

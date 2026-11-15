@@ -35,3 +35,23 @@ test "parseMem parses valid hex string" {
         else => return error.TestUnexpectedResult,
     }
 }
+
+test "parseWord parses set NAME=VALUE with optional --frame and rejects invalid syntax" {
+    const allocator = std.testing.allocator;
+    const direct = (try write_mod.parseWord(allocator, "set", &.{"g_count=42"})).?;
+    try std.testing.expectEqual(@as(u32, 0), direct.set_var.frame);
+    try std.testing.expectEqualStrings("g_count", direct.set_var.name);
+    try std.testing.expectEqualStrings("42", direct.set_var.value);
+
+    const framed = (try write_mod.parseWord(allocator, "set", &.{ "--frame", "2", "local_x=-1" })).?;
+    try std.testing.expectEqual(@as(u32, 2), framed.set_var.frame);
+    try std.testing.expectEqualStrings("local_x", framed.set_var.name);
+    try std.testing.expectEqualStrings("-1", framed.set_var.value);
+
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{}));
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{"no_equals"}));
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{"=42"}));
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{"g_count="}));
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{ "a=1", "b=2" }));
+    try std.testing.expectError(error.BadArguments, write_mod.parseWord(allocator, "set", &.{ "--frame", "xyz", "a=1" }));
+}

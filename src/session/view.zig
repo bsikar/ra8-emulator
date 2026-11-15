@@ -5,8 +5,10 @@
 //! them does.
 const std = @import("std");
 const disasm = @import("disasm.zig");
+const annotate = @import("annotate.zig");
 const core_view = @import("core_view.zig");
 const registers_list = @import("registers.zig");
+const elf = @import("ra8_board").image.elf;
 
 pub const limits = struct {
     /// Words on one line of `x`.
@@ -52,8 +54,9 @@ pub fn word(out: anytype, core: core_view.View, text: []const u8, address: u32) 
     try out.print("{s} = 0x{X:0>8} ({d})\n", .{ text, read, read });
 }
 
-/// The instruction at `address`, and how many bytes it takes.
-pub fn instruction(out: anytype, core: core_view.View, address: u32) !u32 {
+/// The instruction at `address`, named by the image when the image puts a
+/// name on where it goes, and how many bytes it takes.
+pub fn instruction(out: anytype, core: core_view.View, image: ?elf.Image, address: u32) !u32 {
     var bytes: [4]u8 = undefined;
     core.read(address, bytes[0..2]) catch {
         try out.print("<unreadable>", .{});
@@ -65,10 +68,12 @@ pub fn instruction(out: anytype, core: core_view.View, address: u32) !u32 {
         try out.print("<unreadable>", .{});
         return width;
     };
-    const text = disasm.one(address, bytes[0..width]) catch {
+    const decoded = disasm.one(address, bytes[0..width]) catch {
         try out.print("<undecoded 0x{X:0>4}>", .{first});
         return width;
     };
-    try out.print("{s}", .{text.slice()});
+    var named = decoded;
+    if (image) |found| annotate.line(found, &named);
+    try out.print("{s}", .{named.slice()});
     return width;
 }

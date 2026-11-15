@@ -34,6 +34,43 @@ zig build                       # zig-out/bin/ra8_emulator
 zig build gate                  # zig fmt --check, file and function length, terms
 ```
 
+## Toolchain planning
+
+The backend executable and firmware compiler are separate installations.
+Export the versioned toolchain decision and requirements for a host/target:
+
+```sh
+ra8_emulator toolchain plan x86_64-linux ra8d2 --cache-root /private/cache --offline
+ra8_emulator toolchain plan x86_64-windows fpb-ra8e1 --backend-zig C:/tools/zig.exe
+```
+
+Baseline host plans are `x86_64-linux`, `x86_64-windows`, `aarch64-macos`
+and `x86_64-macos`; targets are
+`ra8d2`, `ra8p1`, `fpb-ra8e1`, `fpb-ra4t1` and `grove-vision-ai-v2`.
+This prints a plan and performs no installation, tool execution or device
+operation. An offline plan does not certify an installed compiler or SDK.
+The output names pinned Zig archives, full-distribution requirements and
+the separate SDK, probe, driver, flash-image and model-tool gates.
+
+`--project-zig` takes precedence over `--backend-zig`, then the proposed
+verified managed cache. Explicit paths are absolute for the selected host;
+Windows requires a drive or UNC share. Invalid explicit overrides refuse
+without fallback. Baseline archive hashes do not authenticate custom tools.
+Managed provisioning is separate; physical flashing remains blocked until
+the selected target's tools, access and reservation are verified.
+
+The distribution decision and offline/remote limits are recorded in
+RA8EMU-A-65. The public clean-toolchain test accepts a pinned archive or an
+explicit download and records real firmware-build and DAP source checks:
+
+```sh
+python -B tools/toolchain_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --download --output /tmp/toolchain-proof --timeout 480
+```
+
+Append `.exe` on Windows. This test installs only into its fresh evidence
+directory; it performs no physical flashing or production provisioning.
+
 ## Emulator
 
 ```sh
@@ -53,9 +90,27 @@ arguments to list every option.
 ra8_emulator app.elf --debug                 # interactive, at the terminal
 ra8_emulator app.elf --debug-script run.gdb  # play a script, print the transcript
 ra8_emulator app.elf --gdb 3333              # serve gdb, each core a thread
+ra8_emulator dap 4711 app.elf               # DAP attach on 127.0.0.1:4711
+ra8_emulator dap 4711                       # DAP launch supplies program
 ```
 
-`--cpu1` brings up the second core in any of them, and `core 1` selects it.
+`--cpu1` brings up the second core in the terminal and GDB modes, and
+`core 1` selects it.
+The DAP listener serves one TCP client, then exits on disconnect or EOF.
+Configure an editor's DAP client to connect to that port with `request:
+"attach"`, or use `request: "launch"` and `program: "/path/to/app.elf"`
+without a preloaded image. `stopOnEntry` defaults to true. Send
+`configurationDone` after setting breakpoints. Source breakpoints use the
+ELF's DWARF paths. Instruction breakpoints take hexadecimal address strings.
+Stepping is at instruction granularity, with call-aware `next` and
+`stepOut`. Clients must request `granularity: "instruction"`; omitted
+granularity and source-level stepping are explicitly refused.
+Registers and supported DWARF locals are read at the innermost frame.
+Unavailable local locations and caller scopes are left unavailable.
+Conditional/log breakpoints, expression evaluation, URI source paths and
+reverse execution are unsupported. This adapter does not enable history
+recording. The listener uses Session directly and does not connect to a
+separate `serve` process. Editor-specific extension packaging is separate.
 An ordinary run takes breakpoints and dumps too: `--break-sym`, `--watch`,
 `--dump-regs` and `--dump-mem`. `serve` and `ctl` run a session in one
 process and drive it from another, locally or over TCP. The TCP RPC listener
@@ -72,6 +127,237 @@ is already available in `src/interfaces/gui/client/`. The native Zig/SDL GUI
 has been retired on `dev`; its reference implementation remains on the
 `BSIKAR/time-travel` branch. The PWA application is still to be implemented.
 
+
+## Debugger conformance
+
+Build the emulator and deterministic firmware separately before running the
+public-client checks. These commands use Python 3.12 and a real
+`gdb-multiarch` (or an explicit path to `arm-none-eabi-gdb`). On Windows,
+append `.exe` to the emulator path and run the shell commands in Git Bash.
+
+```sh
+zig build -j1
+zig build debug-fixtures -j1
+proof=$(mktemp -d)
+python -B tools/gdb_conformance/oracle.py \
+  --fixture zig-out/bin/debug_conformance.elf \
+  --fault-fixture zig-out/bin/debug_fault.elf \
+  --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf \
+  --output "$proof/oracle.json"
+python -B tools/dap_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf \
+  --oracle "$proof/oracle.json" --output "$proof/dap"
+bash tools/gdb_batch.sh --conformance --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf \
+  --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf \
+  --oracle "$proof/oracle.json" \
+  --output "$proof/gdb" --gdb gdb-multiarch
+```
+
+The independent ELF oracle binds assertions to fixture bytes, exported
+instruction labels, DWARF source rows and known values. Each driver starts
+fresh emulator processes, records bounded expected-versus-actual checks and
+sanitized transcripts, and writes a terminal `result.json`. The DAP driver
+checks launch/attach, breakpoints, calls across execution slices, inspection,
+pause, framing errors and connection loss. The existing GDB batch entry
+point also checks real-GDB memory access, call frames and CPU1. Unsupported
+combinations are recorded explicitly. The `debug-conformance` CI workflow
+runs portable DAP on Linux, Windows and macOS and pinned real GDB on Linux, keeping
+its transcripts as artifacts.
+
+The separate editor harness uses VS Code's native debug client in an
+isolated extension host and Neovim's real `nvim-dap` client. It preserves
+normal editor settings and requires an explicit native VS Code executable
+and a checkout of `nvim-dap` at the revision its runner checks:
+
+```sh
+python -B tools/editor_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --oracle "$proof/oracle.json" \
+  --editor both --code /path/to/Code --nvim-dap /path/to/nvim-dap \
+  --output "$proof/editors"
+```
+
+Editor results identify extension-host/headless automation and set
+`manual_ui_verified` to false. Human UI acceptance is recorded separately
+from these reproducible client checks.
+
+## Backend builds
+
+`serve --workspace DIR --build-zig /absolute/path/to/zig` enables trusted
+RPC clients to run Zig builds on the backend host. On Windows pass the
+absolute path to `zig.exe`. Build scripts execute with the backend user's
+permissions; enable this only for trusted projects and clients. Use the
+existing secured remote transport for a server reached from another device.
+The compiler is explicitly configured; managed provisioning is separate.
+
+Capability bit 17 advertises `ra8.rpc.build_wire`: start/status/cancel at
+`0x0160` through `0x0162`, output/diagnostic events on `0x0181`, and one
+completion on `0x0182`. A start supplies an optional step name, a JSON array
+of at most 16 `-D` options, an optional output-relative ELF path, and a
+100 ms through 600 s deadline. The owning connection can cancel its job;
+disconnect terminates the owned process tree and joins its worker.
+One job runs per backend, while file and control RPC remain responsive.
+
+Each job gets an exclusive `.ra8-builds/<id>/out` prefix, stdout/stderr logs,
+and `result.json`. The result records host, platform, explicit compiler and
+reported version, exact arguments, source content revision, exit/cleanup
+status, and the selected ELF's SHA256. Only a successful build with matching
+before/after workspace content revisions publishes an artifact. This is an
+optimistic change check, not an immutable source snapshot. Nothing automatically loads it into Session.
+Failed/canceled jobs never fall back to earlier artifacts; previous job
+directories remain available. Compilation without artifact selection is
+supported by an empty artifact path.
+
+Source hashing covers at most 10,000 regular workspace entries, 32 directory
+levels and 256 MiB, rejecting links and special files. `.git`, `.zig-cache`,
+`zig-out` and `.ra8-builds` are excluded. External package dependencies are
+not sealed by this revision. ELF hashing is capped at 64 MiB. Live output
+uses a 64-chunk queue with sequence gaps and an explicit truncation flag;
+retained output is capped at 16 MiB, with excess output failing the job.
+Diagnostics give workspace-relative file/line/column when available and mark
+external paths explicitly. Linux/macOS process groups and Windows job objects
+provide cancellation; other host platforms do not advertise this service.
+
+The public real-compiler harness runs on Linux, Windows, and Apple Silicon/Intel macOS CI:
+
+```sh
+python -B tools/build_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture zig-out/bin/debug_conformance.elf --zig /absolute/path/to/zig \
+  --output /tmp/build-proof
+```
+
+The fresh-source regression builds a dependency-free firmware project in a
+new directory and checks absolute source breakpoints and stack paths through
+public DAP, including a wrong-directory filename control:
+
+```sh
+python -B tools/source_conformance/run.py --emulator zig-out/bin/ra8_emulator \
+  --zig /absolute/path/to/zig --output /tmp/source-directory-proof
+```
+
+Append `.exe` on Windows. The compiler is explicitly selected; this test
+requires Zig 0.17.0 and records the actual compiler, source and ELF hashes.
+
+## Projects and verified debug handoff
+
+Project capability bit 18 is enabled by `serve --workspace DIR`. Project RPC
+open/close/build/prepare use `0x0170` through `0x0173`. Open takes a
+workspace-relative config filename, build selects a named recipe, and
+prepare takes the successful current build ID. Existing build status,
+cancel and output events apply to project jobs. While a project is open,
+raw build-start requests are refused so they cannot bypass its recipes.
+Close or disconnect cancels and joins the project build and restores the
+base workspace. The base directory is the authorized boundary; a project's
+root is relative to it and never follows descendant links.
+Project builds require a regular `build.zig` at that root and pass an
+explicit `--build-file`, preventing Zig's implicit search through parents.
+
+A version-one config can contain:
+
+```json
+{
+  "version": 1,
+  "root": "firmware",
+  "target": "ra8d2",
+  "recipes": [
+    {"name": "debug", "artifact": "bin/firmware.elf", "timeout_ms": 300000}
+  ],
+  "source_mappings": [
+    {"host": ".", "client": "C:/client-only/project"}
+  ]
+}
+```
+
+Optional config `compiler` overrides the explicit backend compiler without
+PATH discovery or fallback after an invalid override. A recipe can also
+specify `step` and `options`, the latter a JSON-encoded array of at most
+16 `-D` arguments, as in the build wire contract. Configs are bounded to
+64 KiB, 16 recipes and 16 source mappings. Unknown versions, targets,
+duplicate recipes/mappings and escaping paths are refused.
+
+Prepare retains `.ra8-builds/<id>/project.json` beside the original result.
+The receipt binds config SHA256, target, recipe, build ID, compiler/version,
+source revision and exact ELF SHA256. Failed, canceled or active builds
+cannot prepare a receipt or substitute an older selection. Loading verifies
+the paired original successful result, recipe arguments, current config,
+source and actual ELF bytes before Session receives them. Explicitly
+loading an earlier receipt in a newly opened project still requires the
+matching config and sources. Receipts are provenance records in the trusted
+workspace, not signed attestations for untrusted files.
+
+The local CLI calls the same host API without an RPC roundtrip:
+
+```sh
+ra8_emulator project build /server/workspace project.json debug --zig /absolute/path/to/zig
+ra8_emulator project dap 0 /server/workspace project.json --zig /absolute/path/to/zig
+```
+
+Build prints the relative receipt path and ID as JSON. The second command
+opens a loopback DAP listener; launch supplies that receipt path as
+`program`, relative to the configured project root. The application or
+remote host controller owns this DAP process. Source breakpoints and stack
+paths translate between configured client and server prefixes. Missing,
+changed or unmapped sources produce explicit errors, without presenting an
+older file as current. Source revisions remain optimistic content checks,
+with the build service's limits and dependency exclusions above. Rebuilds
+use distinct artifacts; disconnect and relaunch against the chosen receipt
+to reload Session. Existing plain `dap` behavior and locals availability
+are preserved.
+
+Targets describe build profiles. Project DAP currently accepts `ra8d2`;
+other profiles return `UnsupportedProjectDebugTarget` until their machine
+profiles are implemented. Compiler/SDK provisioning and physical flashing
+are separate services. This adds no frontend or editor UI.
+
+## Workspace filesystem
+
+An explicit workspace root enables the backend file service for connected
+RPC clients. The root stays open for the lifetime of `serve`:
+
+```sh
+ra8_emulator serve --workspace /path/to/project --listen tcp::0 firmware.elf
+```
+
+Without `--workspace`, file methods refuse and capability bit 16 is absent.
+The typed contract is `ra8.rpc.workspace_wire`: methods `0x0140`–`0x0145`
+list, stat, read, write, watch and unwatch. Listing returns a bounded page of
+JSON name/kind entries; read supports byte offsets. Paths are relative to
+the selected root, accept slash or backslash separators, and refuse parent
+traversal, absolute paths, alternate streams and descendant symlinks.
+This grants trusted connected clients read/write access within that root.
+
+Stat and read supply a version containing file kind, size, modification
+time and identity. `encodeVersion` makes the 25-byte token a write request
+must return; `decodeVersion` reads tokens in read/change replies. A missing
+version means exclusive creation. Existing-file saves check the version,
+stage and sync a sibling file, recheck, then atomically replace. Stale saves
+refuse without truncating the original. Advisory locks coordinate cooperating
+writers; this is optimistic conflict detection, not a transaction against
+external programs that ignore locks or deliberately preserve metadata.
+
+Limits are 4096 path bytes, 256 KiB per read/write, 64 entries per listing
+page and an offset of at most 65,536 entries. Each connection can watch eight
+paths. Watches reconcile one path every 100 ms and send `Change` events on
+topic `0x0180`; directory watches inspect at most 1024 direct children,
+including metadata changes to existing children. They coalesce changes and
+are nonrecursive. A directory that exceeds the bound refuses registration;
+later observation failures emit `unavailable` and release the watch.
+Unwatch/disconnect clears the connection's watches; stale IDs are refused.
+File size, time and identity changes are observed; edits preserving all
+those metadata fields are outside this polling contract.
+
+The public-client smoke test builds no code and records assertions, protocol
+transcripts and owned-process cleanup in a fresh evidence directory:
+
+```sh
+python -B tools/workspace_smoke/run.py --emulator zig-out/bin/ra8_emulator \
+  --fixture tests/fixtures/uart/uart_irq_echo.elf --output /tmp/workspace-proof
+```
+
+Append `.exe` on Windows. `--require-native-links` requires native final-file
+and ancestor-link containment proof; Linux CI enables it. Windows records
+unavailable symlink privileges separately and still tests a native directory
+junction. Both platforms run the public-client check in CI.
 
 ## Rebuilt-ELF replay
 

@@ -18,6 +18,42 @@ const dwt = ra8.chip.periph.dwt;
 const watch_table = ra8.session.watch.table;
 const Store = ra8.chip.core.cpu.memory.store.Store;
 
+const PeekProbe = struct {
+    reads: usize = 0,
+    peeks: usize = 0,
+    fn read(ctx: *anyopaque, _: u32, into: []u8) bus.Error!void {
+        const self: *PeekProbe = @ptrCast(@alignCast(ctx));
+        self.reads += 1;
+        @memset(into, 0);
+    }
+    fn write(_: *anyopaque, _: u32, _: []const u8) bus.Error!void {}
+    fn peek(ctx: *anyopaque, _: u32, into: []u8) bool {
+        const self: *PeekProbe = @ptrCast(@alignCast(ctx));
+        self.peeks += 1;
+        @memset(into, 0xA5);
+        return true;
+    }
+};
+
+test "debugger peeks pass through an armed watch bus without guest reads or watch hits" {
+    var probe: PeekProbe = .{};
+    var machine: stop_machine.Machine = .{};
+    _ = try machine.addWatch(.{ .first = 0x40358100, .last = 0x40358103, .kind = .read });
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .driver = &driver, .inner = .{
+        .ctx = &probe,
+        .vtable = &.{ .read = PeekProbe.read, .write = PeekProbe.write, .peek = PeekProbe.peek },
+    } };
+    watching.arm(0x22000000, 2);
+    var bytes: [4]u8 = undefined;
+    try std.testing.expect(watching.view().peek(0x40358100, &bytes));
+    try std.testing.expect(watching.view().peek(0x40358100, &bytes));
+    try std.testing.expectEqualSlices(u8, &.{ 0xA5, 0xA5, 0xA5, 0xA5 }, &bytes);
+    try std.testing.expectEqual(@as(usize, 0), probe.reads);
+    try std.testing.expectEqual(@as(usize, 2), probe.peeks);
+    try std.testing.expectEqual(@as(usize, 0), machine.hits_len);
+}
+
 /// The program tests/session/zig/script_test.zig uses: a loop at +0x18
 /// calling a helper at +0x8 that adds r0 into the word at 0x22000054.
 const image = struct {
@@ -248,4 +284,30 @@ test "a quiet bus listens only to the PPB, and a store there ends the stretch" {
     listening.quiet = false;
     try view.write(image.base + 0x100, &[_]u8{ 2, 0, 0, 0 });
     try std.testing.expect(machine.arrivals().len > 0);
+}
+
+test "NVIC acknowledgment crosses quiet, cut and watch adapters without a guest write" {
+    var rig: Board = .{};
+    try rig.open();
+    defer rig.close();
+    var machine: stop_machine.Machine = .{};
+    _ = try machine.addWatch(.{ .first = memmap.nvic.ispr, .last = memmap.nvic.ispr + 3, .kind = .write });
+    var driver: step_hook.Driver = .{ .machine = &machine };
+    var watching: watch_bus.WatchBus = .{ .inner = rig.board.view(), .driver = &driver };
+    var clock: ra8.chip.periph.clocks.Clocks = .{};
+    var cut: ra8.chip.core.cpu.cpu.systick_cut.Cut = .{ .clocks = .{ &clock, null } };
+    var cutting: ra8.session.zig.cut_bus.CutBus = .{ .inner = watching.view(), .cut = &cut };
+    var pending: ra8.chip.core.cpu.exception.nvic_source.NvicSource = .{};
+    var quiet: ra8.chip.core.cpu.exception.quiet_source.QuietSource = .{ .inner = pending.source(), .memory = cutting.view() };
+    pending.clear_due = &quiet.clear_due;
+    const through = quiet.bus();
+    try through.writeWord(memmap.nvic.iser, 3);
+    try through.writeWord(memmap.nvic.ispr, 3);
+    machine.begin();
+    watching.arm(0x22000000, 2);
+    const first = (try quiet.source().winner(through)).?;
+    try std.testing.expectEqual(@as(u9, 16), first.number);
+    try quiet.source().taken(through, first.number);
+    try std.testing.expectEqual(@as(u32, 2), try through.readWord(memmap.nvic.ispr));
+    try std.testing.expectEqual(@as(usize, 0), machine.hits_len);
 }

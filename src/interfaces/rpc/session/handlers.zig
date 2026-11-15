@@ -1,6 +1,9 @@
-//! The session RPC handlers: one thin adapter per method onto the Session
-//! API (RA8EMU-735). Handlers never see bytes; server.zig routes.
+//! Session RPC handlers and per-connection resources (RA8EMU-735).
 const std = @import("std");
+const session_lib = @import("ra8_session");
+const host = @import("ra8_host");
+const workspace_watch = @import("../workspace_watch.zig");
+const nav_hooks = @import("nav_hooks.zig");
 const rpc = @import("ra8_rpc_wire");
 const proto = @import("rpc.zig");
 const load_chunks = @import("load_chunks.zig");
@@ -29,7 +32,7 @@ pub const Mapping = struct {
     /// A core's last loaded image's main stack reservation (RA8EMU-816).
     stackFn: ?*const fn (*anyopaque, usize) ?region_map.Stack = null,
     /// A core's last loaded image, for backtrace names (RA8EMU-1125).
-    imageFn: ?*const fn (*anyopaque, usize) ?@import("ra8_session").symbols.Image = null,
+    imageFn: ?*const fn (*anyopaque, usize) ?session_symbols.Image = null,
 };
 
 /// Writes peripheral blocks or one block's registers (RA8EMU-818).
@@ -38,8 +41,7 @@ pub const Peripherals = struct {
     listFn: *const fn (*anyopaque, usize, []const u8, bool, []u8) anyerror![]const u8,
 };
 
-/// Folds sampled call stacks (RA8EMU-833); error.NothingSampled on an
-/// empty window and thread.
+/// Folds stacks; error.NothingSampled on an empty window/thread (RA8EMU-833).
 pub const Folding = struct {
     context: *anyopaque,
     foldFn: *const fn (*anyopaque, usize, ?u32, u64, u64, []u8) anyerror![]const u8,
@@ -50,8 +52,7 @@ pub const Listing = struct {
     listFn: *const fn (*anyopaque, []u8) anyerror![]const u8,
 };
 
-/// Turns RTOS tracing on (RA8EMU-832); nothing on the trace topic without
-/// it. Reads a thread's name from its TX_THREAD; empty without it.
+/// Turns RTOS tracing on (RA8EMU-832); reads names from TX_THREAD.
 pub const TraceOn = struct {
     context: *anyopaque,
     onFn: *const fn (*anyopaque) bool,
@@ -75,6 +76,14 @@ const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,
+    project: ?*host.project.Project = null,
+    project_base_workspace: ?*host.workspace.Workspace = null,
+    project_base_runner: ?*host.build.Runner = null,
+    workspace: ?*host.workspace.Workspace = null,
+    workspace_watches: workspace_watch.Table = .{},
+    build_runner: ?*host.build.Runner = null,
+    build_id: u64 = 0,
+    build_completion_sent: bool = false,
     /// Holds read_memory replies; its length caps one read.
     scratch: []u8,
     /// The last run's stop, until Host.poll sends it.
@@ -104,7 +113,7 @@ pub const Context = struct {
     /// Owns captured panel frames; null, or no display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.
-    state: ?@import("ra8_session").board.state.Hook = null,
+    state: ?session_lib.board.state.Hook = null,
     listing: ?Listing = null, // fitted parts; null refuses list_parts
     board_profile: ?*const board_lib.profile.Profile = null, // board_parts (RA8EMU-1152)
     camera: ?Camera = null, // camera source; null refuses set_camera_source
@@ -116,7 +125,7 @@ pub const Context = struct {
     folding: ?Folding = null,
     clock: ?session_rtc.Clock = null, // rtc counters; null refuses `rtc`
     /// Loaded ThreadX modules' symbols, asked before the image's (RA8EMU-1141).
-    modules: ?*@import("ra8_session").txm.debug.Table = null,
+    modules: ?*session_lib.txm.debug.Table = null,
     /// Turns RTOS tracing on when a client first wants the trace topic.
     trace_on: ?TraceOn = null,
     /// Reads a thread's name for the trace topic.
@@ -135,7 +144,7 @@ pub const Context = struct {
     advance_target_ns: u64 = 0,
     advance_core: proto.Core = .cpu0,
     transport_epoch: u64 = 0, // epoch last reported on the transport topic
-    nav: @import("nav_hooks.zig").Hooks = .{}, // application hooks of the navigation requests
+    nav: nav_hooks.Hooks = .{}, // application hooks of the navigation requests
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
         return self.topics[@backingInt(of)] & bit(topic) != 0;
@@ -244,9 +253,7 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
     return ack;
 }
 
-/// `break NAME` (RA8EMU-1141): placed where the name resolves now, the
-/// module table asked before the image; an unknown name waits for its
-/// module to load.
+/// `break NAME` resolves modules before the image, waiting if unknown (RA8EMU-1141).
 pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome(proto.NamedPoint) {
     const which = core(args.core);
     if (context.modules) |table| if (table.addressOf(args.name)) |address|
@@ -264,7 +271,7 @@ fn placeNamed(context: *Context, which: api.Core, address: u32) rpc.Outcome(prot
     return .{ .ok = .{ .id = id, .address = address, .deferred = 0 } };
 }
 
-fn imageOf(context: *Context, which: api.Core) ?@import("ra8_session").symbols.Image {
+pub fn imageOf(context: *Context, which: api.Core) ?session_symbols.Image {
     const mapping = context.mapping orelse return null;
     const imageFn = mapping.imageFn orelse return null;
     return imageFn(mapping.context, @backingInt(which));
@@ -272,7 +279,7 @@ fn imageOf(context: *Context, which: api.Core) ?@import("ra8_session").symbols.I
 
 pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32) {
     if (args.last < args.first) return .{ .err = .bad_args };
-    const kind = std.meta.stringToEnum(@FieldType(@import("ra8_session").watch.table.Watch, "kind"), @tagName(args.access)) orelse
+    const kind = std.meta.stringToEnum(@FieldType(session_lib.watch.table.Watch, "kind"), @tagName(args.access)) orelse
         return .{ .err = .bad_args };
     const id = context.session.setWatchpoint(core(args.core), .{ .first = args.first, .last = args.last, .kind = kind }) catch |err|
         return refuse(proto.U32, err);
@@ -328,35 +335,9 @@ pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
     return ack;
 }
 
-/// Drop every subscription, as a new connection starts with none.
-pub fn forget(context: *Context) void {
-    context.topics = .{ 0, 0 };
-    context.pending = null;
-    context.advance_ticket = null;
-    context.advance_from_ns = 0;
-    context.advance_target_ns = 0;
-    context.transport_epoch = 0;
-    context.lcd_rate = .{ 0, 0 };
-    context.lcd_pending = .{ null, null };
-    context.lcd_holds = 0;
-    release(context, &context.uart_feed);
-    unwatch(context);
-    release(context, &context.session_feed);
-    release(context, &context.trace_feed);
-}
-
-/// Give up the panel feed, and the watch on the panel that came with it.
-fn unwatch(context: *Context) void {
-    if (context.lcd_feed == null) return;
-    release(context, &context.lcd_feed);
-    if (context.session.display) |display| display.watch(false);
-}
-
-fn release(context: *Context, feed: *?usize) void {
-    const id = feed.* orelse return;
-    context.session.unsubscribe(id);
-    feed.* = null;
-}
+pub const forget = @import("connection.zig").forget;
+const release = @import("connection.zig").release;
+const unwatch = @import("connection.zig").unwatch;
 
 pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
     _ = args;

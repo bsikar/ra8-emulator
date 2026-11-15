@@ -1,0 +1,194 @@
+name: debug-conformance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  public-clients:
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+
+      - name: Install verified Zig 0.17.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $platform = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $expected = @{
+            'x86_64-windows' = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+            'x86_64-linux' = '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+            'aarch64-macos' = 'b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a'
+            'x86_64-macos' = '4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6'
+          }[$platform]
+          $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
+          curl -fsSL --retry 3 -o $archive "https://ziglang.org/download/0.17.0/zig-$platform-0.17.0.$extension"
+          if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Zig SHA256 mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'debug-zig'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          tar -xf $archive -C $destination
+          if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' }
+          Join-Path $destination "zig-$platform-0.17.0" | Add-Content -Path $env:GITHUB_PATH
+
+      - name: Record exact checkout and tools
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'debug-conformance'
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $head = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot identify checkout' }
+          $zigVersion = (zig version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $zigVersion -ne '0.17.0') { throw 'Wrong Zig version' }
+          $pythonVersion = (python --version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $pythonVersion -ne 'Python 3.12.10') { throw 'Wrong Python version' }
+          @{git_head=$head; zig=$zigVersion; python=$pythonVersion; runner_os=$env:RUNNER_OS; runner_arch=$env:RUNNER_ARCH} |
+            ConvertTo-Json | Set-Content -Path (Join-Path $output 'environment.json')
+
+      - name: Build emulator
+        id: emulator
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          zig build -j1 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/debug-conformance/build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Emulator build failed' }
+
+      - name: Build deterministic firmware separately
+        id: fixtures
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          zig build debug-fixtures -j1 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP/debug-conformance/fixture-build.log"
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture build failed' }
+
+      - name: Native macOS process ownership and output tests
+        if: runner.os == 'macOS'
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          zig build ra8_host_tests -j1 '-Dtest-filter=host.build'
+          if ($LASTEXITCODE -ne 0) { throw 'Native macOS build-process tests failed' }
+
+      - name: Derive independent ELF oracle
+        id: oracle
+        shell: pwsh
+        run: |
+          python tools/gdb_conformance/oracle.py --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf --cpu1-fixture zig-out/bin/debug_cpu1.elf --peripheral-fixture zig-out/bin/debug_peripheral.elf --output "$env:RUNNER_TEMP/debug-conformance/oracle.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture oracle failed' }
+
+      - name: Public DAP end-to-end matrix
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          python tools/dap_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --fault-fixture zig-out/bin/debug_fault.elf --oracle "$env:RUNNER_TEMP/debug-conformance/oracle.json" --output "$env:RUNNER_TEMP/debug-conformance/dap" --overall-timeout 180 --request-timeout 5 --startup-timeout 15 --pause-timeout 2
+          if ($LASTEXITCODE -ne 0) { throw 'DAP conformance failed' }
+
+      - name: Install pinned real GDB on Linux
+        id: gdb
+        if: always() && runner.os == 'Linux' && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success' && steps.oracle.outcome == 'success'
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdb=15.0.50.20240403-0ubuntu1 gdb-multiarch=15.0.50.20240403-0ubuntu1
+          test "$(dpkg-query -W -f='${Version}' gdb-multiarch)" = '15.0.50.20240403-0ubuntu1'
+          gdb-multiarch --version > "$RUNNER_TEMP/debug-conformance/gdb-version.txt"
+
+      - name: Real GDB through existing batch harness
+        if: always() && runner.os == 'Linux' && steps.gdb.outcome == 'success'
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          timeout 240 bash tools/gdb_batch.sh --conformance --emulator ./zig-out/bin/ra8_emulator --fixture ./zig-out/bin/debug_conformance.elf --oracle "$RUNNER_TEMP/debug-conformance/oracle.json" --output "$RUNNER_TEMP/debug-conformance/gdb" --gdb gdb-multiarch --expected-gdb-version 15.0.50.20240403 --cpu1-fixture ./zig-out/bin/debug_cpu1.elf --fault-fixture ./zig-out/bin/debug_fault.elf --peripheral-fixture ./zig-out/bin/debug_peripheral.elf
+
+      - name: Workspace filesystem through public RPC
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 3
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $workspaceArgs = @('-B', 'tools/workspace_smoke/run.py', '--emulator', "zig-out/bin/ra8_emulator$suffix", '--fixture', 'zig-out/bin/debug_conformance.elf', '--output', "$env:RUNNER_TEMP/debug-conformance/workspace", '--timeout', '120')
+          if (-not $IsWindows) { $workspaceArgs += '--require-native-links' }
+          python @workspaceArgs
+          if ($LASTEXITCODE -ne 0) { throw 'Workspace filesystem conformance failed' }
+
+      - name: Backend builds through public RPC with real Zig
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 7
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          python -B tools/build_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/builds" --timeout 360
+          if ($LASTEXITCODE -ne 0) { throw 'Backend build conformance failed' }
+
+      - name: Fresh compiler source directory through public DAP
+        if: always() && steps.emulator.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 6
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          python -B tools/source_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/source-directory" --timeout 300
+          if ($LASTEXITCODE -ne 0) { throw 'Fresh source-directory conformance failed' }
+
+      - name: Toolchain policy and clean compiler build/debug flow
+        if: always() && steps.emulator.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 11
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
+          python -B tools/toolchain_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --archive $archive --output "$env:RUNNER_TEMP/debug-conformance/toolchain" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Clean toolchain policy/build/debug conformance failed' }
+
+      - name: Project lifecycle and verified handoff unit tests
+        if: always() && steps.emulator.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          zig build ra8_host_tests -j1 '-Dtest-filter=project'
+          if ($LASTEXITCODE -ne 0) { throw 'Project lifecycle unit tests failed' }
+
+      - name: Projects through public RPC and receipt-only DAP
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
+        shell: pwsh
+        timeout-minutes: 11
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          python -B tools/project_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/projects" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Project build/debug conformance failed' }
+
+      - name: Preserve terminal results and sanitized transcripts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: debug-conformance-${{ matrix.os }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/debug-conformance
+          if-no-files-found: error
+          retention-days: 14

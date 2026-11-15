@@ -35,6 +35,7 @@ const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 pub const protect = @import("protect.zig");
 pub const route = @import("route.zig");
+pub const capabilities = @import("capabilities.zig");
 
 pub const win_base: u32 = 0x4040_0800;
 pub const win_span: u32 = 0x580;
@@ -61,13 +62,15 @@ pub const Pfs = struct {
     ordering: route.Route = .{},
     /// Pin writes that landed, so a refusal count has something to sit beside.
     programmed: u32 = 0,
+    /// Stores whose written PDR bit the physical pad cannot support.
+    direction_refused: u32 = 0,
 
     pub fn init() Pfs {
         return .{};
     }
 
     pub fn quiet(self: *const Pfs) bool {
-        return self.programmed == 0 and self.guard.quiet() and self.ordering.quiet();
+        return self.programmed == 0 and self.direction_refused == 0 and self.guard.quiet() and self.ordering.quiet();
     }
 
     /// The flat index a pin sits at, the firmware's own (port * 16) + pin.
@@ -112,7 +115,12 @@ pub const Pfs = struct {
             }
             const index = offset / 4;
             const standing = self.entries[index];
-            const merged = lanes.merge(standing, lanes.lane(offset), width, value);
+            const requested = lanes.merge(standing, lanes.lane(offset), width, value);
+            const pad = capabilities.get(index / limits.pin_count, index % limits.pin_count);
+            const written = lanes.merge(0, lanes.lane(offset), width, 0xFFFF_FFFF);
+            const output = requested & capabilities.field.pdr != 0;
+            if (written & capabilities.field.pdr != 0 and pad.direction(output) != output) self.direction_refused +%= 1;
+            const merged = pad.sanitize(requested);
             self.ordering.observe(standing, merged);
             self.entries[index] = merged;
             self.programmed +%= 1;

@@ -62,6 +62,31 @@ test "FILE:LINE is told apart from the other places" {
     try std.testing.expectEqual(@as(?session_source.FileLine, null), session_source.fileLine("fw.zig:x"));
 }
 
+test "DWARF path roots distinguish absolute names from drive-relative names" {
+    for ([_][]const u8{ "/src/main.zig", "C:/src/main.zig", "c:\\src\\main.zig", "\\\\server\\share\\main.zig", "\\src\\main.zig" }) |path| {
+        try std.testing.expect(find.absolute(path));
+    }
+    for ([_][]const u8{ "", "main.zig", "src/main.zig", "C:main.zig", "C:", "1:/main.zig" }) |path| {
+        try std.testing.expect(!find.absolute(path));
+    }
+}
+
+test "Windows source paths match native editor separators and casing" {
+    const file = ra8.session.dwarf.line.File{ .directory = "C:\\Project\\", .name = "src\\Main.zig" };
+    try std.testing.expect(find.named(file, "c:/project/src/main.zig"));
+    try std.testing.expect(find.named(file, "C:\\PROJECT\\src\\Main.zig"));
+    try std.testing.expect(find.named(file, "MAIN.ZIG"));
+    try std.testing.expect(!find.named(file, "D:/Project/src/Main.zig"));
+    try std.testing.expect(!find.named(file, "c:/project/other/Main.zig"));
+    try std.testing.expect(!find.named(file, "ain.zig"));
+    const absolute = ra8.session.dwarf.line.File{ .directory = "D:/wrong", .name = "C:\\Project\\src\\Main.zig" };
+    try std.testing.expect(find.named(absolute, "c:/project/src/main.zig"));
+    try std.testing.expect(!find.named(absolute, "D:/wrong/Main.zig"));
+    const posix = ra8.session.dwarf.line.File{ .directory = "/project", .name = "src/Main.zig" };
+    try std.testing.expect(find.named(posix, "/project/src/Main.zig"));
+    try std.testing.expect(!find.named(posix, "/project/src/main.zig"));
+}
+
 // Directory none; file "a.c". set_address 0x1000; advance_line +2; copy
 // (0x1000, line 3); advance_pc 1 op; advance_line +1; set_prologue_end;
 // copy (0x1002, line 4); advance_pc 1 op; end_sequence at 0x1004.

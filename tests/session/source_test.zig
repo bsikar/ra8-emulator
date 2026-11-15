@@ -49,6 +49,13 @@ test "an image with no line table, or a damaged one, has no line to give" {
     try said(.{ .line = &damaged }, 0x10, "No line number information available for address 0x00000010\n");
 }
 
+test "an absolute Windows DWARF file does not acquire a second directory" {
+    var bytes: [128]u8 = undefined;
+    var out: std.Io.Writer = .fixed(&bytes);
+    try session_source.path(&out, .{ .directory = "D:/wrong", .name = "C:\\Project\\main.zig" });
+    try std.testing.expectEqualStrings("C:\\Project\\main.zig", out.buffered());
+}
+
 test "info line takes one place" {
     const parsed = (try commands.parse("info line target+4")).?;
     try std.testing.expectEqualStrings("target+4", parsed.line);

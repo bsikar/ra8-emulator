@@ -5,6 +5,10 @@
 //! never import it: a component that needs host data declares an interface,
 //! and the application fills it from here.
 pub const profiles = @import("profiles.zig");
+pub const project = @import("project/root.zig");
+pub const build = @import("build/root.zig");
+pub const workspace = @import("workspace/workspace.zig");
+pub const toolchain = @import("toolchain/root.zig");
 pub const app_dirs = @import("app_dirs.zig");
 pub const history = @import("history/root.zig");
 pub const stops = @import("stops.zig");
@@ -20,6 +24,7 @@ pub const session_files = @import("session_files.zig");
 pub const socket_flags = @import("socket_flags.zig");
 pub const folder = @import("folder.zig");
 pub const pipe = @import("camera/pipe/pipe.zig");
+
 /// Host camera capture backends and file formats (RA8EMU-1011).
 pub const camera = struct {
     pub const consent = @import("camera/webcam/consent.zig");

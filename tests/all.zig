@@ -5,6 +5,8 @@
 //! all_host.zig; the rest go here.
 const std = @import("std");
 test {
+    _ = @import("session/dwarf/compilation_test.zig");
+    _ = @import("session/dwarf/line/path_test.zig");
     _ = @import("session/device_metrics_test.zig");
     _ = @import("chip/core/cpu/memory/touched_test.zig");
     _ = @import("session/run/all.zig");
@@ -33,6 +35,7 @@ test {
     _ = @import("chip/core/cpu/fpu/all_test.zig");
     _ = @import("chip/core/cpu/mve/all_test.zig");
     _ = @import("chip/core/cpu/board_bus_test.zig");
+    _ = @import("chip/core/cpu/nvic_registers_test.zig");
     _ = @import("chip/core/cpu/boot_test.zig");
     _ = @import("chip/core/cpu/fp_corpus_test.zig");
     _ = @import("chip/core/cpu/fp_cmp_corpus_test.zig");
@@ -115,6 +118,12 @@ test {
     _ = @import("chip/core/cadence_test.zig");
     _ = @import("session/all.zig");
     _ = @import("interfaces/gdb/all.zig");
+    _ = @import("interfaces/dap/framing_test.zig");
+    _ = @import("interfaces/dap/protocol_test.zig");
+    _ = @import("interfaces/dap/adapter_test.zig");
+    _ = @import("interfaces/dap/inspection_test.zig");
+    _ = @import("interfaces/dap/points_test.zig");
+    _ = @import("session/run_slice_test.zig");
     _ = @import("board/image/elf_test.zig");
     _ = @import("chip/core/idle_test.zig");
     _ = @import("chip/core/pend_clear_test.zig");

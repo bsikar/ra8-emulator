@@ -2,6 +2,25 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("interfaces/rpc/build_test.zig");
+    _ = @import("host/build/request_test.zig");
+    _ = @import("host/build/queue_test.zig");
+    _ = @import("host/build/runner_test.zig");
+    _ = @import("host/build/source_test.zig");
+    _ = @import("host/build/diagnostic_test.zig");
+    _ = @import("host/build/pipe_test.zig");
+    _ = @import("host/build/process_test.zig");
+    _ = @import("workbench.zig");
+    _ = @import("host/workspace/path_test.zig");
+    _ = @import("host/workspace/entry_test.zig");
+    _ = @import("host/workspace/observe_test.zig");
+    _ = @import("host/workspace/save_test.zig");
+    _ = @import("host/workspace/workspace_test.zig");
+    _ = @import("interfaces/rpc/workspace_wire_test.zig");
+    _ = @import("interfaces/rpc/workspace_watch_test.zig");
+    _ = @import("interfaces/rpc/workspace_test.zig");
+    _ = @import("interfaces/cli/serve/main_test.zig");
+    _ = @import("interfaces/cli/dap_test.zig");
     _ = @import("session/harness/metrics_test.zig");
     _ = @import("host/metrics/metrics_test.zig");
     _ = @import("host/metrics/linux_test.zig");
@@ -43,11 +62,7 @@ test {
     _ = @import("host/history/pack_file_test.zig");
     _ = @import("host/pipe_pair_test.zig");
     _ = @import("host/socket_flags_test.zig");
-    _ = @import("host/sock/sock_test.zig");
-    _ = @import("host/sock/windows_test.zig");
-    _ = @import("host/sock/ready_test.zig");
-    _ = @import("host/sock/afd_test.zig");
-    _ = @import("host/sock/path_test.zig");
+    _ = @import("host/sock/all_test.zig");
     _ = @import("host/win32_test.zig");
     _ = @import("interfaces/cli/eink_log_test.zig");
     _ = @import("interfaces/cli/host/bytes_test.zig");
@@ -61,9 +76,7 @@ test {
     _ = @import("interfaces/cli/history_maint_cli_test.zig");
     _ = @import("interfaces/cli/history_replay_elf_cli_test.zig");
     _ = @import("interfaces/cli/session_ctl_test.zig");
-    _ = @import("interfaces/cli/ctl/branch_test.zig");
-    _ = @import("interfaces/cli/ctl/write_test.zig");
-    _ = @import("interfaces/cli/ctl/diff_test.zig");
+    _ = @import("interfaces/cli/ctl/all.zig");
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/profiles_test.zig");
@@ -122,6 +135,7 @@ test {
     _ = @import("interfaces/cli/report/unmodelled_test.zig");
     _ = @import("interfaces/cli/report/watchdog_test.zig");
     _ = @import("interfaces/cli/report/dtc1_test.zig");
+    _ = @import("interfaces/cli/report/pinfunc_test.zig");
     _ = @import("interfaces/cli/report/usb/usb_test.zig");
     _ = @import("interfaces/cli/report/part_test.zig");
     _ = @import("interfaces/cli/report/run_test.zig");
@@ -193,6 +207,7 @@ test {
     _ = @import("interfaces/rpc/session/disasm_test.zig");
     _ = @import("interfaces/rpc/session/disasm_wire_test.zig");
     _ = @import("interfaces/rpc/session/locals_wire_test.zig");
+    _ = @import("interfaces/rpc/session/set_var_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");
     _ = @import("interfaces/rpc/served_second_test.zig");
     _ = @import("interfaces/rpc/served_history_test.zig");

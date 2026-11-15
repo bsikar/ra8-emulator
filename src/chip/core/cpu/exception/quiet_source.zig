@@ -91,6 +91,7 @@ pub const QuietSource = struct {
             .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek },
             .direct = self.memory.direct,
             .lines = self.memory.lines,
+            .register_state = self.memory.register_state,
         };
     }
 

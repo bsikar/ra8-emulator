@@ -8,6 +8,9 @@
 //! fault types the wire carries), the host, and the firmware's wire library
 //! as `ra8_rpc_wire`.
 pub const served_card = @import("served_card.zig");
+pub const workspace = @import("workspace.zig");
+pub const workspace_wire = @import("workspace_wire.zig");
+pub const workspace_watch = @import("workspace_watch.zig");
 pub const served_media = @import("served_media.zig");
 pub const card_apps = @import("card_apps.zig");
 pub const child_transport = @import("child_transport.zig");
@@ -39,3 +42,7 @@ pub const stdio_transport = @import("stdio_transport.zig");
 pub const ws_transport = @import("ws_transport.zig");
 pub const ws_handshake = @import("ws_handshake.zig");
 pub const ws_frame = @import("ws_frame.zig");
+pub const build = @import("build.zig");
+pub const build_wire = @import("build_wire.zig");
+pub const project = @import("project.zig");
+pub const project_wire = @import("project_wire.zig");

@@ -19,8 +19,8 @@ fn noMap(_: *anyopaque, _: usize, _: bool, _: []u8) anyerror![]const u8 {
     return error.NoImage;
 }
 
-test "Method opcode disasm is 0x013D and routed in server" {
-    try std.testing.expectEqual(@as(u16, 0x013D), @backingInt(proto.Method.disasm));
+test "Method opcode disasm is 0x013E and routed in server" {
+    try std.testing.expectEqual(@as(u16, 0x013E), @backingInt(proto.Method.disasm));
     var found = false;
     inline for (server.routes) |route| {
         if (route[0] == @backingInt(proto.Method.disasm)) found = true;
@@ -29,7 +29,10 @@ test "Method opcode disasm is 0x013D and routed in server" {
 }
 
 test "disasm decodes instructions forward from PC with symbol entry label" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = image_path,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
+    });
     defer opened.deinit();
 
     const session = opened.session();
@@ -62,7 +65,10 @@ test "disasm decodes instructions forward from PC with symbol entry label" {
 }
 
 test "disasm refuses unattached CPU1 with no_core" {
-    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{ .elf_path = image_path });
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = image_path,
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
+    });
     defer opened.deinit();
 
     var scratch: [disasm_wire.disasm_bytes]u8 = undefined;

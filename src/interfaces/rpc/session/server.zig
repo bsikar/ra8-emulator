@@ -35,8 +35,16 @@ const session_branch = @import("branch.zig");
 const session_intervene = @import("intervene.zig");
 const session_nav = @import("nav_handlers.zig");
 const rewind_feed = @import("rewind_feed.zig");
+const workspace = @import("../workspace.zig");
+const workspace_wire = @import("../workspace_wire.zig");
+const workspace_watch = @import("../workspace_watch.zig");
+const build = @import("../build.zig");
+const build_wire = @import("../build_wire.zig");
+const project = @import("../project.zig");
+const project_wire = @import("../project_wire.zig");
 const session_marker = @import("nav_marker.zig");
 const session_diff = @import("diff.zig");
+const session_set_var = @import("set_var.zig");
 pub const session_metrics = @import("metrics.zig");
 pub const session_disasm = @import("disasm.zig");
 
@@ -49,7 +57,7 @@ pub const app_codes = handlers.app_codes;
 pub const forget = handlers.forget;
 
 const M = proto.Method;
-pub const routes = .{
+const session_routes = .{
     .{ @backingInt(M.load), handlers.load },
     .{ @backingInt(M.load_begin), session_chunks.loadBegin },
     .{ @backingInt(M.load_chunk), session_chunks.loadChunk },
@@ -110,8 +118,11 @@ pub const routes = .{
     .{ @backingInt(M.marker_set), session_marker.markerSet },
     .{ @backingInt(M.frame_status), session_nav.frameStatus },
     .{ @backingInt(M.diff), session_diff.diff },
+    .{ @backingInt(M.set_var), session_set_var.setVar },
     .{ @backingInt(M.disasm), session_disasm.disasm },
 };
+
+pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -131,8 +142,17 @@ pub const Host = struct {
         // A host whose own loop pumps between frames advertises bit 15, so
         // its clients know `advance_async` queues and completes on the
         // transport topic (RA8EMU-1196, slice 14).
-        const caps = proto.capabilities | (if (context.transport_async) proto.transport_cap else 0);
+        var caps = proto.capabilities;
+        if (context.transport_async) caps |= proto.transport_cap;
+        if (context.workspace != null) caps |= workspace_wire.capability;
+        if (context.build_runner != null) caps |= build_wire.capability;
+        if (context.project != null) caps |= project_wire.capability;
+
         return .{ .server = Server.init(wire, rx, context, caps) };
+    }
+
+    pub fn deinit(self: *Host) void {
+        handlers.forget(self.server.context);
     }
 
     /// Answer at most one frame, then send the UART bytes, the LCD dirty
@@ -157,6 +177,8 @@ pub const Host = struct {
 /// bounded pump of the transport plane's active job. `Host.poll` and the
 /// native local GUI link (slice 15) both use this order.
 pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
+    try build.pump(context, server, tx);
+    try workspace_watch.pump(context, server, tx);
     try uart_feed.pump(context, server, tx);
     try lcd_feed.pump(context, server, tx);
     try event_feed.pump(context, server, tx);

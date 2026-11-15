@@ -243,3 +243,35 @@ test "port output changes notify a wired device" {
     gpio.applyWrite(regAddress(8, pcntr3), 4, 0x10);
     try std.testing.expectEqual(@as(u32, 2), observed.count);
 }
+
+test "input-only pads refuse output direction through PCNTR1" {
+    var gpio = Gpio.init();
+    const reserved: u16 = (1 << 0) | (1 << 14) | (1 << 15);
+    gpio.applyWrite(regAddress(2, pcntr1), 4, (@as(u32, reserved) << 16) | reserved);
+    try std.testing.expectEqual(@as(u16, 0), gpio.ports[2].pdr);
+    try std.testing.expectEqual(@as(u32, 0), gpio.readReg(regAddress(2, pcntr2), 4));
+    gpio.setInput(2, 0, true);
+    try std.testing.expect(gpio.pinLevel(2, 0));
+}
+
+test "GPIO masks only unsupported directions and counts one refusal per store" {
+    var gpio = Gpio.init();
+    const at = regAddress(2, pcntr1);
+    gpio.applyWrite(at, 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u16, 0x3FFE), gpio.ports[2].pdr);
+    try std.testing.expectEqual(@as(u32, 1), gpio.direction_refused);
+    gpio.applyWrite(at, 1, 3);
+    try std.testing.expectEqual(@as(u16, 0x3F02), gpio.ports[2].pdr);
+    gpio.applyWrite(at + 1, 1, 0xC0);
+    try std.testing.expectEqual(@as(u16, 2), gpio.ports[2].pdr);
+    try std.testing.expectEqual(@as(u32, 3), gpio.direction_refused);
+    gpio.applyWrite(at + 2, 2, 0xFFFF);
+    try std.testing.expectEqual(@as(u32, 3), gpio.direction_refused);
+    try std.testing.expectEqual(@as(u32, 2), gpio.readReg(regAddress(2, pcntr2), 4));
+    gpio.applyWrite(at, 1, 2);
+    try std.testing.expectEqual(@as(u32, 3), gpio.direction_refused);
+    try std.testing.expectEqual(@as(u32, 0), gpio.refusedStores());
+    gpio.reset();
+    try std.testing.expectEqual(@as(u32, 0), gpio.direction_refused);
+    try std.testing.expectEqual(@as(u16, 0), gpio.ports[2].pdr);
+}

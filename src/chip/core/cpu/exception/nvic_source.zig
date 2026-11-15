@@ -17,6 +17,7 @@ const banked_mod = @import("../../banked.zig");
 const nvic_banked = @import("../../../periph/nvic/banked.zig");
 const scs_alias = @import("../../../periph/scs_alias.zig");
 const nvic = @import("../../../periph/nvic/nvic.zig");
+const nvic_registers = @import("../nvic_registers.zig");
 const nvic_clear = @import("../../../periph/nvic/clear.zig");
 const memmap = @import("../../memmap.zig");
 const Entry = @import("active.zig").Entry;
@@ -33,6 +34,7 @@ const Port = struct {
     memo: Memo = .{},
 
     pub fn readWord(self: *Port, address: u32) bus.Error!u32 {
+        if (nvic_registers.covers(address)) return self.through.registers().readWord(address);
         const slot = Memo.slotOf(address) orelse return self.through.readWord(address);
         if (self.memo.get(slot)) |value| return value;
         const value = try self.through.readWord(address);
@@ -44,7 +46,8 @@ const Port = struct {
         if (Memo.slotOf(address)) |slot| self.memo.forget(slot);
         var bytes: [4]u8 = undefined;
         @import("std").mem.writeInt(u32, &bytes, value, .little);
-        return self.through.write(address, &bytes);
+        const memory = if (nvic_registers.covers(address)) self.through.registers() else self.through;
+        return memory.write(address, &bytes);
     }
 
     pub fn readNonSecure(self: *Port, address: u32) bus.Error!u32 {

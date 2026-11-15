@@ -14,6 +14,7 @@ const session_report = @import("../report.zig");
 const session_view = @import("../view.zig");
 const watch_table = @import("../watch/table.zig");
 const session_api = @import("../api.zig");
+const var_write = @import("../var_write.zig");
 const endpoint = @import("ra8_components").endpoint;
 
 pub const Error = error{ Unsupported, MissingPart };
@@ -69,6 +70,7 @@ pub const ZigScript = struct {
             .print => |text| try session_view.word(out, view, text, try self.resolve(text)),
             .backtrace => try session_report.backtrace(view, self.image, out),
             .watch => |want| try self.setWatch(want, out),
+            .set_var => |sv| try self.setVar(sv, out),
             .core => |index| try self.switchTo(index, out),
             else => return Error.Unsupported,
         }
@@ -95,6 +97,20 @@ pub const ZigScript = struct {
         try self.session.setSpeed(self.session.currentCore(), wanted);
         if (wanted) |factor| return out.print("Speed {d}x\n", .{factor});
         try out.writeAll("Speed max\n");
+    }
+
+    fn setVar(self: *ZigScript, sv: commands.SetVar, out: anytype) !void {
+        const image = self.image orelse return error.NoSymbols;
+        const res = try var_write.set(self.session, self.session.currentCore(), image, 0, sv.name, sv.value);
+        if (res.status == .ok) {
+            if (res.in_register != 0xff) {
+                try out.print("{s} = {s} ({s}, r{d})\n", .{ sv.name, sv.value, @tagName(res.scope), res.in_register });
+            } else {
+                try out.print("{s} = {s} ({s}, 0x{x:0>8})\n", .{ sv.name, sv.value, @tagName(res.scope), res.address });
+            }
+            return;
+        }
+        try out.print("error: {s}: {s}\n", .{ sv.name, res.message });
     }
 
     /// As session.zig's switchTo: say which core has the session and where

@@ -4,6 +4,7 @@
 test {
     _ = @import("disasm_test.zig");
     _ = @import("symbols_test.zig");
+    _ = @import("annotate_test.zig");
     _ = @import("run_policy_test.zig");
     _ = @import("breakpoint_test.zig");
     _ = @import("history_test.zig");
@@ -169,6 +170,7 @@ test {
     _ = @import("profile_test.zig");
     _ = @import("functions_test.zig");
     _ = @import("fpb_test.zig");
+    _ = @import("var_write_test.zig");
     _ = @import("watch/link_test.zig");
     _ = @import("rtos/trace_test.zig");
     _ = @import("rtos/stream_test.zig");

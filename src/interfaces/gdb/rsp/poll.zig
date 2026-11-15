@@ -25,9 +25,11 @@ pub const Socket = struct {
         const ready = sock_ready.wait(self.io, self.handle, 0) catch return false;
         if (!ready.any()) return false;
         var byte: [1]u8 = undefined;
-        const peeked = sock_ready.takeByte(self.io, self.handle, &byte, true) orelse return false;
-        if (peeked == 0 or byte[0] != packet.interrupt) return false;
-        _ = sock_ready.takeByte(self.io, self.handle, &byte, false) orelse return false;
+        // A lost control stream must end the run so serve can close the connection.
+        const peeked = sock_ready.takeByte(self.io, self.handle, &byte, true) orelse return true;
+        if (peeked == 0) return true;
+        if (byte[0] != packet.interrupt) return false;
+        _ = sock_ready.takeByte(self.io, self.handle, &byte, false) orelse return true;
         return true;
     }
 };

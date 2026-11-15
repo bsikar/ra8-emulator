@@ -1,8 +1,10 @@
 //! Auto-detecting RPC byte transport over connected TCP/Unix sockets and WebSockets (RA8EMU-1241).
 //! Transparently detects HTTP GET `Upgrade: websocket` vs raw TCP RPC greetings.
 const std = @import("std");
+const builtin = @import("builtin");
 const rpc = @import("ra8_rpc_wire");
 const sock_ready = @import("ra8_host").sock.ready;
+const sock_unix = @import("ra8_host").sock.unix;
 const ws_handshake = @import("ws_handshake.zig");
 const ws_frame = @import("ws_frame.zig");
 
@@ -16,6 +18,7 @@ pub const State = enum {
 pub const Connection = struct {
     stream: std.Io.net.Stream,
     io: std.Io,
+    unix_socket: bool = false,
     state: State = .detect,
 
     rx_buf: [4096]u8 = undefined,
@@ -36,10 +39,11 @@ pub const Connection = struct {
     }
 
     pub fn unix(io: std.Io, path: []const u8) !Connection {
-        var buffer: [std.fs.max_path_bytes]u8 = undefined;
-        const name = try @import("ra8_host").sock.path.unix(io, path, &buffer);
-        const address = try std.Io.net.UnixAddress.init(name);
-        return .{ .stream = try address.connect(io), .io = io };
+        return .{ .stream = try sock_unix.connect(io, path), .io = io, .unix_socket = builtin.os.tag == .windows };
+    }
+
+    pub fn fromUnix(io: std.Io, stream: std.Io.net.Stream) Connection {
+        return .{ .stream = stream, .io = io, .unix_socket = builtin.os.tag == .windows };
     }
 
     pub fn init(io: std.Io, stream: std.Io.net.Stream) Connection {
@@ -52,7 +56,7 @@ pub const Connection = struct {
 
     pub fn close(self: *Connection) void {
         self.state = .closed;
-        self.stream.close(self.io);
+        if (self.unix_socket) sock_unix.close(self.io, self.stream.socket.handle) else self.stream.close(self.io);
     }
 
     const vtable: rpc.Transport.VTable = .{
@@ -65,10 +69,31 @@ pub const Connection = struct {
         return @ptrCast(@alignCast(ctx));
     }
 
+    fn waitSocket(self: *Connection, ms: i32) !sock_ready.Ready {
+        return if (self.unix_socket)
+            sock_unix.wait(self.io, self.stream.socket.handle, ms)
+        else
+            sock_ready.wait(self.io, self.stream.socket.handle, ms);
+    }
+
+    fn sendAll(self: *Connection, bytes: []const u8, ms: u32) rpc.Transport.Error!void {
+        const sent = if (self.unix_socket)
+            sock_unix.sendAll(self.io, self.stream.socket.handle, bytes, ms)
+        else
+            sock_ready.sendAll(self.io, self.stream.socket.handle, bytes, ms);
+        sent catch return error.LinkDown;
+    }
+
+    fn socketReady(self: *Connection) usize {
+        const ready = self.waitSocket(0) catch return 0;
+        return @intFromBool(ready.any());
+    }
+
     fn readSocket(self: *Connection, into: []u8) rpc.Transport.Error!usize {
         if (into.len == 0) return 0;
-        const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return error.LinkDown;
+        const ready = self.waitSocket(0) catch return error.LinkDown;
         if (!ready.any()) return 0;
+        if (self.unix_socket) return sock_unix.read(self.io, self.stream.socket.handle, into);
         var vec = [_][]u8{into};
         const got = self.stream.readWithControl(self.io, &vec, &.{}) catch return error.LinkDown;
         return got.data_len;
@@ -77,25 +102,23 @@ pub const Connection = struct {
     fn send(ctx: *anyopaque, bytes: []const u8) rpc.Transport.Error!void {
         const self = from(ctx);
         switch (self.state) {
-            .raw => {
-                sock_ready.sendAll(self.io, self.stream.socket.handle, bytes, 100) catch return error.LinkDown;
-            },
+            .raw => try self.sendAll(bytes, 100),
             .websocket => {
                 if (bytes.len <= 2048) {
                     var packet: [2048 + 10]u8 = undefined;
                     const hdr = ws_frame.encodeServerHeader(&packet, .binary, bytes.len);
                     @memcpy(packet[hdr.len..][0..bytes.len], bytes);
-                    sock_ready.sendAll(self.io, self.stream.socket.handle, packet[0 .. hdr.len + bytes.len], 100) catch return error.LinkDown;
+                    try self.sendAll(packet[0 .. hdr.len + bytes.len], 100);
                 } else {
                     var hdr_buf: [10]u8 = undefined;
                     const hdr = ws_frame.encodeServerHeader(&hdr_buf, .binary, bytes.len);
-                    sock_ready.sendAll(self.io, self.stream.socket.handle, hdr, 100) catch return error.LinkDown;
-                    sock_ready.sendAll(self.io, self.stream.socket.handle, bytes, 100) catch return error.LinkDown;
+                    try self.sendAll(hdr, 100);
+                    try self.sendAll(bytes, 100);
                 }
             },
             .detect => {
                 self.state = .raw;
-                sock_ready.sendAll(self.io, self.stream.socket.handle, bytes, 100) catch return error.LinkDown;
+                try self.sendAll(bytes, 100);
             },
             .closed => return error.LinkDown,
         }
@@ -116,21 +139,18 @@ pub const Connection = struct {
         switch (self.state) {
             .raw => {
                 if (self.rx_len > 0) return self.rx_len;
-                const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return 0;
-                return @intFromBool(ready.any());
+                return self.socketReady();
             },
             .websocket => {
                 if (self.frame_remaining > 0 and self.rx_len > 0) {
                     return @min(self.rx_len, self.frame_remaining);
                 }
                 if (self.rx_len > 0) return self.rx_len;
-                const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return 0;
-                return @intFromBool(ready.any());
+                return self.socketReady();
             },
             .detect => {
                 if (self.rx_len > 0) return self.rx_len;
-                const ready = sock_ready.wait(self.io, self.stream.socket.handle, 0) catch return 0;
-                return @intFromBool(ready.any());
+                return self.socketReady();
             },
             .closed => return 0,
         }
@@ -180,7 +200,7 @@ pub const Connection = struct {
         var resp_buf: [ws_handshake.response_buf_size]u8 = undefined;
         const resp = ws_handshake.formatResponse(&accept_key, &resp_buf) catch return error.BadMessage;
 
-        sock_ready.sendAll(self.io, self.stream.socket.handle, resp, 1000) catch return error.LinkDown;
+        try self.sendAll(resp, 1000);
     }
 
     fn drainRaw(self: *Connection, into: []u8) rpc.Transport.Error!usize {
@@ -244,7 +264,7 @@ pub const Connection = struct {
                 .close => {
                     var close_hdr: [10]u8 = undefined;
                     const close_bytes = ws_frame.encodeServerHeader(&close_hdr, .close, 0);
-                    sock_ready.sendAll(self.io, self.stream.socket.handle, close_bytes, 100) catch {};
+                    self.sendAll(close_bytes, 100) catch {};
                     self.state = .closed;
                     return error.LinkDown;
                 },
@@ -294,7 +314,7 @@ pub const Connection = struct {
         if (payload.len > 0) {
             @memcpy(packet[hdr.len..][0..payload.len], payload);
         }
-        sock_ready.sendAll(self.io, self.stream.socket.handle, packet[0 .. hdr.len + payload.len], 100) catch return error.LinkDown;
+        try self.sendAll(packet[0 .. hdr.len + payload.len], 100);
     }
 
     fn compactRx(self: *Connection) void {

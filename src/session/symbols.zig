@@ -34,9 +34,31 @@ pub const section_type = struct {
 
 /// Symbol types, of which only the function matters here.
 pub const symbol_type = struct {
+    /// STT_NOTYPE.
+    pub const none: u8 = 0;
+    /// STT_OBJECT, a data object such as a global variable.
+    pub const object: u8 = 1;
     /// STT_FUNC, the low nibble of st_info on a function symbol.
     pub const func: u8 = 2;
+    /// STT_SECTION.
+    pub const section: u8 = 3;
+    /// STT_FILE.
+    pub const file: u8 = 4;
 };
+
+/// Resolve `wanted` in `.symtab`, returning its value, size, and type kind.
+/// Prefers data objects or sized symbols over untyped zero-size entries.
+pub fn symbolOf(image: elf.Image, wanted: []const u8) ?Named {
+    var walk = Walk.init(image);
+    var fallback: ?Named = null;
+    while (walk.next()) |sym| {
+        if (sym.kind == symbol_type.section or sym.kind == symbol_type.file) continue;
+        if (!std.mem.eql(u8, sym.name, wanted)) continue;
+        if (sym.kind == symbol_type.object or sym.size > 0) return sym;
+        if (fallback == null) fallback = sym;
+    }
+    return fallback;
+}
 
 /// One ELF32 section header, read straight off the file.
 pub const SectionHeader = extern struct {

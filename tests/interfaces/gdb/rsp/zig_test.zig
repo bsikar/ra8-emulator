@@ -80,6 +80,23 @@ test "one thread: thread queries and selecting any other thread" {
     try expectReply(&target, "?", "T05thread:1;");
 }
 
+test "GDB capabilities omit reverse when the active transport has no history bridge" {
+    var memory = ram();
+    var cpu: Cpu = .{ .bus = memory.view() };
+    try cpu.reset(0);
+    var machine = Machine{};
+    var live: session_api.Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 100 } };
+    var plane: transport.Transport = .{ .session = &live };
+    var target: zig_run.Target = .{ .session = &live, .transport = &plane, .wall = legacyWall() };
+    const stub: dispatch.Dispatch = .{ .zig = &target };
+    var out: [128]u8 = undefined;
+    try std.testing.expectEqualStrings("PacketSize=1000;qXfer:features:read+", try stub.answer("qSupported", &out));
+    try expectReply(&target, "s", "T05thread:1;");
+    const before = cpu.regs.pc;
+    try expectReply(&target, "bs", "E00");
+    try std.testing.expectEqual(before, cpu.regs.pc);
+}
+
 test "with CPU1 attached it is thread 2, and selecting it moves g, s and ?" {
     var memory0 = ram();
     var cpu0: Cpu = .{ .bus = memory0.view() };

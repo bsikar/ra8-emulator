@@ -44,7 +44,8 @@ pub const packet_size: usize = 0x1000;
 /// gdb's SIGTRAP: the machine stopped where the debugger asked it to.
 pub const halted = "S05";
 
-const supported = std.fmt.comptimePrint("PacketSize={x};qXfer:features:read+;ReverseContinue+;ReverseStep+", .{packet_size});
+const supported = std.fmt.comptimePrint("PacketSize={x};qXfer:features:read+", .{packet_size});
+const reverse_supported = supported ++ ";ReverseContinue+;ReverseStep+";
 const xfer = "qXfer:features:read:";
 const memory_error = "E01";
 const request_error = "E00";
@@ -62,6 +63,8 @@ pub const Dispatch = struct {
 
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
+        if (request.len == 0) return out[0..0];
+        if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, if (self.supportsReverse()) reverse_supported else supported);
         if (self.zig) |live| {
             if (zig_run.handles(request)) return zig_run.answer(live, request, out);
             // The transport's read gate: while a job moves the machine is
@@ -87,8 +90,6 @@ pub const Dispatch = struct {
             };
             return selected.answer(request, out);
         }
-        if (request.len == 0) return out[0..0];
-        if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, supported);
         if (std.mem.startsWith(u8, request, xfer)) return features.read(request[xfer.len..], out);
         if (std.mem.eql(u8, request, "qAttached")) return copy(out, "1");
         if (needsCore(request[0]) and self.view == null) return out[0..0];
@@ -105,6 +106,12 @@ pub const Dispatch = struct {
             'H' => copy(out, "OK"),
             else => out[0..0],
         };
+    }
+
+    fn supportsReverse(self: Dispatch) bool {
+        const live = self.zig orelse return false;
+        if (live.transport) |plane| return plane.history != null;
+        return live.session.history != null;
     }
 
     /// The core registers and memory are read from and written to.

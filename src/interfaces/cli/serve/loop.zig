@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const served = @import("ra8_rpc").session.server;
 const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 const sock_ready = @import("ra8_host").sock.ready;
+const sock_unix = @import("ra8_host").sock.unix;
 const win32 = @import("ra8_host").win32;
 
 /// How long an idle server waits on its peer before checking again.
@@ -23,7 +24,7 @@ pub const Buffers = struct {
 };
 
 /// What the peer's descriptor is, which decides how a hang-up shows.
-pub const Link = enum { pipe, socket };
+pub const Link = enum { pipe, socket, unix_socket };
 
 /// Set from a signal handler; the loops end at their next idle check.
 pub var stopping = std.atomic.Value(bool).init(false);
@@ -37,6 +38,7 @@ pub fn answerStdio(io: std.Io, context: *served.Context, buffers: Buffers) !void
 /// Answer frames on `wire` until the peer behind `fd` closes or a stop is asked.
 pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
     var host = served.Host.init(wire, buffers.rx, context);
+    defer host.deinit();
     while (true) {
         try buffers.pump(context);
         const polled = host.poll(buffers.tx) catch |err| {
@@ -55,10 +57,13 @@ pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transpo
 /// reads as both is asked what it still holds.
 pub fn closed(io: std.Io, fd: std.posix.fd_t, link: Link) !bool {
     if (on_windows and link == .pipe) return pipeClosed(fd);
-    const ready = try sock_ready.wait(io, fd, idle_wait_ms);
+    const ready = if (link == .unix_socket)
+        try sock_unix.wait(io, fd, idle_wait_ms)
+    else
+        try sock_ready.wait(io, fd, idle_wait_ms);
     if (!ready.readable) return ready.hung_up;
     if (link == .pipe) return ready.hung_up and pipeDrained(fd);
-    return peerGone(io, fd);
+    return peerGone(io, fd, link == .unix_socket);
 }
 
 const on_windows = builtin.os.tag == .windows;
@@ -81,7 +86,8 @@ fn pipeClosed(pipe: std.posix.fd_t) bool {
 }
 
 /// Peek one byte: zero bytes means the peer closed its end.
-fn peerGone(io: std.Io, fd: std.posix.fd_t) bool {
+fn peerGone(io: std.Io, fd: std.posix.fd_t, is_unix: bool) bool {
     var byte: [1]u8 = undefined;
-    return (sock_ready.takeByte(io, fd, &byte, true) orelse return true) == 0;
+    const got = if (is_unix) sock_unix.takeByte(io, fd, &byte, true) else sock_ready.takeByte(io, fd, &byte, true);
+    return (got orelse return true) == 0;
 }
