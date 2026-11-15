@@ -465,3 +465,37 @@ including an improved score still above the limit, requires reviewing its
 new fingerprint. After removing findings, run
 `zig build lint -- --prune-baseline`; this command refuses new debt.
 `--update-baseline` accepts debt and requires explicit review of the diff.
+
+## Session bundle writer
+
+`ra8.snapshot.bundle.writer.Writer` packs a frozen session into a standalone
+USTAR archive without allocating or buffering its payloads. `init` writes
+`manifest.json`, `state.ra8snap`, and, when recording is enabled,
+`recording/root.bin` and `recording/branches.bin`. The state uses the existing
+snapshot format unchanged. Its magic and current version are checked before
+any archive bytes are written; the caller supplies a reader buffer of at
+least 12 bytes. Import performs the full state and recording validation.
+
+The JSON manifest identifies `ra8-session-bundle` version 1, the snapshot
+version, board label, primary/optional secondary ELF name, byte length and
+16-byte BLAKE3 identity (32 lowercase hexadecimal characters), and whether
+recording is present.
+Names and board labels are nonempty UTF-8 strings of at most 256 bytes.
+This descriptive metadata must come from the same frozen session as the
+payloads; the format writer cannot establish that relationship itself.
+
+For recordings, call `add(.log, leaf, source)` and
+`add(.objects, leaf, source)` for all committed log segments and referenced
+object files, including pack data and indexes. Supply entries in strictly
+increasing archive-path order: log entries first, then objects. At least one
+log entry is required; an empty segment is allowed. Files may be opened and
+closed one at a time. Leaves are at most 96 ASCII letters, digits, dots,
+dashes or underscores, excluding `.` and `..`. Paths, links, ownership locks,
+lifecycle markers and scratch files do not belong in the bundle.
+
+Each source supplies a reader and exact byte length, at most 8 GiB minus one
+byte per file (USTAR's numeric limit). Entries use mode 0600 and timestamp
+zero; `finish` appends two zero blocks. Short reads and I/O failures propagate
+and prevent completion. After any `add` or `finish` error, discard the partial
+output. The caller owns source consistency, output flushing and atomic
+publication. CLI/RPC export and bundle import are separate follow-on work.
