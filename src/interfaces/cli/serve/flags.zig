@@ -6,6 +6,7 @@ const host = @import("ra8_host");
 const source_spec = @import("ra8_host").camera.source_spec;
 
 pub const ParsedFlags = struct {
+    targets: ?[]const u8 = null,
     artifacts_root: ?[]const u8 = null,
     build_zig: ?[]const u8 = null,
     workspace: ?[]const u8 = null,
@@ -31,7 +32,7 @@ const FlagStep = enum { taken, stop, bad };
 
 pub fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
     inline for (.{
-        parseAccess, parseInputs, parseCardHistory, parseCapture, parseHistory, parseCameraBudget,
+        parseTargets, parseAccess, parseInputs, parseCardHistory, parseCapture, parseHistory, parseCameraBudget,
     }) |parseOne| {
         const step = parseOne(flags, argv, at);
         if (step != .stop) return step;
@@ -136,5 +137,14 @@ fn parseCameraBudget(flags: *ParsedFlags, argv: []const []const u8, at: *usize) 
     } else if (std.mem.eql(u8, argv[idx], "--allow-webcam") and !flags.allow_webcam) {
         flags.allow_webcam = true;
     } else return .stop;
+    return .taken;
+}
+
+fn parseTargets(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
+    if (!std.mem.eql(u8, argv[at.*], "--targets")) return .stop;
+    if (flags.targets != null or at.* + 1 == argv.len) return .bad;
+    at.* += 1;
+    if (argv[at.*].len == 0) return .bad;
+    flags.targets = argv[at.*];
     return .taken;
 }

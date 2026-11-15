@@ -2,9 +2,11 @@
 const build = @import("../build.zig");
 const Context = @import("handlers.zig").Context;
 const project = @import("../project.zig");
+const targets = @import("../targets.zig");
 
 /// Drop every subscription, as a new connection starts with none.
 pub fn forget(context: *Context) void {
+    targets.forget(context);
     context.artifact_transfer.drop();
     project.forget(context);
     build.forget(context);

@@ -1,4 +1,9 @@
 test {
+    _ = @import("host/targets_test.zig");
+    _ = @import("interfaces/cli/ctl/targets_test.zig");
+    _ = @import("interfaces/rpc/targets_test.zig");
+    _ = @import("interfaces/rpc/targets_wire_test.zig");
+    _ = @import("interfaces/cli/serve/targets_test.zig");
     _ = @import("interfaces/cli/artifacts/main_test.zig");
     _ = @import("snapshot/all.zig");
     _ = @import("interfaces/rpc/artifacts/all.zig");

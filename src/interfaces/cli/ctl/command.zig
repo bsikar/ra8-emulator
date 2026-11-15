@@ -5,8 +5,10 @@ const ctl_write = @import("write.zig");
 const events = @import("events.zig");
 const proto = @import("ra8_rpc").session.rpc;
 const Spec = @import("../serve/listen.zig").Spec;
+const targets = @import("targets.zig");
 
 pub const Command = union(enum) {
+    targets: targets.Command,
     load: []const u8,
     run: u64,
     advance: u64,

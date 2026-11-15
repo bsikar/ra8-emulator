@@ -13,6 +13,8 @@ pub const probe_ctl = @import("probe_ctl.zig");
 pub const project = @import("project/main.zig");
 pub const serve = @import("serve/serve.zig");
 pub const session_ctl = @import("session_ctl.zig");
+pub const target_bindings = @import("serve/targets.zig");
+pub const target_ctl = @import("ctl/targets.zig");
 pub const toolchain = @import("toolchain.zig");
 pub const usb_disk_option = @import("usb_disk_option.zig");
 
