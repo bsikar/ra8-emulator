@@ -194,6 +194,10 @@ const Stops = struct {
         var self: Stops = .{};
         if (builtin.os.tag == .windows) {
             if (!win32.SetConsoleCtrlHandler(onConsoleStop, .TRUE).toBool()) return error.StopHandlerFailed;
+            errdefer _ = win32.SetConsoleCtrlHandler(onConsoleStop, .FALSE);
+            // Registering a handler leaves the launcher's inherited Ctrl-C
+            // ignore attribute intact. Enable delivery to our handler too.
+            if (!win32.SetConsoleCtrlHandler(null, .FALSE).toBool()) return error.StopHandlerFailed;
         } else {
             const action: std.posix.Sigaction = .{ .handler = .{ .handler = onStop }, .mask = std.posix.sigemptyset(), .flags = 0 };
             std.posix.sigaction(std.posix.SIG.INT, &action, &self.int);
