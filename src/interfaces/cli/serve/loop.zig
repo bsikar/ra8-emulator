@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const served = @import("ra8_rpc").session.server;
+const Service = @import("ra8_rpc").artifacts.service.Service;
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
 const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
@@ -86,4 +87,48 @@ fn peerGone(io: std.Io, fd: std.posix.fd_t, is_unix: bool) bool {
     var byte: [1]u8 = undefined;
     const got = if (is_unix) sock_unix.takeByte(io, fd, &byte, true) else sock_ready.takeByte(io, fd, &byte, true);
     return (got orelse return true) == 0;
+}
+
+/// Stdio remains open for a fresh greeting after importing a replacement.
+pub fn answerStdioManaged(io: std.Io, service: *Service) !void {
+    var stdio = Stdio.process();
+    try answerManaged(io, service, stdio.transport(), stdio.input, .pipe);
+}
+
+pub fn answerManaged(
+    io: std.Io,
+    service: *Service,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+) !void {
+    while (true) {
+        if (!try managedSession(io, service, wire, fd, link)) return;
+        service.activate();
+        // Socket peers reconnect after their commit reply; stdio starts a new handshake.
+        if (link != .pipe) return;
+    }
+}
+
+fn managedSession(
+    io: std.Io,
+    service: *Service,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+) !bool {
+    const source = service.active;
+    var host = served.Host.init(wire, source.rx, &source.context);
+    defer host.deinit();
+    errdefer service.discardPending();
+    while (true) {
+        const polled = host.poll(source.tx) catch |err| {
+            service.discardPending();
+            if (err == error.LinkDown and try closed(io, fd, link)) return false;
+            return err;
+        };
+        if (service.pending != null) return true;
+        if (polled != .idle) continue;
+        if (stopping.load(.acquire) or try closed(io, fd, link)) return false;
+    }
 }

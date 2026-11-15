@@ -7,8 +7,8 @@ import time
 
 
 class Server:
-    def __init__(self, emulator, fixture, workspace, output, trace, deadline, sanitize):
-        command = [str(emulator), "serve"]
+    def __init__(self, emulator, fixture, workspace, output, trace, deadline, sanitize, options=()):
+        command = [str(emulator), "serve", *map(str, options)]
         if workspace is not None:
             command += ["--workspace", str(workspace)]
         command += ["--history", "off", "--listen", "tcp::0", str(fixture)]

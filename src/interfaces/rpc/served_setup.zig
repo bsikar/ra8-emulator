@@ -356,6 +356,7 @@ pub const Served = struct {
         }
         served_second.close(self);
         self.context.chunks.drop();
+        self.context.artifact_transfer.drop();
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
