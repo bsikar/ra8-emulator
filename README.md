@@ -498,4 +498,36 @@ byte per file (USTAR's numeric limit). Entries use mode 0600 and timestamp
 zero; `finish` appends two zero blocks. Short reads and I/O failures propagate
 and prevent completion. After any `add` or `finish` error, discard the partial
 output. The caller owns source consistency, output flushing and atomic
-publication. CLI/RPC export and bundle import are separate follow-on work.
+publication. CLI/RPC export/import verbs remain separate follow-on work.
+
+
+`ra8.snapshot.bundle.reader.Reader` admits the same format as a bounded
+stream. Its manifest fields are required; unknown bundle/snapshot versions,
+duplicate JSON fields, unsafe or duplicate paths, unsupported tar entry
+kinds, bad checksums, nonzero padding, missing payloads/footer and trailing
+content fail admission. Standard USTAR zero record padding is accepted within
+the byte budget. Consume each entry with `copy` or `readAlloc` before
+calling `next`. An error poisons the reader. Default limits are 4 GiB total
+(including headers and footer), 1 GiB per entry and 4096 entries; callers can
+supply stricter limits.
+
+`ra8.rpc.bundle_import.open` returns a separate, owned `*Served` ready for an
+application to publish. It never receives or changes the live session.
+Snapshot-only imports require the original ELF bytes and a matching board
+profile. Recording imports require a host history root: they create a fresh
+leased session, stream recording files into it, and use the recorded profile
+and embedded ELF images. The lease transfers into the restored server without
+being released. A failed import removes only that private session. Destroy a
+successful import with `deinit` followed by the supplied allocator's `destroy`.
+
+Admission checks snapshot section bounds/duplicates, model/build provenance,
+image identities, branch tables, complete log frames, checkpoint snapshots,
+optional derived checkpoint sidecars, and required referenced objects. Pack
+indexes are validated before ordinary store recovery can repair them; pack
+records and their declared expansion are bounded and verified. Recording
+admission additionally caps each log at 64 MiB, other files at 256 MiB, roots
+at 64 MiB, branch tables at 8 MiB, branches/checkpoints at 4096, and total pack
+expansion at the reader's total-byte limit. Existing snapshot preparation
+validates machine semantics before restoring the private machine. The saved
+active line and scheduler position must fit the recording; future writes use
+a fresh segment, preserving every imported segment.

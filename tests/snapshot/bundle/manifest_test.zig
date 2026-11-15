@@ -51,3 +51,20 @@ test "maximum escaped labels and two images fit the bounded manifest" {
     try std.testing.expectEqualStrings("2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a", &parsed.value.elf1.?.identity);
     try std.testing.expect(!parsed.value.recording);
 }
+
+test "manifest admission rejects missing fields unknown versions and malformed identities" {
+    var buffer: [8192]u8 = undefined;
+    const bytes = try manifest.encode(&buffer, metadata, false);
+    var parsed = try manifest.decode(std.testing.allocator, bytes);
+    defer parsed.deinit();
+    parsed.value.version = 2;
+    const bad_version = try std.json.Stringify.valueAlloc(std.testing.allocator, parsed.value, .{});
+    defer std.testing.allocator.free(bad_version);
+    try std.testing.expectError(error.BadBundleVersion, manifest.decode(std.testing.allocator, bad_version));
+    parsed.value.version = 1;
+    parsed.value.elf0.identity[0] = 'G';
+    const bad_identity = try std.json.Stringify.valueAlloc(std.testing.allocator, parsed.value, .{});
+    defer std.testing.allocator.free(bad_identity);
+    try std.testing.expectError(error.BadIdentity, manifest.decode(std.testing.allocator, bad_identity));
+    try std.testing.expectError(error.MissingField, manifest.decode(std.testing.allocator, "{}"));
+}

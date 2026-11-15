@@ -3,6 +3,7 @@ const std = @import("std");
 
 const file = @import("../file.zig");
 const manifest = @import("manifest.zig");
+const names = @import("names.zig");
 
 pub const Source = struct {
     reader: *std.Io.Reader,
@@ -58,7 +59,7 @@ pub const Writer = struct {
     pub fn add(self: *Writer, space: Space, leaf: []const u8, source: Source) !void {
         if (self.state != .recording) return error.InvalidState;
         errdefer self.state = .failed;
-        try leafCheck(leaf);
+        try names.check(leaf);
         try sizeCheck(source.size);
 
         var buffer: [128]u8 = undefined;
@@ -97,14 +98,4 @@ fn snapshotCheck(source: Source) !void {
     const header = try source.reader.peek(12);
     if (!std.mem.eql(u8, header[0..8], &file.magic)) return error.BadMagic;
     if (std.mem.readInt(u32, header[8..12], .little) != file.version) return error.BadVersion;
-}
-
-fn leafCheck(leaf: []const u8) !void {
-    if (leaf.len == 0 or leaf.len > 96) return error.InvalidName;
-    if (std.mem.eql(u8, leaf, ".") or std.mem.eql(u8, leaf, "..")) return error.InvalidName;
-    for (leaf) |c| {
-        if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '-' and c != '_') {
-            return error.InvalidName;
-        }
-    }
 }
