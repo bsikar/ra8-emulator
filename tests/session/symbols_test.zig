@@ -198,3 +198,36 @@ test "a lookup over two images finds a name either one carries, secure first" {
     try std.testing.expectEqual(@as(?u32, null), symbols.addressInAny(&both, "g_missing"));
     try std.testing.expectEqual(@as(?u32, null), symbols.addressInAny(&.{}, "g_alive"));
 }
+
+fn markObject(buffer: []u8, index: usize, size: u32) void {
+    const at = Builder.sym_off + @sizeOf(symbols.Symbol) * index;
+    const entry: *align(1) symbols.Symbol =
+        std.mem.bytesAsValue(symbols.Symbol, buffer[at..][0..@sizeOf(symbols.Symbol)]);
+    entry.st_info = symbols.symbol_type.object;
+    entry.st_size = size;
+}
+
+test "symbolOf returns address, size, and kind for data and function symbols" {
+    var buffer: [1024]u8 = undefined;
+    const bytes = Builder.build(
+        &buffer,
+        &.{ "g_count", "g_byte", "helper_fn" },
+        &.{ 0x2200_0100, 0x2200_0104, 0x0200_1000 },
+    );
+    markObject(&buffer, 0, 4);
+    markObject(&buffer, 1, 1);
+    markFunction(&buffer, 2, 0x20);
+    const image = try elf.Image.init(bytes);
+
+    const count_sym = symbols.symbolOf(image, "g_count") orelse return error.NotFound;
+    try std.testing.expectEqual(@as(u32, 0x2200_0100), count_sym.value);
+    try std.testing.expectEqual(@as(u32, 4), count_sym.size);
+    try std.testing.expectEqual(symbols.symbol_type.object, count_sym.kind);
+
+    const byte_sym = symbols.symbolOf(image, "g_byte") orelse return error.NotFound;
+    try std.testing.expectEqual(@as(u32, 1), byte_sym.size);
+
+    const fn_sym = symbols.symbolOf(image, "helper_fn") orelse return error.NotFound;
+    try std.testing.expectEqual(symbols.symbol_type.func, fn_sym.kind);
+    try std.testing.expectEqual(@as(?symbols.Named, null), symbols.symbolOf(image, "g_missing"));
+}

@@ -6,3 +6,5 @@ pub const info = @import("info.zig");
 pub const compilation = @import("compilation.zig");
 pub const line = @import("line/line.zig");
 pub const locals = @import("locals.zig");
+pub const var_loc = @import("var_loc.zig");
+pub const vars = @import("vars.zig");
