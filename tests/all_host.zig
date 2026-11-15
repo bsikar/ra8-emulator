@@ -100,6 +100,8 @@ test {
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("interfaces/cli/serve_parse_test.zig");
     _ = @import("interfaces/cli/map_main_test.zig");
+    _ = @import("snapshot/bundle/manifest_test.zig");
+    _ = @import("snapshot/bundle/writer_test.zig");
     _ = @import("snapshot/file_test.zig");
     _ = @import("board/snapshot/memory_test.zig");
     _ = @import("snapshot/fields_test.zig");
