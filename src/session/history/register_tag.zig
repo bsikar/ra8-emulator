@@ -1,4 +1,5 @@
 //! Stable architectural register identifiers used by window deltas.
+/// Stable delta-field IDs: the S-register range is also used for indexed FP access.
 pub const RegTag = enum(u8) {
     r0 = 0,
     r1,

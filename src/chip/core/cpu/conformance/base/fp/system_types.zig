@@ -1,7 +1,8 @@
-//! Types and constructors shared by the adjacent instruction-vector case groups.
+//! Floating-point system/compare fixtures: register transfers, status flags, and rejected encodings.
 
 pub const vector = @import("../../vector.zig");
 
+/// Reset tail-predication size, before comparison or exception flags are applied.
 pub const fpscr_reset: u32 = 0x0004_0000;
 
 pub const r1_in: u32 = 0x1111_1111;
@@ -50,10 +51,12 @@ pub fn bad(name: []const u8, hw1: u16, hw2: u16) V {
     return vec(name, .{ .hw1 = hw1, .hw2 = hw2 }, none);
 }
 
+/// Pack the four comparison flags (N, Z, C, V) and optional Invalid Operation flag.
 pub fn flags(nzcv: u4, ioc: bool) u32 {
     return (@as(u32, nzcv) << 28) | fpscr_reset | @intFromBool(ioc);
 }
 
+/// FPSCR.NZCV outcomes for ordered comparisons and the NaN (unordered) case.
 pub const less: u4 = 0b1000;
 
 pub const equal: u4 = 0b0110;
@@ -62,10 +65,13 @@ pub const greater: u4 = 0b0010;
 
 pub const unordered: u4 = 0b0011;
 
+/// Raw IEEE 754 binary32 register encodings for 1.0 and 2.0.
 pub const one: u64 = 0x3F80_0000;
 
 pub const two: u64 = 0x4000_0000;
 
+/// Quiet NaN: the quiet bit is set.
 pub const qnan: u64 = 0x7FC0_0000;
 
+/// Signaling NaN: a nonzero payload with the quiet bit clear.
 pub const snan: u64 = 0x7F80_0001;

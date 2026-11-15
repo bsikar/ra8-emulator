@@ -33,6 +33,7 @@ pub fn verify(project: *Project, value: receipt.Receipt) ![]u8 {
         return error.ProjectConfigChanged;
     }
 
+    // Bind the supplied receipt to the current configuration and selected build.
     const recipe = try config.findRecipe(parsed.value, value.recipe);
     try currentBuild(project, value);
 
@@ -46,6 +47,7 @@ pub fn verify(project: *Project, value: receipt.Receipt) ![]u8 {
 
     try arguments.verify(project.allocator, recipe, value, original.value, project.runner.?.compiler);
 
+    // Bracket the ELF read with source hashes to catch edits during handoff.
     var cancel: std.atomic.Value(bool) = .init(false);
     const budget = project.budget(&cancel);
     const before = try source.revision(project.workspace.?.dir, budget);

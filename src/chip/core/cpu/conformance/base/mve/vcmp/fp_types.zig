@@ -1,15 +1,19 @@
-//! Types and constructors shared by the adjacent instruction-vector case groups.
+//! MVE floating-point comparison fixtures: operands in, predicate/status flags out.
 
 pub const vector = @import("../../../vector.zig");
 
 pub const In = struct {
+    /// First and second instruction halfwords, in fetch order.
     hw1: u16,
     hw2: u16,
     size: u8 = 4,
+    /// Raw Q-register bits; the instruction selects the lane size and interpretation.
     qn: u128 = 0,
     qm: u128 = 0,
     rm: u32 = 0,
+    /// Vector Predicate Register bits.
     vpr: u32 = 0,
+    /// Packed If-Then (IT) or interrupted-instruction continuation (ECI) state.
     it: u8 = 0,
     lr: u32 = 0,
     fpscr: u32 = 0x0004_0000,
