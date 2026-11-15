@@ -186,13 +186,16 @@ test "cache maintenance preserves a hash-named symlink and its target" {
     var buffer: [68]u8 = undefined;
     const name = try imageName(&buffer, 1000);
     try ownedSymlink(&rig, name);
+    var before_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const before = before_buffer[0..try rig.cache.readLink(io, name, &before_buffer)];
     _ = try rig.copy("cache maintenance");
     const stat = try rig.cache.statFile(io, name, .{ .follow_symlinks = false });
     try std.testing.expectEqual(std.Io.File.Kind.sym_link, stat.kind);
-    if (native) {
-        const through_link = try std.fmt.allocPrint(rig.arena.allocator(), "{s}/sentinel", .{name});
-        try rig.payload(through_link, "unrelated");
-    } else try rig.payload(name, "unrelated");
+    // RedirectionGuard may forbid traversing a non-admin junction. Inspect
+    // its stored destination and read the owned target directly instead.
+    var after_buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const after = after_buffer[0..try rig.cache.readLink(io, name, &after_buffer)];
+    try std.testing.expectEqualStrings(before, after);
     const target = try rig.tmp.dir.readFileAlloc(io, if (native) "untouched-target/sentinel" else "untouched-target", rig.arena.allocator(), .limited(100));
     try std.testing.expectEqualStrings("unrelated", target);
 }
