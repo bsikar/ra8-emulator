@@ -61,4 +61,6 @@ pub const Method = enum(u16) {
     frame_status = 0x013B,
     diff = 0x013C,
     set_var = 0x013D,
+    undo_write = 0x013E,
+    reset_image = 0x013F,
 };

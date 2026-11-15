@@ -37,6 +37,10 @@ pub fn encode(allocator: std.mem.Allocator, action: Action) !EncodedAction {
     errdefer out.deinit();
     const w = &out.writer;
     const what: What = switch (action) {
+        .restore => |bytes| blk: {
+            try w.writeAll(bytes);
+            break :blk .state_restore;
+        },
         .register => |reg| blk: {
             try w.writeByte(@backingInt(reg.core));
             try w.writeInt(u32, @backingInt(reg.which), .little);
@@ -100,6 +104,7 @@ pub fn free(allocator: std.mem.Allocator, encoded: *EncodedAction) void {
 pub fn decode(allocator: std.mem.Allocator, what: What, body: []const u8) !Action {
     var r: Reader = .{ .body = body };
     switch (what) {
+        .state_restore => return .{ .restore = try allocator.dupe(u8, body) },
         .register_write => {
             const core = try r.core();
             const raw = try r.int(u32);

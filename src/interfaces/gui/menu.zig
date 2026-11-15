@@ -12,7 +12,7 @@ pub const board_profiles = @import("shell/board_profiles.zig");
 const Kind = pane_layout.Kind;
 
 /// The fixed commands. Run, Pause and Step are the time bar's controls.
-pub const Command = enum { open_elf, open_profile, close, settings, quit, run, pause, step, reset, toggle_fullscreen, reload };
+pub const Command = enum { open_elf, open_profile, close, settings, quit, run, pause, step, reset, undo_write, toggle_fullscreen, reload };
 
 /// Pick a shipped board or panel profile (RA8EMU-1152). An empty panel
 /// stem means the board's own panel, "none" means no panel at all.
@@ -96,6 +96,7 @@ pub const run = [_]Item{
     .{ .label = "Run", .action = .{ .command = .run }, .shortcut = .{ .key = 'R' } },
     .{ .label = "Pause", .action = .{ .command = .pause }, .shortcut = .{ .key = 'P' } },
     .{ .label = "Step", .action = .{ .command = .step }, .shortcut = .{ .key = 'S' } },
+    .{ .label = "Undo Debugger Write", .action = .{ .command = .undo_write }, .shortcut = .{ .key = 'Z' }, .divided = true },
     .{ .label = "Reset", .action = .{ .command = .reset }, .shortcut = .{ .key = 'R', .shift = true }, .divided = true },
 };
 
@@ -182,6 +183,8 @@ pub const State = struct {
     running: bool = false,
     /// The window is full screen (RA8EMU-966).
     fullscreen: bool = false,
+    recovery_supported: bool = false,
+    recovery_pending: bool = false,
 };
 
 /// The text `item` draws: "Enter"/"Exit Full Screen" follows the window's
@@ -201,11 +204,14 @@ pub fn label(item: Item, state: State) []const u8 {
 /// Whether `action` can fire now. Disabled items draw muted and never fire.
 pub fn enabled(action: Action, state: State) bool {
     return switch (action) {
-        .toggle, .choice, .recent => true,
+        .toggle => true,
+        .choice, .recent => !state.recovery_pending,
         .command => |command| switch (command) {
-            .open_elf, .open_profile, .settings, .quit, .toggle_fullscreen => true,
-            .close, .reset, .reload => state.loaded,
-            .run, .step => state.loaded and !state.running,
+            .open_profile, .settings, .quit, .toggle_fullscreen => true,
+            .open_elf => !state.recovery_pending,
+            .close, .reload => state.loaded and !state.recovery_pending,
+            .undo_write, .reset => state.loaded and !state.running and state.recovery_supported and !state.recovery_pending,
+            .run, .step => state.loaded and !state.running and !state.recovery_pending,
             .pause => state.running,
         },
     };

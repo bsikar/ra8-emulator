@@ -8,17 +8,21 @@ const menu = @import("../menu.zig");
 const menu_bar = @import("../menu_bar.zig");
 const pane_layout = @import("../ui/pane_layout.zig");
 const shell_loop = @import("loop.zig");
+const proto = @import("ra8_rpc").session.rpc;
 
 const Shell = shell_loop.Shell;
 
 /// What the strip's enabled rules read from the session this frame.
 pub fn observe(shell: *Shell, window: platform.Platform, width: i32) void {
+    shell.recovery.sync(shell);
     if (shell.recent_menu) |m| shell.menu.menus = m.sync();
     shell.width = width;
     shell.menu.state = .{
         .loaded = shell.loaded,
         .running = if (shell.time) |time| time.run.lit else false,
         .fullscreen = window.fullscreen(),
+        .recovery_supported = if (shell.link) |link| link.caps() & proto.recovery_cap != 0 else false,
+        .recovery_pending = shell.recovery.asked != null,
     };
 }
 
@@ -58,15 +62,24 @@ pub fn key(shell: *Shell, window: platform.Platform, event: platform.Event) bool
 /// One menu action: the same steps the time bar's buttons and the pane
 /// titles take.
 pub fn fire(shell: *Shell, window: platform.Platform, action: menu.Action) void {
+    shell.recovery.sync(shell);
+    if (shell.recovery.asked != null) switch (action) {
+        .choice, .recent => return,
+        .command => |command| switch (command) {
+            .run, .step, .open_elf, .reload, .reset, .undo_write => return,
+            else => {},
+        },
+        else => {},
+    };
     switch (action) {
         .command => |command| switch (command) {
             .open_elf => if (shell.files) |files| files.ask(),
             .reload => if (shell.files) |files| if (shell.link) |link| files.reload(link, &shell.status),
             .open_profile => if (shell.pick) |pick| pick.ask(),
             .settings => shell.settings.ask(),
-            // The wire has no unload or reset method yet; those items wait
-            // for the methods to land.
-            .close, .reset => {},
+            .close => {},
+            .reset => shell.recovery.ask(shell, .reset_image),
+            .undo_write => shell.recovery.ask(shell, .undo_write),
             .quit => shell.open = false,
             .toggle_fullscreen => window.toggleFullscreen(),
             .run => if (shell.time) |time| if (shell.link) |link| time.pressCommand(.run, link, &shell.status),

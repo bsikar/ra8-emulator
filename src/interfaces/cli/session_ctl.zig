@@ -41,7 +41,8 @@ pub const usage =
     "            branch ls | branch switch ID | branch rm ID [--confirm] | diff A B\n" ++
     "            fork confirm | fork cancel | fork status | write-reg NAME VALUE | " ++
     "set NAME=VALUE | console " ++
-    "TEXT";
+    "TEXT\n" ++
+    "            undo | reset-image";
 
 const command_parse = @import("ctl/parse.zig");
 const command_types = @import("ctl/command.zig");

@@ -9,7 +9,9 @@ pub const protocol_version: u16 = 1;
 /// Bit 14: the locals_at op (RA8EMU-1187), locals at a chosen frame.
 /// Bit 15: the transport topic and advance_async (RA8EMU-1196, slice 14):
 /// host answers advance_async by queueing and reports on transport topic.
-pub const capabilities: u32 = 0x0000_7FFF;
+/// Bit 19: debugger write undo and clean image reset.
+pub const capabilities: u32 = 0x0008_7FFF;
+pub const recovery_cap: u32 = 1 << 19;
 /// Capability bit 15, the transport topic (ORed in when frame loop pumps).
 pub const transport_cap: u32 = 0x0000_8000;
 pub const max_payload = 1_048_576;
@@ -72,6 +74,7 @@ pub const EventKind = enum(u8) {
     rtos_idle,
     isr_enter,
     isr_leave,
+    rewound,
 };
 
 pub const Load = struct {

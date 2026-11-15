@@ -27,6 +27,24 @@ pub fn skipBkpt(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     return .{ .ok = .{ .accepted = 1 } };
 }
 
+/// Restores the whole machine to before the most recent debugger write.
+pub fn undoWrite(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
+    _ = args;
+    if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
+    context.session.undoWrite() catch |err| return refuse(err);
+    context.pending = null;
+    return .{ .ok = .{ .accepted = 1 } };
+}
+
+/// Restores the whole machine's clean image checkpoint.
+pub fn resetImage(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
+    _ = args;
+    if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
+    context.session.resetImage() catch |err| return refuse(err);
+    context.pending = null;
+    return .{ .ok = .{ .accepted = 1 } };
+}
+
 fn core(of: proto.Core) api.Core {
     return @fromBackingInt(@intCast(@backingInt(of)));
 }

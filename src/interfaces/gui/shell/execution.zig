@@ -25,6 +25,8 @@ pub fn exchange(self: *Shell) !void {
 /// on a thread of its own is paid between frames too: .fresh arms the
 /// frame clock once, .same pays without arming it again.
 pub fn paySlices(self: *Shell, frame: enum { fresh, same }) !void {
+    self.recovery.sync(self);
+    if (self.recovery.asked != null) return;
     const time = self.time orelse return;
     const link = self.link orelse return;
     defer settle(self);

@@ -22,18 +22,15 @@ const Session = @import("../api.zig").Session;
 
 const Pair = chip.core.second.core.zig.run.Driver;
 const NvicSource = chip.core.cpu.exception.nvic_source.NvicSource;
-
 const attachment_snapshot = @import("attachments.zig");
 const second_state = @import("second_state.zig");
 
 pub const attachments = attachment_snapshot;
 pub const Error = error{ SecondCoreNotSaved, UnsupportedAttachments };
-
 pub const Hook = struct {
     context: *anyopaque,
     saveFn: *const fn (*anyopaque, []const u8) anyerror!void,
     restoreFn: *const fn (*anyopaque, []const u8) anyerror!void,
-
     pub fn save(self: Hook, path: []const u8) anyerror!void {
         return self.saveFn(self.context, path);
     }
@@ -93,7 +90,10 @@ pub const Files = struct {
     /// Puts the whole saved run back; a reverse window of the run before it goes.
     pub fn readFrom(self: *Files, bytes: []const u8) !void {
         try self.readParts(bytes, .{});
-        if (self.session) |session| session.dropWindow();
+        if (self.session) |session| {
+            session.dropWindow();
+            if (session.history) |history| if (!history.edits.restoring) history.edits.clear();
+        }
     }
 
     /// Restores only `parts`; the board's attachments follow the board.

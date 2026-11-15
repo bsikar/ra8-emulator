@@ -16,6 +16,8 @@ pub const WriteCommand = union(enum) {
     console: []const u8,
     /// `skip-bkpt`: step CPU0 over the BKPT it is stopped on.
     skip_bkpt,
+    undo,
+    reset_image,
 };
 
 /// The machine-changing words: write-reg (or reg NAME VALUE), write-mem
@@ -27,8 +29,21 @@ pub fn parseWord(allocator: std.mem.Allocator, name: []const u8, args: []const [
     if (eql(u8, name, "write-mem") or (eql(u8, name, "poke") and args.len == 2)) return try parseMem(allocator, args);
     if (eql(u8, name, "set")) return try parseSet(args);
     if (eql(u8, name, "console")) return if (args.len == 1) .{ .console = args[0] } else error.BadArguments;
-    if (eql(u8, name, "skip-bkpt")) return if (args.len == 0) .skip_bkpt else error.BadArguments;
+    if (try parseNoArgs(name, args)) |cmd| return cmd;
     return null;
+}
+
+fn parseNoArgs(name: []const u8, args: []const []const u8) !?WriteCommand {
+    const command: WriteCommand = if (std.mem.eql(u8, name, "skip-bkpt"))
+        .skip_bkpt
+    else if (std.mem.eql(u8, name, "undo"))
+        .undo
+    else if (std.mem.eql(u8, name, "reset-image"))
+        .reset_image
+    else
+        return null;
+    if (args.len != 0) return error.BadArguments;
+    return command;
 }
 
 /// Parse `set [--frame N] NAME=VALUE`.
@@ -119,6 +134,19 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
         .skip_bkpt => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .skip_bkpt, .{ .core = .cpu0 });
             if (json) try w.writeAll("{\"skip_bkpt\":true}\n") else try w.writeAll("BKPT skipped\n");
+        },
+        .undo, .reset_image => {
+            if (cmd == .undo) {
+                _ = try client.call(proto.Ack, proto.CoreOnly, .undo_write, .{ .core = .cpu0 });
+            } else {
+                _ = try client.call(proto.Ack, proto.CoreOnly, .reset_image, .{ .core = .cpu0 });
+            }
+            const name = if (cmd == .undo) "undo" else "reset_image";
+            if (json) {
+                try w.print("{{\"{s}\":true}}\n", .{name});
+            } else {
+                try w.print("{s}: restored machine checkpoint\n", .{name});
+            }
         },
     }
     return 0;
