@@ -67,6 +67,7 @@ pub fn libraries(
         .{ .name = "ra8_gfx", .module = firmware.module("ra8_gfx") },
     });
     const rpc = library(b, target, optimize, "ra8_rpc", "src/interfaces/rpc/root.zig", &.{
+        .{ .name = "ra8_snapshot", .module = snapshot },
         .{ .name = "ra8_session", .module = session },
         .{ .name = "ra8_components", .module = components },
         .{ .name = "ra8_host", .module = host },

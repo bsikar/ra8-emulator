@@ -87,18 +87,8 @@ pub const Bind = struct {
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
-        const bind = try allocator.create(Bind);
+        const bind = try allocate(allocator);
         errdefer allocator.destroy(bind);
-        bind.* = .{
-            .gpa = allocator,
-            .pending = .init(allocator),
-            .base = undefined,
-            .session = undefined,
-            .log = undefined,
-            .sink = undefined,
-            .storage = undefined,
-            .objects = undefined,
-        };
         errdefer bind.pending.deinit();
         bind.base = if (opts.reopen != null)
             try history.base.Base.existingConfigured(allocator, io, path, .cache, .{ .recover = false })
@@ -115,6 +105,38 @@ pub const Bind = struct {
         } else {
             _ = bind.session.close(null, .move) catch {};
         };
+        try initialize(bind, allocator, io, opts);
+        return bind;
+    }
+
+    /// Borrow a validated import's lease until success, then take ownership without an unlock gap.
+    pub fn adopt(allocator: std.mem.Allocator, base: *history.base.Base, incoming: *history.session.Session) !*Bind {
+        const bind = try allocate(allocator);
+        errdefer allocator.destroy(bind);
+        errdefer bind.pending.deinit();
+        bind.base = base.*;
+        bind.session = incoming.*;
+        bind.session.base = &bind.base;
+        try initialize(bind, allocator, base.io, .{ .reopen = incoming.id });
+        return bind;
+    }
+
+    fn allocate(allocator: std.mem.Allocator) !*Bind {
+        const bind = try allocator.create(Bind);
+        bind.* = .{
+            .gpa = allocator,
+            .pending = .init(allocator),
+            .base = undefined,
+            .session = undefined,
+            .log = undefined,
+            .sink = undefined,
+            .storage = undefined,
+            .objects = undefined,
+        };
+        return bind;
+    }
+
+    fn initialize(bind: *Bind, allocator: std.mem.Allocator, io: std.Io, opts: Options) !void {
         errdefer if (bind.media_bytes) |bytes| allocator.free(bytes);
         errdefer if (bind.root_bytes) |bytes| allocator.free(bytes);
         try bind.readRoot(opts);
@@ -151,7 +173,6 @@ pub const Bind = struct {
             .putPacked = &history_pending.putPacked,
         };
         try bind.bindBudget(allocator, io, store, opts.cap);
-        return bind;
     }
 
     /// End the run: the log closes first, then the session (an ephemeral

@@ -1,5 +1,4 @@
 const callbacks = @import("served_callbacks.zig");
-const host = @import("ra8_host");
 const served_card = @import("served_card.zig");
 const served_startup = @import("served_startup.zig");
 const session = @import("ra8_session");
@@ -14,6 +13,7 @@ const proto = @import("session/rpc.zig");
 const served = @import("session/server.zig");
 const served_camera = @import("served_camera.zig");
 const served_initial = @import("served_initial.zig");
+const served_owner = @import("served_owner.zig");
 const served_usbip = @import("served_usbip.zig");
 const symbols = @import("ra8_session").symbols;
 
@@ -22,7 +22,6 @@ const frame_pipeline = @import("frame_pipeline.zig");
 const history = @import("ra8_host").history;
 const history_bind = @import("history_bind.zig");
 const history_bridge = @import("history_bridge.zig");
-const history_budget = @import("ra8_host").history.budget;
 const history_marker_store = @import("history_marker_store.zig");
 const history_ram = @import("history_ram.zig");
 const history_resources = @import("ra8_host").history.resources;
@@ -41,6 +40,8 @@ const session_fork = @import("ra8_session").history_fork_router;
 /// nothing it writes lands on the disk. No options at all records
 /// nothing.
 pub const HistoryOpts = struct {
+    /// Consumed even on open failure; an admitted import keeps its existing lease.
+    imported: ?*history_bind.Bind = null,
     root: ?[]const u8 = null,
     checkpoint_every: u32 = 64,
     /// An explicit cap on the served session's disk history share, in
@@ -147,41 +148,43 @@ pub const Served = struct {
         // The history outlives the harness: the armed checkpoints write
         // through its shapes until the harness's teardown disarms, so on
         // an error the harness goes first and the history closes second.
-        var bind: ?*history_bind.Bind = null;
+        var bind: ?*history_bind.Bind = if (history_opts) |opts| opts.imported else null;
         errdefer if (bind) |b| if (b.close()) |_| {} else |_| {};
         var ram: ?*history_ram.RamHistory = null;
         errdefer if (ram) |r| r.deinit();
-        if (history_opts) |opts| {
+        if (history_opts) |opts| if (bind == null) {
             if (opts.root) |root| {
                 bind = try openHistory(allocator, io, root, board_profile, opts, &initial);
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
-        }
+        };
         const profile = if (bind) |b| if (b.reopened) b.root.?.board_profile else board_profile else board_profile;
-        var owner = try harness.open(allocator, io, .{
-            .elf_path = elf_path,
-            .elf_bytes = initial.firstBytes(),
-            .board_profile = profile,
-            .history_storage = if (bind) |b| b.storage else if (ram) |r| r.storage else null,
-            .history_objects = if (bind) |b| b.objects else if (ram) |r| r.object_space else null,
-            .history_disk = if (bind) |b| b.disk else if (ram) |r| r.budget else null,
-            .history_checkpoint_cap = if (bind) |b| b.checkpoint_cap else 0,
-            .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
-            .files = host.session_files.cwd(session.file_ops.Ops),
-        });
+        var owner = try served_owner.open(allocator, io, elf_path, &initial, profile, bind, ram, history_opts);
         errdefer owner.deinit();
         _ = owner.watchModules();
         try self.initContext(allocator, io, owner, bind, ram);
         errdefer allocator.free(self.rx);
         errdefer allocator.free(self.tx);
         errdefer allocator.free(self.context.scratch);
+        try self.finishOpen(allocator, io, &initial, profile, history_opts, startup);
+    }
+
+    fn finishOpen(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        initial: *served_initial.Images,
+        profile: ?[]const u8,
+        history_opts: ?HistoryOpts,
+        startup: Startup,
+    ) !void {
         if (initial.second) |image| try served_second.open(self, image);
         errdefer served_second.close(self);
         errdefer served_card.release(self);
         try served_initial.media(self, startup);
         // Seed the reverse window only after both images and startup media exist.
-        if (history_opts) |opts| try self.owner.openWindow(try windowBytes(opts));
+        if (history_opts) |opts| try self.owner.openWindow(try served_owner.windowBytes(opts));
         if (self.second) |cpu1| if (self.owner.state.window) |window| window.attachSecond(&cpu1.cpu().slots);
         // The transport rides the context so run-control methods route through it (slice 14).
         self.context.transport = self.owner.transport();
@@ -193,7 +196,7 @@ pub const Served = struct {
         errdefer served_prefetch.detach(self);
         try served_prefetch.attach(self, if (history_opts) |o| o.ram_budget else null);
         try self.attachContext(allocator, profile);
-        if (bind) |b| if (history_opts.?.kept) try b.session.keep();
+        if (self.history) |b| if (history_opts.?.kept) try b.session.keep();
     }
 
     fn initContext(
@@ -369,15 +372,6 @@ pub const Served = struct {
         if (self.ram_history) |ram| ram.deinit();
     }
 };
-/// The reverse window's byte budget: the window share of the RAM budget, the
-/// 128 MiB floor's share when the host's RAM cannot be measured.
-fn windowBytes(opts: HistoryOpts) !usize {
-    const ram = history_resources.ramBudget(opts.ram_budget) catch |err| switch (err) {
-        error.MeasurementUnavailable => history_budget.bytes.floor,
-        else => return err,
-    };
-    return @intCast((try history_budget.partition(ram)).window);
-}
 
 fn openHistory(
     allocator: std.mem.Allocator,

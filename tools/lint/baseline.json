@@ -222,7 +222,6 @@
     {"count": 1, "fingerprint": "a29b54345fe9f72bc9757f18bbdca380a252acc9e9d423b380bd344e12139803", "path": "src/interfaces/rpc/served_history.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "a9fdb789ac2212f2d94b1efb991e2f7a3c22854e187cf99f5a106a077b117f40", "path": "src/interfaces/rpc/served_history.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "fa2723a137508730ca2baeb0042e4229f16848aedfaf32b9e2f11863a9b9ee91", "path": "src/interfaces/rpc/served_history.zig", "rule": "no_swallow_error"},
-    {"count": 1, "fingerprint": "c5efbfdddd0dbb538e3ac083270f5c3b7303bdec389dac37b2081d9cfd6864db", "path": "src/interfaces/rpc/served_setup.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "2fb43d1e30ee1595e1cb050e5963781e61e6fc2fdaa9878166fba168216ac167", "path": "src/interfaces/rpc/served_setup.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "cd5413e144bc939c2338281ac285c9d717ff24322c0ddba7f108f33bf3d0d6d5", "path": "src/interfaces/rpc/served_setup.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "549ba8794cd3d07e32cca6d02fd7e80dc6b6ea41916892961820436dbe1b351c", "path": "src/interfaces/rpc/session/advance.zig", "rule": "no_swallow_error"},

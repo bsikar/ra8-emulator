@@ -10,6 +10,7 @@
 pub const backtrace_wire = @import("backtrace_wire.zig");
 pub const build = @import("build.zig");
 pub const build_wire = @import("build_wire.zig");
+pub const bundle_import = @import("bundle/import.zig");
 pub const card_apps = @import("card_apps.zig");
 pub const child_transport = @import("child_transport.zig");
 pub const frame_pipeline = @import("frame_pipeline.zig");
