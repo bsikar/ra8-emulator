@@ -337,6 +337,7 @@ fn replayable(what: Intervention.What) bool {
         .camera_change,
         .skip_bkpt,
         .load,
+        .state_restore,
         => true,
         else => false,
     };

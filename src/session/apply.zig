@@ -11,6 +11,7 @@ const elf = @import("ra8_board").image.elf;
 const fork_router_mod = @import("history/fork_router.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
+const write_undo = @import("write_undo.zig");
 
 const Session = api.Session;
 pub const Action = fork_router_mod.Action;
@@ -18,13 +19,20 @@ pub const Action = fork_router_mod.Action;
 /// Dispatches an action onto the machine without routing checks.
 pub fn applyAction(self: *Session, action: Action) anyerror!void {
     switch (action) {
+        .restore => |bytes| try write_undo.applyRestore(self, bytes),
         .register => |reg| {
+            const prior = try write_undo.prepare(self);
+            errdefer write_undo.finish(self, prior, false);
             try (try self.view(reg.core)).setRegister(reg.which, reg.value);
+            write_undo.finish(self, prior, true);
             self.dirty();
             self.publish(.{ .core = reg.core, .kind = .register_written });
         },
         .memory => |mem| {
+            const prior = try write_undo.prepare(self);
+            errdefer write_undo.finish(self, prior, false);
             try (try self.view(mem.core)).write(mem.address, mem.bytes);
+            write_undo.finish(self, prior, true);
             self.dirty();
             self.publish(.{ .core = mem.core, .kind = .memory_written, .address = mem.address });
         },
@@ -72,6 +80,7 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
             else |_|
                 null;
             self.widget_tree_addresses[@backingInt(ld.core)] = tree_address;
+            write_undo.loaded(self);
             self.publish(.{ .core = ld.core, .kind = .loaded });
         },
     }
@@ -83,6 +92,7 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
 /// the common refusals never reach a half-made branch.
 pub fn preflight(self: *Session, action: Action) anyerror!void {
     switch (action) {
+        .restore => |bytes| try write_undo.preflightRestore(self, bytes),
         .register => |reg| _ = try (try self.view(reg.core)).register(reg.which),
         .memory => |mem| {
             const view = try self.view(mem.core);

@@ -322,6 +322,7 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.board.input_landing = &state.landing_observer;
     bindSnapshot(state, allocator, io, options);
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
+    errdefer state.history.deinit();
     state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());

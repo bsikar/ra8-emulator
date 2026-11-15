@@ -207,6 +207,7 @@ pub const Intervention = struct {
         camera_change = 10,
         skip_bkpt = 11,
         load = 12,
+        state_restore = 13,
         _,
     };
     what: What,

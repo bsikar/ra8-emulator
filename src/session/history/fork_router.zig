@@ -34,6 +34,7 @@ pub const FaultMode = fault_spec.Mode;
 
 /// What mutation was requested by the host intervention.
 pub const Action = union(enum) {
+    restore: []const u8,
     register: struct { core: Core, which: Register, value: u32 },
     memory: struct { core: Core, address: u32, bytes: []const u8 },
     input: struct { core: Core, at_ns: u64, event: input_script.Event },
@@ -62,6 +63,7 @@ pub const RouteDecision = enum {
 /// Duplicates any borrowed slice in `action` using `allocator`.
 pub fn dupeAction(allocator: std.mem.Allocator, action: Action) !Action {
     switch (action) {
+        .restore => |bytes| return .{ .restore = try allocator.dupe(u8, bytes) },
         .memory => |m| return .{
             .memory = .{
                 .core = m.core,
@@ -86,6 +88,7 @@ pub fn dupeAction(allocator: std.mem.Allocator, action: Action) !Action {
 /// Frees any duplicated slice in `action` using `allocator`.
 pub fn freeAction(allocator: std.mem.Allocator, action: *Action) void {
     switch (action.*) {
+        .restore => |bytes| allocator.free(bytes),
         .memory => |m| allocator.free(m.bytes),
         .console => |c| allocator.free(c.bytes),
         .camera => |cam| allocator.free(cam.spec),

@@ -54,6 +54,8 @@ pub const Refusal = enum {
     /// The transport refused a turbo run (slice 19): the advance was
     /// declined, or the link in reach cannot carry one.
     advance,
+    undo,
+    reset_image,
 
     pub fn message(self: Refusal) []const u8 {
         return switch (self) {
@@ -63,6 +65,8 @@ pub const Refusal = enum {
             .too_large => "the image is too large for the session (64 MiB at most)",
             .seek => "the session refused the seek",
             .advance => "the session refused the advance",
+            .undo => "the session refused undo (no saved write or unsupported history)",
+            .reset_image => "the session refused reset (no clean image or unsupported history)",
         };
     }
 };

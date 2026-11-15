@@ -31,8 +31,9 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var whole = false;
     var events: [batch]api.Event = undefined;
     while (context.session.pollEvents(id, &events)) |read| {
-        if (read.dropped != 0) whole = true;
+        whole = whole or read.dropped != 0;
         for (events[0..read.count]) |event| {
+            whole = whole or event.kind == .rewound;
             note(context, &due, event);
         }
         if (read.count < batch) break;
@@ -89,6 +90,14 @@ fn skip(what: []const u8, err: anyerror) void {
 }
 
 fn note(context: *const Context, due: *[2]?Due, event: api.Event) void {
+    if (event.kind == .rewound) {
+        const index = @backingInt(event.core);
+        if (context.wants(@fromBackingInt(index), .lcd_dirty)) due[index] = .{
+            .rect = .{ .x = 0, .y = 0, .width = std.math.maxInt(u16), .height = std.math.maxInt(u16) },
+            .virtual_ns = event.virtual_ns,
+        };
+        return;
+    }
     if (event.kind != .lcd_frame) return;
     const frame = switch (event.payload) {
         .frame => |refreshed| refreshed,

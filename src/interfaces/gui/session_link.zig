@@ -40,9 +40,12 @@ pub const State = union(enum) {
 
 /// What one pump took off the wire.
 pub const Arrival = union(enum) {
-    response: struct { id: u32, result: Env.Result },
+    response: struct { id: u32, result: Env.Result, connection: u64 = 0 },
     event: Env.Event,
 };
+
+// Assigned on open without reading the previous, possibly undefined Link.
+var next_connection: std.atomic.Value(u64) = .init(1);
 
 fn classify(err: proto.Error) Failure {
     return switch (err) {
@@ -63,11 +66,12 @@ pub const Link = struct {
     /// Set when the link is native: `send` queues into the mailbox and
     /// `pump` takes its ring; no wire is involved.
     native: ?*local_native_link.Native = null,
+    connection: u64 = 0,
 
     /// Greet the session on `wire`. `rx` (2 * Env.max_frame bytes) and `tx`
     /// (Env.max_frame bytes) must outlive the link.
     pub fn open(self: *Link, wire: rpc.Transport, rx: []u8, tx: []u8) void {
-        self.* = .{ .inner = wire, .client = undefined, .tx = tx };
+        self.* = .{ .inner = wire, .client = undefined, .tx = tx, .connection = next_connection.fetchAdd(1, .monotonic) };
         self.client = proto.Client.init(self.watched(), rx, proto.capabilities);
         self.client.greet(tx) catch |err| self.fail(err);
     }
@@ -86,7 +90,7 @@ pub const Link = struct {
     /// session answers `advance` with a response, so the shell takes the
     /// sync path. Tests of the sync path's semantics open this way.
     pub fn openNativePlain(self: *Link, native: *local_native_link.Native) void {
-        self.* = .{ .native = native, .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } } };
+        self.* = .{ .native = native, .connection = next_connection.fetchAdd(1, .monotonic), .state = .{ .connected = .{ .version = proto.protocol_version, .caps = proto.capabilities } } };
     }
 
     /// The session's capability bits, or 0 while not connected.
@@ -108,7 +112,7 @@ pub const Link = struct {
                 return null;
             }) orelse return null;
             return switch (got) {
-                .response => |r| .{ .response = .{ .id = r.id, .result = r.result } },
+                .response => |r| .{ .response = .{ .id = r.id, .result = r.result, .connection = self.connection } },
                 .event => |e| .{ .event = e },
             };
         }
@@ -121,7 +125,7 @@ pub const Link = struct {
                 self.state = .{ .connected = .{ .version = proto.protocol_version, .caps = offered } };
                 return null;
             },
-            .response => |response| return .{ .response = .{ .id = response.id, .result = response.result } },
+            .response => |response| return .{ .response = .{ .id = response.id, .result = response.result, .connection = self.connection } },
             .event => |event| return .{ .event = event },
         }
     }

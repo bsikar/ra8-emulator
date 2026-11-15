@@ -10,6 +10,7 @@ test "stream kinds the wire names map to the same wire kind" {
     try std.testing.expectEqual(proto.EventKind.input_scheduled, feed.wireKind(.input_scheduled).?);
     try std.testing.expectEqual(proto.EventKind.unplugged, feed.wireKind(.unplugged).?);
     try std.testing.expectEqual(proto.EventKind.led_changed, feed.wireKind(.led_changed).?);
+    try std.testing.expectEqual(proto.EventKind.rewound, feed.wireKind(.rewound).?);
 }
 
 test "stream kinds with their own topic or no wire name are skipped" {

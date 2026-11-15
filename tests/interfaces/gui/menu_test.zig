@@ -136,7 +136,7 @@ test "find maps a key and shift to its action in any case" {
     try std.testing.expect(menu.find(bar, 'r', true).?.eql(.{ .command = .reset }));
     try std.testing.expect(menu.find(bar, '3', false).?.eql(.{ .toggle = .camera }));
     try std.testing.expect(menu.find(bar, '8', false).?.eql(.{ .toggle = .stack }));
-    try std.testing.expectEqual(@as(?menu.Action, null), menu.find(bar, 'Z', false));
+    try std.testing.expect(menu.find(bar, 'Z', false).?.eql(.{ .command = .undo_write }));
     try std.testing.expectEqual(@as(?menu.Action, null), menu.find(bar, 'O', true));
 }
 
@@ -151,7 +151,7 @@ test "nothing loaded: only Open, Quit and the view toggles fire" {
 }
 
 test "loaded and halted: run and step fire, pause does not" {
-    const halted = menu.State{ .loaded = true };
+    const halted = menu.State{ .loaded = true, .recovery_supported = true };
     try std.testing.expect(menu.enabled(.{ .command = .run }, halted));
     try std.testing.expect(menu.enabled(.{ .command = .step }, halted));
     try std.testing.expect(menu.enabled(.{ .command = .reset }, halted));
@@ -162,7 +162,7 @@ test "loaded and halted: run and step fire, pause does not" {
 test "running: pause fires, run and step do not" {
     const running = menu.State{ .loaded = true, .running = true };
     try std.testing.expect(menu.enabled(.{ .command = .pause }, running));
-    try std.testing.expect(menu.enabled(.{ .command = .reset }, running));
+    try std.testing.expect(!menu.enabled(.{ .command = .reset }, running));
     try std.testing.expect(!menu.enabled(.{ .command = .run }, running));
     try std.testing.expect(!menu.enabled(.{ .command = .step }, running));
 }
