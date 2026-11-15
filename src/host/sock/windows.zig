@@ -14,8 +14,8 @@ const sock_dgram: c_int = 2;
 const sol_socket: c_int = 0xffff;
 const so_error: c_int = 0x1007;
 const sd_send: c_int = 1;
-const fionbio: c_long = @bitCast(@as(u32, 0x8004_667E));
-const socket_error: c_int = -1;
+pub const fionbio: c_long = @bitCast(@as(u32, 0x8004_667E));
+pub const socket_error: c_int = -1;
 
 const SockaddrIn = extern struct {
     family: u16 = af_inet,
@@ -33,25 +33,44 @@ extern "ws2_32" fn send(s: Socket, bytes: [*]const u8, len: c_int, flags: c_int)
 extern "ws2_32" fn shutdown(s: Socket, how: c_int) callconv(.winapi) c_int;
 extern "ws2_32" fn closesocket(s: Socket) callconv(.winapi) c_int;
 
-var started = std.atomic.Value(bool).init(false);
+var started = std.atomic.Value(u8).init(0);
 
 /// Winsock must be started once per process before the first socket.
-fn start() Error!void {
-    if (started.swap(true, .acq_rel)) return;
-    var data: [512]u8 align(8) = undefined;
-    if (WSAStartup(0x0202, &data) == 0) return;
-    started.store(false, .release);
-    return error.SystemResources;
+pub fn start() Error!void {
+    while (true) switch (started.load(.acquire)) {
+        2 => return,
+        0 => {
+            if (started.cmpxchgStrong(0, 1, .acq_rel, .acquire) != null) continue;
+            var data: [512]u8 align(8) = undefined;
+            if (WSAStartup(0x0202, &data) == 0) {
+                started.store(2, .release);
+                return;
+            }
+            started.store(0, .release);
+            return error.SystemResources;
+        },
+        else => std.atomic.spinLoopHint(),
+    };
+}
+
+/// Enable nonblocking mode on a Winsock socket handle.
+pub fn setNonblocking(s: Socket) Error!void {
+    var nonblocking: c_ulong = 1;
+    if (ioctlsocket(s, fionbio, &nonblocking) == socket_error) return lastError();
+}
+
+/// Open a nonblocking Winsock socket for `family` and `kind`.
+pub fn openSocket(family: c_int, kind: c_int) Error!Socket {
+    try start();
+    const s = socket(family, kind, 0);
+    if (s == win32.invalid_handle) return lastError();
+    errdefer close(s);
+    try setNonblocking(s);
+    return s;
 }
 
 pub fn open(stream: bool) Error!Socket {
-    try start();
-    const s = socket(af_inet, if (stream) sock_stream else sock_dgram, 0);
-    if (s == win32.invalid_handle) return lastError();
-    errdefer close(s);
-    var nonblocking: c_ulong = 1;
-    if (ioctlsocket(s, fionbio, &nonblocking) == socket_error) return lastError();
-    return s;
+    return openSocket(af_inet, if (stream) sock_stream else sock_dgram);
 }
 
 /// True when the connect finished at once; WouldBlock means it is pending.
@@ -90,14 +109,20 @@ pub fn close(s: Socket) void {
     _ = closesocket(s);
 }
 
-pub fn readyFor(s: Socket, writable: bool) Error!bool {
-    var fds = [_]win32.PollFd{.{ .fd = s, .events = if (writable) win32.poll_out else win32.poll_in, .revents = 0 }};
-    const got = win32.WSAPoll(&fds, fds.len, 0);
+/// Poll `s` via `WSAPoll` for `events` up to `timeout_ms`, returning `revents`.
+pub fn poll(s: Socket, events: i16, timeout_ms: i32) Error!i16 {
+    var fds = [_]win32.PollFd{.{ .fd = s, .events = events, .revents = 0 }};
+    const got = win32.WSAPoll(&fds, fds.len, timeout_ms);
     if (got == socket_error) return lastError();
-    return got != 0;
+    return fds[0].revents;
 }
 
-fn lastError() Error {
+pub fn readyFor(s: Socket, writable: bool) Error!bool {
+    const revents = try poll(s, if (writable) win32.poll_out else win32.poll_in, 0);
+    return revents != 0;
+}
+
+pub fn lastError() Error {
     return mapCode(win32.WSAGetLastError());
 }
 
