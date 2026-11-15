@@ -77,6 +77,7 @@ fn rebooted(cpu: *cpu_mod.Cpu, pending: *Reboot) !void {
     cpu.retired = retired;
 }
 
+/// Charge the board, advance the scheduler, then process stop/reboot/snapshot hooks.
 fn closeBoundary(cpu: *cpu_mod.Cpu, edge: Boundary, saved: *scheduler.State, snapshot: ?Snapshot) !bool {
     try edge.closeFn(edge.context, saved.stretch.carry);
     saved.next();
@@ -93,6 +94,7 @@ fn advance(cpu: *cpu_mod.Cpu, saved: *scheduler.State, left: u64) Progress {
     const before = cpu.slots;
     const stopped = cpu.runToCount(width, cpu.slots + width);
     const ran: u32 = @intCast(cpu.slots - before);
+    // A sleeping core can consume the interval without executing every slot.
     const elapsed = if (stopped == .count and cpu.waiting != null) width else ran;
     saved.advance(elapsed, ran);
     const cut_pending = if (cpu.cut) |latch| latch.takePending() else null;
