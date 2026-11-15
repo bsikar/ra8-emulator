@@ -1,18 +1,23 @@
-//! Types and constructors shared by the adjacent instruction-vector case groups.
+//! MVE pairwise integer fixtures, including predication and saturation status.
 
 pub const vector = @import("../../../vector.zig");
 
 pub const In = struct {
+    /// First and second instruction halfwords, in fetch order.
     hw1: u16,
     hw2: u16,
     size: u8 = 4,
+    /// Raw Q-register bits; the instruction selects the lane size and interpretation.
     qd: u128 = 0,
     qn: u128 = 0,
     qm: u128 = 0,
+    /// Vector Predicate Register bits.
     vpr: u32 = 0,
+    /// Packed If-Then (IT) or interrupted-instruction continuation (ECI) state.
     it: u8 = 0,
     ltpsize: u3 = 4,
     lr: u32 = 0,
+    /// FPSCR.QC, the cumulative saturation flag.
     qc: u1 = 0,
 };
 

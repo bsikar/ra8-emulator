@@ -1,4 +1,4 @@
-//! Types and constructors shared by the adjacent instruction-vector case groups.
+//! MVE integer fixtures: packed operands, plain results, and results with saturation status.
 
 pub const int = @import("int.zig");
 
@@ -12,6 +12,7 @@ pub const VPlain = vector.Vector(Operands, u128);
 
 pub const VSat = vector.Vector(Operands, int.Sat);
 
+/// Mixed lane signs and boundary values; lane zero occupies the least-significant bits.
 pub const a: u128 = 0x80000000_7FFFFFFF_00FF7F80_FFFF0001;
 
 pub const b: u128 = 0x80000000_00000001_01017F81_0001FFFF;
