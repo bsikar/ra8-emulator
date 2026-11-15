@@ -272,3 +272,28 @@ test "step-back, rewind and timeline walk the recorded window (RA8EMU-1170)" {
     try std.testing.expectEqual(pcs[0], open_session.live.core.cpu.regs.pc);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "oldest recorded stop") != null);
 }
+
+test "set updates a variable when symbols are loaded and refuses cleanly without an image" {
+    var memory: Sram = .{};
+    var cpu: Cpu = .{ .bus = memory.view() };
+    var machine: stop_machine.Machine = .{};
+    var live: Session = .{ .live = .{ .core = .{ .cpu = &cpu }, .machine = &machine, .budget = 1 } };
+    var target: zig_script.ZigScript = .{ .session = &live };
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try std.testing.expectEqual(.more, try target.apply((try commands.parse("set g_x=1")).?, &out.writer));
+    try std.testing.expectEqualStrings("error: NoSymbols\n", out.written());
+
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = "tests/fixtures/uart/uart_irq_echo.elf",
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
+    });
+    defer opened.deinit();
+    var live_target: zig_script.ZigScript = .{ .image = opened.image(), .session = opened.session() };
+    out.clearRetainingCapacity();
+    try std.testing.expectEqual(.more, try live_target.apply((try commands.parse("set g_uart_irq_echoes=0x55")).?, &out.writer));
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "g_uart_irq_echoes") != null);
+    var readback: [4]u8 = undefined;
+    try opened.session().read(.cpu0, 0x2200_0034, &readback);
+    try std.testing.expectEqual(@as(u32, 0x55), std.mem.readInt(u32, &readback, .little));
+}

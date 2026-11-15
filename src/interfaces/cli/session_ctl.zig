@@ -32,7 +32,7 @@ pub const usage =
     \\            rc | plug MODEL@ENDPOINT | unplug ENDPOINT | snapshot PATH | restore PATH
     \\            map | stack | rtc | periph [BLOCK] | folded [THREAD] | fault MODEL@ENDPOINT=MODE
     \\            branch ls | branch switch ID | branch rm ID [--confirm] | diff A B
-    \\            fork confirm | fork cancel | fork status | write-reg NAME VALUE | console TEXT
+    \\            fork confirm | fork cancel | fork status | write-reg NAME VALUE | set NAME=VALUE | console TEXT
 ;
 
 /// What `regs` reads when it is given no names.
@@ -333,7 +333,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             try out.rtc(w, json, report);
         },
         .branch_cmd => |cmd| try ctl_branch.perform(client, w, json, cmd),
-        .write_cmd => |cmd| try ctl_write.perform(client, w, json, cmd),
+        .write_cmd => |cmd| return try ctl_write.perform(client, w, json, cmd),
         .diff_cmd => |cmd| try ctl_diff.perform(client, w, json, cmd.a, cmd.b),
     }
     return 0;

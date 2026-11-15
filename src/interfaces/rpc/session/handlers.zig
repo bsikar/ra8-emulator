@@ -271,7 +271,7 @@ fn placeNamed(context: *Context, which: api.Core, address: u32) rpc.Outcome(prot
     return .{ .ok = .{ .id = id, .address = address, .deferred = 0 } };
 }
 
-fn imageOf(context: *Context, which: api.Core) ?session_symbols.Image {
+pub fn imageOf(context: *Context, which: api.Core) ?session_symbols.Image {
     const mapping = context.mapping orelse return null;
     const imageFn = mapping.imageFn orelse return null;
     return imageFn(mapping.context, @backingInt(which));

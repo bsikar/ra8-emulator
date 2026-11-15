@@ -44,6 +44,7 @@ const project = @import("../project.zig");
 const project_wire = @import("../project_wire.zig");
 const session_marker = @import("nav_marker.zig");
 const session_diff = @import("diff.zig");
+const session_set_var = @import("set_var.zig");
 pub const session_metrics = @import("metrics.zig");
 
 /// The framing library, for callers that only import the emulator.
@@ -116,6 +117,7 @@ const session_routes = .{
     .{ @backingInt(M.marker_set), session_marker.markerSet },
     .{ @backingInt(M.frame_status), session_nav.frameStatus },
     .{ @backingInt(M.diff), session_diff.diff },
+    .{ @backingInt(M.set_var), session_set_var.setVar },
 };
 
 pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes;

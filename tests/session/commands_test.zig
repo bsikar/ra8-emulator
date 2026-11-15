@@ -120,3 +120,14 @@ test "the reverse commands parse (RA8EMU-1170)" {
     try std.testing.expectError(error.ExtraArgument, commands.parse("timeline now"));
     try std.testing.expectError(error.BadNumber, commands.parse("rewind later"));
 }
+
+test "set parses variable assignment in direct and gdb forms (RA8EMU-1245)" {
+    try expectParsed(.{ .set_var = .{ .name = "g_count", .value = "42" } }, "set g_count=42");
+    try expectParsed(.{ .set_var = .{ .name = "local_x", .value = "-1" } }, "set var local_x=-1");
+    try expectParsed(.{ .set_var = .{ .name = "flag", .value = "true" } }, "set variable flag = true");
+    try std.testing.expectError(error.MissingArgument, commands.parse("set"));
+    try std.testing.expectError(error.MissingArgument, commands.parse("set var"));
+    try std.testing.expectError(error.BadNumber, commands.parse("set =42"));
+    try std.testing.expectError(error.MissingArgument, commands.parse("set g_count="));
+    try std.testing.expectError(error.ExtraArgument, commands.parse("set g_count=1 extra"));
+}

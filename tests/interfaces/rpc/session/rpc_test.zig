@@ -1,6 +1,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const protocol = ra8.rpc.session.rpc;
+const set_var_wire = ra8.rpc.session.set_var_wire;
 
 fn roundTrip(comptime T: type, value: T) !void {
     var bytes: [protocol.max_payload]u8 = undefined;
@@ -34,15 +35,25 @@ test "every request, result, and event message round-trips" {
     try roundTrip(protocol.DirtyRect, .{ .core = .cpu0, .x = 1, .y = 2, .width = 2, .height = 2, .virtual_ns = 9, .pixels = "gray" });
     try roundTrip(protocol.SessionEvent, .{ .core = .cpu1, .kind = .loaded, .address = 0x1000 });
     try roundTrip(protocol.Trace, .{ .core = .cpu1, .bytes = "trace" });
+    try roundTrip(set_var_wire.SetVarArgs, .{ .core = .cpu0, .frame = 1, .name = "g_count", .value = "-42" });
+    try roundTrip(set_var_wire.SetVarReply, .{
+        .status = .read_only,
+        .scope = .local,
+        .address = 0,
+        .in_register = 0xff,
+        .size = 4,
+        .message = "optimized out",
+    });
 }
 
 const fuzzed = .{
-    protocol.Load,         protocol.Run,           protocol.CoreOnly,     protocol.SetSpeed,
-    protocol.ReadRegister, protocol.WriteRegister, protocol.ReadMemory,   protocol.Memory,
-    protocol.WriteMemory,  protocol.Point,         protocol.Watch,        protocol.Subscription,
-    protocol.Now,          protocol.RunBudget,     protocol.PointId,      protocol.U64,
-    protocol.U32,          protocol.Bool,          protocol.Ack,          protocol.Stopped,
-    protocol.Uart,         protocol.DirtyRect,     protocol.SessionEvent, protocol.Trace,
+    protocol.Load,           protocol.Run,             protocol.CoreOnly,     protocol.SetSpeed,
+    protocol.ReadRegister,   protocol.WriteRegister,   protocol.ReadMemory,   protocol.Memory,
+    protocol.WriteMemory,    protocol.Point,           protocol.Watch,        protocol.Subscription,
+    protocol.Now,            protocol.RunBudget,       protocol.PointId,      protocol.U64,
+    protocol.U32,            protocol.Bool,            protocol.Ack,          protocol.Stopped,
+    protocol.Uart,           protocol.DirtyRect,       protocol.SessionEvent, protocol.Trace,
+    set_var_wire.SetVarArgs, set_var_wire.SetVarReply,
 };
 
 test "random bytes decode to an error or a value for every message, never a crash" {

@@ -259,10 +259,10 @@ fn scan(cursor: *Cursor, table: []const u8, sections: Sections, unit: u64, addre
     }
 }
 
-const Spec = struct { tag: u64, children: bool, cursor: Cursor };
+pub const Spec = struct { tag: u64, children: bool, cursor: Cursor };
 
 /// The abbreviation `code`, its cursor on the first attribute spec.
-fn specOf(abbrev: []const u8, code: u64) Error!Spec {
+pub fn specOf(abbrev: []const u8, code: u64) Error!Spec {
     var cursor = Cursor{ .bytes = abbrev };
     while (true) {
         const at = try cursor.uleb();
@@ -279,7 +279,8 @@ fn specOf(abbrev: []const u8, code: u64) Error!Spec {
     }
 }
 
-const Attr = struct { number: u64 = 0, address: bool = false, global: bool = false, block: ?[]const u8 = null, text: ?[]const u8 = null };
+pub const Attr = struct { number: u64 = 0, address: bool = false, global: bool = false, block: ?[]const u8 = null, text: ?[]const u8 = null };
+pub const readAttr = read;
 
 /// An attribute's value when its form carries one this reader needs,
 /// else an empty one once the cursor is past it.
