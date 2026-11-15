@@ -1,14 +1,13 @@
 //! The machine, as `ra8_chip.core`: the cores, their memory map, the second
 //! core's bring-up and what a run reads off them. The index file for
 //! src/chip/core; the CPU itself is under `cpu`.
-pub const cpu = @import("core/cpu.zig");
 pub const banked = @import("core/banked.zig");
 pub const bounded = @import("core/bounded.zig");
 pub const cadence = @import("core/cadence.zig");
-pub const event = @import("core/event.zig");
-pub const windows = @import("core/windows.zig");
+pub const cpu = @import("core/cpu.zig");
 pub const csel = @import("core/csel.zig");
 pub const deadline = @import("core/deadline.zig");
+pub const event = @import("core/event.zig");
 pub const fault = @import("core/fault.zig");
 pub const idle = @import("core/idle.zig");
 pub const loaded_image = @import("core/loaded_image.zig");
@@ -20,8 +19,8 @@ pub const mpu_guard = @import("core/mpu_guard.zig");
 pub const part = @import("core/part/part.zig");
 pub const pend_clear = @import("core/pend_clear.zig");
 pub const reboot = @import("core/reboot.zig");
-pub const second = @import("core/second/second.zig");
 pub const scheduler = @import("core/scheduler/scheduler.zig");
+pub const second = @import("core/second/second.zig");
 pub const session = @import("core/session.zig");
 pub const sleep_pace = @import("core/sleep_pace.zig");
 pub const stop = @import("core/stop.zig");
@@ -30,3 +29,4 @@ pub const tick = @import("core/tick.zig");
 pub const tz = @import("core/tz.zig");
 pub const undefined_ops = @import("core/undefined_ops.zig");
 pub const until = @import("core/until.zig");
+pub const windows = @import("core/windows.zig");

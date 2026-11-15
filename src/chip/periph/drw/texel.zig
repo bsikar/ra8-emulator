@@ -129,7 +129,9 @@ pub fn bitOffset(width: u32, at: u64) u64 {
 /// how far into that first byte a sub-byte texel sits.
 pub fn extract(width: u32, shift: u3, bytes: [4]u8) u32 {
     var word: u32 = 0;
-    for (bytes, 0..) |byte, lane| word |= @as(u32, byte) << @intCast(lane * 8);
+    for (bytes, 0..) |byte, lane| {
+        word |= @as(u32, byte) << @intCast(lane * 8);
+    }
     const mask: u32 = if (width >= 32) std.math.maxInt(u32) else (@as(u32, 1) << @intCast(width)) - 1;
     return word >> shift & mask;
 }

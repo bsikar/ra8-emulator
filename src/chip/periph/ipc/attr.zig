@@ -37,9 +37,9 @@
 //! still shadow, because they attribute the bus arbiter and the bus-initiator MPU,
 //! neither of which this board models; giving them a home here would be a
 //! register file pretending to be a decision.
+const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-const lanes = @import("../lanes.zig");
 
 /// CPSCU geometry (ra8_ipc_regs.h: IPCSAR 0x4000_8610, IPCPAR 0x4000_8614).
 pub const win_base: u32 = 0x4000_8610;

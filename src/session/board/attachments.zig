@@ -1,18 +1,20 @@
 //! Complete catalog/fault topology staged outside the live guest.
 const std = @import("std");
+
 const c = @import("ra8_components");
 const run = @import("ra8_board").snapshot.run;
+
 const fields = run.fields;
 const file = run.file;
 const Board = @import("ra8_board").board.Board;
-const Plugs = @import("plug.zig").Plugs;
 const Faults = @import("faults/faults.zig").Faults;
-const codec = c.catalog_snapshot;
+const Plugs = @import("plug.zig").Plugs;
+
 pub const graph = @import("attachment_graph.zig");
+const install = @import("attachment_install.zig");
+pub const inventory = @import("attachment_inventory.zig");
 pub const nodes = @import("attachment_nodes.zig");
 pub const topology = @import("attachment_topology.zig");
-pub const inventory = @import("attachment_inventory.zig");
-const install = @import("attachment_install.zig");
 
 pub const section_kind: file.Kind = .attachments;
 pub const layout: u16 = 1;
@@ -28,9 +30,11 @@ pub fn capture(board: *Board, binding: ?Binding, g: *graph.Graph) !topology.Topo
     }
     try g.retain(board, if (binding) |held| held.plugs else null, if (binding) |held| held.faults else null);
     const top = try topology.Topology.capture(board, if (binding) |held| held.plugs else null, g);
-    if (binding == null) for (g.nodes[0..g.count]) |node| switch (node.kind) {
-        .builtin, .floating => {},
-        else => return error.AttachmentOwnerRequired,
+    if (binding == null) for (g.nodes[0..g.count]) |node| {
+        switch (node.kind) {
+            .builtin, .floating => {},
+            else => return error.AttachmentOwnerRequired,
+        }
     };
     return top;
 }
@@ -57,7 +61,9 @@ fn body(g: *const graph.Graph, top: *const topology.Topology, writer: *std.Io.Wr
         try nodes.writePayload(node, writer);
     }
     try fields.write(writer, @as(u16, @intCast(g.runtime_count)));
-    for (g.runtime[0..g.runtime_count]) |id| try fields.write(writer, id.?);
+    for (g.runtime[0..g.runtime_count]) |id| {
+        try fields.write(writer, id.?);
+    }
     try fields.write(writer, g.wrapped);
     try fields.write(writer, g.spi_held);
     try fields.write(writer, g.uart_held);
@@ -104,7 +110,9 @@ pub fn prepare(board: *Board, binding: ?Binding, bytes: []const u8) !Prepared {
     if (try fields.read(u16, &cursor) != layout) return error.BadValue;
     const count = try fields.read(u16, &cursor);
     if (count > nodes.limit) return error.BadValue;
-    for (0..count) |id| try readNode(next, arena.allocator(), board, &cursor, id);
+    for (0..count) |id| {
+        try readNode(next, arena.allocator(), board, &cursor, id);
+    }
     next.runtime_count = try fields.read(u16, &cursor);
     if (next.runtime_count > next.runtime.len) return error.BadValue;
     for (next.runtime[0..next.runtime_count], 0..) |*entry, index| {
@@ -116,7 +124,11 @@ pub fn prepare(board: *Board, binding: ?Binding, bytes: []const u8) !Prepared {
     next.wrapped = try fields.read(@TypeOf(next.wrapped), &cursor);
     next.spi_held = try fields.read(@TypeOf(next.spi_held), &cursor);
     next.uart_held = try fields.read(@TypeOf(next.uart_held), &cursor);
-    inline for (.{ .{ next.wrapped, .i2c_fault }, .{ next.spi_held, .spi_fault }, .{ next.uart_held, .uart_fault } }) |group| {
+    inline for (.{
+        .{ next.wrapped, .i2c_fault },
+        .{ next.spi_held, .spi_fault },
+        .{ next.uart_held, .uart_fault },
+    }) |group| {
         for (group[0], 0..) |entry, index| if (entry) |id| {
             if (id >= count or std.meta.activeTag(next.nodes[id].kind) != group[1]) return error.BadValue;
             for (group[0][0..index]) |previous_id| if (previous_id == id) return error.BadValue;
@@ -124,9 +136,11 @@ pub fn prepare(board: *Board, binding: ?Binding, bytes: []const u8) !Prepared {
     }
     const top = try topology.Topology.read(&cursor, next);
     if (!cursor.done()) return error.BadValue;
-    if (binding == null) for (next.nodes[0..next.count]) |node| switch (node.kind) {
-        .builtin, .floating => {},
-        else => return error.AttachmentOwnerRequired,
+    if (binding == null) for (next.nodes[0..next.count]) |node| {
+        switch (node.kind) {
+            .builtin, .floating => {},
+            else => return error.AttachmentOwnerRequired,
+        }
     };
     return .{ .allocator = allocator, .arena = arena, .next = next, .previous = previous, .top = top };
 }

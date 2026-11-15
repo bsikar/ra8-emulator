@@ -6,11 +6,17 @@
 //! restores pre-state, re-executes the slot, and verifies the Blake3 post-digest.
 //!
 //! Tracking is zero-cost and allocation-free when the window is disarmed.
+const board_api = @import("ra8_board");
+const components = @import("ra8_components");
+
 const std = @import("std");
+
 const Allocator = std.mem.Allocator;
 const board_snap = @import("ra8_board").snapshot.run;
+
 const file = board_snap.file;
 const chip = @import("ra8_chip");
+
 const registry = chip.periph.registry;
 const memmap = chip.core.memmap;
 const board_bus = chip.core.cpu.board_bus;
@@ -84,11 +90,17 @@ pub fn sectionForBlockName(name: []const u8) file.Kind {
     if (containsAny(name, &.{ "DRW", "RASTER" })) return .raster;
     if (containsAny(name, &.{ "GLCDC", "DISPLAY" })) return .display;
     if (containsAny(name, &.{ "EINK", "PANEL" })) return .panel;
-    if (containsAny(name, &.{ "SYSC", "SOSC", "LOCO", "CKCR", "CKDIV", "PLL", "MOSC", "VSCR", "LPM", "DPS", "PDCTR" })) return .clocks;
+    if (containsAny(
+        name,
+        &.{ "SYSC", "SOSC", "LOCO", "CKCR", "CKDIV", "PLL", "MOSC", "VSCR", "LPM", "DPS", "PDCTR" },
+    )) return .clocks;
     if (containsAny(name, &.{ "CPSCU", "PSCU", "IDAU", "SAU", "MPU" })) return .security;
     if (containsAny(name, &.{ "MSTP", "CPU_CTRL", "SDRAM", "MRMS", "GTCLKCR" })) return .controllers;
     if (containsAny(name, &.{ "XSPI", "FLASH", "OCTA", "OPTIONS" })) return .storage;
-    if (containsAny(name, &.{ "PFS", "GPIO", "CRC", "DOC", "CAC", "ACMP", "POEG", "VBATT", "MONITOR", "CAUSE" })) return .signals;
+    if (containsAny(
+        name,
+        &.{ "PFS", "GPIO", "CRC", "DOC", "CAC", "ACMP", "POEG", "VBATT", "MONITOR", "CAUSE" },
+    )) return .signals;
     if (containsAny(name, &.{ "DMAC", "DMA", "DTC", "ELC", "ICU" })) return .datapath;
     if (containsAny(name, &.{ "CEU", "SSIE", "AUDIO", "PDM" })) return .media;
     if (containsAny(name, &.{ "SPI", "CAN", "MAILBOX", "ECC" })) return .wired;
@@ -227,64 +239,64 @@ pub fn saveBoardSection(board: anytype, kind: file.Kind, writer: anytype) !void 
             try board.bus.saveSnapshot(writer);
         },
         .timers => if (@hasField(B, "clock")) {
-            try @import("ra8_chip").snapshot.timers.save(board, writer);
+            try chip.snapshot.timers.save(board, writer);
         },
         .serial => if (@hasField(B, "serial")) {
-            try @import("ra8_chip").periph.sci.snapshot.save(board, writer);
+            try chip.periph.sci.snapshot.save(board, writer);
         },
         .sd => if (@hasField(B, "sd")) {
-            try @import("ra8_board").snapshot.sd.save(board, writer);
+            try board_api.snapshot.sd.save(board, writer);
         },
         .wire => if (@hasField(B, "wire")) {
-            try @import("ra8_board").snapshot.wire.save(board, writer);
+            try board_api.snapshot.wire.save(board, writer);
         },
         .raster => if (@hasField(B, "raster")) {
-            try @import("ra8_chip").periph.drw.snapshot.save(board, writer);
+            try chip.periph.drw.snapshot.save(board, writer);
         },
         .display => if (@hasField(B, "display")) {
-            try @import("ra8_chip").periph.glcdc.snapshot.save(board, writer);
+            try chip.periph.glcdc.snapshot.save(board, writer);
         },
         .panel => if (@hasField(B, "panel")) {
-            try @import("ra8_components").eink.snapshot.save(board, writer);
+            try components.eink.snapshot.save(board, writer);
         },
         .clocks => if (@hasField(B, "branches")) {
-            try @import("ra8_chip").snapshot.clocks.save(board, writer);
+            try chip.snapshot.clocks.save(board, writer);
         },
         .security => if (@hasField(B, "attribution")) {
-            try @import("ra8_chip").snapshot.security.save(board, writer);
+            try chip.snapshot.security.save(board, writer);
         },
         .controllers => if (@hasField(B, "modules")) {
-            try @import("ra8_chip").snapshot.controllers.save(board, writer);
+            try chip.snapshot.controllers.save(board, writer);
         },
         .storage => if (@hasField(B, "flash")) {
-            try @import("ra8_board").snapshot.storage.save(board, writer);
+            try board_api.snapshot.storage.save(board, writer);
         },
         .signals => if (@hasField(B, "pins")) {
-            try @import("ra8_chip").snapshot.signals.save(board, writer);
+            try chip.snapshot.signals.save(board, writer);
         },
         .datapath => if (@hasField(B, "events")) {
-            try @import("ra8_chip").snapshot.datapath.save(board, writer);
+            try chip.snapshot.datapath.save(board, writer);
         },
         .media => if (@hasField(B, "capture")) {
-            try @import("ra8_chip").snapshot.media.save(board, writer);
+            try chip.snapshot.media.save(board, writer);
         },
         .wired => if (@hasField(B, "spi")) {
-            try @import("ra8_board").snapshot.wired.save(board, writer);
+            try board_api.snapshot.wired.save(board, writer);
         },
         .channels => if (@hasField(B, "analog")) {
-            try @import("ra8_chip").snapshot.channels.save(board, writer);
+            try chip.snapshot.channels.save(board, writer);
         },
         .usb => if (@hasField(B, "usb")) {
-            try @import("ra8_board").snapshot.usb.save(board, writer);
+            try board_api.snapshot.usb.save(board, writer);
         },
         .rswitch => if (@hasField(B, "rswitch")) {
-            try @import("ra8_board").snapshot.rswitch.save(board, writer);
+            try board_api.snapshot.rswitch.save(board, writer);
         },
         .npu => if (@hasField(B, "npu")) {
-            try @import("ra8_chip").periph.npu.snapshot.save(board, writer);
+            try chip.periph.npu.snapshot.save(board, writer);
         },
         .c6 => if (@hasField(B, "c6")) {
-            try @import("ra8_components").esp_hosted.snapshot.save(board, writer);
+            try components.esp_hosted.snapshot.save(board, writer);
         },
         else => {},
     }
@@ -301,64 +313,64 @@ pub fn loadBoardSection(board: anytype, kind: file.Kind, bytes: []const u8) !voi
             try board.bus.loadSnapshot(sec.payload);
         },
         .timers => if (@hasField(B, "clock")) {
-            try @import("ra8_chip").snapshot.timers.load(board, bytes);
+            try chip.snapshot.timers.load(board, bytes);
         },
         .serial => if (@hasField(B, "serial")) {
-            try @import("ra8_chip").periph.sci.snapshot.load(board, bytes);
+            try chip.periph.sci.snapshot.load(board, bytes);
         },
         .sd => if (@hasField(B, "sd")) {
-            try @import("ra8_board").snapshot.sd.load(board, bytes);
+            try board_api.snapshot.sd.load(board, bytes);
         },
         .wire => if (@hasField(B, "wire")) {
-            try @import("ra8_board").snapshot.wire.load(board, bytes);
+            try board_api.snapshot.wire.load(board, bytes);
         },
         .raster => if (@hasField(B, "raster")) {
-            try @import("ra8_chip").periph.drw.snapshot.load(board, bytes);
+            try chip.periph.drw.snapshot.load(board, bytes);
         },
         .display => if (@hasField(B, "display")) {
-            try @import("ra8_chip").periph.glcdc.snapshot.load(board, bytes);
+            try chip.periph.glcdc.snapshot.load(board, bytes);
         },
         .panel => if (@hasField(B, "panel")) {
-            try @import("ra8_components").eink.snapshot.load(board, bytes);
+            try components.eink.snapshot.load(board, bytes);
         },
         .clocks => if (@hasField(B, "branches")) {
-            try @import("ra8_chip").snapshot.clocks.load(board, bytes);
+            try chip.snapshot.clocks.load(board, bytes);
         },
         .security => if (@hasField(B, "attribution")) {
-            try @import("ra8_chip").snapshot.security.load(board, bytes);
+            try chip.snapshot.security.load(board, bytes);
         },
         .controllers => if (@hasField(B, "modules")) {
-            try @import("ra8_chip").snapshot.controllers.load(board, bytes);
+            try chip.snapshot.controllers.load(board, bytes);
         },
         .storage => if (@hasField(B, "flash")) {
-            try @import("ra8_board").snapshot.storage.load(board, bytes);
+            try board_api.snapshot.storage.load(board, bytes);
         },
         .signals => if (@hasField(B, "pins")) {
-            try @import("ra8_chip").snapshot.signals.load(board, bytes);
+            try chip.snapshot.signals.load(board, bytes);
         },
         .datapath => if (@hasField(B, "events")) {
-            try @import("ra8_chip").snapshot.datapath.load(board, bytes);
+            try chip.snapshot.datapath.load(board, bytes);
         },
         .media => if (@hasField(B, "capture")) {
-            try @import("ra8_chip").snapshot.media.load(board, bytes);
+            try chip.snapshot.media.load(board, bytes);
         },
         .wired => if (@hasField(B, "spi")) {
-            try @import("ra8_board").snapshot.wired.load(board, bytes);
+            try board_api.snapshot.wired.load(board, bytes);
         },
         .channels => if (@hasField(B, "analog")) {
-            try @import("ra8_chip").snapshot.channels.load(board, bytes);
+            try chip.snapshot.channels.load(board, bytes);
         },
         .usb => if (@hasField(B, "usb")) {
-            try @import("ra8_board").snapshot.usb.load(board, bytes);
+            try board_api.snapshot.usb.load(board, bytes);
         },
         .rswitch => if (@hasField(B, "rswitch")) {
-            try @import("ra8_board").snapshot.rswitch.load(board, bytes);
+            try board_api.snapshot.rswitch.load(board, bytes);
         },
         .npu => if (@hasField(B, "npu")) {
-            try @import("ra8_chip").periph.npu.snapshot.load(board, bytes);
+            try chip.periph.npu.snapshot.load(board, bytes);
         },
         .c6 => if (@hasField(B, "c6")) {
-            try @import("ra8_components").esp_hosted.snapshot.load(board, bytes);
+            try components.esp_hosted.snapshot.load(board, bytes);
         },
         else => {},
     }

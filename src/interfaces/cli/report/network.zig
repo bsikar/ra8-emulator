@@ -3,15 +3,15 @@
 //! where the Ethernet PTP timers got to, and what the AT modem on the
 //! MikroBUS UART was asked.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
 const ether = @import("ether.zig");
-const riic_report = @import("riic.zig");
-const modem_line = @import("ra8_components").modem_at;
-const pi4ioe = @import("ra8_components").pi4ioe;
-const ov5640 = @import("ra8_components").ov5640;
 const gt911 = @import("ra8_components").gt911;
 const lsm6dso = @import("ra8_components").lsm6dso;
 const max17048 = @import("ra8_components").max17048;
+const modem_line = @import("ra8_components").modem_at;
+const ov5640 = @import("ra8_components").ov5640;
+const pi4ioe = @import("ra8_components").pi4ioe;
+const riic_report = @import("riic.zig");
+const Writer = @import("../report.zig").Writer;
 
 /// One block per controller that saw traffic. A transmit made out of
 /// operation mode moves nothing on silicon, and a delivery with no receive
@@ -48,7 +48,10 @@ fn optional(board: *Board, out: Writer) !void {
     if (wire.click) {
         try out.print("I2C optional parts: Click module fitted, LSM6DSO 0x{X:0>2} and MAX17048 0x{X:0>2}\n", addresses);
     } else {
-        try out.print("I2C optional parts: none fitted, nothing answers at 0x{X:0>2} or 0x{X:0>2} (--click fits them)\n", addresses);
+        try out.print(
+            "I2C optional parts: none fitted, nothing answers at 0x{X:0>2} or 0x{X:0>2} (--click fits them)\n",
+            addresses,
+        );
     }
 }
 
@@ -308,7 +311,8 @@ fn can(board: *Board, out: Writer) !void {
         }
         if (unit.faults.invented != 0) {
             try out.print(
-                "CANFD{d}: REFUSED {d} store(s) to CFDCnERFL that would have raised an error flag the controller never saw\n",
+                "CANFD{d}: REFUSED {d} store(s) to CFDCnERFL that would have raised an error " ++
+                    "flag the controller never saw\n",
                 .{ index, unit.faults.invented },
             );
         }

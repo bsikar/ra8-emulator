@@ -55,12 +55,28 @@ const sizes = [_]V{
 };
 
 const predicated = [_]V{
-    vec("vpt mask 1000 ands p0 then ends the block", .{ .hw1 = 0xF000, .rn = 16, .vpr = 0x0088_0F0F }, .{ .vpr = 0x0000_0F0F }),
+    vec(
+        "vpt mask 1000 ands p0 then ends the block",
+        .{ .hw1 = 0xF000, .rn = 16, .vpr = 0x0088_0F0F },
+        .{ .vpr = 0x0000_0F0F },
+    ),
     vec("vpt mask 0100 ands p0 and shifts", .{ .hw1 = 0xF000, .rn = 4, .vpr = 0x0044_00FF }, .{ .vpr = 0x0088_000F }),
-    vec("vpt mask 1100 ands then inverts for the else", .{ .hw1 = 0xF000, .rn = 16, .vpr = 0x00CC_00FF }, .{ .vpr = 0x0088_FF00 }),
+    vec(
+        "vpt mask 1100 ands then inverts for the else",
+        .{ .hw1 = 0xF000, .rn = 16, .vpr = 0x00CC_00FF },
+        .{ .vpr = 0x0088_FF00 },
+    ),
     vec("the loop tail ands p0", .{ .hw1 = 0xF000, .rn = 16, .ltpsize = 0, .lr = 3 }, .{ .vpr = 0x0000_0007 }),
-    vec("eci a0a1 keeps the done beats' p0", .{ .hw1 = 0xF000, .rn = 12, .vpr = 0x0000_00AA, .it = 0x20 }, .{ .vpr = 0x0000_0FAA }),
-    vec("eci a0a1a2b0 runs beat 3 and leaves a0", .{ .hw1 = 0xF000, .rn = 16, .it = 0x50 }, .{ .vpr = 0x0000_F000, .it = 0x10 }),
+    vec(
+        "eci a0a1 keeps the done beats' p0",
+        .{ .hw1 = 0xF000, .rn = 12, .vpr = 0x0000_00AA, .it = 0x20 },
+        .{ .vpr = 0x0000_0FAA },
+    ),
+    vec(
+        "eci a0a1a2b0 runs beat 3 and leaves a0",
+        .{ .hw1 = 0xF000, .rn = 16, .it = 0x50 },
+        .{ .vpr = 0x0000_F000, .it = 0x10 },
+    ),
 };
 
 const unclaimed = [_]V{

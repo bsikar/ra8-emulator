@@ -2,10 +2,10 @@
 //! console line the firmware printed through it. Split out of report.zig,
 //! which was at the file-length limit.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
-const Host = @import("ra8_chip").periph.usbhs.Host;
 const Echo = @import("ra8_components").usb.echo.Device;
+const Host = @import("ra8_chip").periph.usbhs.Host;
 const usb_cable = @import("usb/cable.zig");
+const Writer = @import("../report.zig").Writer;
 
 /// One line per SCI channel that moved bytes, plus the last console line the
 /// firmware printed. A TDR write made with CCR0.TE clear never leaves the
@@ -78,7 +78,10 @@ pub fn sections(board: *Board, out: Writer) !void {
         }
     }
     if (board.serial.line.lines != 0) {
-        try out.print("SCI console: {d} line(s), last \"{s}\"\n", .{ board.serial.line.lines, board.serial.line.slice() });
+        try out.print(
+            "SCI console: {d} line(s), last \"{s}\"\n",
+            .{ board.serial.line.lines, board.serial.line.slice() },
+        );
     }
 }
 
@@ -206,8 +209,8 @@ pub fn usb(board: *Board, out: Writer) !void {
     );
     if (host.phy.blind != 0) {
         try out.print(
-            "  {d} line-state read(s) answered SE0 with something on the far end: " ++
-                "CNEN, or VBUSEN as a host or DPRPU as a device, was clear\n",
+            "  {d} line-state read(s) answered SE0 with something on the far end: CNEN, or " ++
+                "VBUSEN as a host or DPRPU as a device, was clear\n",
             .{host.phy.blind},
         );
     }
@@ -244,8 +247,8 @@ fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, echo: *const Ech
     try usb_cable.section(cable, out);
     if (host.refusals() == 0) return;
     try out.print(
-        "  refused: {d} odd offset, {d} with the module off, {d} status write(s), " ++
-            "{d} in device role, {d} bad pipe, {d} packet size\n",
+        "  refused: {d} odd offset, {d} with the module off, {d} status write(s), {d} in " ++
+            "device role, {d} bad pipe, {d} packet size\n",
         .{
             host.misaligned,
             host.off,
@@ -258,8 +261,8 @@ fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, echo: *const Ech
     const data = &host.xfer.data;
     if (data.refusals() != 0) {
         try out.print(
-            "  data ports refused: {d} bad pipe, " ++
-                "{d} pipe already held, {d} wrong access width, {d} against the pipe's direction\n",
+            "  data ports refused: {d} bad pipe, {d} pipe already held, {d} wrong access " ++
+                "width, {d} against the pipe's direction\n",
             .{
                 data.ports[0].bad_pipe + data.ports[1].bad_pipe,
                 data.ports[0].contended + data.ports[1].contended,
@@ -270,9 +273,8 @@ fn usbRefused(host: *const Host, cable: ?*const usb_cable.Loop, echo: *const Ech
     }
     if (host.xfer.refusals() + echo.refusals() == host.xfer.stalls + data.refusals()) return;
     try out.print(
-        "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, " ++
-            "{d} FIFO not ready, {d} drained past the packet, " ++
-            "{d} out of order at the device\n",
+        "  transfers refused: {d} with nothing on the bus, {d} stray CCPL, {d} FIFO not " ++
+            "ready, {d} drained past the packet, {d} out of order at the device\n",
         .{
             host.xfer.no_device,
             host.xfer.stray_ccpl,

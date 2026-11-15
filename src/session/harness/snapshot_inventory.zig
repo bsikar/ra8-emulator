@@ -1,7 +1,19 @@
 //! Existing State ownership classification. Typed attachments save arena guest state.
 const fields = @import("ra8_board").snapshot.run.fields;
+
 pub fn complete(comptime State: type) bool {
-    return fields.complete(State, .{ "board", "cpu0", "machine", "driver", "cpu", "pending", "chunk", "reboot", "plugs", "faults" }, .{
+    return fields.complete(State, .{
+        "board",
+        "cpu0",
+        "machine",
+        "driver",
+        "cpu",
+        "pending",
+        "chunk",
+        "reboot",
+        "plugs",
+        "faults",
+    }, .{
         .{ .name = "allocator", .reason = "Target resource allocator" },
         .{ .name = "bytes", .reason = "Image identity validated before restore" },
         .{ .name = "image", .reason = "Immutable view of retained image bytes" },
@@ -15,7 +27,10 @@ pub fn complete(comptime State: type) bool {
         .{ .name = "loading", .reason = "Target loader bindings and validated image identities" },
         .{ .name = "session", .reason = "Saved core bookkeeping; retained embedding and debugger controls" },
         .{ .name = "transport", .reason = "Debugger control plane rebuilt live after restore" },
-        .{ .name = "plugs_arena", .reason = "Target allocator wiring; reachable pointed-to guest objects saved by typed attachments" },
+        .{
+            .name = "plugs_arena",
+            .reason = "Target allocator wiring; reachable pointed-to guest objects saved by typed attachments",
+        },
         .{ .name = "edge", .reason = "Stable boundary wiring; clocks saved separately" },
         .{ .name = "files", .reason = "Stable snapshot owner bindings" },
         .{ .name = "state_file", .reason = "Host file path and I/O handles" },

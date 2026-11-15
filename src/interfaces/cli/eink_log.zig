@@ -1,9 +1,10 @@
 //! Per-refresh JSONL records requested with `--eink-log PATH` (RA8EMU-552).
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const eink = @import("ra8_components").eink;
-const refresh = @import("ra8_components").eink.refresh;
 const json = @import("report/json/json.zig");
+const refresh = @import("ra8_components").eink.refresh;
 
 pub const Entry = struct {
     virtual_time_ns: u64,

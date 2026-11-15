@@ -19,13 +19,17 @@ pub fn lanes(size: Size) u8 {
 pub fn read(bank: *const Bank, q: u3) u128 {
     const base: u5 = @as(u5, q) * 4;
     var value: u128 = 0;
-    for (0..4) |k| value |= @as(u128, bank.s[base + k]) << @intCast(32 * k);
+    for (0..4) |k| {
+        value |= @as(u128, bank.s[base + k]) << @intCast(32 * k);
+    }
     return value;
 }
 
 pub fn write(bank: *Bank, q: u3, value: u128) void {
     const base: u5 = @as(u5, q) * 4;
-    for (0..4) |k| bank.s[base + k] = @truncate(value >> @intCast(32 * k));
+    for (0..4) |k| {
+        bank.s[base + k] = @truncate(value >> @intCast(32 * k));
+    }
 }
 
 fn mask(size: Size) u128 {

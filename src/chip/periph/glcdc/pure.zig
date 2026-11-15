@@ -6,9 +6,10 @@
 //! composition would reach for, `compose` runs the mixer's own stack over
 //! those copies, and nothing in the model moves. The refusals are the
 //! ones a scan of the same state would give.
-const glcdc_mod = @import("glcdc.zig");
 const blend = @import("blend.zig");
+const glcdc_mod = @import("glcdc.zig");
 const mix = @import("mix.zig");
+
 const Glcdc = glcdc_mod.Glcdc;
 
 /// The copied inputs for a pure composition of this block as it stands.

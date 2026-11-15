@@ -4,6 +4,7 @@
 //! the element width and none of it when Rm[7:0] is zero.
 const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// One element: `e` bit-reversed within `width` bits, keeping `keep` bits.

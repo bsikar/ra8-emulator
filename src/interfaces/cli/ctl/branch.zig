@@ -1,7 +1,8 @@
 //! Session control branch and fork commands (Slice 20.4).
 const std = @import("std");
-const proto = @import("ra8_rpc").session.rpc;
+
 const Client = @import("client.zig").Client;
+const proto = @import("ra8_rpc").session.rpc;
 
 pub const BranchCommand = union(enum) {
     branch_ls,
@@ -80,7 +81,8 @@ fn listBranches(client: *Client, w: anytype, json: bool) !void {
             const it = proto.branch_wire.get(list.bytes, idx);
             if (idx > 0) try w.writeAll(",");
             try w.print(
-                "{{\"id\":{d},\"parent\":{d},\"fork_r\":{d},\"recorded_end_r\":{d},\"child_count\":{d},\"reason\":\"{s}\",\"live\":{s},\"kept\":{s},\"pinned\":{s}}}",
+                "{{\"id\":{d},\"parent\":{d},\"fork_r\":{d},\"recorded_end_r\":{d},\"child_count" ++
+                    "\":{d},\"reason\":\"{s}\",\"live\":{s},\"kept\":{s},\"pinned\":{s}}}",
                 .{
                     it.id,
                     it.parent,

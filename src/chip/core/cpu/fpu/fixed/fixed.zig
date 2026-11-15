@@ -8,10 +8,10 @@
 //! From fixed point reads only the low 16 bits of a 16-bit operand,
 //! extended by signedness, and rounds under the given mode (FPSCR's).
 const Format = @import("../format.zig").Format;
-const RMode = @import("../fpscr.zig").RMode;
 const Fpscr = @import("../fpscr.zig").Fpscr;
-const to_int = @import("../to_int.zig");
 const from_int = @import("../from_int.zig");
+const RMode = @import("../fpscr.zig").RMode;
+const to_int = @import("../to_int.zig");
 pub const vectors = @import("vectors.zig");
 
 /// FPToFixed with `width` 16 or 32, rounding toward zero.
@@ -25,7 +25,15 @@ pub fn toFixed(comptime fmt: Format, op: fmt.Bits(), width: u6, fbits: u6, unsig
 }
 
 /// FixedToFP with `width` 16 or 32, rounding under `mode`.
-pub fn fromFixed(comptime fmt: Format, op: u32, width: u6, fbits: u6, unsigned: bool, mode: RMode, fpscr: *Fpscr) fmt.Bits() {
+pub fn fromFixed(
+    comptime fmt: Format,
+    op: u32,
+    width: u6,
+    fbits: u6,
+    unsigned: bool,
+    mode: RMode,
+    fpscr: *Fpscr,
+) fmt.Bits() {
     const value = if (width == 32) op else widenHalf(op, unsigned);
     return from_int.fromFixed(fmt, value, fbits, unsigned, mode, fpscr);
 }

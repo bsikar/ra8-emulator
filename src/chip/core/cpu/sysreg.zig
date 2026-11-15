@@ -7,6 +7,7 @@
 //! aliases (SYSm 0x88 and up) are not modelled here yet, so `known` leaves
 //! them out.
 const regs = @import("regs.zig");
+
 const Regs = regs.Regs;
 
 pub const sysm = struct {

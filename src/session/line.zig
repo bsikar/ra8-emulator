@@ -8,11 +8,12 @@
 //! line, and a position recorded live is its owner's: live recording only
 //! happens past the line's recorded end, which the line's own segment owns.
 const std = @import("std");
+
 const api = @import("api.zig");
-const stop_machine = @import("stop_machine.zig");
 const branch_mod = @import("history/branch.zig");
 const history_position = @import("history/position.zig");
 const replay_feeder = @import("history/replay_feeder.zig");
+const stop_machine = @import("stop_machine.zig");
 const window_fork = @import("history/window_fork.zig");
 
 const Session = api.Session;

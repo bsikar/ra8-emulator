@@ -7,6 +7,7 @@
 //! its RX before it asks (ra8_net_provision's "READY v1") would otherwise
 //! throw an early answer away (RA8EMU-626).
 const std = @import("std");
+
 const sci = @import("sci.zig");
 
 pub const Error = error{BadReply};

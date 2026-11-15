@@ -33,7 +33,6 @@
 //!     HUM Ch 62.6.2.1 predicts. So the test here is the hard one either way,
 //!     and every pixel that lands inside the boundary band is counted, so a
 //!     run says how much of its picture sits where the two would differ.
-const std = @import("std");
 
 /// Register byte offsets, each the first of a run of six (ra8_drw_regs.h).
 pub const off = struct {

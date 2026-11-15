@@ -30,7 +30,9 @@ pub const Events = struct {
 
     /// SEV on any core: every core's bit is set and every waiter wakes.
     pub fn sev(self: *Events) void {
-        for (0..cores) |index| self.post(@intCast(index));
+        for (0..cores) |index| {
+            self.post(@intCast(index));
+        }
     }
 
     /// An event local to one core: exception entry or return, or a pending

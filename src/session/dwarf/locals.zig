@@ -10,10 +10,11 @@
 //! a multi-op one included, comes back with no location rather than a
 //! guess, and the pane shows it as optimized out.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
+
 const dwarf_cursor = @import("cursor.zig");
 const dwarf_info = @import("info.zig");
 const dwarf_line = @import("line/line.zig");
+const elf = @import("ra8_board").image.elf;
 
 const Cursor = dwarf_cursor.Cursor;
 pub const Error = dwarf_cursor.Error;
@@ -217,7 +218,15 @@ const Die = struct {
     }
 };
 
-fn scan(cursor: *Cursor, table: []const u8, sections: Sections, unit: u64, address: u32, into: []Local, written: *usize) Error!void {
+fn scan(
+    cursor: *Cursor,
+    table: []const u8,
+    sections: Sections,
+    unit: u64,
+    address: u32,
+    into: []Local,
+    written: *usize,
+) Error!void {
     var depth: usize = 0;
     var collect: ?usize = null;
     while (!cursor.done()) {
@@ -241,7 +250,10 @@ fn scan(cursor: *Cursor, table: []const u8, sections: Sections, unit: u64, addre
         }
         if (collect != null) {
             if ((spec.tag == tag.variable or spec.tag == tag.formal_parameter) and written.* < into.len) {
-                var local = Local{ .name = die.name orelse "", .where = if (die.location) |bytes| where(bytes) else null };
+                var local = Local{
+                    .name = die.name orelse "",
+                    .where = if (die.location) |bytes| where(bytes) else null,
+                };
                 if (die.type_ref) |ref| {
                     const found = describeType(sections, unit, ref, die.type_global, 0) catch null;
                     if (found) |kind| {
@@ -279,7 +291,13 @@ pub fn specOf(abbrev: []const u8, code: u64) Error!Spec {
     }
 }
 
-pub const Attr = struct { number: u64 = 0, address: bool = false, global: bool = false, block: ?[]const u8 = null, text: ?[]const u8 = null };
+pub const Attr = struct {
+    number: u64 = 0,
+    address: bool = false,
+    global: bool = false,
+    block: ?[]const u8 = null,
+    text: ?[]const u8 = null,
+};
 pub const readAttr = read;
 
 /// An attribute's value when its form carries one this reader needs,
@@ -303,7 +321,11 @@ fn read(cursor: *Cursor, kind: u64, implicit: i64, str: []const u8) Error!Attr {
         form.flag_present => .{ .number = 1 },
         form.string => .{ .text = try cursor.string() },
         form.strp => .{ .text = try dwarf_cursor.stringAt(str, try cursor.int(u32)) },
-        form.exprloc => .{ .block = try cursor.take(std.math.cast(usize, try cursor.uleb()) orelse return Error.Truncated) },
+        form.exprloc => .{
+            .block = try cursor.take(
+                std.math.cast(usize, try cursor.uleb()) orelse return Error.Truncated,
+            ),
+        },
         form.block1 => .{ .block = try cursor.take(try cursor.byte()) },
         form.block2 => .{ .block = try cursor.take(try cursor.int(u16)) },
         form.block4 => .{ .block = try cursor.take(try cursor.int(u32)) },
@@ -321,7 +343,9 @@ fn where(bytes: []const u8) ?Where {
     const first = cursor.byte() catch return null;
     const found: Where = switch (first) {
         op.fbreg => .{ .frame = cursor.sleb() catch return null },
-        op.breg_base...op.breg_base + 31 => .{ .register = .{ .reg = first - op.breg_base, .offset = cursor.sleb() catch return null } },
+        op.breg_base...op.breg_base + 31 => .{
+            .register = .{ .reg = first - op.breg_base, .offset = cursor.sleb() catch return null },
+        },
         op.reg_base...op.reg_base + 31 => .{ .in_register = first - op.reg_base },
         op.addr => .{ .address = cursor.int(u32) catch return null },
         else => return null,

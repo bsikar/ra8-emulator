@@ -1,14 +1,16 @@
 //! Whole guest runs restored by preparation followed by a non-failing commit.
 //! Each core has a CPU section; CPU1's owned memory has a separate section.
-const std = @import("std");
-/// The format, for a run owner that adds sections of its own.
-pub const file = @import("ra8_snapshot").file;
-pub const fields = @import("ra8_snapshot").fields;
-const memory = @import("memory.zig");
-const cpu = @import("ra8_chip").core.cpu.snapshot;
 const board_snap = @import("board.zig");
-const Store = @import("ra8_chip").core.cpu.memory.store.Store;
+const cpu = @import("ra8_chip").core.cpu.snapshot;
 const Cpu = @import("ra8_chip").core.cpu.cpu.Cpu;
+pub const fields = @import("ra8_snapshot").fields;
+
+/// The format, for a run owner that adds sections of its own.
+const std = @import("std");
+
+pub const file = @import("ra8_snapshot").file;
+const memory = @import("memory.zig");
+const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 
 pub const Error = file.Error || memory.Error || cpu.Error || board_snap.Error || error{ImageMismatch};
 pub const Identity = [2]?[16]u8;
@@ -29,32 +31,63 @@ pub fn save(writer: anytype, store: *const Store, cores: []const *const Cpu, boa
     try savePair(writer, &.{store}, cores, board, @splat(null));
 }
 
-pub fn savePair(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity) !void {
+pub fn savePair(
+    writer: anytype,
+    stores: []const *const Store,
+    cores: []const *const Cpu,
+    board: anytype,
+    identity: Identity,
+) !void {
     return savePairMode(writer, stores, cores, board, identity, false, .{});
 }
 
-pub fn savePairAttached(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity) !void {
+pub fn savePairAttached(
+    writer: anytype,
+    stores: []const *const Store,
+    cores: []const *const Cpu,
+    board: anytype,
+    identity: Identity,
+) !void {
     return savePairMode(writer, stores, cores, board, identity, true, .{});
 }
 
 /// An attached save of only the parts asked for; the board is always written.
-pub fn savePairParts(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity, parts: Parts) !void {
+pub fn savePairParts(
+    writer: anytype,
+    stores: []const *const Store,
+    cores: []const *const Cpu,
+    board: anytype,
+    identity: Identity,
+    parts: Parts,
+) !void {
     return savePairMode(writer, stores, cores, board, identity, true, parts);
 }
 
-fn savePairMode(writer: anytype, stores: []const *const Store, cores: []const *const Cpu, board: anytype, identity: Identity, owned: bool, parts: Parts) !void {
+fn savePairMode(
+    writer: anytype,
+    stores: []const *const Store,
+    cores: []const *const Cpu,
+    board: anytype,
+    identity: Identity,
+    owned: bool,
+    parts: Parts,
+) !void {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return error.BadValue;
     try file.writeHeader(writer);
     if (owned) try board_snap.saveAttached(board, writer) else try board_snap.save(board, writer);
     if (parts.memory) {
-        for (stores, 0..) |store, index| try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
+        for (stores, 0..) |store, index| {
+            try memory.saveAs(store, if (index == 0) .memory else .second_memory, writer);
+        }
     } else try memory.saveFabric(stores[0], writer);
     try saveCores(writer, cores, identity);
 }
 
 /// The cores' own sections and the image identity that follows them.
 pub fn saveCores(writer: anytype, cores: []const *const Cpu, identity: Identity) !void {
-    for (cores, 0..) |core, index| try cpu.save(core, @intCast(index), writer);
+    for (cores, 0..) |core, index| {
+        try cpu.save(core, @intCast(index), writer);
+    }
     var counter: std.Io.Writer.Discarding = .init(&.{});
     try fields.write(&counter.writer, identity);
     try file.writeSectionHeader(writer, .image, counter.fullCount());
@@ -102,40 +135,77 @@ pub fn Prepared(comptime B: type) type {
     };
 }
 
-pub fn prepare(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity) !Prepared(@TypeOf(board.*)) {
+pub fn prepare(
+    bytes: []const u8,
+    stores: []const *Store,
+    cores: []const *Cpu,
+    board: anytype,
+    identity: Identity,
+) !Prepared(@TypeOf(board.*)) {
     return prepareMode(bytes, stores, cores, board, identity, false, .{});
 }
 
-pub fn prepareAttached(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity) !Prepared(@TypeOf(board.*)) {
+pub fn prepareAttached(
+    bytes: []const u8,
+    stores: []const *Store,
+    cores: []const *Cpu,
+    board: anytype,
+    identity: Identity,
+) !Prepared(@TypeOf(board.*)) {
     return prepareMode(bytes, stores, cores, board, identity, true, .{});
 }
 
 /// An attached preparation of only the parts asked for: a part left out
 /// is neither read from `bytes` nor changed by the commit.
-pub fn prepareParts(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity, parts: Parts) !Prepared(@TypeOf(board.*)) {
+pub fn prepareParts(
+    bytes: []const u8,
+    stores: []const *Store,
+    cores: []const *Cpu,
+    board: anytype,
+    identity: Identity,
+    parts: Parts,
+) !Prepared(@TypeOf(board.*)) {
     return prepareMode(bytes, stores, cores, board, identity, true, parts);
 }
 
-fn prepareMode(bytes: []const u8, stores: []const *Store, cores: []const *Cpu, board: anytype, identity: Identity, owned: bool, parts: Parts) !Prepared(@TypeOf(board.*)) {
+fn prepareMode(
+    bytes: []const u8,
+    stores: []const *Store,
+    cores: []const *Cpu,
+    board: anytype,
+    identity: Identity,
+    owned: bool,
+    parts: Parts,
+) !Prepared(@TypeOf(board.*)) {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return Error.BadValue;
     if (parts.memory) try check(bytes, board) else try board_snap.partOf(board.part, bytes);
     try checkImage(bytes, identity);
     var memories: [2]?memory.Prepared = @splat(null);
     errdefer for (&memories) |*held| if (held.*) |*one| one.deinit();
     if (parts.memory) for (stores, 0..) |store, index| {
-        const section = try file.Reader.find(bytes, if (index == 0) .memory else .second_memory) orelse return Error.Missing;
+        const section = try file.Reader.find(bytes, if (index == 0)
+            .memory
+        else
+            .second_memory) orelse return Error.Missing;
         memories[index] = try memory.prepare(store, section.payload);
     };
     // The fabric check can refuse, so it runs before the board is staged.
     const fabric = if (parts.memory) null else try memory.prepareFabric(stores[0], bytes);
     var prepared = Prepared(@TypeOf(board.*)){
-        .board = if (!parts.board) null else if (owned) try board_snap.prepareAttached(board, bytes) else try board_snap.prepare(board, bytes),
+        .board = if (!parts.board)
+            null
+        else if (owned)
+            try board_snap.prepareAttached(board, bytes)
+        else
+            try board_snap.prepare(board, bytes),
         .memories = memories,
         .fabric = fabric,
         .count = cores.len,
     };
     errdefer if (prepared.board) |*held| held.deinit();
-    for (cores, 0..) |core, index| prepared.cores[index] = try cpu.prepare(core, @intCast(index), bytes);
+    for (cores, 0..) |core, index| {
+        prepared.cores[index] = try cpu.prepare(core, @intCast(index), bytes);
+    }
     return prepared;
 }
 

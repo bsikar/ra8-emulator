@@ -13,7 +13,6 @@
 //! same period are counted together, the gaps between periods are
 //! counted apart, and the two numbers say the shape in one line without
 //! keeping a store list that grows with the run.
-const std = @import("std");
 
 /// The gaps between consecutive stores, in SysTick periods.
 pub const Spacing = struct {

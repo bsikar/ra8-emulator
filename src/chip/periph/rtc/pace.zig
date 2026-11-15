@@ -6,7 +6,6 @@
 //! time firmware reads match the run at any speed. A run fits its board
 //! with the virtual clock (RA8EMU-185, board_fit.zig); a bare `Rtc.init()`
 //! keeps the boundary gear so the RTC's own tests stay one second a tick.
-const std = @import("std");
 
 pub const ns_per_second: u64 = 1_000_000_000;
 

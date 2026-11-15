@@ -7,9 +7,9 @@
 //! event's virtual time, and at that boundary every event due is applied
 //! in file order. Time is the board's TimeBase (RA8EMU-179); the wrapped
 //! boundary converts its cycle edge when instructions and cycles differ.
-const std = @import("std");
-const boot = @import("ra8_chip").core.cpu.boot;
+
 const api = @import("../api.zig");
+const boot = @import("ra8_chip").core.cpu.boot;
 const fault_schedule = @import("ra8_components").fault.schedule;
 const timebase = @import("ra8_chip").periph.timebase;
 

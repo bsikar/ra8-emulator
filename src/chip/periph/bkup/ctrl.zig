@@ -203,6 +203,8 @@ pub const Control = struct {
 
 fn defaults() [slot_count]u8 {
     var out = @as([slot_count]u8, @splat(0));
-    for (&specs, 0..) |spec, index| out[index] = spec.reset;
+    for (&specs, 0..) |spec, index| {
+        out[index] = spec.reset;
+    }
     return out;
 }

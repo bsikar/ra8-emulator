@@ -1,9 +1,10 @@
 //! Freeze and restore the existing complete SD snapshot, independently of ELF memory.
 const std = @import("std");
-const session = @import("ra8_session");
+
 const history = @import("ra8_host").history;
-const snapshot = @import("ra8_board").snapshot;
 const objects = @import("object_read.zig");
+const session = @import("ra8_session");
+const snapshot = @import("ra8_board").snapshot;
 
 /// Sparse SD snapshot input cap; never allocate from an unchecked object length.
 pub const max_bytes = 256 * 1024 * 1024;

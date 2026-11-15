@@ -7,12 +7,13 @@
 //! any other is VPT, which opens a block once P0 is written. The integer
 //! group rejects these because their size field reads 0b11. Lane semantics
 //! are in src/chip/core/cpu/mve/float.cmp.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
 const vpst = @import("../vpst.zig");
+
 const Cond = mve.float.cmp.Cond;
 
 pub const group: op.Group = .{ .name = "mve_vcmp_fp", .decode = decode, .oracle = false };

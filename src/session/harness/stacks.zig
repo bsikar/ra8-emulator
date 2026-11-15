@@ -4,14 +4,14 @@
 //! one. The store is what the session wire's folded request reads.
 //!
 //! Nothing samples until `watch`; a session that never asks runs as before.
-const elf = @import("ra8_board").image.elf;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
 const dwarf_line = @import("../dwarf/line/line.zig");
+const elf = @import("ra8_board").image.elf;
 const rtos_trace = @import("../rtos/trace.zig");
 const stack_profile = @import("../stack/profile.zig");
 const stack_sampler = @import("../stack/sampler.zig");
 const stack_samples = @import("../stack/samples.zig");
+const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
 
 /// One sample every this many retired instructions, unless set otherwise.
 pub const default_every: u32 = 1000;
@@ -24,7 +24,14 @@ pub const Stacks = struct {
 
     /// Sample `cpu` as core `index`, walking its stacks with `image`'s
     /// frames and symbols. `self` and `image` outlive the sampling.
-    pub fn watch(self: *Stacks, index: u1, cpu: *cpu_mod.Cpu, image: *const elf.Image, time: *const TimeBase, trace: ?*const rtos_trace.Trace) void {
+    pub fn watch(
+        self: *Stacks,
+        index: u1,
+        cpu: *cpu_mod.Cpu,
+        image: *const elf.Image,
+        time: *const TimeBase,
+        trace: ?*const rtos_trace.Trace,
+    ) void {
         self.unwatch(index, cpu);
         self.cores[index] = .{
             .view = .{ .zig = .{ .cpu = cpu } },

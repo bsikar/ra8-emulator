@@ -5,9 +5,9 @@
 //! speed.zig): 0.001x to 1000000x. A factor between thousandths rounds to
 //! the nearest one; one that rounds to zero is refused, not paused, since
 //! pause is Session.pause.
-const std = @import("std");
-const speed = @import("run/run.zig").speed;
+
 const debug_session = @import("session.zig");
+const speed = @import("run/run.zig").speed;
 
 /// Where a running engine takes the new factor, in thousandths of real time,
 /// or null to run unpaced as `--speed max` does (RA8EMU-714).

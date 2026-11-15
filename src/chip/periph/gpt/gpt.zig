@@ -80,19 +80,22 @@
 //! NOT MODELLED, AND NOT GUESSED: the per-source interrupt enables in
 //! GTINTAD, so channel 0's overflow always raises and a compare match never
 //! does.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const buf = @import("buffer.zig");
+
 pub const buffer = buf;
 const ch = @import("channel.zig");
+
 pub const channel = ch;
 const clk = @import("clock.zig");
 pub const compare = @import("compare.zig");
 const lk = @import("lock.zig");
-const win = @import("window.zig");
 const md = @import("mode.zig");
 const prd = @import("period.zig");
+const win = @import("window.zig");
+
 pub const period = prd;
 pub const sync = @import("sync.zig");
 

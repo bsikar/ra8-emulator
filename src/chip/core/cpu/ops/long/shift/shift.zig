@@ -16,9 +16,9 @@
 //! imm5 0 as 32 for LSR and ASR, RA8EMU-312); for LSLL it stays unclaimed.
 //! Also left to other groups: RdaHi = 0b1111 (the single-register
 //! saturating shifts), type 0b11, hw1 bit 0 set, and the register forms.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 pub const reg = @import("reg.zig");
 pub const sat = @import("sat.zig");
 pub const sat64 = @import("sat64.zig");

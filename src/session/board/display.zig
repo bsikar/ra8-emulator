@@ -1,12 +1,13 @@
 //! Session access to the board's raw panel frame and settled state.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const display_settled = @import("ra8_board").display_settled;
-const FrameCapture = @import("ra8_board").frame_capture.FrameCapture;
 const eink = @import("ra8_components").eink;
-const session_display = @import("../display.zig");
-const session_api = @import("../api.zig");
+const FrameCapture = @import("ra8_board").frame_capture.FrameCapture;
 const panel_watch = @import("../panel/watch.zig");
+const session_api = @import("../api.zig");
+const session_display = @import("../display.zig");
 
 pub const Error = error{ Timeout, NoVirtualProgress, NoFrame };
 
@@ -151,7 +152,9 @@ pub const Host = struct {
         if (!try self.composeInto(&capture)) return Error.NoFrame;
         const pixels = try allocator.alloc(u8, capture.pixels.len);
         errdefer allocator.free(pixels);
-        for (capture.pixels, pixels) |argb, *gray| gray.* = session_display.grayscale(argb);
+        for (capture.pixels, pixels) |argb, *gray| {
+            gray.* = session_display.grayscale(argb);
+        }
         return .{
             .width = capture.width,
             .height = capture.height,

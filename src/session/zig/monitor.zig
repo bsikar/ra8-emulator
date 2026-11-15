@@ -7,13 +7,16 @@
 //! this, once per instruction, so firmware running a debug monitor sees
 //! the same pend on either core. With MON_EN clear the event is dropped.
 const std = @import("std");
-const zig_core = @import("core.zig");
-const stop_machine = @import("../stop_machine.zig");
+
 const dcb = @import("ra8_chip").periph.dcb;
+const stop_machine = @import("../stop_machine.zig");
+const zig_core = @import("core.zig");
 
 /// Pend DebugMonitor for the event the last instruction raised, if any.
 pub fn take(core: zig_core.ZigCore, machine: *stop_machine.Machine) void {
-    while (machine.takeMonitor()) |cause| pend(core, machine, cause);
+    while (machine.takeMonitor()) |cause| {
+        pend(core, machine, cause);
+    }
 }
 
 /// Set DEMCR.MON_PEND and latch DFSR for `cause` when DEMCR.MON_EN is set.

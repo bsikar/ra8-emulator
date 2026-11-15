@@ -1,7 +1,9 @@
 //! The trail's records: what a write replaced and who wrote it, the
 //! structural barriers between them, and the noncore-write watches.
 const std = @import("std");
+
 const memory = @import("ra8_chip").core.cpu.memory;
+
 const observer = memory.observer;
 const Initiator = memory.initiator.Initiator;
 

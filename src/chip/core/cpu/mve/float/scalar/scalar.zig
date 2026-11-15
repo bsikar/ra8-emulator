@@ -7,10 +7,10 @@
 //! DO_2OP_FP_SCALAR, DO_2OP_FP_ACC_SCALAR and DO_VCMP_FP_SCALAR. An F16
 //! form reads only the low 16 bits of Rm. VFMA is d + n*Rm and VFMAS is
 //! d*n + Rm.
-const Fpscr = @import("../../../fpu/fpscr.zig").Fpscr;
-const qreg = @import("../../qreg.zig");
 const float = @import("../float.zig");
 const float_cmp = @import("../cmp/cmp.zig");
+const Fpscr = @import("../../../fpu/fpscr.zig").Fpscr;
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 /// `rm` (its low 16 bits for F16) copied into every lane.
@@ -18,7 +18,9 @@ pub fn broadcast(rm: u32, size: float.Size) u128 {
     const qs = float.qsize(size);
     const value: u32 = if (size == .half) rm & 0xFFFF else rm;
     var out: u128 = 0;
-    for (0..qreg.lanes(qs)) |i| out = qreg.setElem(out, qs, @intCast(i), value);
+    for (0..qreg.lanes(qs)) |i| {
+        out = qreg.setElem(out, qs, @intCast(i), value);
+    }
     return out;
 }
 

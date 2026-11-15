@@ -49,13 +49,29 @@ const setup = [_]V{
 };
 
 const letp = [_]V{
-    vec("letp.32 takes four and loops", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 20, .ltpsize = 2 }, .{ .pc = 0xE4, .lr = 16, .ltpsize = 2 }),
+    vec(
+        "letp.32 takes four and loops",
+        .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 20, .ltpsize = 2 },
+        .{ .pc = 0xE4, .lr = 16, .ltpsize = 2 },
+    ),
     vec("letp.32 with four left exits", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 4, .ltpsize = 2 }, .{ .lr = 4 }),
     vec("letp.32 with nothing left exits", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 0, .ltpsize = 2 }, .{ .lr = 0 }),
-    vec("letp.8 takes sixteen", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 17, .ltpsize = 0 }, .{ .pc = 0xE4, .lr = 1, .ltpsize = 0 }),
-    vec("letp.64 takes two", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 3, .ltpsize = 3 }, .{ .pc = 0xE4, .lr = 1, .ltpsize = 3 }),
+    vec(
+        "letp.8 takes sixteen",
+        .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 17, .ltpsize = 0 },
+        .{ .pc = 0xE4, .lr = 1, .ltpsize = 0 },
+    ),
+    vec(
+        "letp.64 takes two",
+        .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 3, .ltpsize = 3 },
+        .{ .pc = 0xE4, .lr = 1, .ltpsize = 3 },
+    ),
     vec("letp with ltpsize 4 takes one", .{ .hw1 = 0xF01F, .hw2 = 0xC011, .lr = 5 }, .{ .pc = 0xE4, .lr = 4 }),
-    vec("letp at its longest distance", .{ .hw1 = 0xF01F, .hw2 = 0xCFFF, .lr = 9, .ltpsize = 2 }, .{ .pc = 0xFFFF_F106, .lr = 5, .ltpsize = 2 }),
+    vec(
+        "letp at its longest distance",
+        .{ .hw1 = 0xF01F, .hw2 = 0xCFFF, .lr = 9, .ltpsize = 2 },
+        .{ .pc = 0xFFFF_F106, .lr = 5, .ltpsize = 2 },
+    ),
 };
 
 const unclaimed = [_]V{

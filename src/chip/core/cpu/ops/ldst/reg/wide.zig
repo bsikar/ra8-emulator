@@ -7,11 +7,12 @@
 //! and Rt of SP or PC on a byte or halfword access (Rt = PC there is PLD, PLI
 //! or an unallocated hint). LDR with Rt = PC branches through BXWritePC.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
 const alignment = @import("../../../alignment.zig");
+const bti = @import("../../../bti.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const bti = @import("../../../bti.zig");
+const op = @import("../../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

@@ -10,12 +10,14 @@
 //!
 //! Stores compact deltas per slot (only modified fields), with symmetric
 //! in-place swap enabling exact undo and redo.
+const register_tag = @import("register_tag.zig");
 const std = @import("std");
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const regs_mod = @import("ra8_chip").core.cpu.regs;
-const fp_state = @import("ra8_chip").core.cpu.fpu.state;
+
 const banked_mod = @import("ra8_chip").core.banked;
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const fp_state = @import("ra8_chip").core.cpu.fpu.state;
 const position_mod = @import("ra8_chip").core.scheduler.position;
+const regs_mod = @import("ra8_chip").core.cpu.regs;
 const trail_mod = @import("trail.zig");
 
 pub const Position = position_mod.Position;
@@ -28,103 +30,8 @@ pub const SlotKind = enum(u8) {
     barrier = 3,
 };
 
-pub const RegTag = enum(u8) {
-    r0 = 0,
-    r1,
-    r2,
-    r3,
-    r4,
-    r5,
-    r6,
-    r7,
-    r8,
-    r9,
-    r10,
-    r11,
-    r12,
-    msp,
-    psp,
-    lr,
-    pc,
-    xpsr,
-    control,
-    primask,
-    basepri,
-    faultmask,
-    msplim,
-    psplim,
-    low_msp,
-    low_psp,
-    pac_key_p0,
-    pac_key_p1,
-    pac_key_p2,
-    pac_key_p3,
-    pac_key_u0,
-    pac_key_u1,
-    pac_key_u2,
-    pac_key_u3,
-    exc_return,
-    fnc_return,
-    s0,
-    s1,
-    s2,
-    s3,
-    s4,
-    s5,
-    s6,
-    s7,
-    s8,
-    s9,
-    s10,
-    s11,
-    s12,
-    s13,
-    s14,
-    s15,
-    s16,
-    s17,
-    s18,
-    s19,
-    s20,
-    s21,
-    s22,
-    s23,
-    s24,
-    s25,
-    s26,
-    s27,
-    s28,
-    s29,
-    s30,
-    s31,
-    fpscr,
-    vpr,
-    fpccr,
-    fpcar,
-    fpdscr,
-    cpacr,
-    banked_current,
-    banked_other_msp,
-    banked_other_psp,
-    banked_other_msplim,
-    banked_other_psplim,
-    banked_other_primask,
-    banked_other_basepri,
-    banked_other_faultmask,
-    banked_other_control,
-    banked_other_low_msp,
-    banked_other_low_psp,
-    slots_lo,
-    slots_hi,
-    retired_lo,
-    retired_hi,
-    sync_entries_lo,
-    sync_entries_hi,
-    exclusive,
-    event,
-};
-
-pub const reg_tag_count: usize = @typeInfo(RegTag).@"enum".field_names.len;
+pub const RegTag = register_tag.RegTag;
+pub const reg_tag_count = register_tag.reg_tag_count;
 
 pub const RegDiff = struct {
     tag: RegTag,
@@ -176,12 +83,13 @@ pub const ArchState = struct {
     pub fn readField(self: *const ArchState, tag: RegTag, val: *u32, valid: *bool) void {
         val.* = 0;
         valid.* = true;
+        if (fpIndex(tag)) |index| {
+            val.* = self.fp.bank.s[index];
+            return;
+        }
         switch (tag) {
             .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => {
                 val.* = self.regs.low[@backingInt(tag) - @backingInt(RegTag.r0)];
-            },
-            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => {
-                val.* = self.fp.bank.s[@backingInt(tag) - @backingInt(RegTag.s0)];
             },
             .msp => val.* = self.regs.msp,
             .psp => val.* = self.regs.psp,
@@ -243,16 +151,18 @@ pub const ArchState = struct {
                 valid.* = false;
             },
             .event => val.* = @intFromBool(self.event),
+            else => unreachable, // S0-S31 were handled above.
         }
     }
 
     pub fn writeField(self: *ArchState, tag: RegTag, val: u32, valid: bool) void {
+        if (fpIndex(tag)) |index| {
+            self.fp.bank.s[index] = val;
+            return;
+        }
         switch (tag) {
             .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12 => {
                 self.regs.low[@backingInt(tag) - @backingInt(RegTag.r0)] = val;
-            },
-            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => {
-                self.fp.bank.s[@backingInt(tag) - @backingInt(RegTag.s0)] = val;
             },
             .msp => self.regs.msp = val,
             .psp => self.regs.psp = val,
@@ -302,6 +212,7 @@ pub const ArchState = struct {
             .sync_entries_hi => self.sync_entries = (self.sync_entries & 0x0000_0000_FFFF_FFFF) | (@as(u64, val) << 32),
             .exclusive => self.exclusive = if (valid) val else null,
             .event => self.event = (val != 0),
+            else => unreachable, // S0-S31 were handled above.
         }
     }
 };
@@ -352,3 +263,9 @@ pub const WindowSlot = struct {
     honest_bytes: usize = 0,
     post_digest: [16]u8 = @splat(0),
 };
+
+fn fpIndex(tag: RegTag) ?usize {
+    const value = @backingInt(tag);
+    if (value < @backingInt(RegTag.s0) or value > @backingInt(RegTag.s31)) return null;
+    return value - @backingInt(RegTag.s0);
+}

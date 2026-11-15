@@ -7,13 +7,13 @@
 //! as the instruction leaves them, so the innermost frame is the pc the
 //! core goes on to. Memory is read through the core view, whose reads
 //! peek and so take nothing from a FIFO (RA8EMU-938).
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const core_view = @import("../core_view.zig");
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const rtos_trace = @import("../rtos/trace.zig");
 const stack_samples = @import("samples.zig");
 const stack_walk = @import("walk.zig");
-const unwind = @import("../unwind/unwind.zig");
 const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
+const unwind = @import("../unwind/unwind.zig");
 
 pub const Sampler = struct {
     view: core_view.View,

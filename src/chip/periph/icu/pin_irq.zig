@@ -14,8 +14,8 @@
 //! holds the line until the handler clears it; a level still held after
 //! that clear is not raised again. Nothing in the corpus selects low level
 //! (the board code picks falling edge), so this stays the simple reading.
-const pfs = @import("../pfs/pfs.zig");
 const irqcr = @import("irqcr.zig");
+const pfs = @import("../pfs/pfs.zig");
 
 /// PmnPFS.ISEL: the pin is an IRQ input.
 pub const isel: u32 = pfs.capabilities.field.isel;

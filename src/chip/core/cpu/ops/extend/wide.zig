@@ -7,10 +7,11 @@
 //! Left unclaimed: Rd or Rm of SP or PC and Rn of SP (UNPREDICTABLE), and the
 //! dual-halfword SXTB16/UXTB16 rows from the DSP extension.
 const std = @import("std");
-const op = @import("../../op.zig");
+
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const extend = @import("extend.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

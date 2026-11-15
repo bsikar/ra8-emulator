@@ -2,13 +2,15 @@
 //! Video-player rewind: reverse clock pacing, segment bucket decoding,
 //! honest throughput limiting, and hysteresis switching between smooth
 //! and keyframe playback.
+const decoded_frame = @import("decoded_frame.zig");
 const std = @import("std");
-const position_mod = @import("position.zig");
+
 const branch_mod = @import("branch.zig");
-const frame_cache_mod = @import("frame_cache.zig");
 const checkpoint_picture = @import("checkpoint_picture.zig");
-const temp_cp_mod = @import("temp_checkpoints.zig");
+const frame_cache_mod = @import("frame_cache.zig");
 const nav_index = @import("nav_index.zig");
+const position_mod = @import("position.zig");
+const temp_cp_mod = @import("temp_checkpoints.zig");
 
 pub const Position = position_mod.Position;
 pub const FrameCache = frame_cache_mod.FrameCache;
@@ -20,38 +22,8 @@ pub const PresentationMode = enum {
     keyframes_only,
 };
 
-pub const SourceKind = enum {
-    frame_cache,
-    decoded_segment,
-    checkpoint_picture,
-};
-
-/// One decoded frame presented during playback.
-pub const DecodedFrame = struct {
-    position: Position,
-    virtual_ns: u64,
-    width: u16,
-    height: u16,
-    pixels: []u8,
-    source: SourceKind,
-
-    pub fn deinit(self: *DecodedFrame, allocator: std.mem.Allocator) void {
-        allocator.free(self.pixels);
-        self.pixels = &.{};
-    }
-
-    pub fn dupe(self: *const DecodedFrame, allocator: std.mem.Allocator) !DecodedFrame {
-        const px = try allocator.dupe(u8, self.pixels);
-        return .{
-            .position = self.position,
-            .virtual_ns = self.virtual_ns,
-            .width = self.width,
-            .height = self.height,
-            .pixels = px,
-            .source = self.source,
-        };
-    }
-};
+pub const SourceKind = decoded_frame.SourceKind;
+pub const DecodedFrame = decoded_frame.DecodedFrame;
 
 /// One presentation bucket: holds the last frame of a speed/60 s window.
 pub const Bucket = struct {
@@ -176,7 +148,9 @@ pub const FrameDecoder = struct {
     }
 
     pub fn clearBuckets(self: *FrameDecoder) void {
-        for (self.buckets.items) |*b| b.deinit(self.allocator);
+        for (self.buckets.items) |*b| {
+            b.deinit(self.allocator);
+        }
         self.buckets.clearRetainingCapacity();
     }
 
@@ -319,7 +293,12 @@ pub const FrameDecoder = struct {
     /// over the entries of the cursor's `line`. A line with none there (a
     /// fork just made) takes its ancestors' pictures from before its fork
     /// point, found through `graph`.
-    pub fn lookupRestorePicture(self: *FrameDecoder, virtual_ns: u64, cursor_line: branch_mod.BranchId, graph: ?*const branch_mod.BranchGraph) !?DecodedFrame {
+    pub fn lookupRestorePicture(
+        self: *FrameDecoder,
+        virtual_ns: u64,
+        cursor_line: branch_mod.BranchId,
+        graph: ?*const branch_mod.BranchGraph,
+    ) !?DecodedFrame {
         var line = cursor_line;
         var limit: ?Position = null;
         // A line has fewer ancestors than the graph has nodes.
@@ -342,7 +321,9 @@ pub const FrameDecoder = struct {
         const reader = self.picture_reader orelse return null;
         const entries = idx.entries.items;
         var lo: usize = 0;
-        while (lo < entries.len and entries[lo].at.branch < line) lo += 1;
+        while (lo < entries.len and entries[lo].at.branch < line) {
+            lo += 1;
+        }
         var hi = lo;
         while (hi < entries.len and entries[hi].at.branch == line) : (hi += 1) {
             if (limit) |cut| if (branch_mod.scalarOrder(entries[hi].at, cut) == .gt) break;

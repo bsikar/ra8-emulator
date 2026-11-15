@@ -9,8 +9,8 @@
 //! its own: every reply is a packet the firmware's own USBFS driver wrote.
 //! A control transfer is asynchronous here, because the device side answers
 //! only when its driver runs, so the host side polls `answer`.
-const usbfs = @import("ra8_chip").periph.usbfs;
 const regs = @import("ra8_chip").periph.usbhs.regs;
+const usbfs = @import("ra8_chip").periph.usbfs;
 const usbhs_far = @import("ra8_chip").periph.usbhs.far;
 
 /// How the device side has ended the control transfer so far.

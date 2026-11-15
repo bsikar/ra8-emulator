@@ -1,8 +1,8 @@
 //! What names this machine and this process in a session's owner record.
 //! The host name decides whether a sweep may trust a directory's lock at
 //! all; the pid and the boot id are only ever shown.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 pub const limits = struct {
     pub const host = 768;

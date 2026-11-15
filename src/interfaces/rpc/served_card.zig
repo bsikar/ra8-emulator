@@ -1,8 +1,12 @@
 //! Host startup card inputs shared by the CLI and GUI adapters.
+const session = @import("ra8_session");
+
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
-const host_folder = @import("ra8_host").folder;
 const card_apps = @import("card_apps.zig");
+const host_folder = @import("ra8_host").folder;
+
 const default_label = "RA8";
 
 pub const Options = struct {
@@ -65,7 +69,10 @@ fn fromDir(board: *Board, io: std.Io, sdhi: Options) !void {
         std.debug.print("--sd-dir {s}: {s}\n", .{ source, @errorName(err) });
         return err;
     };
-    std.debug.print("sd-dir: {s} -> FAT32 {d} MiB, {d} files, {d} dirs\n", .{ source, built.blocks / 2048, built.files, built.dirs });
+    std.debug.print(
+        "sd-dir: {s} -> FAT32 {d} MiB, {d} files, {d} dirs\n",
+        .{ source, built.blocks / 2048, built.files, built.dirs },
+    );
 }
 
 /// Own module bytes and pairs for as long as the harness borrows them.
@@ -79,7 +86,7 @@ pub fn stage(self: anytype, options: Options) !void {
     const allocator = arena.allocator();
     const staged = try allocator.alloc(card_apps.Staged, card_apps.max_apps);
     const apps = try card_apps.paired(self.io, allocator, options.appPaths(), staged);
-    const pairs = try allocator.create([card_apps.max_apps]@import("ra8_session").txm.debug.Pair);
+    const pairs = try allocator.create([card_apps.max_apps]session.txm.debug.Pair);
     const paired = try card_apps.pairs(apps, pairs);
     release(self);
     self.card_arena = arena;

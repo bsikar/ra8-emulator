@@ -12,8 +12,8 @@
 //! monitor stays 0; the EK-RA8D2 reads tas_cycle=0 there (RA8EMU-496).
 //! Clearing TASE or entering RESET clears it. A configuration change
 //! completes at once: the start-time wait is not modelled.
-const lanes = @import("../lanes.zig");
 const eth_mode = @import("mode.zig");
+const lanes = @import("../lanes.zig");
 
 pub const reg = struct {
     pub const start: u32 = 0x0300;

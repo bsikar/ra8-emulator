@@ -20,7 +20,6 @@
 //! this counts it. A zero here says the losses are the model's own writes and
 //! the next place to look is the engine side; a number near the 368 missing
 //! says the write-one-to-set lane is the hole.
-const std = @import("std");
 
 /// Stores that took a standing PendSV pend down.
 pub const Cleared = struct {

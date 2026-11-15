@@ -10,8 +10,9 @@
 //! (`last_gated` and the `dropped` log, which name peripherals by static
 //! strings). A load keeps the target's.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -45,7 +46,9 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, board: anytype) !void {
-    inline for (parts) |part| try fields.writeExcept(writer, @field(board, part.name), part.skip);
+    inline for (parts) |part| {
+        try fields.writeExcept(writer, @field(board, part.name), part.skip);
+    }
 }
 
 /// All or nothing: every unit is read over a copy of itself, and the board
@@ -59,12 +62,16 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
         try fields.readOver(&cursor, &copies[i], part.skip);
     }
     if (!cursor.done()) return Error.BadValue;
-    inline for (parts, 0..) |part, i| @field(board.*, part.name) = copies[i];
+    inline for (parts, 0..) |part, i| {
+        @field(board.*, part.name) = copies[i];
+    }
 }
 
 /// The types of `parts`' fields of `Board`, as a tuple.
 fn Copies(comptime Board: type) type {
     var types: [parts.len]type = undefined;
-    for (parts, 0..) |part, i| types[i] = @FieldType(Board, part.name);
+    for (parts, 0..) |part, i| {
+        types[i] = @FieldType(Board, part.name);
+    }
     return @Tuple(&types);
 }

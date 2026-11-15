@@ -1,7 +1,8 @@
 //! Stop-local DAP handles and views, rebuilt from Session on every request.
 const std = @import("std");
-const session = @import("ra8_session");
+
 const p = @import("protocol.zig");
+const session = @import("ra8_session");
 
 pub const Sources = struct {
     context: *anyopaque,
@@ -43,7 +44,13 @@ pub const Inspection = struct {
         const image = target.images[@backingInt(core)];
         var walked: [session.unwind.limits.frames]session.unwind.Frame = undefined;
         const cfi = if (image) |loaded| session.dwarf.line.section(loaded, ".debug_frame") else &.{};
-        const count = session.unwind.walk(cfi, try session.unwind.registersOf(view), try view.register(.psp), view, &walked);
+        const count = session.unwind.walk(
+            cfi,
+            try session.unwind.registersOf(view),
+            try view.register(.psp),
+            view,
+            &walked,
+        );
         const start = optionalNumber(args, "startFrame", 0) catch return error.InvalidArguments;
         const levels = try optionalNumber(args, "levels", 0);
         const end = if (levels == 0) count else @min(count, start +| levels);
@@ -54,17 +61,35 @@ pub const Inspection = struct {
             const pc = if (frame.exact) frame.pc else frame.pc -| 1;
             var name_buf: [32]u8 = undefined;
             const fallback = try std.fmt.bufPrint(&name_buf, "0x{X:0>8}", .{frame.pc});
-            const name = if (image) |loaded| if (session.symbols.inside(loaded, pc)) |symbol| symbol.name else fallback else fallback;
+            const name = if (image) |loaded|
+                if (session.symbols.inside(loaded, pc)) |symbol|
+                    symbol.name
+                else
+                    fallback
+            else
+                fallback;
             const place = session.dwarf.line.lookup(session.source.of(image), pc) catch null;
             try out.print("{{\"id\":{d},\"name\":", .{self.frameId(core, index)});
             try p.quote(out, name);
-            try out.print(",\"line\":{d},\"column\":{d},\"instructionPointerReference\":\"0x{X:0>8}\"", .{ if (place) |found| found.line -| @intFromBool(!self.lines_start_at_one) else @as(u32, 0), @intFromBool(self.columns_start_at_one), frame.pc });
+            try out.print(
+                ",\"line\":{d},\"column\":{d},\"instructionPointerReference\":\"0x{X:0>8}\"",
+                .{
+                    if (place) |found| found.line -| @intFromBool(!self.lines_start_at_one) else @as(u32, 0),
+                    @intFromBool(self.columns_start_at_one),
+                    frame.pc,
+                },
+            );
             if (place) |found| {
                 var path: [4096]u8 = undefined;
                 var writer: std.Io.Writer = .fixed(&path);
                 try session.source.qualifiedPath(&writer, found.file);
                 var mapped: [4096]u8 = undefined;
-                const visible = if (target.sources) |sources| try sources.pathFn(sources.context, writer.buffered(), true, &mapped) else writer.buffered();
+                const visible = if (target.sources) |sources| try sources.pathFn(
+                    sources.context,
+                    writer.buffered(),
+                    true,
+                    &mapped,
+                ) else writer.buffered();
                 try out.writeAll(",\"source\":");
                 try p.quote(out, .{ .name = std.fs.path.basename(found.file.name), .path = visible });
             }
@@ -79,7 +104,12 @@ pub const Inspection = struct {
         const frame = try self.decode(target, id);
         // Caller registers require CFI reconstruction; never show live registers as a caller's.
         if (frame.index != 0) return out.writeAll("{\"scopes\":[]}");
-        try out.print("{{\"scopes\":[{{\"name\":\"Registers\",\"presentationHint\":\"registers\",\"variablesReference\":{d},\"expensive\":false}},{{\"name\":\"Locals\",\"presentationHint\":\"locals\",\"variablesReference\":{d},\"expensive\":false}}]}}", .{ id * 2, id * 2 + 1 });
+        try out.print(
+            "{{\"scopes\":[{{\"name\":\"Registers\",\"presentationHint\":\"registers\",\"vari" ++
+                "ablesReference\":{d},\"expensive\":false}},{{\"name\":\"Locals\",\"presentationH" ++
+                "int\":\"locals\",\"variablesReference\":{d},\"expensive\":false}}]}}",
+            .{ id * 2, id * 2 + 1 },
+        );
     }
 
     pub fn variables(self: *Inspection, target: Target, args: p.Value, out: *std.Io.Writer) !void {
@@ -88,7 +118,25 @@ pub const Inspection = struct {
         if (frame.index != 0) return error.InvalidReference;
         try out.writeAll("{\"variables\":[");
         if (ref % 2 == 0) {
-            const names = [_]session.api.Register{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc, .xpsr };
+            const names = [_]session.api.Register{
+                .r0,
+                .r1,
+                .r2,
+                .r3,
+                .r4,
+                .r5,
+                .r6,
+                .r7,
+                .r8,
+                .r9,
+                .r10,
+                .r11,
+                .r12,
+                .sp,
+                .lr,
+                .pc,
+                .xpsr,
+            };
             for (names, 0..) |which, index| {
                 if (index != 0) try out.writeByte(',');
                 try variable(out, @tagName(which), "uint32", try target.session.register(frame.core, which));
@@ -100,7 +148,11 @@ pub const Inspection = struct {
     fn locals(target: Target, core: session.api.Core, out: *std.Io.Writer) !void {
         const image = target.images[@backingInt(core)] orelse return;
         var into: [64]session.dwarf.locals.Local = undefined;
-        const count = try session.dwarf.locals.inFunction(session.dwarf.locals.ofImage(image), try target.session.register(core, .pc), &into);
+        const count = try session.dwarf.locals.inFunction(
+            session.dwarf.locals.ofImage(image),
+            try target.session.register(core, .pc),
+            &into,
+        );
         const view = try target.session.view(core);
         const regs = try session.unwind.registersOf(view);
         for (into[0..count], 0..) |local, index| {
@@ -109,14 +161,26 @@ pub const Inspection = struct {
         }
     }
 
-    fn localValue(view: session.core_view.View, regs: session.unwind.Registers, local: session.dwarf.locals.Local) ?u32 {
+    fn localValue(
+        view: session.core_view.View,
+        regs: session.unwind.Registers,
+        local: session.dwarf.locals.Local,
+    ) ?u32 {
         if (local.size == 0 or local.size > 4) return null;
         const where = local.where orelse return null;
         const address: u32 = switch (where) {
             .frame => return null, // A frame base expression is not necessarily the current SP.
-            .in_register => |reg| return if (reg < regs.len) regs[reg] & (@as(u32, std.math.maxInt(u32)) >> @as(u5, @intCast((4 - local.size) * 8))) else null,
+            .in_register,
+            => |reg| return if (reg < regs.len)
+                regs[reg] & (@as(u32, std.math.maxInt(u32)) >> @as(u5, @intCast((4 - local.size) * 8)))
+            else
+                null,
             .address => |at| at,
-            .register => |reg| if (reg.reg < regs.len) regs[reg.reg] +% @as(u32, @truncate(@as(u64, @bitCast(reg.offset)))) else return null,
+            .register,
+            => |reg| if (reg.reg < regs.len)
+                regs[reg.reg] +% @as(u32, @truncate(@as(u64, @bitCast(reg.offset))))
+            else
+                return null,
         };
         var bytes: [4]u8 = @splat(0);
         view.read(address, bytes[0..local.size]) catch return null;
@@ -142,7 +206,13 @@ pub const Inspection = struct {
         const image = target.images[@backingInt(core)];
         const cfi = if (image) |loaded| session.dwarf.line.section(loaded, ".debug_frame") else &.{};
         var frames: [32]session.unwind.Frame = undefined;
-        const count = session.unwind.walk(cfi, try session.unwind.registersOf(view), try view.register(.psp), view, &frames);
+        const count = session.unwind.walk(
+            cfi,
+            try session.unwind.registersOf(view),
+            try view.register(.psp),
+            view,
+            &frames,
+        );
         if (id % 32 >= count) return error.InvalidReference;
         return .{ .core = core, .index = id % 32 };
     }

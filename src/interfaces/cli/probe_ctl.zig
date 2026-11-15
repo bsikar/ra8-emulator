@@ -4,9 +4,24 @@ pub const Request = struct { host: []const u8, port: u16, action: Action, addres
 pub const Action = enum { capabilities, registers, read, halt, step, cont };
 
 pub fn parse(argv: []const []const u8) !Request {
-    if (argv.len < 6 or !std.mem.eql(u8, argv[1], "ctl") or !std.mem.eql(u8, argv[2], "probe")) return error.BadArguments;
+    if (argv.len < 6 or
+        !std.mem.eql(u8, argv[1], "ctl") or
+        !std.mem.eql(u8, argv[2], "probe")) return error.BadArguments;
     const port = try std.fmt.parseInt(u16, argv[4], 10);
-    const action = if (std.mem.eql(u8, argv[5], "capabilities")) Action.capabilities else if (std.mem.eql(u8, argv[5], "registers")) Action.registers else if (std.mem.eql(u8, argv[5], "read")) Action.read else if (std.mem.eql(u8, argv[5], "halt")) Action.halt else if (std.mem.eql(u8, argv[5], "resume")) Action.cont else if (std.mem.eql(u8, argv[5], "step")) Action.step else return error.UnknownAction;
+    const action = if (std.mem.eql(u8, argv[5], "capabilities"))
+        Action.capabilities
+    else if (std.mem.eql(u8, argv[5], "registers"))
+        Action.registers
+    else if (std.mem.eql(u8, argv[5], "read"))
+        Action.read
+    else if (std.mem.eql(u8, argv[5], "halt"))
+        Action.halt
+    else if (std.mem.eql(u8, argv[5], "resume"))
+        Action.cont
+    else if (std.mem.eql(u8, argv[5], "step"))
+        Action.step
+    else
+        return error.UnknownAction;
     var request = Request{ .host = argv[3], .port = port, .action = action };
     if (action == .read) {
         if (argv.len != 8) return error.BadArguments;
@@ -21,11 +36,24 @@ pub fn parse(argv: []const []const u8) !Request {
 pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     _ = allocator;
     const request = parse(argv) catch |err| {
-        std.debug.print("ctl probe: {s}\nusage: ra8_emulator ctl probe HOST PORT capabilities|registers|read ADDRESS LENGTH|halt|step|resume\n", .{@errorName(err)});
+        std.debug.print(
+            "ctl probe: {s}\n" ++
+                "usage: ra8_emulator ctl probe HOST PORT capabilities|registers|read ADDRESS " ++
+                "LENGTH|halt|step|resume\n",
+            .{@errorName(err)},
+        );
         return 2;
     };
     if (request.action == .capabilities) {
-        try emit(io, "{s}", .{"{\"registers\":true,\"memory_read\":true,\"halt\":true,\"resume\":true,\"step\":true,\"speed_control\":false,\"idle_fast_forward\":false,\"fault_injection\":false}\n"});
+        try emit(
+            io,
+            "{s}",
+            .{
+                "{\"registers\":true,\"memory_read\":true,\"halt\":true,\"resume\":true,\"step\":" ++
+                    "true,\"speed_control\":false,\"idle_fast_forward\":false,\"fault_injection\":fal" ++
+                    "se}\n",
+            },
+        );
         return 0;
     }
     const host = try std.Io.net.HostName.init(request.host);
@@ -51,7 +79,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
             var command: [32]u8 = undefined;
             const text = try std.fmt.bufPrint(&command, "m{X},{X}", .{ request.address, request.length });
             const body = try exchange(reader, writer, text, &response);
-            try emit(io, "{{\"address\":{d},\"length\":{d},\"memory_rsp\":\"{s}\"}}\n", .{ request.address, request.length, body });
+            try emit(
+                io,
+                "{{\"address\":{d},\"length\":{d},\"memory_rsp\":\"{s}\"}}\n",
+                .{ request.address, request.length, body },
+            );
         },
         .halt => {
             try writer.writeByte(3);
@@ -96,7 +128,9 @@ fn sendPacket(writer: anytype, payload: []const u8) !void {
     @memcpy(framed[1 .. payload.len + 1], payload);
     framed[payload.len + 1] = '#';
     var checksum: u8 = 0;
-    for (payload) |byte| checksum +%= byte;
+    for (payload) |byte| {
+        checksum +%= byte;
+    }
     const chars = "0123456789abcdef";
     framed[payload.len + 2] = chars[checksum >> 4];
     framed[payload.len + 3] = chars[checksum & 0xf];

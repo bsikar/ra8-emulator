@@ -7,8 +7,9 @@
 //! null. Otherwise 1:imm12[6:0] is rotated right by imm12[11:7], and the
 //! carry is bit 31 of the result.
 const std = @import("std");
-const shift = @import("shift.zig");
+
 const Instr = @import("instr.zig").Instr;
+const shift = @import("shift.zig");
 
 pub fn imm12(instr: Instr) u12 {
     const i: u12 = @intCast((instr.hw1 >> 10) & 0x1);

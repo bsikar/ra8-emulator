@@ -5,10 +5,11 @@
 //! `i2c:touch@0x37`. A name the catalog does not know is refused here, so a
 //! typo fails before the run starts rather than after the board is built.
 const std = @import("std");
-const endpoint = @import("endpoint.zig");
-const parts = @import("parts.zig");
-const fault_spec = @import("fault/spec.zig");
+
 const eink_wire = @import("eink_it8951/wire.zig");
+const endpoint = @import("endpoint.zig");
+const fault_spec = @import("fault/spec.zig");
+const parts = @import("parts.zig");
 
 /// How many extra models one run may attach: the RIIC registry's own
 /// depth per line (riic_bus.max_devices).

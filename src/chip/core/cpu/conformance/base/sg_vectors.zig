@@ -72,11 +72,27 @@ const secure = [_]V{
 
 const non_secure = [_]V{
     vec("sg from callable memory enters secure state", .{ .ns = true, .attr = .callable }, .{ .lr = 0x2000_0180 }),
-    vec("sg from callable memory keeps an even lr even", .{ .ns = true, .attr = .callable, .lr = 0x2000_0180 }, .{ .lr = 0x2000_0180 }),
-    vec("sg from callable memory clears only lr bit 0", .{ .ns = true, .attr = .callable, .lr = 0xFFFF_FFFF }, .{ .lr = 0xFFFF_FFFE }),
+    vec(
+        "sg from callable memory keeps an even lr even",
+        .{ .ns = true, .attr = .callable, .lr = 0x2000_0180 },
+        .{ .lr = 0x2000_0180 },
+    ),
+    vec(
+        "sg from callable memory clears only lr bit 0",
+        .{ .ns = true, .attr = .callable, .lr = 0xFFFF_FFFF },
+        .{ .lr = 0xFFFF_FFFE },
+    ),
     vec("sg from non-secure memory is a nop", .{ .ns = true, .attr = .non_secure }, ns_kept),
-    vec("sg from secure memory faults invep", .{ .ns = true, .attr = .secure }, .{ .fault = .invalid_entry, .secure = false, .sp = ns_sp }),
-    vec("sg with no attribution faults invep", .{ .ns = true }, .{ .fault = .invalid_entry, .secure = false, .sp = ns_sp }),
+    vec(
+        "sg from secure memory faults invep",
+        .{ .ns = true, .attr = .secure },
+        .{ .fault = .invalid_entry, .secure = false, .sp = ns_sp },
+    ),
+    vec(
+        "sg with no attribution faults invep",
+        .{ .ns = true },
+        .{ .fault = .invalid_entry, .secure = false, .sp = ns_sp },
+    ),
 };
 
 const unclaimed = [_]V{

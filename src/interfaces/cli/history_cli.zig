@@ -5,9 +5,12 @@
 //! is ever touched. Findings and byte counts go to stdout; complaints go
 //! to stderr.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
+
 const bind = struct {
     const rpc = @import("ra8_rpc");
+
     const prune_referrer = rpc.history_bind.prune_referrer;
     const pack_store = rpc.pack_store;
     const history_live = rpc.history_live;
@@ -207,11 +210,34 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         .rm => removeOne(&base, &stdout.interface, command.entry.?, command.kept),
         .prune => sweepClosed(allocator, &base, &stdout.interface),
         .thin => history_maint_cli.thin(allocator, &base, command.entry.?, false, command.gap, &stdout.interface),
-        .reroot => history_maint_cli.reroot(allocator, &base, command.entry.?, false, command.checkpoint, command.confirm, &stdout.interface),
-        .@"replay-elf" => history_replay_elf_cli.run(allocator, io, &base, command.entry.?, command.elf.?, command.json, &stdout.interface),
+        .reroot => history_maint_cli.reroot(
+            allocator,
+            &base,
+            command.entry.?,
+            false,
+            command.checkpoint,
+            command.confirm,
+            &stdout.interface,
+        ),
+        .@"replay-elf" => history_replay_elf_cli.run(
+            allocator,
+            io,
+            &base,
+            command.entry.?,
+            command.elf.?,
+            command.json,
+            &stdout.interface,
+        ),
         .branch => switch (command.branch_sub.?) {
             .ls => |session_name| history_branch_cli.listBranches(allocator, &base, session_name, &stdout.interface),
-            .rm => |b_rm| history_branch_cli.removeBranch(allocator, &base, b_rm.session, b_rm.branch_id, b_rm.confirm, &stdout.interface),
+            .rm => |b_rm| history_branch_cli.removeBranch(
+                allocator,
+                &base,
+                b_rm.session,
+                b_rm.branch_id,
+                b_rm.confirm,
+                &stdout.interface,
+            ),
         },
     };
     try stdout.interface.flush();
@@ -283,7 +309,13 @@ pub fn sweepClosed(allocator: std.mem.Allocator, base: *const history.base.Base,
 /// referrer, then the frame cache. The session is never closed, so an
 /// ephemeral one stays exactly where it is; the lock file and the open
 /// directory are all this touch leaves behind.
-fn sweepSession(allocator: std.mem.Allocator, base: *const history.base.Base, name: []const u8, kept: bool, out: *std.Io.Writer) !void {
+fn sweepSession(
+    allocator: std.mem.Allocator,
+    base: *const history.base.Base,
+    name: []const u8,
+    kept: bool,
+    out: *std.Io.Writer,
+) !void {
     var dir = try base.dir.openDir(base.io, name, .{ .iterate = true, .follow_symlinks = false });
     defer dir.close(base.io);
     var id: history.name.Id = undefined;
@@ -297,10 +329,16 @@ fn sweepSession(allocator: std.mem.Allocator, base: *const history.base.Base, na
     var session = history.session.Session{ .base = base, .id = id, .dir = dir, .lock = held, .kept = kept };
     const store = history.storage.Store.from(&session);
     const res = try history.prune.relief(store, allocator, bind.prune_referrer);
-    try out.print("{s}: {d} orphan objects ({d} bytes), {d} frames ({d} bytes)\n", .{ name, res.orphans, res.orphan_bytes, res.frames, res.frame_bytes });
+    try out.print(
+        "{s}: {d} orphan objects ({d} bytes), {d} frames ({d} bytes)\n",
+        .{ name, res.orphans, res.orphan_bytes, res.frames, res.frame_bytes },
+    );
     // The pack step: packs more than 30% dead are rewritten.
     const packs = try bind.pack_store.PackStore.open(allocator, &session);
     defer packs.close();
     const compacted = try bind.history_live.compactPacks(store, allocator, packs, bind.prune_referrer.collect);
-    try out.print("{s}: {d} packs compacted ({d} -> {d} bytes)\n", .{ name, compacted.packs_removed, compacted.bytes_before, compacted.bytes_after });
+    try out.print(
+        "{s}: {d} packs compacted ({d} -> {d} bytes)\n",
+        .{ name, compacted.packs_removed, compacted.bytes_before, compacted.bytes_after },
+    );
 }

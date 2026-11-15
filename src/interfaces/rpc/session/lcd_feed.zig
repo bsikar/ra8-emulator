@@ -11,9 +11,10 @@
 //! due, so a rate nobody meets costs no conversion. The server supplies the
 //! host clock through its context; without one a rate sends every pass.
 const std = @import("std");
-const proto = @import("rpc.zig");
+
 const api = @import("ra8_session").api;
 const Context = @import("handlers.zig").Context;
+const proto = @import("rpc.zig");
 
 /// Events read from the stream per pass.
 const batch = 32;
@@ -31,7 +32,9 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var events: [batch]api.Event = undefined;
     while (context.session.pollEvents(id, &events)) |read| {
         if (read.dropped != 0) whole = true;
-        for (events[0..read.count]) |event| note(context, &due, event);
+        for (events[0..read.count]) |event| {
+            note(context, &due, event);
+        }
         if (read.count < batch) break;
     }
     // A rate-limited subscriber holds its rectangles merged between sends
@@ -124,7 +127,15 @@ fn narrow(value: u32) u16 {
     return @intCast(@min(value, std.math.maxInt(u16)));
 }
 
-pub fn send(server: anytype, of: proto.Core, rect: Rect, virtual_ns: u64, frame: api.Frame, chunk: []u8, tx: []u8) !void {
+pub fn send(
+    server: anytype,
+    of: proto.Core,
+    rect: Rect,
+    virtual_ns: u64,
+    frame: api.Frame,
+    chunk: []u8,
+    tx: []u8,
+) !void {
     const rows_per: u16 = @intCast(@min(rect.height, max_pixels / rect.width));
     var row: u16 = 0;
     while (row < rect.height) : (row += rows_per) {

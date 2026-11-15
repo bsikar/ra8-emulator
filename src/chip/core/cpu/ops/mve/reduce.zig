@@ -9,11 +9,12 @@
 //! hw2 Rda X 111 b8 0 0 A 0 Qm sub. U with X, U with a 16/32 subtract,
 //! RdaHi of SP and the VRMLALDAVH space stay unclaimed. Only active
 //! elements of Qm add in; the instruction advances the VPT block.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
+
 const Size = mve.qreg.Size;
 const reduce = mve.reduce;
 

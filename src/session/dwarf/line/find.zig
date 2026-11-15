@@ -4,13 +4,15 @@
 //! read, and the lowest address of a row on the asked line wins. A line
 //! with no code of its own falls through to the nearest later line that
 //! has some, which is where gdb puts a break on a blank or comment line.
+const compilation = @import("../compilation.zig");
+
 const dwarf_line = @import("line.zig");
 const line_header = @import("header.zig");
 
 pub const Error = dwarf_line.Error;
 
-pub const named = @import("path.zig").named;
 pub const absolute = @import("path.zig").absolute;
+pub const named = @import("path.zig").named;
 
 /// The best row so far: its line, then its address, lowest first.
 const Best = struct {
@@ -30,7 +32,7 @@ pub fn addressOf(sections: dwarf_line.Sections, file: []const u8, line: u32) Err
     var best: ?Best = null;
     var offset: usize = 0;
     while (offset < sections.line.len) {
-        const directory = @import("../compilation.zig").directory(sections.units, offset) catch "";
+        const directory = compilation.directory(sections.units, offset) catch "";
         const unit = try line_header.read(sections.line, offset);
         offset = unit.end;
         try scan(unit.header, sections.strings, directory, file, line, &best);
@@ -38,7 +40,14 @@ pub fn addressOf(sections: dwarf_line.Sections, file: []const u8, line: u32) Err
     return if (best) |found| found.address else null;
 }
 
-fn scan(header: dwarf_line.Header, strings: line_header.Strings, directory: []const u8, file: []const u8, line: u32, best: *?Best) Error!void {
+fn scan(
+    header: dwarf_line.Header,
+    strings: line_header.Strings,
+    directory: []const u8,
+    file: []const u8,
+    line: u32,
+    best: *?Best,
+) Error!void {
     var rows = dwarf_line.Rows.init(header);
     while (try rows.next()) |row| {
         if (row.end_sequence or row.line < line) continue;

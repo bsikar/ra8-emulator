@@ -34,7 +34,7 @@
 //! The width of the access is the feed width, which is the one thing a byte
 //! model has to get right: a 32-bit store to CRCDIR folds four bytes LSB-first,
 //! the order ra8_crc's word packing produces, and an 8-bit store folds one.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 
 /// CRC geometry (HUM Ch 48). The Non-secure alias is folded onto this base by

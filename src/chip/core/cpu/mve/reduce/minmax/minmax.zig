@@ -4,10 +4,11 @@
 //! forms and unsigned for U and the A forms. Elements are signed except for
 //! U, and the A forms take each element's absolute value first. The result
 //! is written back extended to 32 bits, matching QEMU's DO_VMAXMINV.
-const qreg = @import("../../qreg.zig");
 const int = @import("../../int/int.zig");
 const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 pub const Kind = enum { max, min };

@@ -6,6 +6,7 @@
 //! the default part, so an RA8D2 run's report stays byte identical to the
 //! one every corpus expectation was recorded against.
 const std = @import("std");
+
 const part = @import("ra8_chip").core.part;
 const Writer = @import("../report.zig").Writer;
 
@@ -14,8 +15,8 @@ const kib: u32 = 1024;
 /// The part line, written into `buf`.
 pub fn line(buf: []u8, which: part.Part) ![]const u8 {
     const geometry = part.map.of(which);
-    return std.fmt.bufPrint(buf, "PART: {s} MRAM {d} KB @0x{X:0>8}, SRAM {d} KB @0x{X:0>8}, " ++
-        "CPU0 TCM {d} KB + cache {d} KB, CPU1 TCM {d} KB + cache {d} KB ({s})\n", .{
+    return std.fmt.bufPrint(buf, "PART: {s} MRAM {d} KB @0x{X:0>8}, SRAM {d} KB @0x{X:0>8}, CPU0 TCM {d} KB + " ++
+        "cache {d} KB, CPU1 TCM {d} KB + cache {d} KB ({s})\n", .{
         which.label(),
         geometry.mram_bytes / kib,
         geometry.mram_base,

@@ -8,22 +8,22 @@ const builtin = @import("builtin");
 pub const section = "__TEXT,__info_plist";
 
 pub const text =
-    \\<?xml version="1.0" encoding="UTF-8"?>
-    \\<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-    \\<plist version="1.0">
-    \\<dict>
-    \\  <key>CFBundleIdentifier</key>
-    \\  <string>io.github.bsikar.ra8-emulator</string>
-    \\  <key>CFBundleName</key>
-    \\  <string>ra8_emulator</string>
-    \\  <key>CFBundleInfoDictionaryVersion</key>
-    \\  <string>6.0</string>
-    \\  <key>NSCameraUsageDescription</key>
-    \\  <string>ra8_emulator feeds your webcam into the emulated board's camera when you run it with --camera-source webcam.</string>
-    \\</dict>
-    \\</plist>
-    \\
-;
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" ++
+    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" " ++
+    "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" ++
+    "<plist version=\"1.0\">\n" ++
+    "<dict>\n" ++
+    "  <key>CFBundleIdentifier</key>\n" ++
+    "  <string>io.github.bsikar.ra8-emulator</string>\n" ++
+    "  <key>CFBundleName</key>\n" ++
+    "  <string>ra8_emulator</string>\n" ++
+    "  <key>CFBundleInfoDictionaryVersion</key>\n" ++
+    "  <string>6.0</string>\n" ++
+    "  <key>NSCameraUsageDescription</key>\n" ++
+    "  <string>ra8_emulator feeds your webcam into the emulated board's camera when " ++
+    "you run it with --camera-source webcam.</string>\n" ++
+    "</dict>\n" ++
+    "</plist>\n";
 
 const bytes: [text.len]u8 = text.*;
 

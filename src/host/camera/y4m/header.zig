@@ -43,7 +43,9 @@ pub fn parse(line: []const u8) Error!Header {
     const first = tokens.next() orelse return error.BadHeader;
     if (!std.mem.eql(u8, first, magic)) return error.BadHeader;
     var header = Header{};
-    while (tokens.next()) |token| try take(&header, token[0], token[1..]);
+    while (tokens.next()) |token| {
+        try take(&header, token[0], token[1..]);
+    }
     if (header.width == 0 or header.height == 0) return error.BadHeader;
     if (header.fps_num == 0 or header.fps_den == 0) return error.BadHeader;
     return header;

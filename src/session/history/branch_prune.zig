@@ -5,7 +5,7 @@
 //! strictly after that fork. A branch with children never becomes a full
 //! deletion. The base root branch 0 cannot be deleted when live or when it has
 //! no children.
-const std = @import("std");
+
 const branch_mod = @import("branch.zig");
 
 pub const Position = branch_mod.Position;

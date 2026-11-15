@@ -68,13 +68,12 @@
 //! these trees, and it is not. The rest of the window is shadowed so a
 //! read-modify-write survives, and never read. There is no receive source, so
 //! SSIFRDR reads zero and RDC reads zero, as they do on dev.
-const std = @import("std");
 
+const audio_tap = @import("tap.zig");
 pub const fifo = @import("fifo.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const soft_reset = @import("reset.zig");
-const audio_tap = @import("tap.zig");
 
 /// The staging FIFO, reached as `ssie.stage` the way the other split blocks
 /// in this tree re-export their halves.
@@ -210,7 +209,9 @@ pub const Channel = struct {
     /// Enabling the transmitter starts shifting whatever the FIFO already
     /// holds, oldest first.
     fn drain(self: *Channel) void {
-        for (self.tx.pending()) |sample| self.shift(sample);
+        for (self.tx.pending()) |sample| {
+            self.shift(sample);
+        }
         self.tx.clear();
     }
 

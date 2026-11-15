@@ -1,9 +1,9 @@
 //! Armv8.1-M PAC/PACBTI, PACG, AUT, AUTG and BXAUT instructions. QARMA5
 //! authenticates the zero-extended pointer and modifier with the key selected
 //! from the current CONTROL privilege enable and PAC key registers.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const qarma = @import("../qarma.zig");
 const regs = @import("../regs.zig");
 const sysreg = @import("../sysreg.zig");

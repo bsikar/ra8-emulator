@@ -6,8 +6,8 @@
 //! active lanes set FPSCR.QC. imm6 000xxx (modified immediate), D or M
 //! set, the spare opcodes and the 16-bit space stay unclaimed. Qd is
 //! written before Qm.
-const vector = @import("../../vector.zig");
 const mve_int = @import("int/vectors.zig");
+const vector = @import("../../vector.zig");
 
 pub const In = mve_int.In;
 pub const Out = mve_int.Out;
@@ -49,10 +49,26 @@ const ops = [_]V{
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0xff00 writes the high half and ends the block", .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .vpr = 0x0088FF00 }, .{ .qd = 0x1FE0E020_DB805300_01234567_89ABCDEF, .vpr = 0x0000FF00 }),
-    vec("vqshl lanes the mask turns off set no qc", .{ .hw1 = 0xEF8B, .hw2 = 0x2754, .qd = qd, .qm = qm, .vpr = 0x0088000E }, .{ .qd = 0xDEADBEEF_CAFEF00D_01234567_0810F8EF, .vpr = 0x0000000E }),
-    vec("the loop tail writes the first bytes", .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .ltpsize = 0, .lr = 5 }, .{ .qd = 0xDEADBEEF_CAFEF00D_01234500_2040F000 }),
-    vec("eci a0a1a2b0 hands beat 0 of the next instruction on", .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .it = 0x50 }, .{ .qd = 0x1FE0E020_CAFEF00D_01234567_89ABCDEF, .it = 0x10 }),
+    vec(
+        "vpt p0 0xff00 writes the high half and ends the block",
+        .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .vpr = 0x0088FF00 },
+        .{ .qd = 0x1FE0E020_DB805300_01234567_89ABCDEF, .vpr = 0x0000FF00 },
+    ),
+    vec(
+        "vqshl lanes the mask turns off set no qc",
+        .{ .hw1 = 0xEF8B, .hw2 = 0x2754, .qd = qd, .qm = qm, .vpr = 0x0088000E },
+        .{ .qd = 0xDEADBEEF_CAFEF00D_01234567_0810F8EF, .vpr = 0x0000000E },
+    ),
+    vec(
+        "the loop tail writes the first bytes",
+        .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .ltpsize = 0, .lr = 5 },
+        .{ .qd = 0xDEADBEEF_CAFEF00D_01234500_2040F000 },
+    ),
+    vec(
+        "eci a0a1a2b0 hands beat 0 of the next instruction on",
+        .{ .hw1 = 0xEF95, .hw2 = 0x2554, .qd = qd, .qm = qm, .it = 0x50 },
+        .{ .qd = 0x1FE0E020_CAFEF00D_01234567_89ABCDEF, .it = 0x10 },
+    ),
 };
 
 const unclaimed = [_]V{

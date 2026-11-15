@@ -7,12 +7,13 @@
 //! infinity and zero is the XOR of the operand signs. Everything else is the
 //! quotient, rounded once by FPRound.
 const format = @import("../format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
-const unpack_mod = @import("../unpack.zig");
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
 
 /// The dividend is shifted until its top bit is this bit, so the quotient

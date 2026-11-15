@@ -72,7 +72,11 @@ pub const all = [_]V{
     sh("asrl -64 empties the pair", asrl, 0xC0, 1, 1, 0, 0),
     sh("asrl -128 empties the pair", asrl, 0x80, 0xFFFF_FFFF, 0xFFFF_FFFF, 0, 0),
     sh("asrl by 0 leaves a negative pair", asrl, 0, 0x8000_0000, 7, 0x8000_0000, 7),
-    vec("asrl on r10:r11 by r3", .{ .hw1 = 0xEA5A, .hw2 = 0x3B2D, .lo = 0, .hi = 0xF000_0000, .rm = 4 }, .{ .lo = 0, .hi = 0xFF00_0000 }),
+    vec(
+        "asrl on r10:r11 by r3",
+        .{ .hw1 = 0xEA5A, .hw2 = 0x3B2D, .lo = 0, .hi = 0xF000_0000, .rm = 4 },
+        .{ .lo = 0, .hi = 0xFF00_0000 },
+    ),
     bad("Rm of sp is unclaimed", lo0, 0xD10D),
     bad("Rm of pc is unclaimed", lo0, 0xF10D),
     bad("Rm equal to RdaLo is unclaimed", lo0, 0x010D),

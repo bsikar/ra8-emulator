@@ -62,14 +62,14 @@
 //! other RX FIFOs and the receive buffers, TX queues and history, error
 //! counters and the bus-off machine, and every interrupt besides the
 //! RX-FIFO one. The rest of the window is shadowed, and never read.
-const periph = @import("../registry.zig");
-const lanes = @import("../lanes.zig");
-pub const fifo = @import("fifo.zig");
-pub const sleep = @import("sleep.zig");
-pub const rx = @import("rx/rx.zig");
-pub const tx_status = @import("tx_status.zig");
-pub const regs = @import("regs.zig");
 const errors = @import("error_flags.zig");
+pub const fifo = @import("fifo.zig");
+const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
+pub const regs = @import("regs.zig");
+pub const rx = @import("rx/rx.zig");
+pub const sleep = @import("sleep.zig");
+pub const tx_status = @import("tx_status.zig");
 
 /// The geometry, the offsets and the field masks, split into
 /// regs.zig and reached through the block the way the other parts of

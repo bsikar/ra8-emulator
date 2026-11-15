@@ -12,25 +12,30 @@
 //! A request it does not know gets the empty reply, which is how the
 //! protocol says "not supported" and lets gdb fall back.
 const std = @import("std");
+
 const Cortex = @import("ra8_chip").core.cpu.cortex.Cortex;
 const features = @import("features.zig");
 const stop_machine = @import("ra8_session").stop_machine;
 
 pub const Error = error{NoSpace};
 
-/// The Z and z requests, reached through here so tests see them.
-pub const points = @import("points.zig");
-/// Debugger stores handed on to the debug unit models.
-pub const units = @import("units.zig");
-/// Run control on the Zig core (RA8EMU-118).
-pub const zig_run = @import("zig.zig");
-/// One connection served end to end.
-pub const server = @import("server.zig");
-pub const poll = @import("poll.zig");
 /// ITM text sent to gdb as `O` packets.
 pub const console = @import("console.zig");
 const core_view = @import("ra8_session").core_view;
+
+/// The Z and z requests, reached through here so tests see them.
+pub const points = @import("points.zig");
+pub const poll = @import("poll.zig");
+
+/// One connection served end to end.
+pub const server = @import("server.zig");
 const session_api = @import("ra8_session").api;
+
+/// Debugger stores handed on to the debug unit models.
+pub const units = @import("units.zig");
+
+/// Run control on the Zig core (RA8EMU-118).
+pub const zig_run = @import("zig.zig");
 
 /// The `g` order, which is target.xml's order: r0 to r12, sp, lr, pc, xpsr.
 pub const registers = [_]Cortex{
@@ -64,7 +69,10 @@ pub const Dispatch = struct {
     /// The reply payload for `request`, written into `out`.
     pub fn answer(self: Dispatch, request: []const u8, out: []u8) Error![]const u8 {
         if (request.len == 0) return out[0..0];
-        if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, if (self.supportsReverse()) reverse_supported else supported);
+        if (std.mem.startsWith(u8, request, "qSupported")) return copy(out, if (self.supportsReverse())
+            reverse_supported
+        else
+            supported);
         if (self.zig) |live| {
             if (zig_run.handles(request)) return zig_run.answer(live, request, out);
             // The transport's read gate: while a job moves the machine is
@@ -156,7 +164,9 @@ pub const Dispatch = struct {
             const take = @min(chunk.len, length - done);
             const where = address +% @as(u32, @intCast(done));
             self.target().read(where, chunk[0..take]) catch return copy(out, memory_error);
-            for (chunk[0..take]) |byte| try hexByte(out, &at, byte);
+            for (chunk[0..take]) |byte| {
+                try hexByte(out, &at, byte);
+            }
             done += take;
         }
         return out[0..at];
@@ -206,7 +216,14 @@ pub const Dispatch = struct {
             const take = @min(chunk.len, length - done);
             const bytes = switch (form) {
                 .binary => data[done..][0..take],
-                .hex => std.fmt.hexToBytes(chunk[0..take], data[done * 2 ..][0 .. take * 2]) catch return copy(out, request_error),
+                .hex,
+                => std.fmt.hexToBytes(
+                    chunk[0..take],
+                    data[done * 2 ..][0 .. take * 2],
+                ) catch return copy(
+                    out,
+                    request_error,
+                ),
             };
             const where = address +% @as(u32, @intCast(done));
             if (self.session) |s| {
@@ -236,7 +253,9 @@ fn parseWord(text: *const [8]u8) ?u32 {
 fn word(out: []u8, at: *usize, value: u32) Error!void {
     var bytes: [4]u8 = undefined;
     std.mem.writeInt(u32, &bytes, value, .little);
-    for (bytes) |byte| try hexByte(out, at, byte);
+    for (bytes) |byte| {
+        try hexByte(out, at, byte);
+    }
 }
 
 fn hexByte(out: []u8, at: *usize, byte: u8) Error!void {

@@ -4,14 +4,15 @@
 //! Nothing a peer reports, its PID, birth, paths or digests, ever names a
 //! process to signal, so a correct copy of another instance's fields
 //! cannot end that instance.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const linux = std.os.linux;
-const wire = @import("wire.zig");
-const deadline = @import("deadline.zig");
 const Collector = @import("collector.zig").Collector;
-const provider = @import("provider.zig");
 const Context = @import("context.zig").Context;
+const deadline = @import("deadline.zig");
+const provider = @import("provider.zig");
+const wire = @import("wire.zig");
 
 pub const Stage = enum { open, committed, reaped, abandoned };
 
@@ -33,7 +34,17 @@ pub const Proxy = struct {
         if (builtin.os.tag != .linux) return error.OperationUnsupported;
         try reapable();
         const base = context.source;
-        const child = try std.process.spawn(base.io, .{ .argv = &.{ executable, "--internal-host-move" }, .stdin = .pipe, .stdout = .pipe, .stderr = .ignore, .inherit_files = context.authorities, .inherit_dirs = &.{ base.dir, context.target.dir } });
+        const child = try std.process.spawn(
+            base.io,
+            .{
+                .argv = &.{ executable, "--internal-host-move" },
+                .stdin = .pipe,
+                .stdout = .pipe,
+                .stderr = .ignore,
+                .inherit_files = context.authorities,
+                .inherit_dirs = &.{ base.dir, context.target.dir },
+            },
+        );
         return own(base.io, child, reap_ms, admission);
     }
 
@@ -63,7 +74,14 @@ pub const Proxy = struct {
             _ = linux.close(handle);
         }
         const collector = try Collector.start(io);
-        return .{ .io = io, .child = child, .handle = handle, .collector = collector, .reap_ms = reap_ms, .admission = admission };
+        return .{
+            .io = io,
+            .child = child,
+            .handle = handle,
+            .collector = collector,
+            .reap_ms = reap_ms,
+            .admission = admission,
+        };
     }
 
     /// The request and COMMIT together fit an empty pipe, so neither write
@@ -91,7 +109,10 @@ pub const Proxy = struct {
             self.drop(.abandoned);
             return null;
         }
-        const bound = self.reaping orelse if (self.admission) |whole| whole.phase(self.io, self.reap_ms) else deadline.Deadline.after(self.io, self.reap_ms);
+        const bound = self.reaping orelse if (self.admission) |whole|
+            whole.phase(self.io, self.reap_ms)
+        else
+            deadline.Deadline.after(self.io, self.reap_ms);
         self.reaping = bound;
         bound.ended(self.io, self.handle) catch return null;
         const term = self.child.wait(self.io) catch {
@@ -141,7 +162,13 @@ pub const Proxy = struct {
         if (try provider.pe(self.io, executable)) return;
         const pid = self.child.id orelse return error.ProcessHandleUnavailable;
         var path_buffer: [32]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buffer, "/proc/{d}/exe", .{pid}) catch return error.ProcessHandleUnavailable;
+        const path = std.fmt.bufPrint(
+            &path_buffer,
+            "/proc/{d}/exe",
+            .{
+                pid,
+            },
+        ) catch return error.ProcessHandleUnavailable;
         const file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
         defer file.close(self.io);
         var hash = std.crypto.hash.sha2.Sha256.init(.{});

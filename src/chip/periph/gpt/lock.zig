@@ -45,7 +45,6 @@
 //! read. And what GTWP reads back: the key is a password, not state, so a
 //! read answers the WP bit alone. No driver in either tree ever reads the
 //! register, so nothing observes the difference.
-const std = @import("std");
 
 /// Where the register sits in a channel (ra8_gpt_regs.h line 56).
 pub const off = struct {

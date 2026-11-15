@@ -5,14 +5,17 @@
 //! is a canonical stop on that core's retire path, and the last one strictly
 //! before the job's cursor is the stop the reverse step lands on.
 
-const std = @import("std");
+const canonical_step = @import("../history/canonical_step.zig");
+const trail = @import("../history/trail.zig");
+const window_engine = @import("../history/window_engine.zig");
+
 const api = @import("../api.zig");
+const back_window = @import("back_window.zig");
 const command_mod = @import("command.zig");
 const position_mod = @import("../history/position.zig");
+const run_slice = @import("../run_slice.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
-const back_window = @import("back_window.zig");
-const run_slice = @import("../run_slice.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;
@@ -115,7 +118,11 @@ fn queueAtGrid(self: *Transport, step: command_mod.Step, facts: seek_engine.Fact
         .plan => |plan| plan,
         .pending => return Error.NotReady,
     };
-    const origin_cp = if (plan.base == .window) checkpointAtOrBefore(self.session, grid.at, facts.checkpoints) else null;
+    const origin_cp = if (plan.base == .window) checkpointAtOrBefore(
+        self.session,
+        grid.at,
+        facts.checkpoints,
+    ) else null;
     self.cancel();
     self.epoch += 1;
     // The replay recreates the recorded path one instruction at a time; wakes ride along.
@@ -171,7 +178,7 @@ pub fn restoreOriginPair(self: *Transport, origin: seek_engine.Base, fallback_cp
     }
 }
 
-fn walkWindowTo(session: *api.Session, w: *@import("../history/window_engine.zig").ReverseWindow, target: seek_engine.Position) !void {
+fn walkWindowTo(session: *api.Session, w: *window_engine.ReverseWindow, target: seek_engine.Position) !void {
     while (w.cursor() > 0) {
         const at = w.at() orelse break;
         if ((session.comparePositions(at, target) catch break) != .gt) break;
@@ -211,8 +218,8 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     }
     if (back.base == .window) {
         const w = self.session.window orelse return Error.NotReady;
-        const canonical = @import("../history/canonical_step.zig");
-        const core: @import("../history/trail.zig").Core = switch (job.core) {
+        const canonical = canonical_step;
+        const core: trail.Core = switch (job.core) {
             .cpu0 => .cpu0,
             .cpu1 => .cpu1,
         };
@@ -246,7 +253,7 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
 
 fn outsideWindowFallback(
     self: *Transport,
-    w: *@import("../history/window_engine.zig").ReverseWindow,
+    w: *window_engine.ReverseWindow,
     back: *Back,
 ) ?api.Ended {
     const bridge = self.history orelse return .{ .stop = .history_start };

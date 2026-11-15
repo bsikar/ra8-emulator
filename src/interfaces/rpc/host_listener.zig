@@ -8,15 +8,18 @@
 //! address in the same file and exits; the running app raises its window
 //! (RA8EMU-1156). Nothing here spawns the app: a client that finds
 //! no listener starts ra8_gui first.
-const std = @import("std");
+const host_api = @import("ra8_host");
+
 const builtin = @import("builtin");
-const sock_ready = @import("ra8_host").sock.ready;
-pub const served = @import("session/server.zig");
+const std = @import("std");
+
+const host_gdb = @import("host_gdb.zig");
 const proto = @import("session/rpc.zig");
+pub const served = @import("session/server.zig");
+const session_api = @import("ra8_session").api;
+const sock_ready = @import("ra8_host").sock.ready;
 const socket_transport = @import("socket_transport.zig");
 const ws_transport = @import("ws_transport.zig");
-const session_api = @import("ra8_session").api;
-const host_gdb = @import("host_gdb.zig");
 
 /// One connected client's receive buffer, as big as the shell's own.
 const rx_size = 2 * proto.Client.Env.max_frame;
@@ -94,7 +97,7 @@ pub const Listener = struct {
         try std.Io.Dir.cwd().createDirPath(io, dir);
         // Owner-only, so other users cannot reach the listener's sockets or
         // the discovery file through the directory (RA8EMU-1175).
-        @import("ra8_host").session_files.harden(io, std.Io.Dir.cwd(), dir) catch {};
+        host_api.session_files.harden(io, std.Io.Dir.cwd(), dir) catch {};
 
         if (builtin.os.tag == .windows) {
             var address = std.Io.net.IpAddress.parse("127.0.0.1", 0) catch unreachable;
@@ -213,7 +216,9 @@ pub const Listener = struct {
 
     /// Pump every session's gdb port once, before the RPC client's answer.
     pub fn pumpGdb(self: *Listener) void {
-        for (self.gdb.items) |session| session.pump();
+        for (self.gdb.items) |session| {
+            session.pump();
+        }
     }
 
     /// Report a waiting focus request once (RA8EMU-1156): a second launch

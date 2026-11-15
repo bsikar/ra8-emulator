@@ -5,13 +5,14 @@
 //! the end of the stream, a failed call or a short buffer is a failed read,
 //! which the source answers by holding the last frame.
 const std = @import("std");
+
 const abi = @import("abi.zig");
 const com = @import("com.zig");
+const consent = @import("../webcam/consent.zig");
 const mf_open = @import("open.zig");
-const v4l2 = @import("../v4l2/abi.zig");
 const negotiate = @import("../v4l2/negotiate.zig");
 const source = @import("../webcam/input.zig");
-const consent = @import("../webcam/consent.zig");
+const v4l2 = @import("../v4l2/abi.zig");
 
 /// How many empty samples (stream ticks) one read waits through.
 pub const gap_tries = 4;
@@ -48,7 +49,14 @@ pub const MfCapture = struct {
         const r = self.reader;
         const pixel: u32 = if (r.subtype == .yuy2) 2 else 3;
         const format = if (r.subtype == .yuy2) v4l2.pix_yuyv else v4l2.pix_rgb24;
-        return .{ .width = r.width, .height = r.height, .pixelformat = format, .bytesperline = r.width * pixel, .sizeimage = r.width * pixel * r.height, .streaming = true };
+        return .{
+            .width = r.width,
+            .height = r.height,
+            .pixelformat = format,
+            .bytesperline = r.width * pixel,
+            .sizeimage = r.width * pixel * r.height,
+            .streaming = true,
+        };
     }
 
     fn read(ctx: *anyopaque, out: []u8) bool {
@@ -70,7 +78,9 @@ pub const MfCapture = struct {
         for (0..gap_tries) |_| {
             var flags: u32 = 0;
             var sample: ?*anyopaque = null;
-            if (!abi.succeeded(com.readSample(self.reader.reader, abi.first_video_stream, &flags, &sample))) return null;
+            if (!abi.succeeded(
+                com.readSample(self.reader.reader, abi.first_video_stream, &flags, &sample),
+            )) return null;
             if (flags & abi.end_of_stream != 0) {
                 if (sample) |s| com.release(s);
                 return null;

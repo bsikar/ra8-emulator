@@ -13,20 +13,22 @@
 //! The Zig core feeds the tracer through src/session/rtos/zig.zig, and CPU1
 //! through src/session/rtos/second.zig.
 const std = @import("std");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+
 const elf = @import("ra8_board").image.elf;
-const symbols = @import("../symbols.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const rtos_trace = @import("trace.zig");
+const symbols = @import("../symbols.zig");
+
 /// The trace's event shape and observer, for an index fed from the run.
 pub const trace_events = rtos_trace;
-pub const names = @import("names.zig");
-pub const isr = @import("isr.zig");
-pub const zig = @import("zig.zig");
-pub const second = @import("second.zig");
-pub const load = @import("load.zig");
-pub const report = @import("report.zig");
 /// `--trace-rtos-out FILE`: the trace as a file, and its reader (RA8EMU-345).
 pub const file = @import("file.zig");
+pub const isr = @import("isr.zig");
+pub const load = @import("load.zig");
+pub const names = @import("names.zig");
+pub const report = @import("report.zig");
+pub const second = @import("second.zig");
+pub const zig = @import("zig.zig");
 
 /// The word ThreadX keeps the running thread's control block in.
 pub const symbol = "_tx_thread_current_ptr";
@@ -138,9 +140,16 @@ pub fn print(out: anytype, tracer: ?*const Tracer, memory: anytype) !void {
     const events = one.trace.list();
     try out.print(
         "  {s}: {s} @0x{X:0>8}, {d} event(s)\n",
-        .{ if (one.core == 1) "rtos cpu1     " else "rtos trace    ", symbol, one.address, events.len + one.trace.dropped },
+        .{
+            if (one.core == 1) "rtos cpu1     " else "rtos trace    ",
+            symbol,
+            one.address,
+            events.len + one.trace.dropped,
+        },
     );
-    for (events) |event| try line(out, event, memory);
+    for (events) |event| {
+        try line(out, event, memory);
+    }
     if (one.trace.dropped > 0) {
         try out.print("                  and {d} more, not kept\n", .{one.trace.dropped});
     }

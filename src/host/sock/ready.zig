@@ -1,7 +1,8 @@
 //! Whether a socket has bytes waiting or its peer hung up (RA8EMU-828).
 //! POSIX uses poll; Windows uses native AFD operations on std.Io.net handles.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const afd = @import("afd.zig");
 const socket_flags = @import("../socket_flags.zig");
 
@@ -34,9 +35,20 @@ pub fn wait(io: std.Io, handle: Handle, ms: i32) error{SystemResources}!Ready {
 /// when the receive fails, 0 when the peer hung up (RA8EMU-943).
 pub fn takeByte(io: std.Io, handle: Handle, byte: *[1]u8, peek: bool) ?usize {
     if (builtin.os.tag == .windows) {
-        return afd.receive(io, handle, byte, peek, .{ .duration = .{ .raw = .fromMilliseconds(20), .clock = .awake } }) catch null;
+        return afd.receive(
+            io,
+            handle,
+            byte,
+            peek,
+            .{ .duration = .{ .raw = .fromMilliseconds(20), .clock = .awake } },
+        ) catch null;
     }
-    const got = std.c.recv(handle, byte, byte.len, @as(c_int, if (peek) @intCast(std.posix.MSG.PEEK) else 0) | @as(c_int, @intCast(std.posix.MSG.DONTWAIT)));
+    const got = std.c.recv(
+        handle,
+        byte,
+        byte.len,
+        @as(c_int, if (peek) @intCast(std.posix.MSG.PEEK) else 0) | @as(c_int, @intCast(std.posix.MSG.DONTWAIT)),
+    );
     if (got < 0) return null;
     return @intCast(got);
 }

@@ -11,11 +11,12 @@
 //! F32) or the lane's first byte (F32 to F16) is, and the bytes written are
 //! merged under the mask.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
-const qreg = @import("../../qreg.zig");
-const predicate = @import("../../predicate.zig");
 const float = @import("../float.zig");
+const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 /// F32 lanes of `m` rounded to F16 in the bottom or `top` half of each word

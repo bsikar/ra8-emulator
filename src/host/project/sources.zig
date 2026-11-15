@@ -1,7 +1,8 @@
 //! Project source availability and client/server remapping at debugger boundaries.
 const std = @import("std");
-const Project = @import("project.zig").Project;
+
 const map = @import("map.zig");
+const Project = @import("project.zig").Project;
 const source = @import("../build/source.zig");
 
 pub fn translate(project: *Project, name: []const u8, to_client: bool, into: []u8) ![]const u8 {
@@ -25,7 +26,10 @@ pub fn location(project: *Project, name: []const u8, to_client: bool, into: []u8
     const host_path = if (to_client) normalized else mapped;
     if (!map.prefix(host_path, root)) return error.SourceUnavailable;
     const relative = std.mem.trimStart(u8, host_path[root.len..], "/");
-    const stat = project.workspace.?.stat(relative) catch |err| return if (err == error.FileNotFound) error.SourceMissing else error.SourceUnavailable;
+    const stat = project.workspace.?.stat(relative) catch |err| return if (err == error.FileNotFound)
+        error.SourceMissing
+    else
+        error.SourceUnavailable;
     if (stat.kind == .missing) return error.SourceMissing;
     if (stat.kind != .file) return error.SourceUnavailable;
     if (mapped.len > into.len) return error.NoSpaceLeft;

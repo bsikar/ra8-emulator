@@ -1,55 +1,41 @@
 //! Public owner for a firmware image, its Zig core, board, and debug session.
+const board_api = @import("ra8_board");
+const metrics = @import("metrics.zig");
+const recording = @import("recording.zig");
+const snapshot_inventory = @import("snapshot_inventory.zig");
+
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const part = @import("ra8_chip").core.part;
-const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
-const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
-const mpu_check = @import("ra8_chip").core.cpu.board_bus.mpu_check;
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const scheduler = @import("ra8_chip").core.scheduler;
-const NvicSource = @import("ra8_chip").core.cpu.exception.nvic_source.NvicSource;
-const QuietSource = @import("ra8_chip").core.cpu.exception.quiet_source.QuietSource;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const memory_load = @import("ra8_chip").core.cpu.memory.load;
-const read_image = @import("ra8_board").image.load;
+
 const Board = @import("ra8_board").board.Board;
-const profile = @import("ra8_board").profile;
-const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
-const Reboot = @import("ra8_chip").core.reboot.Reboot;
-const session_plug = @import("../board/plug.zig");
-const session_faults = @import("../board/faults/faults.zig");
-const board_boundary = @import("../board/boundary.zig");
-const session_events = @import("../board/events.zig");
-const second_core = @import("ra8_chip").core.second.core;
-const memmap = @import("ra8_chip").core.memmap;
-const session_display = @import("../board/display.zig");
-const session_state = @import("../board/state.zig");
-const session_history = @import("../history.zig");
-const input_script = @import("ra8_components").input_script;
-const history_trail = @import("../history/trail.zig");
-const chunk_clock = @import("../chunk_clock.zig");
-pub const files = @import("files.zig");
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const debug_session = @import("../session.zig");
+const elf = @import("ra8_board").image.elf;
+pub const files = @import("files.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const input_script = @import("ra8_components").input_script;
+const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
+const part = @import("ra8_chip").core.part;
+const profile = @import("ra8_board").profile;
+const scheduler = @import("ra8_chip").core.scheduler;
+const second_core = @import("ra8_chip").core.second.core;
 const session_api = @import("../api.zig");
+const session_display = @import("../board/display.zig");
+const session_events = @import("../board/events.zig");
+const session_faults = @import("../board/faults/faults.zig");
+const session_history = @import("../history.zig");
+const session_plug = @import("../board/plug.zig");
+const session_state = @import("../board/state.zig");
 const transport_mod = @import("../transport/transport.zig");
-const stop_machine = @import("../stop_machine.zig");
-const step_hook = @import("../step_hook.zig");
-const watch_bus = @import("../watch/bus.zig");
-const rtos_hook = step_hook.rtos.hook;
-const rtos_publish = step_hook.rtos.publish;
-const symbols = @import("../symbols.zig");
-const txm_modules = @import("../txm/modules.zig");
-const txm_publish = @import("../txm/publish.zig");
-const txm_debug = @import("../txm/debug.zig");
-const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
-const decode = @import("ra8_chip").core.cpu.decode;
-pub const stacks = @import("stacks.zig");
-const load_input = @import("load_input.zig");
+
 const block_cache = @import("block_cache.zig");
 pub const checkpoints = @import("checkpoints.zig");
-const window_box = @import("window.zig");
-const advance_mod = @import("advance.zig");
+const load_input = @import("load_input.zig");
 const rtos_trace = @import("rtos_trace.zig");
+pub const stacks = @import("stacks.zig");
+const symbols = @import("../symbols.zig");
+const txm_debug = @import("../txm/debug.zig");
+const txm_modules = @import("../txm/modules.zig");
+const txm_publish = @import("../txm/publish.zig");
 
 pub const limits = struct {
     pub const max_elf_bytes = 64 * 1024 * 1024;
@@ -60,73 +46,10 @@ pub const Options = @import("options.zig").Options;
 
 const LoaderState = @import("loader_state.zig").LoaderState;
 
-const State = struct {
-    allocator: std.mem.Allocator,
-    bytes: []u8,
-    image: elf.Image,
-    board: Board,
-    /// The board profile the run opened with, its labels pointing into the
-    /// caller's text (RA8EMU-1152).
-    profile: profile.Profile = undefined,
-    cpu0: Cpu0,
-    memory: BoardBus,
-    /// CPU0's MPU check, armed as a plain run arms it (boot.zig).
-    check: mpu_check.Check,
-    machine: stop_machine.Machine,
-    driver: step_hook.Driver,
-    watching: watch_bus.WatchBus,
-    cpu: cpu_mod.Cpu,
-    /// CPU0's decoded instructions and formed blocks, as a plain run keeps them
-    /// (boot.zig runOn), so a session runs at a plain run's pace (RA8EMU-1120).
-    decoded: decode.cache.DecodeCache,
-    formed: *decode.block_cache.BlockCache,
-    pending: NvicSource,
-    quiet: QuietSource,
-    loading: LoaderState,
-    session: session_api.Session,
-    /// The control plane the front ends drive; rebuilt live, never saved.
-    transport: transport_mod.Transport,
-    plugs_arena: std.heap.ArenaAllocator,
-    plugs: session_plug.Plugs,
-    faults: session_faults.Faults,
-    edge: board_boundary.BoardBoundary,
-    chunk: chunk_clock.ChunkClock,
-    files: session_state.Files,
-    state_file: files.StateFile,
-    history: session_history.History,
-    /// The input landing adapter (slice 16) and its observer: board dispatches
-    /// report through it, and the boundary's saved state carries its position.
-    landing: session_history.Landing,
-    landing_observer: input_script.Script.Landing,
-    /// The undo trail while a run records, null until `record` starts it.
-    recording: ?history_trail.Recording = null,
-    /// The reverse window recording the live run, once `openWindow` built it.
-    window: ?*window_box.Window = null,
-    /// The armed checkpoint pair when the application bound a host history root.
-    persistent: ?*checkpoints.Armed = null,
-    reboot: Reboot,
-    display: session_display.Host,
-    metrics_tracking: [2]@import("metrics.zig").Track,
-    tracer: ?rtos_hook.Tracer,
-    listener: rtos_hook.zig.Listener,
-    publisher: rtos_publish.Publisher,
-    module_watch: txm_publish.Watcher,
-    /// Set by watchModules and pairModules; the state is built without defaults.
-    modules: txm_debug.Table,
-
-    fn metricsRead(context: *anyopaque, core: u1) @import("../device_metrics.zig").Snapshot {
-        const self: *State = @ptrCast(@alignCast(context));
-        return @import("metrics.zig").read(self, core);
-    }
-
-    fn advance(context: *anyopaque, max_ns: u64) anyerror!void {
-        const self: *State = @ptrCast(@alignCast(context));
-        try advance_mod.run(&self.session, &self.board, &self.edge, max_ns);
-    }
-};
+const State = @import("state.zig").State;
 
 comptime {
-    if (!@import("snapshot_inventory.zig").complete(State)) @compileError("unclassified harness State");
+    if (!snapshot_inventory.complete(State)) @compileError("unclassified harness State");
 }
 /// Owns the heap-stable emulator state. Do not copy a live Harness value.
 pub const Harness = struct {
@@ -207,7 +130,13 @@ pub const Harness = struct {
     pub fn watchModules(self: *Harness) bool {
         const state = self.state;
         const head = symbols.addressOf(state.image, txm_modules.list_symbol) orelse return false;
-        state.module_watch = .{ .head_at = head, .memory = .{ .guest = self.guest() }, .stream = &state.session.event_stream, .inner = state.session.live.boundary, .time = &state.board.time.base };
+        state.module_watch = .{
+            .head_at = head,
+            .memory = .{ .guest = self.guest() },
+            .stream = &state.session.event_stream,
+            .inner = state.session.live.boundary,
+            .time = &state.board.time.base,
+        };
         state.module_watch.fault_at = symbols.addressOf(state.image, txm_publish.fault_symbol);
         state.modules = .{ .pairs = &.{} };
         state.module_watch.table = &state.modules;
@@ -254,25 +183,11 @@ pub const Harness = struct {
     /// Starts recording the undo trail on the machine's store, the round
     /// facts read live (RA8EMU-D1). Both cores and the store must be
     /// attached, since the trail attributes a write by its core's slot count.
-    pub fn record(self: *Harness) !void {
-        const state = self.state;
-        const cpu0 = state.loading.cpu[0] orelse return error.CoreNotAttached;
-        const cpu1 = state.loading.cpu[1] orelse return error.CoreNotAttached;
-        if (state.cpu0.store == null) return error.StoreMissing;
-        state.recording = history_trail.Recording.init(
-            state.allocator,
-            .{ &cpu0.slots, &cpu1.slots },
-            &state.cpu0.store.?,
-        );
-        state.recording.?.arm();
-    }
+    pub const record = recording.record;
 
     /// Builds the reverse window of `bytes` budget, plants it at the loaded
     /// machine and records the live run into it from here on. Call once.
-    pub fn openWindow(self: *Harness, bytes: usize) !void {
-        const state = self.state;
-        state.window = try window_box.Window.create(state.allocator, &state.session, &state.files, &state.cpu0.store.?, &state.memory, &state.cpu.slots, bytes);
-    }
+    pub const openWindow = recording.openWindow;
 
     pub fn deinit(self: *Harness) void {
         const state = self.state;
@@ -328,7 +243,15 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
     option_memory.apply(&state.board.heartbeat, state.cpu0.own());
-    state.memory = .{ .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } }, .periph = &state.board.bus, .scs = .{ .partitions = &state.board.partitions, .regions = &state.board.regions, .clears = &state.board.clears } };
+    state.memory = .{
+        .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } },
+        .periph = &state.board.bus,
+        .scs = .{
+            .partitions = &state.board.partitions,
+            .regions = &state.board.regions,
+            .clears = &state.board.clears,
+        },
+    };
     // The MPU check, as a plain run arms it (boot.zig), before any view copies
     // the direct path; without it a session core refused nothing (RA8EMU-1148).
     state.check = .{ .unit = &state.board.regions, .state = &state.cpu.banked.current };
@@ -362,7 +285,14 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
 /// Assemble the session around the wired cores: hooks, history, display, and
 /// the opened image's initial load.
 fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Options) !void {
-    state.session = .{ .live = .{ .core = .{ .cpu = &state.cpu }, .machine = &state.machine, .budget = debug_session.limits.default_budget, .watch = &state.watching } };
+    state.session = .{
+        .live = .{
+            .core = .{ .cpu = &state.cpu },
+            .machine = &state.machine,
+            .budget = debug_session.limits.default_budget,
+            .watch = &state.watching,
+        },
+    };
     state.session.metrics = .{ .context = state, .readFn = State.metricsRead };
     state.transport = .{ .session = &state.session };
     state.session.attachInputScript(&state.board.input_script);
@@ -377,24 +307,74 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
     state.loading.reboot = &state.reboot;
     state.chunk = .{ .cpu = &state.cpu, .mark = state.cpu.retired };
     state.session.event_sources.chunk = &state.chunk;
-    state.edge = .{ .board = &state.board, .core = state.cpu0.own(), .cpu = &state.cpu, .reboot = &state.reboot, .selected = &state.session.live.index, .chunk = &state.chunk, .idle_skip = options.idle_skip };
+    state.edge = .{
+        .board = &state.board,
+        .core = state.cpu0.own(),
+        .cpu = &state.cpu,
+        .reboot = &state.reboot,
+        .selected = &state.session.live.index,
+        .chunk = &state.chunk,
+        .idle_skip = options.idle_skip,
+    };
     state.session.live.boundary = state.edge.hook();
     state.landing = .{ .history = &state.history, .grid = &state.edge.saved };
     state.landing_observer = state.landing.observer();
     state.board.input_landing = &state.landing_observer;
-    state.files = .{ .store = &state.cpu0.store.?, .cpu = &state.cpu, .board = &state.board, .edge = &state.edge, .session = &state.session, .image = state.bytes, .image_hash = @import("ra8_board").snapshot.run.imageIdentity(state.bytes), .images = &state.loading.loaded, .hashes = &state.loading.hashes, .pending = &state.pending, .attachments = .{ .arena = &state.plugs_arena, .plugs = &state.plugs, .faults = &state.faults } };
-    state.state_file = .{ .allocator = allocator, .io = io, .files = &state.files, .dir = options.state_dir, .store = if (options.files) |ops| ops.state else null };
+    bindSnapshot(state, allocator, io, options);
     state.history = try session_history.History.init(allocator, &state.files, options.history_frames);
     state.session.history = &state.history;
     session_events.attach(&state.board, &state.session);
     state.session.attachBoard(.cpu0, state.board.ticker(), state.cpu0.own());
-    state.display = session_display.Host.init(allocator, &state.board, .{ .context = state, .advanceFn = State.advance, .session = &state.session });
+    state.display = session_display.Host.init(
+        allocator,
+        &state.board,
+        .{ .context = state, .advanceFn = State.advance, .session = &state.session },
+    );
     errdefer state.display.deinit();
     state.display.settled.window_ns = options.settle_window_ns;
     state.display.watch.events = &state.session.event_sources;
     state.display.watch.useIo(io);
     state.session.attachDisplay(state.display.interface());
     try state.session.load(.cpu0, state.bytes);
-    if (options.history_storage != null and options.history_objects != null and options.checkpoint_every != 0)
-        state.persistent = try checkpoints.armSession(allocator, &state.session, &state.history, &state.files, &state.edge.saved, options.history_storage.?, options.history_objects.?, options.history_disk, options.history_checkpoint_cap, options.checkpoint_every);
+    if (options.history_storage != null and options.history_objects != null and options.checkpoint_every != 0) {
+        state.persistent = try checkpoints.armSession(
+            allocator,
+            &state.session,
+            &state.history,
+            &state.files,
+            &state.edge.saved,
+            options.history_storage.?,
+            options.history_objects.?,
+            options.history_disk,
+            options.history_checkpoint_cap,
+            options.checkpoint_every,
+        );
+    }
+}
+
+fn bindSnapshot(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Options) void {
+    state.files = .{
+        .store = &state.cpu0.store.?,
+        .cpu = &state.cpu,
+        .board = &state.board,
+        .edge = &state.edge,
+        .session = &state.session,
+        .image = state.bytes,
+        .image_hash = board_api.snapshot.run.imageIdentity(state.bytes),
+        .images = &state.loading.loaded,
+        .hashes = &state.loading.hashes,
+        .pending = &state.pending,
+        .attachments = .{
+            .arena = &state.plugs_arena,
+            .plugs = &state.plugs,
+            .faults = &state.faults,
+        },
+    };
+    state.state_file = .{
+        .allocator = allocator,
+        .io = io,
+        .files = &state.files,
+        .dir = options.state_dir,
+        .store = if (options.files) |ops| ops.state else null,
+    };
 }

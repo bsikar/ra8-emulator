@@ -48,8 +48,9 @@ pub const refused: Verdict = .{ .enabled = false };
 
 /// IsCPEnabled(10, privileged, secure).
 pub fn check(req: Request) Verdict {
-    if (!req.secure and req.nsacr & (@as(u32, 1) << cp) == 0)
+    if (!req.secure and req.nsacr & (@as(u32, 1) << cp) == 0) {
         return .{ .enabled = false, .to_secure = true };
+    }
     return switch (access(req.cpacr)) {
         .full => allowed,
         .privileged => if (req.privileged) allowed else refused,

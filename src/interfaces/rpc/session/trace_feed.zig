@@ -3,9 +3,10 @@
 //! its own queue and sends each one the wire names as a `trace` event, with
 //! the thread's name read from its TX_THREAD when the server can read it.
 const std = @import("std");
-const proto = @import("rpc.zig");
+
 const api = @import("ra8_session").api;
 const Context = @import("handlers.zig").Context;
+const proto = @import("rpc.zig");
 
 /// Events read from the stream per pass.
 const batch = 64;
@@ -17,7 +18,10 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var name_buf: [proto.TraceEvent.max_len.name]u8 = undefined;
     while (true) {
         const read = context.session.pollEvents(id, &events) orelse return;
-        if (read.dropped != 0) std.debug.print("serve: {d} trace events dropped before a client read them\n", .{read.dropped});
+        if (read.dropped != 0) std.debug.print(
+            "serve: {d} trace events dropped before a client read them\n",
+            .{read.dropped},
+        );
         for (events[0..read.count]) |event| {
             const kind: proto.EventKind = switch (event.kind) {
                 .rtos_switch => .rtos_switch,

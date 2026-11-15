@@ -7,8 +7,8 @@
 //! decimal-below-ten rule on both signs (`#-0`, `#-9`, `#-0xa`). The unprivileged
 //! family adds `t` and drops a zero offset.
 const Instr = @import("../../instr.zig").Instr;
-const text = @import("../text.zig");
 const ldst_wide = @import("../../ops/ldst/wide.zig");
+const text = @import("../text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = ldst_wide.form(instr) orelse return;

@@ -1,12 +1,13 @@
 //! Bounded host UDP flows for the ESP32-C6 station bridge.
 const std = @import("std");
+
 const dhcp = @import("dhcp.zig");
 const eth = @import("eth.zig");
 const frame = @import("frame.zig");
-const Queue = @import("queue.zig").Queue;
-const tape = @import("tape/tape.zig");
-const Sock = @import("sock.zig").Sock;
 const host_net = @import("host_net.zig");
+const Queue = @import("queue.zig").Queue;
+const Sock = @import("sock.zig").Sock;
+const tape = @import("tape/tape.zig");
 
 pub const capacity: usize = 8;
 
@@ -43,7 +44,9 @@ pub const Bridge = struct {
     cursor: usize = 0,
 
     pub fn deinit(self: *Bridge) void {
-        for (&self.flows) |*flow| flow.close();
+        for (&self.flows) |*flow| {
+            flow.close();
+        }
         self.generation = 0;
         self.cursor = 0;
     }
@@ -54,7 +57,12 @@ pub const Bridge = struct {
 
     pub fn forward(self: *Bridge, run: *tape.Tape, net: ?host_net.Net, ip: eth.Ipv4, datagram: eth.Udp) void {
         const key = makeKey(ip, datagram.src_port, datagram.dst_port);
-        const index = self.find(key) orelse self.allocate(run, net, key, replyRoute(ip, datagram.src_port, datagram.dst_port)) orelse return;
+        const index = self.find(key) orelse self.allocate(
+            run,
+            net,
+            key,
+            replyRoute(ip, datagram.src_port, datagram.dst_port),
+        ) orelse return;
         const flow = &self.flows[index];
         if (flow.pending_len != 0 or datagram.data.len > flow.pending.len) return;
         const sent = flow.sock.send(datagram.data) catch |err| switch (err) {
@@ -73,7 +81,9 @@ pub const Bridge = struct {
     }
 
     pub fn poll(self: *Bridge, run: *tape.Tape, queue: *Queue) void {
-        for (0..capacity) |step| self.pollOne(run, queue, (self.cursor + step) % capacity);
+        for (0..capacity) |step| {
+            self.pollOne(run, queue, (self.cursor + step) % capacity);
+        }
         self.cursor = (self.cursor + 1) % capacity;
     }
 

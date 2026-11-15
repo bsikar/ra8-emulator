@@ -5,8 +5,9 @@
 //! window ability while nothing it writes lands on the host's disk
 //! (RA8EMU-1196).
 const std = @import("std");
-const session_recorder = @import("ra8_session").history_recorder;
+
 const object_reuse = @import("ra8_session").history_object_reuse;
+const session_recorder = @import("ra8_session").history_recorder;
 
 /// A checkpoint object's stored bytes, keyed by its 32-character name.
 const Named = struct { name: [32]u8, bytes: []u8 };
@@ -36,14 +37,21 @@ pub const RamHistory = struct {
         errdefer gpa.destroy(self);
         self.* = .{ .gpa = gpa, .share = share, .index = std.AutoHashMap([32]u8, usize).init(gpa) };
         self.storage = .{ .context = self, .append = &appendLog, .flush = &flushLog, .truncate = &truncateLog };
-        self.object_space = .{ .context = self, .put = &putObject, .sync = &syncObjects, .putPacked = &putPackedObject };
+        self.object_space = .{
+            .context = self,
+            .put = &putObject,
+            .sync = &syncObjects,
+            .putPacked = &putPackedObject,
+        };
         self.budget = .{ .context = self, .free = &freeRam, .cap = share, .floor = 0, .relief = null };
         return self;
     }
 
     pub fn deinit(self: *RamHistory) void {
         self.log_bytes.deinit(self.gpa);
-        for (self.objects.items) |one| self.gpa.free(one.bytes);
+        for (self.objects.items) |one| {
+            self.gpa.free(one.bytes);
+        }
         self.objects.deinit(self.gpa);
         self.index.deinit();
         self.gpa.destroy(self);
@@ -76,7 +84,12 @@ pub const RamHistory = struct {
         self.log_bytes.shrinkRetainingCapacity(@intCast(len));
     }
 
-    fn putObject(context: *anyopaque, kind: session_recorder.Objects.Kind, name: []const u8, bytes: []const u8) anyerror!void {
+    fn putObject(
+        context: *anyopaque,
+        kind: session_recorder.Objects.Kind,
+        name: []const u8,
+        bytes: []const u8,
+    ) anyerror!void {
         const self: *RamHistory = @ptrCast(@alignCast(context));
         if (self.get(name)) |old| return object_reuse.validate(self.gpa, kind, old, bytes);
         try self.insertNamed(name, bytes);

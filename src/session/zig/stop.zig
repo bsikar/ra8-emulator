@@ -3,10 +3,11 @@
 //! Resolved against the image's symbol table. The
 //! counter is read at each boundary by the run clock's done check.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const symbols = @import("../symbols.zig");
-const Stop = @import("ra8_chip").core.stop.Stop;
+
 const Deadline = @import("ra8_chip").core.deadline.Deadline;
+const elf = @import("ra8_board").image.elf;
+const Stop = @import("ra8_chip").core.stop.Stop;
+const symbols = @import("../symbols.zig");
 
 /// The watched counter, or null. A name the image does not carry is
 /// reported and the run goes to its instruction budget instead: a missing
@@ -46,7 +47,16 @@ pub fn verdict(out: anytype, wanted: ?[]const u8, stop: ?Stop, timed: ?Deadline,
         return;
     };
     const name = wanted.?;
-    if (watched.reached) return out.print("stopped clean on {s} >= {d}, pc 0x{X:0>8}\n", .{ name, watched.reaches, pc });
-    if (spent) return out.print("ran {d} ms, {s} never reached {d}, pc 0x{X:0>8}\n", .{ timed.?.periods, name, watched.reaches, pc });
-    try out.print("ran {d} instructions, {s} never reached {d}, pc 0x{X:0>8}\n", .{ budget, name, watched.reaches, pc });
+    if (watched.reached) return out.print(
+        "stopped clean on {s} >= {d}, pc 0x{X:0>8}\n",
+        .{ name, watched.reaches, pc },
+    );
+    if (spent) return out.print(
+        "ran {d} ms, {s} never reached {d}, pc 0x{X:0>8}\n",
+        .{ timed.?.periods, name, watched.reaches, pc },
+    );
+    try out.print(
+        "ran {d} instructions, {s} never reached {d}, pc 0x{X:0>8}\n",
+        .{ budget, name, watched.reaches, pc },
+    );
 }

@@ -3,7 +3,8 @@
 //!
 //! Eight channels at 0x4000_A000, 0x40 apart. The shared module bank next
 //! door, whose DMAST.DMST is the activation gate over all eight, is its own
-//! file (dma_bank.zig) and this block asks it before every request. A channel is programmed with DMSAR, DMDAR, DMCRA, DMCRB, DMTMD
+//! file (dma_bank.zig) and this block asks it before every request. A channel is programmed with DMSAR, DMDAR, DMCRA,
+//! DMCRB, DMTMD
 //! and DMAMD, armed with DMCNT.DTE, and triggered with a DMREQ.SWREQ store.
 //! Unlike the DTC next door, nothing about the transfer lives in memory: the
 //! registers ARE the descriptor, which is why there is no vector table here.
@@ -19,11 +20,11 @@
 //! not: it is queued and raised at the chunk boundary with the rest of the
 //! events, so firmware sees the bytes immediately and the interrupt one
 //! boundary later.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
 const dma_bank = @import("../dma_bank.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");

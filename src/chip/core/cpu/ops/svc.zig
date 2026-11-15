@@ -1,9 +1,9 @@
 //! SVC (T1), the supervisor call: exception 11, taken once the instruction
 //! retires, so the stacked return address is the next instruction and the
 //! stacked IT state has already moved past it.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const group: op.Group = .{ .name = "svc", .decode = decode, .oracle = false };
 

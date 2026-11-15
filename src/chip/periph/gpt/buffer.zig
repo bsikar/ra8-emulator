@@ -45,7 +45,6 @@
 //! rather than an invented two-deep queue; GTBER's dead-time buffer field and
 //! GTPDBR (+0x6C), the period double buffer; and the buffer-transfer skipping
 //! in GTITC, which nothing in either tree programs.
-const std = @import("std");
 
 const compare = @import("compare.zig");
 

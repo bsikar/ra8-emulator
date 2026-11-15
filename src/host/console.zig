@@ -8,6 +8,7 @@
 //! dropped. Enter arrives as '\r' and is handed on as '\n', the byte a POSIX
 //! terminal in line mode gives the SCI. Only ASCII is passed on.
 const std = @import("std");
+
 const windows = std.os.windows;
 
 /// KEY_EVENT_RECORD, as INPUT_RECORD carries it.
@@ -34,8 +35,16 @@ comptime {
 }
 
 extern "kernel32" fn GetConsoleMode(console: windows.HANDLE, mode: *windows.DWORD) callconv(.winapi) windows.BOOL;
-extern "kernel32" fn GetNumberOfConsoleInputEvents(console: windows.HANDLE, count: *windows.DWORD) callconv(.winapi) windows.BOOL;
-extern "kernel32" fn ReadConsoleInputW(console: windows.HANDLE, records: [*]InputRecord, length: windows.DWORD, read: *windows.DWORD) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetNumberOfConsoleInputEvents(
+    console: windows.HANDLE,
+    count: *windows.DWORD,
+) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn ReadConsoleInputW(
+    console: windows.HANDLE,
+    records: [*]InputRecord,
+    length: windows.DWORD,
+    read: *windows.DWORD,
+) callconv(.winapi) windows.BOOL;
 
 /// True when `handle` is an interactive console rather than a pipe or file.
 pub fn isConsole(handle: windows.HANDLE) bool {
@@ -69,6 +78,8 @@ pub fn read(handle: windows.HANDLE, into: []u8) ?usize {
     var got: windows.DWORD = 0;
     if (!ReadConsoleInputW(handle, &records, want, &got).toBool()) return null;
     var end: usize = 0;
-    for (records[0..got]) |record| end = keyBytes(record, into, end);
+    for (records[0..got]) |record| {
+        end = keyBytes(record, into, end);
+    }
     return if (end == 0) null else end;
 }

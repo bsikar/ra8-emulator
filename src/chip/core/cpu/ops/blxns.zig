@@ -15,12 +15,14 @@
 //! Left unclaimed: Rm of SP or PC, and the 32-bit space. BXNS is
 //! src/chip/core/cpu/ops/bxns.zig.
 const std = @import("std");
-const op = @import("../op.zig");
+
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
-const tz = @import("../../tz.zig");
 const memmap = @import("../../memmap.zig");
+const op = @import("../op.zig");
 const regs = @import("../regs.zig");
+const tz = @import("../../tz.zig");
+
 const xpsr_bits = regs.xpsr_bits;
 const control_bits = regs.control_bits;
 

@@ -11,6 +11,7 @@
 //! that is at most a thousand checks a second, and a 10 ms timer still lands
 //! within a millisecond of the wall clock.
 const std = @import("std");
+
 const pacer = @import("pacer.zig");
 
 /// The least virtual time between two looks at the wall clock.

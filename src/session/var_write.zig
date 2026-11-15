@@ -1,13 +1,16 @@
 //! Mutate live/rewound variable state by symbol or DWARF local name using
 //! Session.write / Session.setRegister and typed little-endian encoding.
-const std = @import("std");
-const Session = @import("api.zig").Session;
 const Core = @import("api.zig").Core;
 const core_view = @import("core_view.zig");
 const elf = @import("ra8_board").image.elf;
+const Session = @import("api.zig").Session;
+const std = @import("std");
+const var_value = @import("var_value.zig");
+
 const Cortex = core_view.Cortex;
-const symbols = @import("symbols.zig");
 const dwarf = @import("dwarf/dwarf.zig");
+const symbols = @import("symbols.zig");
+
 const vars = dwarf.vars;
 const unwind = @import("unwind/unwind.zig");
 
@@ -29,13 +32,7 @@ pub const Scope = enum(u8) {
     local = 2,
 };
 
-pub const ScalarKind = enum {
-    signed,
-    unsigned,
-    float,
-    boolean,
-    untyped,
-};
+pub const ScalarKind = var_value.ScalarKind;
 
 pub const Result = struct {
     status: Status,
@@ -46,44 +43,19 @@ pub const Result = struct {
     message: []const u8,
 };
 
-pub const EncodeError = error{
-    InvalidValue,
-    Overflow,
-    UnsupportedWidth,
-};
-
-/// Map DWARF type info to the scalar encoding category used for input parsing.
-pub fn inferKind(info: vars.TypeInfo) error{NonScalar}!ScalarKind {
-    if (!info.is_scalar and info.encoding == .unknown) {
-        if (info.size > 0 or info.name.len > 0) return error.NonScalar;
-        return .untyped;
-    }
-    return switch (info.encoding) {
-        .signed => .signed,
-        .unsigned, .address, .utf => .unsigned,
-        .float => .float,
-        .boolean => .boolean,
-        .unknown => .untyped,
-    };
-}
-
-/// Encode `raw_value` as `width` little-endian bytes according to `kind`.
-pub fn encodeValue(raw_value: []const u8, width: u32, kind: ScalarKind, out: *[8]u8) EncodeError![]const u8 {
-    const val = std.mem.trim(u8, raw_value, " \t\r\n");
-    if (val.len == 0) return error.InvalidValue;
-    if (width != 1 and width != 2 and width != 4 and width != 8) return error.UnsupportedWidth;
-
-    switch (kind) {
-        .signed => return encodeSigned(val, width, out),
-        .unsigned => return encodeUnsigned(val, width, out),
-        .untyped => return encodeUntyped(val, width, out),
-        .float => return encodeFloat(val, width, out),
-        .boolean => return encodeBool(val, width, out),
-    }
-}
+pub const EncodeError = var_value.EncodeError;
+pub const inferKind = var_value.inferKind;
+pub const encodeValue = var_value.encodeValue;
 
 /// Resolve and write `name=value` against `core` and `frame_idx`.
-pub fn set(session: *Session, core: Core, image: elf.Image, frame_idx: u32, name: []const u8, value: []const u8) !Result {
+pub fn set(
+    session: *Session,
+    core: Core,
+    image: elf.Image,
+    frame_idx: u32,
+    name: []const u8,
+    value: []const u8,
+) !Result {
     const view = session.view(core) catch |err| switch (err) {
         error.CoreNotAttached => return fail(.frame_unavailable, .none, "core is not attached"),
         else => return fail(.frame_unavailable, .none, "core view unavailable"),
@@ -127,19 +99,33 @@ fn writeLocal(
         .read_only => |reason| return fail(.read_only, .local, vars.reasonText(reason)),
         else => {},
     }
-    const kind = inferKind(local.type_info) catch return fail(.unsupported_type, .local, "non-scalar local cannot be set");
+    const kind = inferKind(local.type_info) catch {
+        return fail(.unsupported_type, .local, "non-scalar local cannot be set");
+    };
     const width = local.type_info.size;
     var buf: [8]u8 = undefined;
     const encoded = encodeValue(value, width, kind, &buf) catch |err| return mapEncodeError(err, .local);
 
     switch (local.location) {
         .in_register => |reg_num| {
-            if (frame_idx > 0) return fail(.read_only, .local, "register local in non-top frame cannot be written directly");
-            const reg = dwarfToProtoReg(reg_num) orelse return fail(.read_only, .local, "extended register cannot be written");
+            if (frame_idx > 0) return fail(
+                .read_only,
+                .local,
+                "register local in non-top frame cannot be written directly",
+            );
+            const reg = dwarfToProtoReg(reg_num) orelse {
+                return fail(.read_only, .local, "extended register cannot be written");
+            };
             if (width == 8) return fail(.unsupported_type, .local, "8-byte value does not fit in one 32-bit register");
             const val_u32 = decodeToU32(encoded, kind == .signed);
             session.setRegister(core, reg, val_u32) catch |err| return mapWriteError(err, .local);
-            return .{ .status = .ok, .scope = .local, .in_register = reg_num, .size = width, .message = "updated local register" };
+            return .{
+                .status = .ok,
+                .scope = .local,
+                .in_register = reg_num,
+                .size = width,
+                .message = "updated local register",
+            };
         },
         .frame => |fb_off| {
             const base = vars.frameBaseAddress(frame_bytes, local.frame_base_expr, regs) catch {
@@ -147,17 +133,35 @@ fn writeLocal(
             };
             const addr = addSigned(base, fb_off);
             session.write(core, addr, encoded) catch |err| return mapWriteError(err, .local);
-            return .{ .status = .ok, .scope = .local, .address = addr, .size = width, .message = "updated local variable" };
+            return .{
+                .status = .ok,
+                .scope = .local,
+                .address = addr,
+                .size = width,
+                .message = "updated local variable",
+            };
         },
         .register_offset => |ro| {
             if (ro.reg >= regs.len) return fail(.read_only, .local, "register base unavailable for local variable");
             const addr = addSigned(regs[ro.reg], ro.offset);
             session.write(core, addr, encoded) catch |err| return mapWriteError(err, .local);
-            return .{ .status = .ok, .scope = .local, .address = addr, .size = width, .message = "updated local variable" };
+            return .{
+                .status = .ok,
+                .scope = .local,
+                .address = addr,
+                .size = width,
+                .message = "updated local variable",
+            };
         },
         .address => |addr| {
             session.write(core, addr, encoded) catch |err| return mapWriteError(err, .local);
-            return .{ .status = .ok, .scope = .local, .address = addr, .size = width, .message = "updated static local variable" };
+            return .{
+                .status = .ok,
+                .scope = .local,
+                .address = addr,
+                .size = width,
+                .message = "updated static local variable",
+            };
         },
         .read_only => unreachable,
     }
@@ -196,75 +200,6 @@ fn writeGlobal(
     return .{ .status = .ok, .scope = .global, .address = addr, .size = width, .message = "updated global variable" };
 }
 
-fn encodeSigned(val: []const u8, width: u32, out: *[8]u8) EncodeError![]const u8 {
-    const parsed = std.fmt.parseInt(i64, val, 0) catch |err| return if (err == error.Overflow) error.Overflow else error.InvalidValue;
-    const ok = switch (width) {
-        1 => parsed >= std.math.minInt(i8) and parsed <= std.math.maxInt(i8),
-        2 => parsed >= std.math.minInt(i16) and parsed <= std.math.maxInt(i16),
-        4 => parsed >= std.math.minInt(i32) and parsed <= std.math.maxInt(i32),
-        8 => true,
-        else => unreachable,
-    };
-    if (!ok) return error.Overflow;
-    std.mem.writeInt(i64, out, parsed, .little);
-    return out[0..width];
-}
-
-fn encodeUnsigned(val: []const u8, width: u32, out: *[8]u8) EncodeError![]const u8 {
-    if (val[0] == '-') return error.Overflow;
-    const parsed = std.fmt.parseInt(u64, val, 0) catch |err| return if (err == error.Overflow) error.Overflow else error.InvalidValue;
-    const limit: u64 = switch (width) {
-        1 => std.math.maxInt(u8),
-        2 => std.math.maxInt(u16),
-        4 => std.math.maxInt(u32),
-        8 => std.math.maxInt(u64),
-        else => unreachable,
-    };
-    if (parsed > limit) return error.Overflow;
-    std.mem.writeInt(u64, out, parsed, .little);
-    return out[0..width];
-}
-
-fn encodeUntyped(val: []const u8, width: u32, out: *[8]u8) EncodeError![]const u8 {
-    if (val[0] == '-') return encodeSigned(val, width, out);
-    return encodeUnsigned(val, width, out);
-}
-
-fn encodeFloat(val: []const u8, width: u32, out: *[8]u8) EncodeError![]const u8 {
-    const wants_inf = std.ascii.eqlIgnoreCase(val, "inf") or std.ascii.eqlIgnoreCase(val, "+inf") or std.ascii.eqlIgnoreCase(val, "-inf");
-    switch (width) {
-        4 => {
-            const f = std.fmt.parseFloat(f32, val) catch return error.InvalidValue;
-            if (!wants_inf and std.math.isInf(f)) return error.Overflow;
-            std.mem.writeInt(u32, out[0..4], @bitCast(f), .little);
-            return out[0..4];
-        },
-        8 => {
-            const f = std.fmt.parseFloat(f64, val) catch return error.InvalidValue;
-            if (!wants_inf and std.math.isInf(f)) return error.Overflow;
-            std.mem.writeInt(u64, out, @bitCast(f), .little);
-            return out[0..8];
-        },
-        else => return error.UnsupportedWidth,
-    }
-}
-
-fn encodeBool(val: []const u8, width: u32, out: *[8]u8) EncodeError![]const u8 {
-    @memset(out, 0);
-    if (std.ascii.eqlIgnoreCase(val, "true")) {
-        out[0] = 1;
-        return out[0..width];
-    }
-    if (std.ascii.eqlIgnoreCase(val, "false")) {
-        out[0] = 0;
-        return out[0..width];
-    }
-    const parsed = std.fmt.parseInt(i64, val, 0) catch |err| return if (err == error.Overflow) error.Overflow else error.InvalidValue;
-    if (parsed != 0 and parsed != 1) return error.Overflow;
-    out[0] = @intCast(parsed);
-    return out[0..width];
-}
-
 const Reader = struct {
     session: *Session,
     core: Core,
@@ -275,7 +210,13 @@ const Reader = struct {
     }
 };
 
-fn resolveFrameRegisters(session: *Session, core: Core, image: elf.Image, view: core_view.View, frame_idx: u32) !unwind.Registers {
+fn resolveFrameRegisters(
+    session: *Session,
+    core: Core,
+    image: elf.Image,
+    view: core_view.View,
+    frame_idx: u32,
+) !unwind.Registers {
     var regs = try unwind.registersOf(view);
     if (frame_idx == 0) return regs;
     const frame_bytes = vars.frameSection(image);
@@ -314,7 +255,11 @@ fn dwarfToProtoReg(reg: u8) ?Cortex {
 fn decodeToU32(bytes: []const u8, signed: bool) u32 {
     return switch (bytes.len) {
         1 => if (signed) @bitCast(@as(i32, @as(i8, @bitCast(bytes[0])))) else bytes[0],
-        2 => if (signed) @bitCast(@as(i32, std.mem.readInt(i16, bytes[0..2], .little))) else std.mem.readInt(u16, bytes[0..2], .little),
+        2,
+        => if (signed)
+            @bitCast(@as(i32, std.mem.readInt(i16, bytes[0..2], .little)))
+        else
+            std.mem.readInt(u16, bytes[0..2], .little),
         4 => std.mem.readInt(u32, bytes[0..4], .little),
         else => 0,
     };
@@ -324,7 +269,8 @@ fn mapEncodeError(err: EncodeError, scope: Scope) Result {
     return switch (err) {
         error.Overflow => fail(.overflow, scope, "value overflows target variable type/width"),
         error.InvalidValue => fail(.invalid_value, scope, "invalid value syntax for variable type"),
-        error.UnsupportedWidth => fail(.unsupported_type, scope, "unsupported variable byte width (expected 1, 2, 4, or 8)"),
+        error.UnsupportedWidth,
+        => fail(.unsupported_type, scope, "unsupported variable byte width (expected 1, 2, 4, or 8)"),
     };
 }
 

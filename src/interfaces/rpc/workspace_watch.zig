@@ -1,10 +1,17 @@
 //! Per-connection metadata watches: bounded paths, no worker or handle per watch.
 const std = @import("std");
+
+const Context = @import("session/handlers.zig").Context;
 const host = @import("ra8_host").workspace;
 const wire = @import("workspace_wire.zig");
-const Context = @import("session/handlers.zig").Context;
+
 pub const capacity = 8;
-const Slot = struct { id: u32 = 0, path: [host.path.capacity]u8 = undefined, len: usize = 0, version: host.observation.Snapshot = .{} };
+const Slot = struct {
+    id: u32 = 0,
+    path: [host.path.capacity]u8 = undefined,
+    len: usize = 0,
+    version: host.observation.Snapshot = .{},
+};
 pub const Table = struct {
     slots: [capacity]Slot = @splat(.{}),
     next_id: u32 = 1,
@@ -12,7 +19,9 @@ pub const Table = struct {
     cursor: usize = 0,
 
     pub fn clear(self: *Table) void {
-        for (&self.slots) |*slot| slot.id = 0;
+        for (&self.slots) |*slot| {
+            slot.id = 0;
+        }
     }
 
     pub fn add(self: *Table, path: []const u8, version: host.observation.Snapshot) !u32 {
@@ -55,12 +64,32 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
         const path = slot.path[0..slot.len];
         var encoded: [wire.version_bytes]u8 = undefined;
         const version = root.observe(path) catch {
-            try server.emit(wire.Change, wire.changed_topic, .{ .id = slot.id, .state = .unavailable, .path = path, .version = try wire.encodeVersion(.{}, &encoded) }, tx);
+            try server.emit(
+                wire.Change,
+                wire.changed_topic,
+                .{
+                    .id = slot.id,
+                    .state = .unavailable,
+                    .path = path,
+                    .version = try wire.encodeVersion(.{}, &encoded),
+                },
+                tx,
+            );
             slot.id = 0;
             return;
         };
         if (version.same(slot.version)) return;
-        try server.emit(wire.Change, wire.changed_topic, .{ .id = slot.id, .state = if (version.version.kind == .missing) .removed else .changed, .path = path, .version = try wire.encodeVersion(version.version, &encoded) }, tx);
+        try server.emit(
+            wire.Change,
+            wire.changed_topic,
+            .{
+                .id = slot.id,
+                .state = if (version.version.kind == .missing) .removed else .changed,
+                .path = path,
+                .version = try wire.encodeVersion(version.version, &encoded),
+            },
+            tx,
+        );
         slot.version = version;
         return;
     }

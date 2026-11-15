@@ -4,11 +4,12 @@
 //! sz 0 (VEOR) is MVE. D, N and M would name Q8 and above, so they must be
 //! zero. `vmov qd, qm` is VORR qd, qm, qm. The semantics are in
 //! src/chip/core/cpu/mve/bitwise/bitwise.zig.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_int = @import("int/int.zig");
+const op = @import("../../op.zig");
+
 const Op = mve.bitwise.Op;
 
 pub const group: op.Group = .{ .name = "mve_bitwise", .decode = decode, .oracle = false };

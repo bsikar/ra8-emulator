@@ -55,7 +55,11 @@ const addv = [_]V{
     vec("vaddv.s32 lr, q1", .{ .hw1 = 0xEEF9, .hw2 = 0xEF02 }, .{ .rda = 0xFE01_FF7F }),
     vec("vaddv.s8 ignores rda", .{ .hw1 = 0xEEF1, .hw2 = 0x0F02, .rda = 0x1234 }, .{ .rda = 0x79 }),
     vec("vaddlv.s32 r0, r1, q1", .{ .hw1 = 0xEE89, .hw2 = 0x0F02 }, .{ .rda = 0xFE01_FF7F, .rda_hi = 0xFFFF_FFFF }),
-    vec("vaddlva.u32 r0, r1, q1 carries", .{ .hw1 = 0xFE89, .hw2 = 0x0F22, .rda = 1, .rda_hi = 0xFFFF_FFFF }, .{ .rda = 0xFE01_FF80, .rda_hi = 1 }),
+    vec(
+        "vaddlva.u32 r0, r1, q1 carries",
+        .{ .hw1 = 0xFE89, .hw2 = 0x0F22, .rda = 1, .rda_hi = 0xFFFF_FFFF },
+        .{ .rda = 0xFE01_FF80, .rda_hi = 1 },
+    ),
     vec("vaddlv.s32 r12, r11, q1", .{ .hw1 = 0xEED9, .hw2 = 0xCF02 }, .{ .rda = 0xFE01_FF7F, .rda_hi = 0xFFFF_FFFF }),
 };
 
@@ -73,17 +77,49 @@ const dual = [_]V{
 };
 
 const long = [_]V{
-    vec("vmlaldav.s16 r0, r1, q2, q1", .{ .hw1 = 0xEE84, .hw2 = 0x0E02 }, .{ .rda = 0xFFF3_89F8, .rda_hi = 0xFFFF_FFFF }),
-    vec("vmlaldav.u32 r0, r1, q2, q1", .{ .hw1 = 0xFE85, .hw2 = 0x0E02 }, .{ .rda = 0x788A_FBFC, .rda_hi = 0x85F5_15FB }),
-    vec("vmlaldava.s32 adds the pair", .{ .hw1 = 0xEE85, .hw2 = 0x0E22, .rda_hi = 0x100 }, .{ .rda = 0x788A_FBFC, .rda_hi = 0xFFF4_14F6 }),
-    vec("vmlaldav.s32 ignores the pair", .{ .hw1 = 0xEE85, .hw2 = 0x0E02, .rda_hi = 0x55 }, .{ .rda = 0x788A_FBFC, .rda_hi = 0xFFF4_13F6 }),
-    vec("vmlsldavx.s16 r0, r1, q2, q1", .{ .hw1 = 0xEE84, .hw2 = 0x1E03 }, .{ .rda = 0xFFFE_7E81, .rda_hi = 0xFFFF_FFFF }),
+    vec(
+        "vmlaldav.s16 r0, r1, q2, q1",
+        .{ .hw1 = 0xEE84, .hw2 = 0x0E02 },
+        .{ .rda = 0xFFF3_89F8, .rda_hi = 0xFFFF_FFFF },
+    ),
+    vec(
+        "vmlaldav.u32 r0, r1, q2, q1",
+        .{ .hw1 = 0xFE85, .hw2 = 0x0E02 },
+        .{ .rda = 0x788A_FBFC, .rda_hi = 0x85F5_15FB },
+    ),
+    vec(
+        "vmlaldava.s32 adds the pair",
+        .{ .hw1 = 0xEE85, .hw2 = 0x0E22, .rda_hi = 0x100 },
+        .{ .rda = 0x788A_FBFC, .rda_hi = 0xFFF4_14F6 },
+    ),
+    vec(
+        "vmlaldav.s32 ignores the pair",
+        .{ .hw1 = 0xEE85, .hw2 = 0x0E02, .rda_hi = 0x55 },
+        .{ .rda = 0x788A_FBFC, .rda_hi = 0xFFF4_13F6 },
+    ),
+    vec(
+        "vmlsldavx.s16 r0, r1, q2, q1",
+        .{ .hw1 = 0xEE84, .hw2 = 0x1E03 },
+        .{ .rda = 0xFFFE_7E81, .rda_hi = 0xFFFF_FFFF },
+    ),
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0x000f adds word 0 only", .{ .hw1 = 0xEEF9, .hw2 = 0x0F02, .vpr = 0x0088_000F }, .{ .rda = 0xFE02_FF7F, .vpr = 0x0000_000F }),
-    vec("vpt p0 0x000f multiplies word 0 only", .{ .hw1 = 0xEEF5, .hw2 = 0x0E02, .vpr = 0x0088_000F }, .{ .rda = 0xF88B_FBFC, .vpr = 0x0000_000F }),
-    vec("the loop tail adds word 0 only", .{ .hw1 = 0xFEF9, .hw2 = 0x0F02, .ltpsize = 2, .lr = 1 }, .{ .rda = 0xFE02_FF7F }),
+    vec(
+        "vpt p0 0x000f adds word 0 only",
+        .{ .hw1 = 0xEEF9, .hw2 = 0x0F02, .vpr = 0x0088_000F },
+        .{ .rda = 0xFE02_FF7F, .vpr = 0x0000_000F },
+    ),
+    vec(
+        "vpt p0 0x000f multiplies word 0 only",
+        .{ .hw1 = 0xEEF5, .hw2 = 0x0E02, .vpr = 0x0088_000F },
+        .{ .rda = 0xF88B_FBFC, .vpr = 0x0000_000F },
+    ),
+    vec(
+        "the loop tail adds word 0 only",
+        .{ .hw1 = 0xFEF9, .hw2 = 0x0F02, .ltpsize = 2, .lr = 1 },
+        .{ .rda = 0xFE02_FF7F },
+    ),
     vec("eci a0a1 adds beats 2 and 3", .{ .hw1 = 0xFEF9, .hw2 = 0x0F22, .rda = 7, .it = 0x20 }, .{ .rda = 6 }),
 };
 

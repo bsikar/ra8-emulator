@@ -15,7 +15,9 @@
 //! refuses the record: replay feeding the device altered traffic would
 //! diverge silently.
 const std = @import("std");
+
 const traffic = @import("ra8_board").usb.traffic;
+
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 
 pub const Error = error{ Truncated, BadValue, BadCrc };
@@ -55,7 +57,8 @@ pub fn decode(body: []const u8) Error!Event {
     if (body.len != fixed_len + @as(usize, head_len) + data_len + crc_len) return Error.Truncated;
     const covered = body[0 .. body.len - crc_len];
     if (Crc32c.hash(covered) != std.mem.readInt(u32, body[body.len - crc_len ..][0..4], .little)) return Error.BadCrc;
-    if (body[0] < @backingInt(traffic.Kind.import) or body[0] > @backingInt(traffic.Kind.progress)) return Error.BadValue;
+    if (body[0] < @backingInt(traffic.Kind.import) or
+        body[0] > @backingInt(traffic.Kind.progress)) return Error.BadValue;
     if (body[1] & ~Flags.pumped != 0) return Error.BadValue;
     const event: Event = .{
         .kind = @fromBackingInt(@intCast(body[0])),

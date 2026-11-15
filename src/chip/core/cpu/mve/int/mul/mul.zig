@@ -8,9 +8,10 @@
 //! VQDMLAH doubles the lane times the scalar and adds Qda shifted up by the
 //! lane width; VQDMLASH doubles the lane times Qda and adds the shifted
 //! scalar. The R forms round, and all four keep the saturated top half.
-const qreg = @import("../../qreg.zig");
 const int = @import("../int.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// Which high-half multiply: signedness, rounding and doubling.

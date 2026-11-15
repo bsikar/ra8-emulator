@@ -1,10 +1,13 @@
 //! File-free callback shape for injection at the application boundary.
 //! The host adapter owns OS handles. Callers close every ByteFile before
 //! closing Session, and keep Session/Base addresses stable while using it.
+const builtin = @import("builtin");
+
 const std = @import("std");
+
 const layout = @import("layout.zig");
-const paths = @import("paths.zig");
 const move = @import("move/root.zig");
+const paths = @import("paths.zig");
 const rename_file = @import("rename.zig");
 const scratch = @import("scratch.zig");
 const Session = @import("session.zig").Session;
@@ -67,7 +70,15 @@ fn open(context: *anyopaque, space: layout.Space, text: []const u8, mode: Mode) 
         .create => try dir.createFile(io, text, .{ .read = true, .exclusive = true, .resolve_beneath = true }),
         .read, .update => blk: {
             try paths.regular(io, dir, text);
-            break :blk try dir.openFile(io, text, .{ .mode = if (mode == .read) .read_only else .read_write, .follow_symlinks = false, .resolve_beneath = true });
+            break :blk try dir.openFile(
+                io,
+                text,
+                .{
+                    .mode = if (mode == .read) .read_only else .read_write,
+                    .follow_symlinks = false,
+                    .resolve_beneath = true,
+                },
+            );
         },
     };
     errdefer file.close(io);
@@ -108,11 +119,26 @@ fn renameHeld(session: *Session, space: layout.Space, from: []const u8, to: []co
     defer dir.close(session.base.io);
     try paths.regular(session.base.io, dir, from);
     if (held) |byte| try verifyIn(session.base.io, dir, from, byte);
-    if (held != null and @import("builtin").os.tag == .windows) return move.windows.publish(session.base.allocator, session.base.io, dir, from, to);
+    if (held != null and
+        builtin.os.tag == .windows) return move.windows.publish(
+        session.base.allocator,
+        session.base.io,
+        dir,
+        from,
+        to,
+    );
     const forced = if (session.move_probe) |probe| probe.force_fallback else false;
     const moved = if (forced) error.OperationUnsupported else move.preserve(session.base.io, dir, from, dir, to);
     moved catch |err| switch (err) {
-        error.OperationUnsupported => return rename_file.linkedProbed(session.base.io, session.dir, dir, space, from, to, session.move_probe),
+        error.OperationUnsupported => return rename_file.linkedProbed(
+            session.base.io,
+            session.dir,
+            dir,
+            space,
+            from,
+            to,
+            session.move_probe,
+        ),
         else => return err,
     };
 }
@@ -147,8 +173,12 @@ fn verifyIn(io: std.Io, dir: std.Io.Dir, text: []const u8, held: ByteFile) !void
     const handle = try native(held);
     const opened = try handle.stat(io);
     const named = try dir.statFile(io, text, .{ .follow_symlinks = false });
-    if (opened.kind != .file or named.kind != .file or opened.inode != named.inode or opened.nlink != 1 or named.nlink != 1) return error.IdentityConflict;
-    if (@import("builtin").os.tag == .linux) {
+    if (opened.kind != .file or
+        named.kind != .file or
+        opened.inode != named.inode or
+        opened.nlink != 1 or
+        named.nlink != 1) return error.IdentityConflict;
+    if (builtin.os.tag == .linux) {
         if (!(try move.file.opened(handle)).same(try move.file.state(dir, text))) return error.IdentityConflict;
     }
 }
@@ -180,7 +210,14 @@ const OwnedFile = struct {
     io: std.Io,
     file: std.Io.File,
 
-    const vtable: ByteFile.Vtable = .{ .read = read, .write = write, .length = length, .truncate = truncate, .sync = sync, .close = close };
+    const vtable: ByteFile.Vtable = .{
+        .read = read,
+        .write = write,
+        .length = length,
+        .truncate = truncate,
+        .sync = sync,
+        .close = close,
+    };
 
     fn cast(context: *anyopaque) *OwnedFile {
         return @ptrCast(@alignCast(context));

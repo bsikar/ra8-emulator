@@ -8,8 +8,9 @@
 //! behaviour it was saved under. An old four-byte section is unscaled and has
 //! no fraction; an old twelve-byte section has no saved boundary rate.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 const scheduler = @import("ra8_chip").core.scheduler;
 
 pub const Error = file.Error || error{BadValue};

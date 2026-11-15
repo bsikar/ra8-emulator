@@ -8,9 +8,9 @@
 //! host already addressed it, the way usbip's own stub keeps the address.
 //! The bridge offers the device only once the scripted host is done, so the
 //! two never share endpoint 0.
-const usbfs = @import("ra8_chip").periph.usbfs;
 const regs = @import("ra8_chip").periph.usbhs.regs;
 const urb = @import("urb.zig");
+const usbfs = @import("ra8_chip").periph.usbfs;
 
 pub const Stage = enum { setup, data, status, finish };
 

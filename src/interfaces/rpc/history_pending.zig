@@ -1,15 +1,16 @@
 //! Object writes remain live until a durable log's references account for them.
 const std = @import("std");
-const history = @import("ra8_host").history;
-const ObjectId = @import("ra8_session").history_object_id.ObjectId;
+
 const Bind = @import("history_bind.zig").Bind;
-const refs = @import("ra8_session").history_refs;
-const log = @import("ra8_session").history_log;
 const format = @import("ra8_session").history_format;
-const record = @import("ra8_session").history_record;
+const history = @import("ra8_host").history;
 const history_live = @import("history_live.zig");
+const log = @import("ra8_session").history_log;
 const object_reuse = @import("object_reuse.zig");
+const ObjectId = @import("ra8_session").history_object_id.ObjectId;
 const ObjectKind = @import("ra8_session").history_recorder.Objects.Kind;
+const record = @import("ra8_session").history_record;
+const refs = @import("ra8_session").history_refs;
 
 pub const Pending = struct {
     names: std.StringHashMap(void),
@@ -20,7 +21,9 @@ pub const Pending = struct {
 
     pub fn clear(self: *Pending) void {
         var keys = self.names.keyIterator();
-        while (keys.next()) |key| self.names.allocator.free(key.*);
+        while (keys.next()) |key| {
+            self.names.allocator.free(key.*);
+        }
         self.names.clearRetainingCapacity();
     }
 
@@ -73,7 +76,9 @@ pub const Pending = struct {
     pub fn collect(context: *anyopaque, gpa: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void {
         const self: *Pending = @ptrCast(@alignCast(context));
         var keys = self.names.keyIterator();
-        while (keys.next()) |key| try add(gpa, names, key.*);
+        while (keys.next()) |key| {
+            try add(gpa, names, key.*);
+        }
     }
 };
 

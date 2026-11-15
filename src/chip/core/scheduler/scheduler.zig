@@ -1,11 +1,12 @@
 //! Scalar scheduler state shared by the plain run and debugger adapters.
 pub const position = @import("position.zig");
 pub const stretch = @import("stretch.zig");
+
 pub const Position = position.Position;
 pub const Stretch = stretch.Stretch;
 const Cpu = @import("../cpu/cpu.zig").Cpu;
-const rate = @import("../rate.zig");
 const Pending = @import("../cpu/systick_cut.zig").Pending;
+const rate = @import("../rate.zig");
 
 // The divider can change during CPU1's turn. Validate against every rate
 // openTurn could have latched, rather than recomputing from today's divider.
@@ -58,7 +59,9 @@ pub const State = struct {
         self.at.phase = .cpu0;
         self.at.o = 0;
         self.at.gap = .retired;
-        for (&self.base, self.lengths) |*base, length| base.* += length;
+        for (&self.base, self.lengths) |*base, length| {
+            base.* += length;
+        }
         self.lengths = .{ 0, 0 };
         self.stretch = .{};
         self.cut = false;
@@ -73,7 +76,10 @@ pub const State = struct {
         for (self.base, self.lengths) |base, length| if (base > 0xffffffffffffffff - @as(u64, length)) return false;
         if (self.stretch.carry > self.stretch.full or self.lengths[0] > self.stretch.carry) return false;
         if (self.cut and (self.stretch.carry == 0 or self.lengths[1] != 0)) return false;
-        if (!self.cut and (self.cut_pending.bank != .secure or self.cut_pending.old_reload != 0 or self.cut_pending.old_control != 0)) return false;
+        if (!self.cut and
+            (self.cut_pending.bank != .secure or
+                self.cut_pending.old_reload != 0 or
+                self.cut_pending.old_control != 0)) return false;
         if (!self.cut and (self.cut_pending.old_current != 0 or self.cut_pending.current_written)) return false;
         if (!self.cut_pending.valid()) return false;
         const spent = self.stretch.full != 0 and self.stretch.left() == 0;

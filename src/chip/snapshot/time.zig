@@ -6,9 +6,11 @@
 //! Host pacing and the soak watch are run options, not board state: they
 //! stay as the run that loads the snapshot configured them.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
-const fields = @import("ra8_snapshot").fields;
+
 const clocks = @import("../periph/clocks.zig");
+const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
+
 const Event = clocks.event_queue.Event;
 
 pub const Error = file.Error || fields.Error || error{Missing};
@@ -26,7 +28,9 @@ fn body(time: *const clocks.Time, writer: *std.Io.Writer) !void {
     // Only the live events: the rest of the array is undefined.
     const live = time.queue.items[0..time.queue.count];
     try fields.write(writer, @as(u8, @intCast(live.len)));
-    for (live) |event| try fields.write(writer, event);
+    for (live) |event| {
+        try fields.write(writer, event);
+    }
 }
 
 /// Restores the time section of a whole snapshot file. On any error `time`
@@ -39,7 +43,9 @@ pub fn load(time: *clocks.Time, bytes: []const u8) Error!void {
     next.queue.next_seq = try fields.read(u32, &cursor);
     const count = try fields.read(u8, &cursor);
     if (count > next.queue.items.len) return Error.BadValue;
-    for (next.queue.items[0..count]) |*event| event.* = try fields.read(Event, &cursor);
+    for (next.queue.items[0..count]) |*event| {
+        event.* = try fields.read(Event, &cursor);
+    }
     next.queue.count = count;
     if (!cursor.done()) return Error.BadValue;
     try ordered(next.queue.items[0..count]);

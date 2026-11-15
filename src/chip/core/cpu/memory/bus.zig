@@ -1,8 +1,8 @@
 //! The Zig core's bus over its store, retaining the Guest initiator identity for
 //! external-memory timing and instrumentation.
 const bus = @import("../bus.zig");
-const memmap = @import("../../memmap.zig");
 const Initiator = @import("initiator.zig").Initiator;
+const memmap = @import("../../memmap.zig");
 const Store = @import("store.zig").Store;
 
 pub const MemoryBus = struct {
@@ -22,7 +22,12 @@ pub const MemoryBus = struct {
             .initiator = self.initiator,
             .lines = self.store.fan(),
         };
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write }, .direct = &self.direct, .lines = self.store.fanMut() };
+        return .{
+            .ctx = self,
+            .vtable = &.{ .read = read, .write = write },
+            .direct = &self.direct,
+            .lines = self.store.fanMut(),
+        };
     }
 
     fn read(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {

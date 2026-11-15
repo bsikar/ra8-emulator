@@ -33,7 +33,6 @@
 //! zero. `ra8_gpt_start_free_run` locks the channel on its way out, so every
 //! one of those clears arrives with GTWP shut. If the part refused them the
 //! flag would stand, and the app passed on the bench.
-const std = @import("std");
 
 const buf = @import("buffer.zig");
 const compare = @import("compare.zig");

@@ -3,9 +3,9 @@
 //! `ldm.w`); the decrement-before forms do not (`stmdb`, `ldmdb`).
 //! STMDB SP! and LDM SP! with two or more registers print as `push.w` and
 //! `pop.w`; with one register they keep the plain spelling.
+const Form = @import("../../../ops/ldm/stm/wide.zig").Form;
 const Instr = @import("../../../instr.zig").Instr;
 const text = @import("../../text.zig");
-const Form = @import("../../../ops/ldm/stm/wide.zig").Form;
 
 const sp: u4 = 13;
 

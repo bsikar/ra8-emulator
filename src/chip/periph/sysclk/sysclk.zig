@@ -52,13 +52,14 @@
 //! frequencies behind it, and the modelled time base is charged per chunk
 //! rather than per cycle (`clocks.zig`), so a rate computed here would be
 //! decoration. Wiring real rates into the time base is its own slice.
+pub const div = @import("div.zig");
+const hazard = @import("../voltage_hazard.zig");
+const oscsf = @import("../oscsf.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-const oscsf = @import("../oscsf.zig");
-pub const div = @import("div.zig");
+
 /// Each core's clock in Hz, from this tree (RA8EMU-515).
 pub const rate = @import("rate.zig");
-const hazard = @import("../voltage_hazard.zig");
 
 /// Window geometry: SCKDIVCR (+0x020) through SCKSCR (+0x026) inclusive.
 pub const win_base: u32 = 0x4001_E020;

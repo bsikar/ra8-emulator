@@ -5,12 +5,12 @@
 //! The PNG is the board view: the panel inside the EK-RA8D2 outline with
 //! the user LEDs as the pins left them (board_view.zig).
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
-const eink = @import("ra8_components").eink;
-const eink_wire = @import("ra8_components").eink.wire;
-const png = @import("ra8_render").png;
-const board_view = @import("ra8_render").board_view;
 const board_leds = @import("ra8_session").board.leds;
+const board_view = @import("ra8_render").board_view;
+const eink = @import("ra8_components").eink;
+const png = @import("ra8_render").png;
 
 /// The panel's size, the size of the view that was written, and whether
 /// the GLCDC gave a frame (when it did not, the panel is drawn dark).
@@ -21,7 +21,9 @@ pub const Saved = struct { width: u32, height: u32, view: board_view.Size, frame
 pub fn opaqueRgba(pixels: []const u32, rgba: []u8) png.Error!void {
     try png.fromArgb(pixels, rgba);
     var at: usize = 3;
-    while (at < rgba.len) : (at += png.bytes_per_pixel) rgba[at] = 0xFF;
+    while (at < rgba.len) : (at += png.bytes_per_pixel) {
+        rgba[at] = 0xFF;
+    }
 }
 
 /// Scan the panel into a buffer and write the board view to `path` as a
@@ -40,7 +42,10 @@ pub fn save(allocator: std.mem.Allocator, io: std.Io, board: *Board, path: []con
     if (!frame) @memset(pixels, 0);
     // No GLCDC frame: the board's own e-ink panel, once refreshed (RA8EMU-591).
     if (!frame and board.panel.refreshes != 0) return saveEink(allocator, io, &board.panel, path);
-    const view = if (panel_only) board_view.Size{ .width = width, .height = height } else board_view.size(width, height);
+    const view = if (panel_only)
+        board_view.Size{ .width = width, .height = height }
+    else
+        board_view.size(width, height);
     if (panel_only) {
         try write(allocator, io, pixels, view, path);
     } else {
@@ -67,7 +72,11 @@ fn saveEink(allocator: std.mem.Allocator, io: std.Io, panel: *const eink.Panel, 
     const rgba = try allocator.alloc(u8, @as(usize, width) * height * png.bytes_per_pixel);
     defer allocator.free(rgba);
     if (panel.planes.glass.pixels.len == 0) {
-        for (0..@as(usize, width) * height) |at| @memcpy(rgba[at * png.bytes_per_pixel ..][0..png.bytes_per_pixel], &[_]u8{ 0, 0, 0, 0xFF });
+        const black = [_]u8{ 0, 0, 0, 0xFF };
+        for (0..@as(usize, width) * height) |at| {
+            const start = at * png.bytes_per_pixel;
+            @memcpy(rgba[start..][0..png.bytes_per_pixel], &black);
+        }
     } else try grayRgba(panel.planes.glass.pixels, rgba);
     const file = try std.Io.Dir.cwd().createFile(io, path, .{});
     defer file.close(io);
@@ -110,7 +119,14 @@ pub fn report(out: anytype, io: std.Io, board: *Board, path: ?[]const u8, panel_
         if (!saved.frame) return out.print("frame-out: no e-ink refresh, the {d}x{d} grey glass written to {s}\n", .{
             saved.width, saved.height, target,
         });
-        return out.print("frame-out: {d}x{d} grey e-ink glass written to {s}\n", .{ saved.width, saved.height, target });
+        return out.print(
+            "frame-out: {d}x{d} grey e-ink glass written to {s}\n",
+            .{
+                saved.width,
+                saved.height,
+                target,
+            },
+        );
     }
     if (!saved.frame) {
         if (panel_only) return out.print("frame-out: no panel frame, a dark {d}x{d} panel written to {s}\n", .{
@@ -120,7 +136,14 @@ pub fn report(out: anytype, io: std.Io, board: *Board, path: ?[]const u8, panel_
             saved.view.width, saved.view.height, target,
         });
     }
-    if (panel_only) return out.print("frame-out: {d}x{d} panel written to {s}\n", .{ saved.width, saved.height, target });
+    if (panel_only) return out.print(
+        "frame-out: {d}x{d} panel written to {s}\n",
+        .{
+            saved.width,
+            saved.height,
+            target,
+        },
+    );
     try out.print("frame-out: {d}x{d} panel on a {d}x{d} board view written to {s}\n", .{
         saved.width, saved.height, saved.view.width, saved.view.height, target,
     });

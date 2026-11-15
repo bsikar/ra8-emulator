@@ -4,9 +4,11 @@
 //! operand / 2^fbits through FPRound under the given mode, so only IXC
 //! can be raised.
 const format = @import("format.zig");
+
 const Format = format.Format;
-const round = @import("round.zig");
 const fpscr_mod = @import("fpscr.zig");
+const round = @import("round.zig");
+
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
 

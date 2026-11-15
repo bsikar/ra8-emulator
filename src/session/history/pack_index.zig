@@ -2,8 +2,10 @@
 //! and XxHash3-64 prefilter check. Equal prefilter never implies equal identity.
 //! Also provides crash recovery index rebuilding from raw pack bytes.
 const std = @import("std");
+
 const ObjectId = @import("object_id.zig").ObjectId;
 const pack_mod = @import("pack.zig");
+
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 
 pub const magic: [8]u8 = "RA8PIDX1".*;

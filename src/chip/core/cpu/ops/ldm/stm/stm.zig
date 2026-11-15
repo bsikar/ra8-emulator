@@ -7,10 +7,11 @@
 //! value wins. STM with Rn in the list stores Rn's value before the
 //! instruction.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
 const alignment = @import("../../../alignment.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 pub const wide = @import("wide.zig");
 
 pub const encodings = struct {

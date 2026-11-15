@@ -76,7 +76,8 @@ pub fn section(board: *Board, out: Writer) !void {
     try channels(unit, out);
     if (sum.faults != 0) {
         try out.print(
-            "DMAC: {d} request(s) CUT SHORT by memory, the units before the refused address stayed and the counts went back\n",
+            "DMAC: {d} request(s) CUT SHORT by memory, the units before the refused address " ++
+                "stayed and the counts went back\n",
             .{sum.faults},
         );
     }
@@ -101,7 +102,8 @@ fn channels(unit: *const dmac.Dmac, out: Writer) !void {
         if (channel.quiet()) continue;
         const shape = channel.plan();
         try out.print(
-            "  ch{d}: {s}/{s}, {d} request(s), {d} unit(s) / {d} byte(s), {d} finished, DMSAR 0x{X:0>8}, DMDAR 0x{X:0>8}\n",
+            "  ch{d}: {s}/{s}, {d} request(s), {d} unit(s) / {d} byte(s), {d} finished, " ++
+                "DMSAR 0x{X:0>8}, DMDAR 0x{X:0>8}\n",
             .{
                 index,
                 @tagName(shape.mode),

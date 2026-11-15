@@ -6,9 +6,12 @@
 //! Each plane is width, height, byte count, then its pixel bytes. Not
 //! saved, because they are wiring: `refresh_hook`, `refresh_log_hook`, and
 //! `event_hook` callbacks, plus the planes' `allocator`. A load keeps the target's.
+const wire = @import("wire.zig");
+
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 
@@ -76,14 +79,19 @@ pub fn readPayload(panel: anytype, cursor: *fields.Cursor) Error!void {
 fn fits(panel: anytype, image: Raw, glass: Raw) bool {
     const shape = panel.planes.geometry;
     if (shape.width == 0 or shape.height == 0 or shape.width > max_side or shape.height > max_side) return false;
-    if (panel.register_count > panel.registers.len or panel.burst.len > panel.burst.buf.len or panel.burst.pos > panel.burst.len) return false;
+    if (panel.register_count > panel.registers.len or
+        panel.burst.len > panel.burst.buf.len or
+        panel.burst.pos > panel.burst.len) return false;
     // During a partial new header, load_left still belongs to the old header.
-    if (panel.command == .load_area and panel.data_index >= @import("wire.zig").arg.load_first_pixel) {
+    if (panel.command == .load_area and panel.data_index >= wire.arg.load_first_pixel) {
         if (panel.load_left > @as(u32, panel.load_width) * panel.load_height) return false;
         if (panel.load_left != 0 and panel.load_width == 0) return false;
         if (panel.loaded_pixels > @as(u32, panel.load_width) * panel.load_height) return false;
     }
-    if (panel.pixels_per_word != 2 and panel.pixels_per_word != 4 and panel.pixels_per_word != 5 and panel.pixels_per_word != 8) return false;
+    if (panel.pixels_per_word != 2 and
+        panel.pixels_per_word != 4 and
+        panel.pixels_per_word != 5 and
+        panel.pixels_per_word != 8) return false;
     if ((image.pixels.len == 0) != (glass.pixels.len == 0)) return false;
     return planeFits(shape, image) and planeFits(shape, glass);
 }

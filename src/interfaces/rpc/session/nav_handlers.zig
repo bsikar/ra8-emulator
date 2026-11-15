@@ -1,8 +1,8 @@
 //! RPC handlers for navigation and playback (Slice 22.4).
-const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const session_mod = @import("ra8_session");
 
 const OutcomeAck = rpc.Outcome(proto.Ack);
@@ -28,7 +28,12 @@ pub fn navQuery(context: *handlers.Context, args: proto.NavQueryArgs) OutcomeRes
         .iteration => return queryIteration(nav, args.index),
         .marker => return queryMarker(nav, args.name, args.index),
         .rtos => return queryRtos(nav),
-        .isr => return .{ .ok = .{ .found = if (nav.isrTransitionCount() > 0) 1 else 0, .count = nav.isrTransitionCount() } },
+        .isr => return .{
+            .ok = .{
+                .found = if (nav.isrTransitionCount() > 0) 1 else 0,
+                .count = nav.isrTransitionCount(),
+            },
+        },
     }
 }
 

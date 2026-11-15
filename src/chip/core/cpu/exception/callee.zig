@@ -8,6 +8,7 @@
 //! (DDI0553 B3.19). The return checks the signature before it trusts the
 //! frame, and a mismatch is a SecureFault INVIS for the caller to raise.
 const std = @import("std");
+
 const bus = @import("../bus.zig");
 
 pub const size: u32 = 0x28;
@@ -33,7 +34,9 @@ pub fn push(to: bus.Bus, sp: u32, callee: Callee, fp: bool) bus.Error!u32 {
     const at = sp -% size;
     try put(to, at, signature(fp));
     try put(to, at +% 4, 0);
-    for (callee, 0..) |word, i| try put(to, at +% 8 +% @as(u32, @intCast(i * 4)), word);
+    for (callee, 0..) |word, i| {
+        try put(to, at +% 8 +% @as(u32, @intCast(i * 4)), word);
+    }
     return at;
 }
 
@@ -48,7 +51,9 @@ pub const Popped = struct {
 pub fn pop(from: bus.Bus, at: u32, fp: bool) Error!Popped {
     if (try from.readWord(at) != signature(fp)) return error.Integrity;
     var callee: Callee = undefined;
-    for (&callee, 0..) |*word, i| word.* = try from.readWord(at +% 8 +% @as(u32, @intCast(i * 4)));
+    for (&callee, 0..) |*word, i| {
+        word.* = try from.readWord(at +% 8 +% @as(u32, @intCast(i * 4)));
+    }
     return .{ .callee = callee, .sp = at +% size };
 }
 

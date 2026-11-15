@@ -5,8 +5,10 @@
 //! non-paged state blobs (registers, timers, scheduler stretch, debug units).
 //! The Merkle root binds all page and blob hashes cryptographically.
 const std = @import("std");
+
 const ObjectId = @import("object_id.zig").ObjectId;
 const position_mod = @import("position.zig");
+
 const Position = position_mod.Position;
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 

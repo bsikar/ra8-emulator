@@ -1,9 +1,9 @@
 //! Text for the branch_wide group: B<cond>.W (T3), B.W (T4) and BL, in
 //! the spelling the parity digests pin, printed as the absolute target: `beq.w #0x2000104`,
 //! `b.w #0x2000100`, `bl #0x2000104`.
+const branch_wide = @import("../../ops/branch/wide.zig");
 const Instr = @import("../../instr.zig").Instr;
 const text = @import("../text.zig");
-const branch_wide = @import("../../ops/branch/wide.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const e = branch_wide.encodings;

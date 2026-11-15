@@ -1,8 +1,9 @@
 //! Per-function execution counts collected by the optional instruction hook.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
-const symbols = @import("symbols.zig");
 const stack_samples = @import("stack/samples.zig");
+const symbols = @import("symbols.zig");
 
 pub const limits = struct {
     pub const functions: usize = 256;

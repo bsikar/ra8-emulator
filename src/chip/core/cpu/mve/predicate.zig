@@ -5,6 +5,7 @@
 //! an element counts as active by the bit of its lowest byte, as the
 //! Arm ARM (DDI0553) pseudocode reads it.
 const qreg = @import("qreg.zig");
+
 const Size = qreg.Size;
 
 pub const Vpr = packed struct(u32) {

@@ -1,57 +1,58 @@
 //! The end-of-run narration: what the board saw, in the order a person reads
 //! it. Kept apart from board.zig so the models and the words about them do
 //! not share a file, and apart from main.zig so main stays wiring.
-const std = @import("std");
-pub const profile = @import("report/profile.zig");
 pub const after = @import("report/after.zig");
-/// The board view's PNG writer (RA8EMU-73).
-pub const png = @import("ra8_render").png;
-pub const frame_out = @import("frame_out.zig");
-pub const frames = @import("frames/frames.zig");
-pub const undefined_sites = @import("report/undefined.zig");
+
 /// Stills of the host window (RA8EMU-500).
 const Board = @import("ra8_board").board.Board;
-const elc = @import("ra8_chip").periph.elc;
-const clocks = @import("ra8_chip").periph.clocks;
-const nvic = @import("ra8_chip").periph.nvic;
-const cac = @import("ra8_chip").periph.cac;
-const dtc = @import("ra8_chip").periph.dtc;
-pub const dtc1 = @import("report/dtc1.zig");
+pub const frame_out = @import("frame_out.zig");
+pub const frames = @import("frames/frames.zig");
+
+/// The board view's PNG writer (RA8EMU-73).
+const std = @import("std");
+
 const analog = @import("report/analog.zig");
-const graphics = @import("report/graphics.zig");
 const audio = @import("report/audio.zig");
+const backup = @import("report/backup.zig");
+const cac = @import("ra8_chip").periph.cac;
 const capture = @import("report/capture.zig");
+const clocks = @import("ra8_chip").periph.clocks;
 const compute = @import("report/compute.zig");
 const cores = @import("report/cores.zig");
 pub const dma = @import("report/dma.zig");
-const backup = @import("report/backup.zig");
+const dtc = @import("ra8_chip").periph.dtc;
+pub const dtc1 = @import("report/dtc1.zig");
+const elc = @import("ra8_chip").periph.elc;
+const graphics = @import("report/graphics.zig");
+const icu = @import("report/icu.zig");
+const lowpower = @import("report/lowpower.zig");
 const memory = @import("report/memory.zig");
-const modules = @import("report/modules.zig");
 const mipi = @import("report/mipi.zig");
+const modules = @import("report/modules.zig");
+const monitors = @import("report/monitors.zig");
 const network = @import("report/network.zig");
 const options = @import("report/options.zig");
-const icu = @import("report/icu.zig");
 pub const pinfunc = @import("report/pinfunc.zig");
-const sysclock = @import("report/sysclk.zig");
-const lowpower = @import("report/lowpower.zig");
 const pll1 = @import("report/pll.zig");
-const voltage = @import("report/voltage.zig");
-const monitors = @import("report/monitors.zig");
+pub const png = @import("ra8_render").png;
+pub const profile = @import("report/profile.zig");
 const serial = @import("report/serial.zig");
 const storage = @import("report/storage.zig");
+const sysclock = @import("report/sysclk.zig");
 const time = @import("report/time.zig");
 const timers = @import("report/timers.zig");
+pub const undefined_sites = @import("report/undefined.zig");
+const voltage = @import("report/voltage.zig");
 pub const watchdog = @import("report/watchdog.zig");
+
 /// Public so its tests can reach it; root.zig is at the gate's 400 lines.
-pub const usb = @import("report/usb/usb.zig");
-pub const json = @import("report/json/json.zig");
 const gpio = @import("ra8_chip").periph.gpio;
-const poeg = @import("ra8_chip").periph.poeg;
-const reset = @import("ra8_chip").periph.reset;
+pub const json = @import("report/json/json.zig");
 const reboot = @import("ra8_chip").core.reboot;
+const reset = @import("ra8_chip").periph.reset;
 const scb = @import("ra8_chip").periph.scb;
-const lob = @import("ra8_chip").core.lob;
 pub const unmodelled = @import("report/unmodelled.zig");
+pub const usb = @import("report/usb/usb.zig");
 
 pub const Writer = *std.Io.Writer;
 
@@ -67,41 +68,7 @@ pub fn bus(board: *Board, out: Writer) !void {
 /// One line per block that was actually used, so a run only reports the
 /// peripherals the firmware touched.
 pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
-    if (!board.checksum.quiet()) {
-        try out.print(
-            "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
-            .{ @backingInt(board.checksum.gps()), board.checksum.dor, board.checksum.bytes },
-        );
-        if (board.checksum.cleared != 0) {
-            try out.print(
-                "CRC: {d} DORCLR pulse(s), each one putting the remainder back to zero\n",
-                .{board.checksum.cleared},
-            );
-        }
-    }
-    if (!board.dataops.quiet()) {
-        try out.print(
-            "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
-            .{ @backingInt(board.dataops.mode()), board.dataops.dodsr0, @intFromBool(board.dataops.flag), board.dataops.ops },
-        );
-        if (board.dataops.windows != 0) {
-            try out.print(
-                "DOC: {d} window compare(s), {s}, DODSR0 0x{X:0>4}..DODSR1 0x{X:0>4}\n",
-                .{
-                    board.dataops.windows,
-                    board.dataops.relation().name(),
-                    board.dataops.dodsr0 & 0xFFFF,
-                    board.dataops.dodsr1 & 0xFFFF,
-                },
-            );
-        }
-        if (board.dataops.refused() != 0) {
-            try out.print(
-                "DOC: {d} DODIR STORE(S) TOO NARROW TO CARRY AN OPERAND\n",
-                .{board.dataops.refused()},
-            );
-        }
-    }
+    try dataOperations(board, out);
     if (!board.accuracy.quiet()) try accuracy(board, out);
     try mipi.sections(board, out);
     try graphics.sections(board, out);
@@ -327,7 +294,8 @@ fn transfers(board: *Board, out: Writer) !void {
     }
     if (unit.cache.skips != 0 or unit.cache.drops != 0) {
         try out.print(
-            "DTC: DTCCR.RRS skipped {d} descriptor read(s) on a repeated vector, {d} read from memory, {d} copy(s) dropped\n",
+            "DTC: DTCCR.RRS skipped {d} descriptor read(s) on a repeated vector, {d} read " ++
+                "from memory, {d} copy(s) dropped\n",
             .{ unit.cache.skips, unit.cache.reads, unit.cache.drops },
         );
     }
@@ -375,9 +343,52 @@ pub fn reboots(out: Writer, pending: reboot.Reboot) !void {
     );
 }
 
-pub const gif = @import("ra8_render").gif;
-pub const wav = @import("ra8_render").wav;
 pub const audio_out = @import("audio_out.zig");
 pub const dumps = @import("report/dumps.zig");
+pub const gif = @import("ra8_render").gif;
 pub const part = @import("report/part.zig");
 pub const run = @import("report/run.zig");
+pub const wav = @import("ra8_render").wav;
+
+fn dataOperations(board: *Board, out: Writer) !void {
+    if (!board.checksum.quiet()) {
+        try out.print(
+            "CRC: GPS={d}, CRCDOR 0x{X:0>8}, {d} byte(s) folded\n",
+            .{ @backingInt(board.checksum.gps()), board.checksum.dor, board.checksum.bytes },
+        );
+        if (board.checksum.cleared != 0) {
+            try out.print(
+                "CRC: {d} DORCLR pulse(s), each one putting the remainder back to zero\n",
+                .{board.checksum.cleared},
+            );
+        }
+    }
+    if (!board.dataops.quiet()) {
+        try out.print(
+            "DOC: OMS={d}, DODSR0 0x{X:0>8}, DOPCF={d}, {d} operation(s)\n",
+            .{
+                @backingInt(board.dataops.mode()),
+                board.dataops.dodsr0,
+                @intFromBool(board.dataops.flag),
+                board.dataops.ops,
+            },
+        );
+        if (board.dataops.windows != 0) {
+            try out.print(
+                "DOC: {d} window compare(s), {s}, DODSR0 0x{X:0>4}..DODSR1 0x{X:0>4}\n",
+                .{
+                    board.dataops.windows,
+                    board.dataops.relation().name(),
+                    board.dataops.dodsr0 & 0xFFFF,
+                    board.dataops.dodsr1 & 0xFFFF,
+                },
+            );
+        }
+        if (board.dataops.refused() != 0) {
+            try out.print(
+                "DOC: {d} DODIR STORE(S) TOO NARROW TO CARRY AN OPERAND\n",
+                .{board.dataops.refused()},
+            );
+        }
+    }
+}

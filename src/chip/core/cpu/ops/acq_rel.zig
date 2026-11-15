@@ -10,10 +10,11 @@
 //!
 //! Left unclaimed: SP or PC as Rt, and PC as Rn.
 const std = @import("std");
-const op = @import("../op.zig");
+
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const rn_mask: u16 = 0xFFF0;

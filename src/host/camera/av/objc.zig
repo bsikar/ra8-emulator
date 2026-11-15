@@ -4,8 +4,9 @@
 //! registers Ra8CaptureDelegate, an NSObject whose
 //! captureOutput:didOutputSampleBuffer:fromConnection: is av_delegate's
 //! didOutput; a later open finds the class already there and reuses it.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const delegate = @import("delegate.zig");
 
 pub const Id = ?*anyopaque;
@@ -76,9 +77,15 @@ pub fn host() ?Runtime {
         .class = lib.lookup(@FieldType(Runtime, "class"), "objc_getClass") orelse return null,
         .selector = lib.lookup(@FieldType(Runtime, "selector"), "sel_registerName") orelse return null,
         .msg_send = lib.lookup(*const anyopaque, "objc_msgSend") orelse return null,
-        .allocate_class = lib.lookup(@FieldType(Runtime, "allocate_class"), "objc_allocateClassPair") orelse return null,
+        .allocate_class = lib.lookup(
+            @FieldType(Runtime, "allocate_class"),
+            "objc_allocateClassPair",
+        ) orelse return null,
         .add_method = lib.lookup(@FieldType(Runtime, "add_method"), "class_addMethod") orelse return null,
-        .register_class = lib.lookup(@FieldType(Runtime, "register_class"), "objc_registerClassPair") orelse return null,
+        .register_class = lib.lookup(
+            @FieldType(Runtime, "register_class"),
+            "objc_registerClassPair",
+        ) orelse return null,
         .dispose_class = lib.lookup(@FieldType(Runtime, "dispose_class"), "objc_disposeClassPair") orelse return null,
     };
 }

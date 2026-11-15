@@ -10,11 +10,12 @@
 //! does not shift one line of the corpus. The clock tree slice (RA8EMU-515)
 //! is where PCLKB becomes the part's real number.
 const std = @import("std");
+
 const agt = @import("agt.zig");
-const clk = @import("clock.zig");
 const cadence = @import("../../core/cadence.zig");
-const timebase = @import("../time/timebase.zig");
+const clk = @import("clock.zig");
 const event_queue = @import("../time/event_queue.zig");
+const timebase = @import("../time/timebase.zig");
 
 /// The PCLKB rate the per-boundary step stands for.
 pub const pclkb_hz: u64 = @as(u64, agt.step_per_tick) * timebase.default_hz / cadence.instructions;

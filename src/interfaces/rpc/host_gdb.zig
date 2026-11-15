@@ -4,10 +4,13 @@
 //! packets. Reads are answered at once; a continue runs one budget per
 //! pump and its stop reply goes out when the run ends (rsp_zig's pump
 //! mode). Nothing here blocks: every step peeks first.
+const session_api2 = @import("ra8_session");
+
 const std = @import("std");
-const sock_ready = @import("ra8_host").sock.ready;
+
 const rsp = @import("ra8_gdb").rsp;
 const session_api = @import("ra8_session").api;
+const sock_ready = @import("ra8_host").sock.ready;
 
 /// The largest packet the stub reads, in bytes, as qSupported tells gdb.
 const packet_size = rsp.dispatch.packet_size;
@@ -24,7 +27,7 @@ pub const Session = struct {
     live: ?*session_api.Session = null,
     /// The host clock the gdb target's transport wall reads, when a
     /// transport is attached to the live session.
-    wall_clock: ?@import("ra8_session").run.pacer.HostClock = null,
+    wall_clock: ?session_api2.run.pacer.HostClock = null,
     client: ?Client = null,
 
     /// One gdb connection, served a frame at a time. The buffers live in
@@ -77,7 +80,7 @@ pub const Session = struct {
         };
         const c = &(self.client.?);
         c.wire = rsp.packet.Reader.init(&c.incoming);
-        if (self.wall_clock == null) self.wall_clock = @import("ra8_session").run.pacer.HostClock.init(self.io);
+        if (self.wall_clock == null) self.wall_clock = session_api2.run.pacer.HostClock.init(self.io);
         c.target = .{ .session = live, .poll = c.socket.poll(), .pump = true, .wall = self.wall_clock.?.wall() };
         c.stub = .{ .zig = &c.target };
     }

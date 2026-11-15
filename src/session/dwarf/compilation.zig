@@ -1,7 +1,9 @@
 //! Associate each line table with its compilation unit's source directory.
 const std = @import("std");
-const reading = @import("cursor.zig");
+
 const info = @import("info.zig");
+const reading = @import("cursor.zig");
+
 const Cursor = reading.Cursor;
 pub const Sections = struct {
     info: []const u8 = &.{},
@@ -78,7 +80,10 @@ fn rootDirectory(root: Root, sections: Sections) reading.Error![]const u8 {
             const base = root.string_base orelse return error.Unsupported;
             const relative = std.math.mul(u64, index, 4) catch return error.Truncated;
             const offset = std.math.add(u64, base, relative) catch return error.Truncated;
-            var cursor: Cursor = .{ .bytes = sections.string_offsets, .at = std.math.cast(usize, offset) orelse return error.Truncated };
+            var cursor: Cursor = .{
+                .bytes = sections.string_offsets,
+                .at = std.math.cast(usize, offset) orelse return error.Truncated,
+            };
             if (cursor.at > cursor.bytes.len) return error.Truncated;
             break :blk try reading.stringAt(sections.strings, try cursor.int(u32));
         },

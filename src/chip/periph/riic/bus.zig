@@ -5,7 +5,6 @@
 //! it. A device is three callbacks and a 7-bit address, the same shape the SPI
 //! and SCI seams use, so a board decides which parts answer and the controller
 //! stays one file about transfers.
-const std = @import("std");
 
 /// How an address byte sits on the wire: the 7-bit address in bits 7:1 and the
 /// direction in bit 0 (HUM Ch 39.3.2).

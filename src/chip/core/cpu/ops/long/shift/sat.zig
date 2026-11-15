@@ -15,9 +15,9 @@
 //! them first, like the other long shifts (RA8EMU-138). Left unclaimed: Rda of SP or PC, Rm of SP, PC or Rda,
 //! hw2 bit 15 set in the immediate form, hw2 bits 7:6 set or type 01 and 11
 //! in the register form.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 const xpsr_bits = @import("../../../regs.zig").xpsr_bits;
 
 pub const Kind = enum { uqshl, urshr, srshr, sqshl, uqrshl, sqrshr };

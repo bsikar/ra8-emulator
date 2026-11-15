@@ -110,7 +110,9 @@ pub const Cache = struct {
     /// Every maintenance boundary counted, whatever the operation.
     pub fn total(self: *const Cache) u32 {
         var sum: u32 = 0;
-        for (self.seen) |boundaries| sum +%= boundaries;
+        for (self.seen) |boundaries| {
+            sum +%= boundaries;
+        }
         return sum;
     }
 

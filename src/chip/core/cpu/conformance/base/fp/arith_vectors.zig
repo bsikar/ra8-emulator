@@ -86,38 +86,137 @@ const operations = [_]V{
     ops("vfms.f32 1 - 2*3", 0xEEA0, op1, 0xC0A0_0000),
     ops("vfnma.f32 -1 - 2*3", 0xEE90, op1, 0xC0E0_0000),
     ops("vfnms.f32 -1 + 2*3", 0xEE90, op0, 0x40A0_0000),
-    vec("vdiv.f32 2/3 rounds and raises ixc", .{ .hw1 = 0xEE80, .hw2 = op0, .n = two, .m = three }, .{ .dst = 0x3F2A_AAAB, .fpscr = raised(ixc) }),
-    vec("vdiv.f32 2/3 in rz truncates", .{ .hw1 = 0xEE80, .hw2 = op0, .n = two, .m = three, .fpscr = 0x00C4_0000 }, .{ .dst = 0x3F2A_AAAA, .fpscr = 0x00C4_0000 | ixc }),
-    vec("vadd.f32 s3, s5, s31 decodes vx:x", .{ .hw1 = 0xEE72, .hw2 = 0x1AAF, .d_reg = 3, .n_reg = 5, .m_reg = 31, .n = two, .m = three }, .{ .dst = 0x40A0_0000 }),
+    vec(
+        "vdiv.f32 2/3 rounds and raises ixc",
+        .{ .hw1 = 0xEE80, .hw2 = op0, .n = two, .m = three },
+        .{ .dst = 0x3F2A_AAAB, .fpscr = raised(ixc) },
+    ),
+    vec(
+        "vdiv.f32 2/3 in rz truncates",
+        .{ .hw1 = 0xEE80, .hw2 = op0, .n = two, .m = three, .fpscr = 0x00C4_0000 },
+        .{ .dst = 0x3F2A_AAAA, .fpscr = 0x00C4_0000 | ixc },
+    ),
+    vec(
+        "vadd.f32 s3, s5, s31 decodes vx:x",
+        .{ .hw1 = 0xEE72, .hw2 = 0x1AAF, .d_reg = 3, .n_reg = 5, .m_reg = 31, .n = two, .m = three },
+        .{ .dst = 0x40A0_0000 },
+    ),
 };
 
 const exceptions = [_]V{
-    vec("vdiv.f32 1/0 is +inf with dzc", .{ .hw1 = 0xEE80, .hw2 = op0, .n = one, .m = 0 }, .{ .dst = 0x7F80_0000, .fpscr = raised(dzc) }),
-    vec("vdiv.f32 0/0 is the default nan with ioc", .{ .hw1 = 0xEE80, .hw2 = op0, .n = 0, .m = 0 }, .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) }),
-    vec("vadd.f32 inf + -inf is the default nan with ioc", .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7F80_0000, .m = 0xFF80_0000 }, .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) }),
-    vec("vmul.f32 0 * inf is the default nan with ioc", .{ .hw1 = 0xEE20, .hw2 = op0, .n = 0, .m = 0x7F80_0000 }, .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) }),
-    vec("vadd.f32 max + max overflows", .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7F7F_FFFF, .m = 0x7F7F_FFFF }, .{ .dst = 0x7F80_0000, .fpscr = raised(ofc | ixc) }),
-    vec("vmul.f32 tiny inexact raises ufc", .{ .hw1 = 0xEE20, .hw2 = op0, .n = 0x0080_0001, .m = 0x3F00_0000 }, .{ .dst = 0x0040_0000, .fpscr = raised(ufc | ixc) }),
-    vec("vadd.f32 propagates a quiet nan", .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7FC0_1234, .m = one }, .{ .dst = 0x7FC0_1234 }),
-    vec("vadd.f32 quiets a signalling nan", .{ .hw1 = 0xEE30, .hw2 = op0, .n = one, .m = 0x7F80_0001 }, .{ .dst = 0x7FC0_0001, .fpscr = raised(ioc) }),
-    vec("vadd.f32 with dn gives the default nan", .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7FC0_1234, .m = one, .fpscr = 0x0204_0000 }, .{ .dst = 0x7FC0_0000, .fpscr = 0x0204_0000 }),
-    vec("vadd.f32 with fz flushes a denormal input", .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x0000_0001, .m = 0, .fpscr = 0x0104_0000 }, .{ .dst = 0, .fpscr = 0x0104_0000 | idc }),
+    vec(
+        "vdiv.f32 1/0 is +inf with dzc",
+        .{ .hw1 = 0xEE80, .hw2 = op0, .n = one, .m = 0 },
+        .{ .dst = 0x7F80_0000, .fpscr = raised(dzc) },
+    ),
+    vec(
+        "vdiv.f32 0/0 is the default nan with ioc",
+        .{ .hw1 = 0xEE80, .hw2 = op0, .n = 0, .m = 0 },
+        .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) },
+    ),
+    vec(
+        "vadd.f32 inf + -inf is the default nan with ioc",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7F80_0000, .m = 0xFF80_0000 },
+        .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) },
+    ),
+    vec(
+        "vmul.f32 0 * inf is the default nan with ioc",
+        .{ .hw1 = 0xEE20, .hw2 = op0, .n = 0, .m = 0x7F80_0000 },
+        .{ .dst = 0x7FC0_0000, .fpscr = raised(ioc) },
+    ),
+    vec(
+        "vadd.f32 max + max overflows",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7F7F_FFFF, .m = 0x7F7F_FFFF },
+        .{ .dst = 0x7F80_0000, .fpscr = raised(ofc | ixc) },
+    ),
+    vec(
+        "vmul.f32 tiny inexact raises ufc",
+        .{ .hw1 = 0xEE20, .hw2 = op0, .n = 0x0080_0001, .m = 0x3F00_0000 },
+        .{ .dst = 0x0040_0000, .fpscr = raised(ufc | ixc) },
+    ),
+    vec(
+        "vadd.f32 propagates a quiet nan",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7FC0_1234, .m = one },
+        .{ .dst = 0x7FC0_1234 },
+    ),
+    vec(
+        "vadd.f32 quiets a signalling nan",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = one, .m = 0x7F80_0001 },
+        .{ .dst = 0x7FC0_0001, .fpscr = raised(ioc) },
+    ),
+    vec(
+        "vadd.f32 with dn gives the default nan",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x7FC0_1234, .m = one, .fpscr = 0x0204_0000 },
+        .{ .dst = 0x7FC0_0000, .fpscr = 0x0204_0000 },
+    ),
+    vec(
+        "vadd.f32 with fz flushes a denormal input",
+        .{ .hw1 = 0xEE30, .hw2 = op0, .n = 0x0000_0001, .m = 0, .fpscr = 0x0104_0000 },
+        .{ .dst = 0, .fpscr = 0x0104_0000 | idc },
+    ),
 };
 
 /// d = -1, n = 1 + 2^-23, m = 1 - 2^-24: the product rounds to 1.0 for
 /// VMLA, so the sum is +0 and inexact; VFMA keeps it exact.
 const fused = [_]V{
-    vec("vmla.f32 rounds the product first", .{ .hw1 = 0xEE00, .hw2 = op0, .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F7F_FFFF }, .{ .dst = 0, .fpscr = raised(ixc) }),
-    vec("vfma.f32 rounds once", .{ .hw1 = 0xEEA0, .hw2 = op0, .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F7F_FFFF }, .{ .dst = 0x337F_FFFE }),
+    vec(
+        "vmla.f32 rounds the product first",
+        .{ .hw1 = 0xEE00, .hw2 = op0, .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F7F_FFFF },
+        .{ .dst = 0, .fpscr = raised(ixc) },
+    ),
+    vec(
+        "vfma.f32 rounds once",
+        .{ .hw1 = 0xEEA0, .hw2 = op0, .d = 0xBF80_0000, .n = 0x3F80_0001, .m = 0x3F7F_FFFF },
+        .{ .dst = 0x337F_FFFE },
+    ),
 };
 
 const wide = [_]V{
-    vec("vadd.f64 d0, d1, d2", .{ .hw1 = 0xEE31, .hw2 = 0x0B02, .double = true, .n = 0x3FF8_0000_0000_0000, .m = 0x4002_0000_0000_0000 }, .{ .dst = 0x400E_0000_0000_0000 }),
-    vec("vdiv.f64 1/3 rounds and raises ixc", .{ .hw1 = 0xEE81, .hw2 = 0x0B02, .double = true, .n = 0x3FF0_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .{ .dst = 0x3FD5_5555_5555_5555, .fpscr = raised(ixc) }),
-    vec("vfma.f64 1 + 2*3", .{ .hw1 = 0xEEA1, .hw2 = 0x0B02, .double = true, .d = 0x3FF0_0000_0000_0000, .n = 0x4000_0000_0000_0000, .m = 0x4008_0000_0000_0000 }, .{ .dst = 0x401C_0000_0000_0000 }),
+    vec(
+        "vadd.f64 d0, d1, d2",
+        .{
+            .hw1 = 0xEE31,
+            .hw2 = 0x0B02,
+            .double = true,
+            .n = 0x3FF8_0000_0000_0000,
+            .m = 0x4002_0000_0000_0000,
+        },
+        .{ .dst = 0x400E_0000_0000_0000 },
+    ),
+    vec(
+        "vdiv.f64 1/3 rounds and raises ixc",
+        .{
+            .hw1 = 0xEE81,
+            .hw2 = 0x0B02,
+            .double = true,
+            .n = 0x3FF0_0000_0000_0000,
+            .m = 0x4008_0000_0000_0000,
+        },
+        .{ .dst = 0x3FD5_5555_5555_5555, .fpscr = raised(ixc) },
+    ),
+    vec(
+        "vfma.f64 1 + 2*3",
+        .{
+            .hw1 = 0xEEA1,
+            .hw2 = 0x0B02,
+            .double = true,
+            .d = 0x3FF0_0000_0000_0000,
+            .n = 0x4000_0000_0000_0000,
+            .m = 0x4008_0000_0000_0000,
+        },
+        .{ .dst = 0x401C_0000_0000_0000 },
+    ),
     vec("vadd.f16 1 + 2", .{ .hw1 = 0xEE30, .hw2 = 0x0981, .n = 0x3C00, .m = 0x4000 }, .{ .dst = 0x4200 }),
-    vec("vmul.f16 reads only the low halves", .{ .hw1 = 0xEE20, .hw2 = 0x0981, .n = 0xFFFF_4000, .m = 0xFFFF_4200 }, .{ .dst = 0x4600 }),
-    vec("vfma.f16 1 + 2*3", .{ .hw1 = 0xEEA0, .hw2 = 0x0981, .d = 0x3C00, .n = 0x4000, .m = 0x4200 }, .{ .dst = 0x4700 }),
+    vec(
+        "vmul.f16 reads only the low halves",
+        .{ .hw1 = 0xEE20, .hw2 = 0x0981, .n = 0xFFFF_4000, .m = 0xFFFF_4200 },
+        .{ .dst = 0x4600 },
+    ),
+    vec(
+        "vfma.f16 1 + 2*3",
+        .{ .hw1 = 0xEEA0, .hw2 = 0x0981, .d = 0x3C00, .n = 0x4000, .m = 0x4200 },
+        .{ .dst = 0x4700 },
+    ),
 };
 
 const unclaimed = [_]V{

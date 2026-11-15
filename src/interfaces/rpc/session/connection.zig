@@ -1,7 +1,7 @@
 //! Connection-owned project, build and subscription cleanup.
+const build = @import("../build.zig");
 const Context = @import("handlers.zig").Context;
 const project = @import("../project.zig");
-const build = @import("../build.zig");
 
 /// Drop every subscription, as a new connection starts with none.
 pub fn forget(context: *Context) void {

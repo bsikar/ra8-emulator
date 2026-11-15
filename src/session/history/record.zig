@@ -14,8 +14,8 @@
 //! host and the boundaries did, never with how many instructions ran.
 
 const std = @import("std");
+
 const history_position = @import("position.zig");
-const scheduler = @import("ra8_chip").core.scheduler;
 
 pub const Position = history_position.Position;
 

@@ -7,16 +7,18 @@
 //! With a board boundary both cores follow one saved round. Selection
 //! changes the view, while all-stop preserves the current round phase.
 //! A bare core without a boundary retains its standalone driver.
+const chip = @import("ra8_chip");
+
+const core_view = @import("../core_view.zig");
+const history_checkpoint = @import("../history/checkpoint.zig");
+const round = @import("round.zig");
+const scheduler = @import("ra8_chip").core.scheduler;
+const stop_machine = @import("../stop_machine.zig");
+const watch_bus = @import("../watch/bus.zig");
+const zig_boundary = @import("boundary.zig");
 const zig_core = @import("core.zig");
 const zig_cycles = @import("cycles.zig");
 const zig_drive = @import("drive.zig");
-const zig_boundary = @import("boundary.zig");
-const core_view = @import("../core_view.zig");
-const stop_machine = @import("../stop_machine.zig");
-const watch_bus = @import("../watch/bus.zig");
-const scheduler = @import("ra8_chip").core.scheduler;
-const round = @import("round.zig");
-const history_checkpoint = @import("../history/checkpoint.zig");
 
 pub const Error = error{ AlreadyRunning, CoreNotAttached, BoundaryFailed, SecondCore };
 
@@ -63,7 +65,15 @@ pub const ZigSession = struct {
     pub fn switchTo(self: *ZigSession, index: u8) Error!void {
         if (index == self.index) return;
         const parked = self.other orelse return Error.CoreNotAttached;
-        self.other = .{ .core = self.core, .machine = self.machine, .started = self.started, .watch = self.watch, .clock = self.clock, .index = self.index, .budget = self.budget };
+        self.other = .{
+            .core = self.core,
+            .machine = self.machine,
+            .started = self.started,
+            .watch = self.watch,
+            .clock = self.clock,
+            .index = self.index,
+            .budget = self.budget,
+        };
         self.core = parked.core;
         self.machine = parked.machine;
         self.started = parked.started;
@@ -100,8 +110,17 @@ pub const ZigSession = struct {
     fn launch(self: *ZigSession, stepping: bool) Error!zig_drive.Ended {
         self.started = true;
         self.ended_index = self.index;
-        const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
-        const target: ?round.Target = if (stepping) .{ .core = @intCast(self.index), .slots = self.core.cpu.slots + 1 } else null;
+        const edge = self.boundary orelse return zig_drive.runClocked(
+            self.core,
+            self.machine,
+            self.budget,
+            self.watch,
+            &self.clock,
+        );
+        const target: ?round.Target = if (stepping) .{
+            .core = @intCast(self.index),
+            .slots = self.core.cpu.slots + 1,
+        } else null;
         if (self.other) |*other| {
             if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
             other.started = true;
@@ -131,7 +150,13 @@ pub const ZigSession = struct {
     pub fn launchStepFallback(self: *ZigSession, target: round.Target) Error!zig_drive.Ended {
         self.started = true;
         self.ended_index = self.index;
-        const edge = self.boundary orelse return zig_drive.runClocked(self.core, self.machine, self.budget, self.watch, &self.clock);
+        const edge = self.boundary orelse return zig_drive.runClocked(
+            self.core,
+            self.machine,
+            self.budget,
+            self.watch,
+            &self.clock,
+        );
         if (self.other) |*other| {
             if (!other.started) other.machine.begin() else if (other.machine.mode == .halted) other.machine.proceed();
             other.started = true;
@@ -153,7 +178,7 @@ pub const ZigSession = struct {
     }
 
     /// The machine store behind this session's boundary, if any.
-    pub fn store(self: ZigSession) ?*@import("ra8_chip").core.cpu.memory.store.Store {
+    pub fn store(self: ZigSession) ?*chip.core.cpu.memory.store.Store {
         if (self.boundary) |b| return b.store;
         return null;
     }

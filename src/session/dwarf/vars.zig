@@ -1,11 +1,12 @@
 //! DWARF variable location classification, type resolution, scope lookup,
 //! and frame-base evaluation for mutating locals and typed globals.
-const std = @import("std");
-const elf = @import("ra8_board").image.elf;
 const Cursor = @import("cursor.zig").Cursor;
 const dwarf_line = @import("line/line.zig");
+const elf = @import("ra8_board").image.elf;
 const locals = @import("locals.zig");
+const std = @import("std");
 const var_loc = @import("var_loc.zig");
+
 const dwarf = std.dwarf;
 
 pub const ReadOnlyReason = var_loc.ReadOnlyReason;
@@ -124,9 +125,16 @@ fn searchUnitLocal(sections: locals.Sections, unit: UnitHeader, pc: u32, wanted:
 
         if (ab.tag == dwarf.TAG.subprogram or ab.tag == dwarf.TAG.lexical_block) {
             const in_range = rangeContains(attrs, pc);
-            const active = parent_active and (in_range orelse (ab.tag == dwarf.TAG.lexical_block and attrs.low_pc == null));
+            const active = parent_active and
+                (in_range orelse (ab.tag == dwarf.TAG.lexical_block and
+                    attrs.low_pc == null));
             if (ab.children and depth < scopes.len) {
-                const fb = if (ab.tag == dwarf.TAG.subprogram) (attrs.frame_base orelse "") else if (depth > 0) scopes[depth - 1].frame_base else "";
+                const fb = if (ab.tag == dwarf.TAG.subprogram)
+                    (attrs.frame_base orelse "")
+                else if (depth > 0)
+                    scopes[depth - 1].frame_base
+                else
+                    "";
                 scopes[depth] = .{ .is_func = ab.tag == dwarf.TAG.subprogram, .active = active, .frame_base = fb };
                 depth += 1;
             }
@@ -146,7 +154,9 @@ fn searchUnitLocal(sections: locals.Sections, unit: UnitHeader, pc: u32, wanted:
             };
         }
         if (ab.children and depth < scopes.len) {
-            const unit_root = ab.tag == dwarf.TAG.compile_unit or ab.tag == dwarf.TAG.partial_unit or ab.tag == dwarf.TAG.namespace;
+            const unit_root = ab.tag == dwarf.TAG.compile_unit or
+                ab.tag == dwarf.TAG.partial_unit or
+                ab.tag == dwarf.TAG.namespace;
             scopes[depth] = .{ .is_func = false, .active = parent_active and unit_root, .frame_base = "" };
             depth += 1;
         }
@@ -269,8 +279,16 @@ fn resolveType(sections: locals.Sections, unit: UnitHeader, sec_offset: u64, dep
             .encoding = .unsigned,
             .is_scalar = attrs.byte_size != null,
         },
-        dwarf.TAG.typedef, dwarf.TAG.const_type, dwarf.TAG.volatile_type, dwarf.TAG.restrict_type, dwarf.TAG.atomic_type => {
-            var inner = if (attrs.type_ref) |ref| try resolveType(sections, target_unit, ref, depth + 1) else TypeInfo{};
+        dwarf.TAG.typedef,
+        dwarf.TAG.const_type,
+        dwarf.TAG.volatile_type,
+        dwarf.TAG.restrict_type,
+        dwarf.TAG.atomic_type,
+        => {
+            var inner = if (attrs.type_ref) |ref|
+                try resolveType(sections, target_unit, ref, depth + 1)
+            else
+                TypeInfo{};
             if (ab.tag == dwarf.TAG.typedef and attrs.name.len > 0) inner.name = attrs.name;
             if (ab.tag == dwarf.TAG.const_type) inner.is_const = true;
             if (ab.tag == dwarf.TAG.volatile_type) inner.is_volatile = true;

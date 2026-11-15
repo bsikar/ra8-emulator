@@ -5,13 +5,14 @@
 //! The pure compositor worker operates over private immutable value copies in a background thread.
 //! The tap rate-caps in host time (60 Hz) and honours cache keyframe demands.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
+const CpuStore = @import("ra8_chip").core.cpu.memory.store.Store;
 const history = @import("ra8_host").history;
 const scheduler = @import("ra8_chip").core.scheduler;
-const CpuStore = @import("ra8_chip").core.cpu.memory.store.Store;
 
 const session = @import("ra8_session");
-const frame_types = session.history_frame_types;
+
 const frame_queue = session.history_frame_queue;
 const frame_tap = session.history_frame_tap;
 const compositor_worker = session.history_compositor_worker;

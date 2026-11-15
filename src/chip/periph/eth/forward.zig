@@ -17,8 +17,8 @@
 //! STATUS: MFWD_STS holds what was written and MFWD_ICLR clears the bits it
 //! is given, so the driver's clear sequence ends with STS 0. The model raises
 //! no forwarding events, so nothing ever sets a bit on its own. ICLR reads 0.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const base: u32 = 0x403C_0000;
 

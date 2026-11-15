@@ -8,13 +8,15 @@
 //! sign keep it; an exact zero sum is +0, or -0 under RM. Everything else is
 //! the exact sum of the addend and the full product, rounded once.
 const format = @import("../format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
 const unpack_mod = @import("../unpack.zig");
+
 const Unpacked = unpack_mod.Unpacked;
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
 pub const vectors = @import("vectors.zig");
 
 /// An exact value wide enough for a double-precision product (106 bits)

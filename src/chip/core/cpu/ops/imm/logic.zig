@@ -5,12 +5,12 @@
 //!
 //! The UNPREDICTABLE register choices and immediates are left unclaimed, so
 //! the core stops rather than guess.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
-const flags = @import("../../flags.zig");
-const thumb_imm = @import("../../thumb_imm.zig");
 const Fields = @import("fields.zig").Fields;
+const flags = @import("../../flags.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+const thumb_imm = @import("../../thumb_imm.zig");
 
 pub const opcodes = struct {
     pub const and_: u4 = 0b0000;

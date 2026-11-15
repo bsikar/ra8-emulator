@@ -47,19 +47,16 @@
 //! its run. It is not concurrency and does not pretend to be. What it buys
 //! is the only thing the firmware actually needs: neither core can spin
 //! forever without the other getting a turn, so a handshake completes.
-const std = @import("std");
+
+const cadence = @import("../cadence.zig");
 const fault = @import("../fault.zig");
+const fault_clear = @import("../../periph/fault/clear.zig");
 const loaded_image = @import("../loaded_image.zig");
 const memmap = @import("../memmap.zig");
-const cadence = @import("../cadence.zig");
-const sau = @import("../../periph/sau/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 const mpu_guard = @import("../mpu_guard.zig");
-const cpuid = @import("../../periph/cpuid.zig");
+const sau = @import("../../periph/sau/sau.zig");
 const scb = @import("../../periph/scb/scb.zig");
-const fault_clear = @import("../../periph/fault/clear.zig");
-const nvic = @import("../../periph/nvic/nvic.zig");
-const clocks = @import("../../periph/clocks.zig");
 const second_wait = @import("wait.zig");
 
 const Guest = @import("../cpu/memory/guest/guest.zig").Guest;

@@ -16,8 +16,9 @@
 //! function, and IFM2 broadcast as minmax.zig reads it. Anything
 //! else is error.OperatorNotModelled.
 const std = @import("std");
-const dma = @import("dma.zig");
+
 const addr = @import("addr.zig");
+const dma = @import("dma.zig");
 const minmax = @import("minmax.zig");
 const round = @import("round.zig");
 
@@ -47,7 +48,16 @@ fn supported(inputs: Inputs) Error!round.Rounding {
 }
 
 /// One output element from the two zero-point-adjusted operands.
-pub fn product(a: i32, b: i32, scale: u32, shift: u6, rounding: round.Rounding, ofm_zero_point: i32, low: i32, high: i32) i32 {
+pub fn product(
+    a: i32,
+    b: i32,
+    scale: u32,
+    shift: u6,
+    rounding: round.Rounding,
+    ofm_zero_point: i32,
+    low: i32,
+    high: i32,
+) i32 {
     const scaled = round.apply(@as(i64, a) * b, scale, shift, rounding) + ofm_zero_point;
     return @intCast(std.math.clamp(scaled, low, high));
 }
@@ -74,7 +84,16 @@ pub fn run(memory: anytype, regions: *const dma.Regions, inputs: Inputs) Error!u
         const o_at = addr.address(inputs.bases.ofm, maps.ofm, q.ofm_stride, f, yy, xx, cc);
         const a = try minmax.load(memory, try minmax.location(regions, maps.ifm.region, a_at, 1), f);
         const b = try minmax.second(memory, regions, inputs, f, yy, xx, cc);
-        const out = product(a - zp_a, b - zp_b, q.ofm_scale.scale, @intCast(q.ofm_scale.shift), rounding, zp_o, low, high);
+        const out = product(
+            a - zp_a,
+            b - zp_b,
+            q.ofm_scale.scale,
+            @intCast(q.ofm_scale.shift),
+            rounding,
+            zp_o,
+            low,
+            high,
+        );
         try minmax.store(memory, try minmax.location(regions, maps.ofm.region, o_at, 1), out, f);
         written += 1;
     };

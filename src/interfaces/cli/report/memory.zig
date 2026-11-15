@@ -5,6 +5,8 @@
 //! SRAMEAR. The Arm cache window rides here too: it is the other thing
 //! standing between the firmware and memory, and what it has to say is the
 //! line size the firmware read and the maintenance it asked for.
+const chip = @import("ra8_chip");
+
 const std = @import("std");
 
 const Board = @import("ra8_board").board.Board;
@@ -35,7 +37,7 @@ pub fn sections(board: *Board, out: Writer) !void {
 /// SRAMPRCR. Quiet unless a key was written or a guarded store happened,
 /// and loud when one was turned away: a configuration write that never
 /// landed is the kind of thing a driver does not notice until the bench.
-fn protection(lock: *const @import("ra8_chip").periph.sram.lock.Lock, out: Writer) !void {
+fn protection(lock: *const chip.periph.sram.lock.Lock, out: Writer) !void {
     if (lock.quiet()) return;
     try out.print(
         "SRAMPRCR: {s}, {d} key write(s), {d} guarded store(s) through\n",

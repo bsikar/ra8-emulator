@@ -63,7 +63,18 @@ pub const Out = struct {
 };
 
 pub const V = vector.Vector(In, Out);
-pub const none: Out = .{ .claimed = false, .s0 = 0, .s16 = 0, .fpscr = 0, .vpr = 0, .m0 = 0, .m16 = 0, .mfpscr = 0, .mvpr = 0, .control = 0 };
+pub const none: Out = .{
+    .claimed = false,
+    .s0 = 0,
+    .s16 = 0,
+    .fpscr = 0,
+    .vpr = 0,
+    .m0 = 0,
+    .m16 = 0,
+    .mfpscr = 0,
+    .mvpr = 0,
+    .control = 0,
+};
 
 fn vec(name: []const u8, input: In, expect: Out) V {
     return .{ .encoding = "vlldm_vlstm", .name = name, .input = input, .expect = expect };
@@ -76,8 +87,26 @@ const stored: Out = .{ .m0 = bankAt(0), .mfpscr = fpscr_in, .mvpr = vpr_in, .con
 const vlstm = [_]V{
     vec("vlstm r0 stores s0-s15, fpscr and vpr", .{ .hw1 = 0xEC20 }, stored),
     vec("vlstm r4 uses r4 as the base", .{ .hw1 = 0xEC24 }, stored),
-    vec("vlstm with ts stores s16-s31 and clears", .{ .hw1 = 0xEC20, .ts = 1 }, .{ .m0 = bankAt(0), .m16 = bankAt(16), .mfpscr = fpscr_in, .mvpr = vpr_in, .control = sfpa, .s0 = 0, .s16 = 0, .fpscr = 0, .vpr = 0 }),
-    vec("vlstm with lspen arms lazy preservation", .{ .hw1 = 0xEC20, .lspen = 1 }, .{ .control = sfpa, .lspact = 1, .fpcar = a }),
+    vec(
+        "vlstm with ts stores s16-s31 and clears",
+        .{ .hw1 = 0xEC20, .ts = 1 },
+        .{
+            .m0 = bankAt(0),
+            .m16 = bankAt(16),
+            .mfpscr = fpscr_in,
+            .mvpr = vpr_in,
+            .control = sfpa,
+            .s0 = 0,
+            .s16 = 0,
+            .fpscr = 0,
+            .vpr = 0,
+        },
+    ),
+    vec(
+        "vlstm with lspen arms lazy preservation",
+        .{ .hw1 = 0xEC20, .lspen = 1 },
+        .{ .control = sfpa, .lspact = 1, .fpcar = a },
+    ),
     vec("vlstm with sfpa clear is a nop", .{ .hw1 = 0xEC20, .control = fpca }, .{ .control = fpca }),
     vec("vlstm from non-secure is undefined", .{ .hw1 = 0xEC20, .secure = false }, .{ .fault = .undefined_instr }),
     vec("vlstm with cp10 off is nocp", .{ .hw1 = 0xEC20, .cpacr = 0 }, .{ .fault = .nocp }),
@@ -86,10 +115,22 @@ const vlstm = [_]V{
 };
 
 const vlldm = [_]V{
-    vec("vlldm r0 loads s0-s15, fpscr and vpr", .{ .hw1 = 0xEC30, .control = sfpa }, .{ .s0 = memAt(a), .fpscr = frame_fpscr, .vpr = frame_vpr }),
-    vec("vlldm with ts loads s16-s31", .{ .hw1 = 0xEC30, .control = sfpa, .ts = 1 }, .{ .s0 = memAt(a), .s16 = memAt(a + 0x48), .fpscr = frame_fpscr, .vpr = frame_vpr }),
+    vec(
+        "vlldm r0 loads s0-s15, fpscr and vpr",
+        .{ .hw1 = 0xEC30, .control = sfpa },
+        .{ .s0 = memAt(a), .fpscr = frame_fpscr, .vpr = frame_vpr },
+    ),
+    vec(
+        "vlldm with ts loads s16-s31",
+        .{ .hw1 = 0xEC30, .control = sfpa, .ts = 1 },
+        .{ .s0 = memAt(a), .s16 = memAt(a + 0x48), .fpscr = frame_fpscr, .vpr = frame_vpr },
+    ),
     vec("vlldm with lspact set only clears it", .{ .hw1 = 0xEC30, .control = sfpa, .lspact = 1, .r0 = a + 4 }, .{}),
-    vec("vlldm from a misaligned base faults", .{ .hw1 = 0xEC30, .control = sfpa, .r0 = a + 4 }, .{ .fault = .unaligned, .control = sfpa }),
+    vec(
+        "vlldm from a misaligned base faults",
+        .{ .hw1 = 0xEC30, .control = sfpa, .r0 = a + 4 },
+        .{ .fault = .unaligned, .control = sfpa },
+    ),
     vec("vlldm with sfpa clear is a nop", .{ .hw1 = 0xEC30, .control = 0 }, .{ .control = 0 }),
     vec("vlldm from non-secure is undefined", .{ .hw1 = 0xEC30, .secure = false }, .{ .fault = .undefined_instr }),
     vec("vlldm with cp10 off is nocp", .{ .hw1 = 0xEC30, .cpacr = 0 }, .{ .fault = .nocp }),

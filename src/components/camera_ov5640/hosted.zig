@@ -5,9 +5,10 @@
 //! wrote into the OV5640's FORMAT CONTROL register and scaled to the size it
 //! programmed. The camera never opens a host file or device itself.
 const std = @import("std");
-const frame_source = @import("ra8_chip").periph.frame_source;
+
 const convert = @import("pixel_convert.zig");
 const converted = @import("converted_source.zig");
+const frame_source = @import("ra8_chip").periph.frame_source;
 const gradient = @import("ra8_chip").periph.gradient_source;
 
 /// OV5640 FORMAT CONTROL (0x4300): bits 7:4 pick the output format. 0x6 is
@@ -43,7 +44,13 @@ pub fn Hosted(comptime Input: type) type {
 
         /// The source owns `input` from here on, and closing it closes the
         /// input. On an error the caller still owns `input` rationale.
-        pub fn open(allocator: std.mem.Allocator, input: *Input, format_control: *const u8, label: []const u8, detail: []const u8) !frame_source.FrameSource {
+        pub fn open(
+            allocator: std.mem.Allocator,
+            input: *Input,
+            format_control: *const u8,
+            label: []const u8,
+            detail: []const u8,
+        ) !frame_source.FrameSource {
             const self = try allocator.create(Self);
             // frame() reads the sensor register before each capture, on the
             // engine thread; opening never touches the board (RA8EMU-227).

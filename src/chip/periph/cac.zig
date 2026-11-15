@@ -40,7 +40,7 @@
 //! where a count is a fact. CACR0 and CAICR are deliberately outside the
 //! rule: CACR0 is how the measurement is stopped in the first place, and the
 //! flag-clear strobes are what the driver uses to tidy up around one.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 
 /// CAC geometry (HUM Ch 10.2). The Non-secure alias is folded onto this base by

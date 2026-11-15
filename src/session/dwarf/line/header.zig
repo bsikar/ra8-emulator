@@ -8,7 +8,7 @@
 //! Versions 2 to 4 number files from one and directories from one, with
 //! zero meaning the compilation directory. Version 5 numbers both from zero
 //! and describes each entry with a list of (content, form) pairs.
-const std = @import("std");
+
 const dwarf_cursor = @import("../cursor.zig");
 
 const Cursor = dwarf_cursor.Cursor;
@@ -145,7 +145,9 @@ fn fileV5(tables: []const u8, index: u64, strings: Strings) Error!File {
 
 fn skipEntries(cursor: *Cursor, formats: Formats, count: u64, strings: Strings) Error!void {
     var index: u64 = 0;
-    while (index < count) : (index += 1) _ = try formats.entry(cursor, strings);
+    while (index < count) : (index += 1) {
+        _ = try formats.entry(cursor, strings);
+    }
 }
 
 const content = struct {

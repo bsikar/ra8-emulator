@@ -1,16 +1,26 @@
 //! Workspace RPC contract. All paths are relative to the configured root.
+const rpc_wire = @import("ra8_rpc_wire");
+
 const host = @import("ra8_host").workspace;
+
 pub const capability: u32 = 1 << 16;
 pub const changed_topic: u16 = 0x0180;
 pub const Version = host.Version;
 pub const version_bytes = 25;
 pub fn encodeVersion(version: Version, into: []u8) ![]const u8 {
-    return @import("ra8_rpc_wire").codec.encode(Version, version, into);
+    return rpc_wire.codec.encode(Version, version, into);
 }
 pub fn decodeVersion(bytes: []const u8) !Version {
-    return @import("ra8_rpc_wire").codec.decode(Version, bytes);
+    return rpc_wire.codec.decode(Version, bytes);
 }
-pub const Method = enum(u16) { list = 0x0140, stat = 0x0141, read = 0x0142, write = 0x0143, watch = 0x0144, unwatch = 0x0145 };
+pub const Method = enum(u16) {
+    list = 0x0140,
+    stat = 0x0141,
+    read = 0x0142,
+    write = 0x0143,
+    watch = 0x0144,
+    unwatch = 0x0145,
+};
 pub const Path = struct {
     path: []const u8,
     pub const max_len = .{ .path = host.path.capacity };

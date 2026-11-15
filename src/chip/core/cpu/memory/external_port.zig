@@ -2,8 +2,8 @@
 //! The SDRAM and OSPI apertures decode here; the board supplies what sits
 //! behind them as a Port: the SDRAM backing bytes, the mapped OSPI device
 //! and a meter that charges each access to the board's timing model.
-const mapped = @import("mapped.zig");
 const Initiator = @import("initiator.zig").Initiator;
+const mapped = @import("mapped.zig");
 
 pub const Kind = enum(u1) {
     ospi,

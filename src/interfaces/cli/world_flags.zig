@@ -3,18 +3,20 @@
 //!
 //! Its own file so cli.zig keeps room for flags (RA8EMU-428). They read the
 //! same way the rest do.
+const audio_out = @import("audio_out.zig");
+
 const std = @import("std");
+
 const cli = @import("cli.zig");
-const touch_spec = @import("ra8_session").touch_spec;
-const request = @import("ra8_components").request;
-const fault_spec = @import("ra8_components").fault.spec;
-const source_spec = @import("ra8_host").camera.source_spec;
-const sci_reply = @import("ra8_chip").periph.sci.reply;
-const rtc_start = @import("ra8_session").rtc.start;
-const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
-const speed = @import("ra8_session").run.speed;
 const duration = @import("ra8_session").duration;
-const timebase = @import("ra8_chip").periph.timebase;
+const fault_spec = @import("ra8_components").fault.spec;
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
+const request = @import("ra8_components").request;
+const rtc_start = @import("ra8_session").rtc.start;
+const sci_reply = @import("ra8_chip").periph.sci.reply;
+const source_spec = @import("ra8_host").camera.source_spec;
+const speed = @import("ra8_session").run.speed;
+const touch_spec = @import("ra8_session").touch_spec;
 
 const Options = cli.Options;
 const card_setup = cli.card.setup;
@@ -42,7 +44,7 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
     if (try parseHistory(options, argv, index)) return true;
     if (try parseSplit(options, argv, index)) return true;
     if (try parseSdhi(options, argv, index)) return true;
-    if (try @import("audio_out.zig").parse(&options.audio, argv, index)) return true;
+    if (try audio_out.parse(&options.audio, argv, index)) return true;
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--console")) {
         options.console = true;
@@ -88,7 +90,13 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.rtc_start = try rtcStart(try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--panel-vsync")) {
         options.panel_vsync = try panelVsync(try next(argv, index));
-    } else if (std.mem.eql(u8, flag, "--camera-source")) {
+    } else return parseInputs(options, argv, index);
+    return true;
+}
+
+fn parseInputs(options: *Options, argv: []const []const u8, index: *usize) !bool {
+    const flag = argv[index.*];
+    if (std.mem.eql(u8, flag, "--camera-source")) {
         const allow = options.camera.allow_webcam;
         options.camera = try camera(try next(argv, index));
         options.camera.allow_webcam = allow;
@@ -104,7 +112,10 @@ pub fn parse(options: *Options, argv: []const []const u8, index: *usize) !bool {
         options.detach_c6 = true;
     } else if (std.mem.eql(u8, flag, "--net-record") or std.mem.eql(u8, flag, "--net-replay")) {
         if (options.net_tape != null) return error.NetTapeTwice;
-        options.net_tape = .{ .dir = try next(argv, index), .mode = if (std.mem.eql(u8, flag, "--net-record")) .record else .replay };
+        options.net_tape = .{
+            .dir = try next(argv, index),
+            .mode = if (std.mem.eql(u8, flag, "--net-record")) .record else .replay,
+        };
     } else if (std.mem.eql(u8, flag, "--attach")) {
         try attach(options, try next(argv, index));
     } else if (std.mem.eql(u8, flag, "--fault")) {

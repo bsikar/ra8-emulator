@@ -11,12 +11,14 @@
 //! Q8+ (D set), a register list past Q7, size 11, a pattern past the
 //! list, Rn = PC and SP with writeback stay unclaimed.
 const std = @import("std");
-const op = @import("../../op.zig");
+
+const alignment = @import("../../alignment.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-const alignment = @import("../../alignment.zig");
 const mve = @import("../../mve/all.zig");
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
+
 const interleave = mve.interleave;
 const Size = mve.qreg.Size;
 
@@ -54,7 +56,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     const size: Size = @fromBackingInt(@intCast(instr.hw2 >> 7 & 3));
     const load = instr.hw1 >> 4 & 1 == 1;
     var q: [4]u128 = undefined;
-    for (0..regs) |r| q[r] = mve.qreg.read(&cpu.fp.bank, @intCast(qd + r));
+    for (0..regs) |r| {
+        q[r] = mve.qreg.read(&cpu.fp.bank, @intCast(qd + r));
+    }
     const pending = mve_beats.pending(cpu);
     for (0..4) |b| {
         if (pending >> @intCast(b * 4) & 1 == 0) continue;
@@ -69,7 +73,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
             try cpu.bus.write(base +% off, &buf);
         }
     }
-    if (load) for (0..regs) |r| mve.qreg.write(&cpu.fp.bank, @intCast(qd + r), q[r]);
+    if (load) for (0..regs) |r| {
+        mve.qreg.write(&cpu.fp.bank, @intCast(qd + r), q[r]);
+    };
     if (instr.hw1 >> 5 & 1 == 1) cpu.regs.set(rn, base +% @as(u32, regs) * 16);
     mve_beats.finishEci(cpu);
 }

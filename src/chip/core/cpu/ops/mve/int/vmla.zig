@@ -5,12 +5,13 @@
 //! nothing. Qda is read and written. Rm of SP or PC is CONSTRAINED
 //! UNPREDICTABLE and left unclaimed. Lane semantics are in
 //! src/chip/core/cpu/mve/int/mul/mul.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const mulh = @import("mulh.zig");
 const mve = @import("../../../mve/all.zig");
 const mve_int = @import("int.zig");
-const mulh = @import("mulh.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.qreg.Size;
 const ScalarForm = mve.int.mul.ScalarForm;
 
@@ -30,7 +31,12 @@ fn decode(instr: Instr) ?op.Exec {
     const rm = instr.hw2 & 0xF;
     if (rm == 13 or rm == 15) return null;
     const tail = instr.hw2 & encodings.hw2_mask;
-    const form: ScalarForm = if (tail == encodings.vmla) .vmla else if (tail == encodings.vmlas) .vmlas else return null;
+    const form: ScalarForm = if (tail == encodings.vmla)
+        .vmla
+    else if (tail == encodings.vmlas)
+        .vmlas
+    else
+        return null;
     return switch (form) {
         inline else => |f| switch (size) {
             0 => execFor(.byte, f),

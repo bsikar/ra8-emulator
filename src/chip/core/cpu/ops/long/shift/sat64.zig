@@ -19,9 +19,9 @@
 //! Left unclaimed: RdaHi of SP, hw2 bit 15 in the immediate form, hw2 bit 6
 //! or type 01 and 11 in the register form, and Rm of SP, PC, RdaLo or
 //! RdaHi.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 const xpsr_bits = @import("../../../regs.zig").xpsr_bits;
 
 pub const Kind = enum { uqshll, urshrl, srshrl, sqshll, uqrshll, sqrshrl };

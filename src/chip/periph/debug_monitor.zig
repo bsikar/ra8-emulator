@@ -6,9 +6,9 @@
 //! exception 12 at SHPR3 PRI_12, entry clears MON_PEND, and SHCSR.MONITORACT
 //! is set while the handler runs (DDI0553 B3.6, D1.2.42).
 
-const memmap = @import("../core/memmap.zig");
-const dcb = @import("dcb.zig");
 const Candidate = @import("candidate.zig").Candidate;
+const dcb = @import("dcb.zig");
+const memmap = @import("../core/memmap.zig");
 
 /// The DebugMonitor exception number.
 pub const number: u16 = 12;

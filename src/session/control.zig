@@ -1,8 +1,12 @@
 //! Session run control and event streaming helpers (Slice 20.3).
+const display_api = @import("display.zig");
+const stream = @import("event/stream.zig");
+
 const std = @import("std");
+
 const api = @import("api.zig");
-const stop_machine = @import("stop_machine.zig");
 const itm = @import("ra8_chip").periph.itm;
+const stop_machine = @import("stop_machine.zig");
 
 pub fn rewind(session: *api.Session, core: api.Core, back: u32) anyerror!void {
     if (session.persistent_recorder) |rec| try rec.force();
@@ -60,7 +64,7 @@ pub fn unsubscribe(session: *api.Session, id: usize) void {
     session.event_stream.unsubscribe(id);
 }
 
-pub fn pollEvents(session: *api.Session, id: usize, out: []api.Event) ?@import("event/stream.zig").Read {
+pub fn pollEvents(session: *api.Session, id: usize, out: []api.Event) ?stream.Read {
     return session.event_stream.read(id, out);
 }
 
@@ -71,11 +75,11 @@ pub fn dirty(session: *api.Session) void {
 }
 
 pub fn waitSettled(session: *api.Session, timeout_ns: u64) anyerror!void {
-    const display = session.display orelse return @import("display.zig").Error.NoDisplay;
+    const display = session.display orelse return display_api.Error.NoDisplay;
     try display.waitSettled(timeout_ns);
 }
 
 pub fn frame(session: *api.Session, allocator: std.mem.Allocator) anyerror!api.Frame {
-    const display = session.display orelse return @import("display.zig").Error.NoDisplay;
+    const display = session.display orelse return display_api.Error.NoDisplay;
     return display.frame(allocator);
 }

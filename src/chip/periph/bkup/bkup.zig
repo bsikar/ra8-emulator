@@ -27,8 +27,8 @@ pub const ctrl = @import("ctrl.zig");
 
 /// VBTBPCR1, outside the window: pcr1.zig.
 pub const pcr1 = @import("pcr1.zig");
-const prcr = @import("../prcr.zig");
 const periph = @import("../registry.zig");
+const prcr = @import("../prcr.zig");
 
 /// VBATT window geometry (ra8_bkup_regs.h).
 pub const win_base: u32 = 0x4001_EC40;

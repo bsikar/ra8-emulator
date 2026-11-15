@@ -32,7 +32,6 @@
 //! second layer over the first is never in the witness at all, and a layer
 //! positioned at a corner of the panel is reported as though it covered the
 //! whole of it.
-const std = @import("std");
 
 /// AB register offsets inside one graphics layer, from the layer's base.
 pub const off = struct {
@@ -280,7 +279,9 @@ pub fn implied(width: u32, height: u32) Layer {
 /// Tell every layer where the panel's first active pixel sits, so a layer
 /// the scan does not fetch still reports its rectangle on the panel.
 pub fn placeAll(layers: []Layer, origin: Origin) void {
-    for (layers) |*layer| layer.origin = origin;
+    for (layers) |*layer| {
+        layer.origin = origin;
+    }
 }
 
 /// The same colour, fully opaque.

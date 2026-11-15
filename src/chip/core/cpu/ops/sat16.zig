@@ -5,9 +5,9 @@
 //!
 //! Left unclaimed: SP or PC in Rd or Rn (UNPREDICTABLE), and any set bit in
 //! hw2[15], imm3, imm2 or hw2[5:4].
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const xpsr_bits = @import("../regs.zig").xpsr_bits;
 
 pub const encodings = struct {

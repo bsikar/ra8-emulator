@@ -2,9 +2,9 @@
 //! debug event it raises (exception/debug_event.zig), so the PC is left on
 //! the BKPT for a debugger, or stacked as the return address for the
 //! handler.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const group: op.Group = .{ .name = "bkpt", .decode = decode, .oracle = false };
 

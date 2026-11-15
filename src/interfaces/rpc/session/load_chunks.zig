@@ -5,8 +5,9 @@
 //! payload keep the single Load wire format.
 
 const std = @import("std");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
 
 const Ack = handlers.Ack;
 const Context = handlers.Context;
@@ -84,8 +85,9 @@ pub fn loadEnd(context: *Context, args: proto.CoreOnly) Ack {
 /// client): images within one payload keep the single Load wire format;
 /// larger ones stream ordered, checksummed chunks (RA8EMU-1174).
 pub fn loadImageCall(client: anytype, core: proto.Core, image: []const u8) !proto.Ack {
-    if (image.len <= proto.max_payload)
+    if (image.len <= proto.max_payload) {
         return client.call(proto.Ack, proto.Load, .load, .{ .core = core, .image = image });
+    }
     if (image.len > max_image) return error.Oversize;
     _ = try client.call(proto.Ack, proto.LoadBegin, .load_begin, .{
         .core = core,
@@ -107,8 +109,9 @@ pub fn loadImageCall(client: anytype, core: proto.Core, image: []const u8) !prot
 /// Sends one image over `send(Args, method, args)` (the gui link), whose
 /// response comes back by pump: same formats as loadImageCall.
 pub fn loadImageSend(link: anytype, core: proto.Core, image: []const u8) !u32 {
-    if (image.len <= proto.max_payload)
+    if (image.len <= proto.max_payload) {
         return link.send(proto.Load, .load, .{ .core = core, .image = image });
+    }
     if (image.len > max_image) return error.Oversize;
     _ = try link.send(proto.LoadBegin, .load_begin, .{
         .core = core,

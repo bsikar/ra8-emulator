@@ -4,23 +4,24 @@
 //! lines are re-pended by the boundary itself (events.rependOn).
 //! A sleeping CPU0 may reach to the board's next edge (RA8EMU-767), as a
 //! plain run's idle skip does (src/interfaces/cli/zig/run.zig asleepWidth).
-const Board = @import("ra8_board").board.Board;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const Cpu = @import("ra8_chip").core.cpu.cpu.Cpu;
-const Reboot = @import("ra8_chip").core.reboot.Reboot;
-const systick_bank = @import("ra8_chip").core.systick_bank;
-const clocks = @import("ra8_chip").periph.clocks;
-const zig_boundary = @import("../zig/boundary.zig");
-const second_core = @import("ra8_chip").core.second.core;
-const chunk_clock = @import("../chunk_clock.zig");
-const registry = @import("ra8_chip").periph.registry;
-const quiet_due = @import("ra8_board").quiet_due;
-const board_edge = @import("ra8_board").boundary;
-const sleep_pace = @import("ra8_chip").core.sleep_pace;
-const scheduler = @import("ra8_chip").core.scheduler;
-const Pending = @import("ra8_chip").core.cpu.cpu.systick_cut.Pending;
-const backing = @import("ra8_board").external.backing;
+const chip = @import("ra8_chip");
+
 const std = @import("std");
+
+const backing = @import("ra8_board").external.backing;
+const Board = @import("ra8_board").board.Board;
+const board_edge = @import("ra8_board").boundary;
+const chunk_clock = @import("../chunk_clock.zig");
+const clocks = @import("ra8_chip").periph.clocks;
+const Cpu = @import("ra8_chip").core.cpu.cpu.Cpu;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const Pending = @import("ra8_chip").core.cpu.cpu.systick_cut.Pending;
+const quiet_due = @import("ra8_board").quiet_due;
+const Reboot = @import("ra8_chip").core.reboot.Reboot;
+const scheduler = @import("ra8_chip").core.scheduler;
+const second_core = @import("ra8_chip").core.second.core;
+const systick_bank = @import("ra8_chip").core.systick_bank;
+const zig_boundary = @import("../zig/boundary.zig");
 
 pub const BoardBoundary = struct {
     board: *Board,
@@ -37,12 +38,22 @@ pub const BoardBoundary = struct {
     chunk: ?*chunk_clock.ChunkClock = null,
     saved: scheduler.State = .{},
     pair: ?*second_core.zig.run.Driver = null,
-    cut: @import("ra8_chip").core.cpu.cpu.systick_cut.Cut = .{},
+    cut: chip.core.cpu.cpu.systick_cut.Cut = .{},
     idle_skip: bool = true,
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
         self.cut.clocks = .{ &self.timebase, &self.ns_timebase };
-        return .{ .context = self, .tickFn = tick, .chunk = self.timebase.per_chunk, .sleepFn = asleep, .awakeFn = awake, .saved = &self.saved, .pair = self.pair, .cut = &self.cut, .store = self.core.store };
+        return .{
+            .context = self,
+            .tickFn = tick,
+            .chunk = self.timebase.per_chunk,
+            .sleepFn = asleep,
+            .awakeFn = awake,
+            .saved = &self.saved,
+            .pair = self.pair,
+            .cut = &self.cut,
+            .store = self.core.store,
+        };
     }
 
     /// An awake CPU0's width: up to a plain run's stretch, cut to the
@@ -116,7 +127,14 @@ pub const BoardBoundary = struct {
 
 /// The cut's elapsed time belongs to the pre-instruction timers. The
 /// triggering bank reads its old control and reload; the other stays live.
-pub fn charge(timebase: *clocks.Clocks, ns_timebase: *clocks.Clocks, core: Guest, cycles: u32, cut: bool, pending: *Pending) !void {
+pub fn charge(
+    timebase: *clocks.Clocks,
+    ns_timebase: *clocks.Clocks,
+    core: Guest,
+    cycles: u32,
+    cut: bool,
+    pending: *Pending,
+) !void {
     if (!cut) {
         try timebase.advance(core, cycles);
         return ns_timebase.advanceSysTick(core, cycles);

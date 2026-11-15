@@ -63,10 +63,14 @@ pub fn single(s: Single) Plan {
 
 /// A load: `memory` holds the plan's words read from start upward.
 pub fn load(plan: Plan, bank: *Bank, memory: []const u32) void {
-    for (memory[0..plan.words], 0..) |word, k| bank.s[plan.first + k] = word;
+    for (memory[0..plan.words], 0..) |word, k| {
+        bank.s[plan.first + k] = word;
+    }
 }
 
 /// A store: fills `out` with the words to write from start upward.
 pub fn store(plan: Plan, bank: *const Bank, out: []u32) void {
-    for (out[0..plan.words], 0..) |*word, k| word.* = bank.s[plan.first + k];
+    for (out[0..plan.words], 0..) |*word, k| {
+        word.* = bank.s[plan.first + k];
+    }
 }

@@ -8,11 +8,12 @@
 //! The run owns the tracer state (`Tracers`): a run has at most one CPU1
 //! and so at most one of these, and it lives as long as the run's CPU1.
 const std = @import("std");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+
 const elf = @import("ra8_board").image.elf;
-const second_core = @import("ra8_chip").core.second.core;
 const file_ops = @import("../file_ops.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const rtos_hook = @import("hook.zig");
+const second_core = @import("ra8_chip").core.second.core;
 
 /// CPU1's tracer state, owned by the run that armed it: a run has at most
 /// one CPU1, so its tracer and listener live inside the run instead of
@@ -26,12 +27,26 @@ pub const Tracers = struct {
 
 /// CPU1's trace and load, names read through CPU1's memory. Nothing when
 /// there is no CPU1 or it was not traced.
-pub fn print(out: anytype, io: std.Io, writer: ?file_ops.Writer, options: anytype, tracers: *const Tracers, second: ?Guest) !void {
+pub fn print(
+    out: anytype,
+    io: std.Io,
+    writer: ?file_ops.Writer,
+    options: anytype,
+    tracers: *const Tracers,
+    second: ?Guest,
+) !void {
     try printOn(out, io, writer, options, tracers, second orelse return);
 }
 
 /// `print` for a CPU1 whose memory is `memory`, engine or store (RA8EMU-588).
-pub fn printOn(out: anytype, io: std.Io, writer: ?file_ops.Writer, options: anytype, tracers: *const Tracers, memory: Guest) !void {
+pub fn printOn(
+    out: anytype,
+    io: std.Io,
+    writer: ?file_ops.Writer,
+    options: anytype,
+    tracers: *const Tracers,
+    memory: Guest,
+) !void {
     const tracer = tracers.tracer orelse return;
     try rtos_hook.report.all(out, io, writer, options, tracer, rtos_hook.Memory{ .guest = memory });
 }
@@ -47,7 +62,14 @@ pub fn sideOn(tracers: *const Tracers, memory: Guest) ?rtos_hook.report.Side {
 /// The listener sits in front of CPU1's bus and exception source, as
 /// rtos_zig.zig does for CPU0; stamps come from CPU1's own SysTick count
 /// and load from its retired count. `print` then reports it as cpu1.
-pub fn armZig(pair: *second_core.zig.run.Driver, io: std.Io, reader: file_ops.Reader, wanted: ?rtos_hook.load.Window, path: ?[]const u8, tracers: *Tracers) void {
+pub fn armZig(
+    pair: *second_core.zig.run.Driver,
+    io: std.Io,
+    reader: file_ops.Reader,
+    wanted: ?rtos_hook.load.Window,
+    path: ?[]const u8,
+    tracers: *Tracers,
+) void {
     const named = path orelse return;
     if (wanted == null) return;
     const bytes = reader.readAlloc(io, named, std.heap.page_allocator, second_core.limits.image_bytes) catch return;

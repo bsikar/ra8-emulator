@@ -11,12 +11,13 @@
 //! Layout: a region count, then per region its base, length, how many pages
 //! follow, and each page as its offset and bytes.
 const std = @import("std");
-const memmap = @import("ra8_chip").core.memmap;
-const store_mod = @import("ra8_chip").core.cpu.memory.store;
+
 const external = @import("../external/memory.zig");
 const external_backing = @import("../external/backing.zig");
-const file = @import("ra8_snapshot").file;
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
+const memmap = @import("ra8_chip").core.memmap;
+const store_mod = @import("ra8_chip").core.cpu.memory.store;
 
 pub const Store = store_mod.Store;
 pub const page: u32 = 0x1000;
@@ -182,7 +183,8 @@ pub fn validate(store: *const Store, payload: []const u8) Error!void {
             };
             if (base == memmap.sdram_base) sdram_seen = true;
         } else {
-            for (memmap.ram) |entry| if (base < entry.end() and entry.base < @as(u64, base) + len) return Error.Unbacked;
+            for (memmap.ram) |entry| if (base < entry.end() and
+                entry.base < @as(u64, base) + len) return Error.Unbacked;
         }
         const pages = try int(payload, &at);
         var previous: ?u32 = null;
@@ -334,9 +336,13 @@ fn regionLen(bytes: []const u8, live: *u32) u64 {
 
 fn regionCount(store: *const Store) u32 {
     var count: u32 = 0;
-    for (store.owned) |mine| count += @intFromBool(mine);
+    for (store.owned) |mine| {
+        count += @intFromBool(mine);
+    }
     count += @intFromBool(store.owns_port);
-    for (store.extra.windows) |held| count += @intFromBool(held != null);
+    for (store.extra.windows) |held| {
+        count += @intFromBool(held != null);
+    }
     return count;
 }
 

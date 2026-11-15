@@ -4,18 +4,19 @@
 //! transcript on either CPU. `core 0|1` hands the session to the other
 //! core (RA8EMU-337), its image and temporary breaks with it.
 const std = @import("std");
+
 const Bounded = @import("ra8_chip").core.bounded.Bounded;
 const break_table = @import("../breaks/table.zig");
 const commands = @import("../commands.zig");
 const elf = @import("ra8_board").image.elf;
+const endpoint = @import("ra8_components").endpoint;
 const session = @import("../session.zig");
+const session_api = @import("../api.zig");
 const session_place = @import("../place/address.zig");
 const session_report = @import("../report.zig");
 const session_view = @import("../view.zig");
-const watch_table = @import("../watch/table.zig");
-const session_api = @import("../api.zig");
 const var_write = @import("../var_write.zig");
-const endpoint = @import("ra8_components").endpoint;
+const watch_table = @import("../watch/table.zig");
 
 pub const Error = error{ Unsupported, MissingPart };
 
@@ -171,7 +172,11 @@ pub const ZigScript = struct {
             const frame = try history.frame(@intCast(back));
             const kind: []const u8 = if (frame.tag == 1) "stop" else "count";
             try out.print("#{d} 0x{x:0>8} {s} {d}.{d:0>3} ms\n", .{
-                back,                                                    frame.pc, kind, frame.at_ns / std.time.ns_per_ms,
+                back,
+                frame.pc,
+                kind,
+                frame.at_ns / std.time.ns_per_ms,
+
                 (frame.at_ns % std.time.ns_per_ms) / std.time.ns_per_us,
             });
         }
@@ -183,7 +188,10 @@ pub const ZigScript = struct {
 
     fn setBreak(self: *ZigScript, at: commands.At, temporary: bool, out: anytype) !void {
         const address = try self.resolve(at.place) & ~@as(u32, 1);
-        const id = try self.session.setBreakpoint(self.session.currentCore(), .{ .address = address, .arrival = at.arrival });
+        const id = try self.session.setBreakpoint(
+            self.session.currentCore(),
+            .{ .address = address, .arrival = at.arrival },
+        );
         if (temporary) try self.temporary.append(id);
         try out.print("{s} {d} at ", .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id });
         try session_report.where(self.image, address, out);
@@ -233,7 +241,8 @@ pub const ZigScript = struct {
                 return out.print("\n", .{});
             },
         };
-        const temporary = stop == .breakpoint and std.mem.indexOfScalar(break_table.Id, self.temporary.constSlice(), stop.breakpoint) != null;
+        const temporary = stop == .breakpoint and
+            std.mem.indexOfScalar(break_table.Id, self.temporary.constSlice(), stop.breakpoint) != null;
         if (temporary) {
             try self.session.clearBreakpoint(core, stop.breakpoint);
             self.forget(stop.breakpoint);

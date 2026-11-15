@@ -10,10 +10,11 @@
 //! counter that made it. The recording knows nothing about the engine
 //! that runs the code, so it can be tested without one.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const place = @import("place/place.zig");
-const symbols = @import("symbols.zig");
 const spacing_mod = @import("spacing.zig");
+const symbols = @import("symbols.zig");
 const tally_mod = @import("tally.zig");
 
 pub const limits = struct {
@@ -175,13 +176,17 @@ pub fn print(out: anytype, image: elf.Image, spec: ?[]const u8, watched: ?Watche
         "  watch         : {s} @0x{X:0>8}, {d} store(s)\n",
         .{ spec orelse "", one.address, one.seen },
     );
-    for (one.opening()) |store| try line(out, image, store);
+    for (one.opening()) |store| {
+        try line(out, image, store);
+    }
     const skipped = one.dropped();
     if (skipped > 0) {
         try out.print("                  and {d} more, ending with\n", .{skipped});
     }
     var room: [limits.tail]Store = undefined;
-    for (one.closing(&room)) |store| try line(out, image, store);
+    for (one.closing(&room)) |store| {
+        try line(out, image, store);
+    }
     try spaced(out, one.spacing);
     try tallied(out, image, one.tally);
 }

@@ -2,6 +2,7 @@
 //! (boot.zig): a block cache joined to the machine's fanout, so a write
 //! over code drops its blocks (code_lines.zig).
 const std = @import("std");
+
 const decode = @import("ra8_chip").core.cpu.decode;
 
 pub fn form(fan: *decode.code_lines.Fanout) !*decode.block_cache.BlockCache {

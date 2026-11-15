@@ -4,6 +4,7 @@
 //! ignored fourth byte at 32 bits. Paletted and compressed files are
 //! refused as unsupported rather than guessed at.
 const std = @import("std");
+
 const decoded = @import("decoded_image.zig");
 
 const Image = decoded.Image;

@@ -28,7 +28,6 @@
 //! prices that fixed instruction cadence in cycles at the image's running
 //! core clock, so its elapsed-cycle report follows the image without changing
 //! the instruction safety ceiling.
-const std = @import("std");
 
 /// Instructions between two boundaries.
 pub const instructions: u32 = 50_000;

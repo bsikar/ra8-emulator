@@ -15,6 +15,7 @@
 //! CPU0's tracer writes PATH and CPU1's writes PATH.cpu1, so the two cores
 //! never race on one file.
 const std = @import("std");
+
 const file_ops = @import("../file_ops.zig");
 const rtos_trace = @import("trace.zig");
 
@@ -36,7 +37,9 @@ pub const Loaded = struct {
 /// The whole trace, header to trailer.
 pub fn write(out: anytype, trace: *const rtos_trace.Trace) !void {
     try out.print("{s}\n", .{header});
-    for (trace.list()) |one| try line(out, one);
+    for (trace.list()) |one| {
+        try line(out, one);
+    }
     try out.print("{s}{d}\n", .{ trailer, trace.dropped });
 }
 

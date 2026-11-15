@@ -4,8 +4,8 @@
 //! always hex, zero included (`#-0x0`); an added one follows the usual
 //! decimal-below-ten rule.
 const Instr = @import("../../../instr.zig").Instr;
-const text = @import("../../text.zig");
 const ldr_literal_wide = @import("../../../ops/ldr/literal/wide.zig");
+const text = @import("../../text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = ldr_literal_wide.form(instr) orelse return;

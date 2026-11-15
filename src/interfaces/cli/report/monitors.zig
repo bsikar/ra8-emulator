@@ -37,7 +37,8 @@ pub fn sections(board: *Board, out: Writer) !void {
     }
     if (board.monitors.bands.bands != 0) {
         try out.print(
-            "SYSC-PVD: REFUSED {d} RHSEL=1 store(s) made with PVDmCR0.RI clear, arm the reset path before selecting the rise-detect band\n",
+            "SYSC-PVD: REFUSED {d} RHSEL=1 store(s) made with PVDmCR0.RI clear, arm the " ++
+                "reset path before selecting the rise-detect band\n",
             .{board.monitors.bands.bands},
         );
     }

@@ -6,7 +6,6 @@
 //! OPERATION also steps straight back to CONFIG: ra8_eth_gwca_default_open
 //! brings GWCA up to OPERATION and then asks for CONFIG without passing
 //! DISABLE, and eth_open_probe passes that path on the EK-RA8D2 bench.
-const std = @import("std");
 
 pub const Mode = enum(u2) {
     reset = 0,

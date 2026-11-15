@@ -1,6 +1,6 @@
 //! Normalize Unix socket names before std.Io.net opens native Windows AFD.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 /// Resolve the existing parent, leaving the not-yet-created socket alone.
 /// POSIX retains its relative and abstract address semantics.

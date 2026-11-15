@@ -1,12 +1,16 @@
 //! Read-only root listing and byte accounting. Host and lock state are
 //! reported separately: a remote lock never authorizes local cleanup.
+const intent = @import("move/intent.zig");
+const move = @import("move/root.zig");
+
 const std = @import("std");
+
 const Base = @import("base.zig").Base;
-const name = @import("name.zig");
 const layout = @import("layout.zig");
-const owner = @import("owner.zig");
 const lock = @import("lock.zig");
 const machine = @import("machine.zig");
+const name = @import("name.zig");
+const owner = @import("owner.zig");
 
 pub const Status = enum { live, stale, kept, other_host, unmarked, creating, pointer, foreign };
 pub const Entry = struct {
@@ -52,7 +56,9 @@ pub const Iterator = struct {
             var dir = try self.base.dir.openDir(self.base.io, entry.name, .{ .follow_symlinks = false });
             defer dir.close(self.base.io);
             // One end of a move that has not ended is not a session yet.
-            if (@import("move/intent.zig").pending(self.base.io, self.base.dir, found.id) or (@import("move/root.zig").tree.moving(self.base.io, self.base.dir, entry.name) catch true)) {
+            if (intent.pending(self.base.io, self.base.dir, found.id) or
+                (move.tree.moving(self.base.io, self.base.dir, entry.name) catch true))
+            {
                 result.status = .unmarked;
                 return result;
             }
@@ -65,7 +71,17 @@ pub const Iterator = struct {
             result.kept = exists(self.base.io, dir, layout.files.kept) or self.base.role == .kept;
             var buffer: [machine.limits.host]u8 = undefined;
             const local = machine.hostName(&buffer);
-            result.status = if (!std.mem.eql(u8, record.host, local) or std.mem.eql(u8, local, machine.unknown)) .other_host else if (result.lock == .held) .live else if (result.kept) .kept else if (result.lock == .missing) .unmarked else if (found.kind == .creating) .creating else .stale;
+            result.status = if (!std.mem.eql(u8, record.host, local) or
+                std.mem.eql(u8, local, machine.unknown)) .other_host else if (result.lock == .held)
+                .live
+            else if (result.kept)
+                .kept
+            else if (result.lock == .missing)
+                .unmarked
+            else if (found.kind == .creating)
+                .creating
+            else
+                .stale;
             return result;
         }
         return null;

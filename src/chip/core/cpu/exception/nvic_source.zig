@@ -12,15 +12,17 @@
 //! source reads all of it as Secure: the normal window is then the Secure
 //! copy, not whichever copy the running state's own view would land on
 //! (RA8EMU-465).
-const bus = @import("../bus.zig");
+const std = @import("std");
+
 const banked_mod = @import("../../banked.zig");
-const nvic_banked = @import("../../../periph/nvic/banked.zig");
-const scs_alias = @import("../../../periph/scs_alias.zig");
-const nvic = @import("../../../periph/nvic/nvic.zig");
-const nvic_registers = @import("../nvic_registers.zig");
-const nvic_clear = @import("../../../periph/nvic/clear.zig");
-const memmap = @import("../../memmap.zig");
+const bus = @import("../bus.zig");
 const Entry = @import("active.zig").Entry;
+const memmap = @import("../../memmap.zig");
+const nvic = @import("../../../periph/nvic/nvic.zig");
+const nvic_banked = @import("../../../periph/nvic/banked.zig");
+const nvic_clear = @import("../../../periph/nvic/clear.zig");
+const nvic_registers = @import("../nvic_registers.zig");
+const scs_alias = @import("../../../periph/scs_alias.zig");
 const Source = @import("source.zig").Source;
 
 /// The bus in the shape the NVIC model's `core` parameter reads.
@@ -45,7 +47,7 @@ const Port = struct {
     pub fn writeWord(self: *Port, address: u32, value: u32) bus.Error!void {
         if (Memo.slotOf(address)) |slot| self.memo.forget(slot);
         var bytes: [4]u8 = undefined;
-        @import("std").mem.writeInt(u32, &bytes, value, .little);
+        std.mem.writeInt(u32, &bytes, value, .little);
         const memory = if (nvic_registers.covers(address)) self.through.registers() else self.through;
         return memory.write(address, &bytes);
     }

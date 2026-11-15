@@ -76,11 +76,11 @@
 //! mode-fault, overrun and parity errors.
 //! The rest of the window is shadowed so a read-modify-write survives, and
 //! never read.
-const std = @import("std");
-const periph = @import("../registry.zig");
+
+pub const enable_lock = @import("enable_lock.zig");
 const frames = @import("frame.zig");
 const lanes = @import("../lanes.zig");
-pub const enable_lock = @import("enable_lock.zig");
+const periph = @import("../registry.zig");
 
 /// The byte-lane arithmetic every register window here shares.
 const part = lanes.part;

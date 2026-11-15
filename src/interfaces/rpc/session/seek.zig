@@ -11,9 +11,9 @@
 //! waits on an index still to land plans pending, a host without a bridge
 //! or a plane stays refused, and a history read failure answers the
 //! app's history code (RA8EMU-1196).
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const Outcome = rpc.Outcome(proto.Ack);
 

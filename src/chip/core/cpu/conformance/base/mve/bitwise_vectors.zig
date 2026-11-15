@@ -4,8 +4,8 @@
 //! bitwise op of Qn and Qm over all 128 bits. Results merge byte by byte
 //! under the VPT mask, the loop tail and the beats EPSR.ECI marks done.
 //! U with sz != 0, D/N/M set and fixed bits flipped are left unclaimed.
-const vector = @import("../../vector.zig");
 const mve_int = @import("int/vectors.zig");
+const vector = @import("../../vector.zig");
 
 pub const In = mve_int.In;
 pub const Out = mve_int.Out;
@@ -39,9 +39,21 @@ const ops = [_]V{
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0xff00 writes the high half and ends the block", .{ .hw1 = 0xFF02, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .vpr = 0x0088FF00 }, .{ .qd = 0x95511559_FFFFFFFD_01234567_89ABCDEF, .vpr = 0x0000FF00 }),
-    vec("the loop tail writes the first bytes", .{ .hw1 = 0xEF22, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .ltpsize = 0, .lr = 5 }, .{ .qd = 0xDEADBEEF_CAFEF00D_01234500_7FFFFFFF }),
-    vec("eci a0a1a2b0 hands beat 0 of the next instruction on", .{ .hw1 = 0xEF02, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .it = 0x50 }, .{ .qd = 0x02244220_CAFEF00D_01234567_89ABCDEF, .it = 0x10 }),
+    vec(
+        "vpt p0 0xff00 writes the high half and ends the block",
+        .{ .hw1 = 0xFF02, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .vpr = 0x0088FF00 },
+        .{ .qd = 0x95511559_FFFFFFFD_01234567_89ABCDEF, .vpr = 0x0000FF00 },
+    ),
+    vec(
+        "the loop tail writes the first bytes",
+        .{ .hw1 = 0xEF22, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .ltpsize = 0, .lr = 5 },
+        .{ .qd = 0xDEADBEEF_CAFEF00D_01234500_7FFFFFFF },
+    ),
+    vec(
+        "eci a0a1a2b0 hands beat 0 of the next instruction on",
+        .{ .hw1 = 0xEF02, .hw2 = 0x0154, .qd = qd, .qn = qn, .qm = qm, .it = 0x50 },
+        .{ .qd = 0x02244220_CAFEF00D_01234567_89ABCDEF, .it = 0x10 },
+    ),
 };
 
 const unclaimed = [_]V{

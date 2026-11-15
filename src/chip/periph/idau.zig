@@ -25,9 +25,9 @@
 //! external RAM and device space to 0xDFFF_FFFF; the exempt space from
 //! 0xE000_0000 is region 0.
 
+const cpscu_sram = @import("cpscu/sram.zig");
 const sau = @import("sau/sau.zig");
 const sau_attr = @import("sau/attribution.zig");
-const cpscu_sram = @import("cpscu/sram.zig");
 
 pub const alias_bit: u32 = 1 << 28;
 pub const sram_ns_base: u32 = 0x3200_0000;

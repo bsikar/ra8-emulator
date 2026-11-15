@@ -16,6 +16,7 @@
 //! the driver's own bring-up. A stage programmed and never latched still
 //! shows the old picture, and that is counted here rather than smoothed over.
 const gam = @import("gamma.zig");
+
 /// The frame boundary a viewer installs on the stage (RA8EMU-573).
 pub const vsync = @import("vsync.zig");
 

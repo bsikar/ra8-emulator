@@ -5,6 +5,7 @@
 //! goes as a count and then each block number with its 512 bytes, numbers
 //! ascending so the same card always writes the same bytes.
 const std = @import("std");
+
 const fields = @import("fields.zig");
 
 pub const block_bytes = 512;
@@ -17,7 +18,9 @@ pub fn write(writer: anytype, map: *const Map) !void {
     const keys = try map.allocator.alloc(u32, map.count());
     defer map.allocator.free(keys);
     var it = map.keyIterator();
-    for (keys) |*key| key.* = it.next().?.*;
+    for (keys) |*key| {
+        key.* = it.next().?.*;
+    }
     std.mem.sort(u32, keys, {}, std.sort.asc(u32));
     try fields.write(writer, @as(u32, @intCast(keys.len)));
     for (keys) |key| {
@@ -67,6 +70,8 @@ pub const List = struct {
 
 pub fn free(map: *Map) void {
     var it = map.valueIterator();
-    while (it.next()) |block| map.allocator.destroy(block.*);
+    while (it.next()) |block| {
+        map.allocator.destroy(block.*);
+    }
     map.deinit();
 }

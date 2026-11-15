@@ -37,12 +37,11 @@
 //! everything, so the descriptor comes back FEMPTY whatever happened. Here a
 //! far end with no room leaves the descriptor owned by the gateway, and the
 //! driver's own retry sees it.
-const std = @import("std");
 
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
-const memmap = @import("../../core/memmap.zig");
 const desc = @import("desc.zig");
 const eth_line = @import("line.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
+const memmap = @import("../../core/memmap.zig");
 
 /// What the engine would not do, and why. Every one of these is a case dev
 /// carries out silently or not at all.

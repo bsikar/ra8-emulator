@@ -2,6 +2,7 @@
 //! The board side of the chip's external port (RA8EMU-1041): the chip decodes
 //! the apertures, and this fabric meters every access behind them.
 const std = @import("std");
+
 const initiator_mod = @import("ra8_chip").core.cpu.memory.initiator;
 const port = @import("ra8_chip").core.cpu.memory.external_port;
 
@@ -80,7 +81,10 @@ fn validateRegion(kind: Kind, one: RegionConfig) Error!void {
         .ospi => 256 * mib,
         .sdram => 128 * mib,
     };
-    if (one.size < mib or one.size > max_size or one.size % mib != 0 or !std.math.isPowerOfTwo(one.size / mib)) return Error.BadSize;
+    if (one.size < mib or
+        one.size > max_size or
+        one.size % mib != 0 or
+        !std.math.isPowerOfTwo(one.size / mib)) return Error.BadSize;
     const width_ok = switch (kind) {
         .ospi => one.width == 1 or one.width == 2 or one.width == 4 or one.width == 8,
         .sdram => one.width == 8 or one.width == 16 or one.width == 32,
@@ -206,7 +210,9 @@ pub const Fabric = struct {
     pub fn setWall(self: *Fabric, wall: u64) void {
         self.wall = wall;
         for (&self.regions) |*region| {
-            for (&region.ready) |*ready| ready.* = @max(ready.*, wall);
+            for (&region.ready) |*ready| {
+                ready.* = @max(ready.*, wall);
+            }
         }
     }
 

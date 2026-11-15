@@ -5,11 +5,13 @@
 //! operand's sign. Only VRINTX (`exact`) raises IXC when that rounding
 //! changed the value.
 const format = @import("../format.zig");
+
 const Format = format.Format;
-const unpack_mod = @import("../unpack.zig");
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
 const rounding_mod = @import("../rounding.zig");
+const unpack_mod = @import("../unpack.zig");
+
 const Rounding = rounding_mod.Rounding;
 const Fpscr = @import("../fpscr.zig").Fpscr;
 pub const vectors = @import("vectors.zig");

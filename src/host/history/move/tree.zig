@@ -1,24 +1,56 @@
 //! Native no-replacing movement first, or an owned link/mkdir transaction.
 //! Destination origin receipts persist after completion. An unmarked empty
 //! directory is ambiguous, never evidence of our interrupted mkdir.
-const std = @import("std");
+const intent = @import("intent.zig");
+const preflight_mod = @import("preflight.zig");
+const reservation_mod = @import("reservation.zig");
+
 const builtin = @import("builtin");
-const h = @import("../root.zig");
+const std = @import("std");
+
 const file = @import("file.zig");
-const proof = @import("receipt.zig");
+const h = @import("../root.zig");
 const hooks = @import("probe.zig");
 const preserve = @import("move.zig").preserve;
+const proof = @import("receipt.zig");
+
 pub const limits = struct {
     pub const depth = 8;
     pub const receipt = 512;
 };
 pub const Probe = hooks.Probe;
 
-pub fn directory(allocator: std.mem.Allocator, io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.Io.Dir, to: []const u8, receipt: []const u8) !void {
+pub fn directory(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_dir: std.Io.Dir,
+    from: []const u8,
+    to_dir: std.Io.Dir,
+    to: []const u8,
+    receipt: []const u8,
+) !void {
     return directoryProbed(allocator, io, from_dir, from, to_dir, to, receipt, null);
 }
-pub fn directoryProbed(allocator: std.mem.Allocator, io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.Io.Dir, to: []const u8, receipt: []const u8, probe: ?Probe) !void {
-    if (builtin.os.tag == .linux) if (probe) |hook| if (hook.force_fallback) return moveProbed(allocator, io, from_dir, from, to_dir, to, receipt, probe);
+pub fn directoryProbed(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_dir: std.Io.Dir,
+    from: []const u8,
+    to_dir: std.Io.Dir,
+    to: []const u8,
+    receipt: []const u8,
+    probe: ?Probe,
+) !void {
+    if (builtin.os.tag == .linux) if (probe) |hook| if (hook.force_fallback) return moveProbed(
+        allocator,
+        io,
+        from_dir,
+        from,
+        to_dir,
+        to,
+        receipt,
+        probe,
+    );
     if (try moving(io, from_dir, from)) return moveProbed(allocator, io, from_dir, from, to_dir, to, receipt, probe);
     {
         var source = try from_dir.openDir(io, from, .{ .iterate = true, .follow_symlinks = false });
@@ -36,7 +68,7 @@ pub fn directoryProbed(allocator: std.mem.Allocator, io: std.Io, from_dir: std.I
 pub fn moving(io: std.Io, dir: std.Io.Dir, entry: []const u8) !bool {
     var found = try dir.openDir(io, entry, .{ .follow_symlinks = false });
     defer found.close(io);
-    if (present(io, found, @import("intent.zig").note)) return true;
+    if (present(io, found, intent.note)) return true;
     if (present(io, found, h.layout.files.moving)) return true;
     return present(io, found, proof.origin) and !present(io, found, proof.ready);
 }
@@ -50,20 +82,49 @@ pub fn receiptOf(io: std.Io, dir: std.Io.Dir, entry: []const u8, buffer: *[limit
     return buffer[0..parsed.value.purpose.len];
 }
 
-pub fn move(allocator: std.mem.Allocator, io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.Io.Dir, to: []const u8, receipt: []const u8) !void {
+pub fn move(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_dir: std.Io.Dir,
+    from: []const u8,
+    to_dir: std.Io.Dir,
+    to: []const u8,
+    receipt: []const u8,
+) !void {
     return moveProbed(allocator, io, from_dir, from, to_dir, to, receipt, null);
 }
-pub fn moveProbed(allocator: std.mem.Allocator, io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.Io.Dir, to: []const u8, receipt: []const u8, probe: ?Probe) !void {
+pub fn moveProbed(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_dir: std.Io.Dir,
+    from: []const u8,
+    to_dir: std.Io.Dir,
+    to: []const u8,
+    receipt: []const u8,
+    probe: ?Probe,
+) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
     try level(allocator, io, from_dir, from, to_dir, to, receipt, null, probe, 0);
 }
 
-fn level(allocator: std.mem.Allocator, io: std.Io, from_parent: std.Io.Dir, from: []const u8, to_parent: std.Io.Dir, to: []const u8, purpose: []const u8, nonce: ?h.name.Id, probe: ?Probe, depth: usize) anyerror!void {
+fn level(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_parent: std.Io.Dir,
+    from: []const u8,
+    to_parent: std.Io.Dir,
+    to: []const u8,
+    purpose: []const u8,
+    nonce: ?h.name.Id,
+    probe: ?Probe,
+    depth: usize,
+) anyerror!void {
     if (depth >= limits.depth) return error.TooDeep;
     const leaving = try file.state(from_parent, from);
     const arriving = try file.here(to_parent);
     if (leaving.kind != .directory) return error.NotDir;
-    if (leaving.device_major != arriving.device_major or leaving.device_minor != arriving.device_minor) return error.CrossDevice;
+    if (leaving.device_major != arriving.device_major or
+        leaving.device_minor != arriving.device_minor) return error.CrossDevice;
     var source = try from_parent.openDir(io, from, .{ .iterate = true, .follow_symlinks = false });
     defer source.close(io);
     const resumed = present(io, source, h.layout.files.moving);
@@ -76,10 +137,7 @@ fn level(allocator: std.mem.Allocator, io: std.Io, from_parent: std.Io.Dir, from
     const record = parsed.value;
     try proof.scope(record, from_parent, from, to_parent, to);
     if (nonce) |expected| if (!std.mem.eql(u8, &expected, &record.nonce)) return error.IdentityConflict;
-    const made = if (to_parent.createDir(io, to, h.layout.directory_permissions)) |_| true else |err| switch (err) {
-        error.PathAlreadyExists => false,
-        else => return err,
-    };
+    const made = try reservation_mod.reserve(io, to_parent, to);
     if (!made and !resumed) {
         try removeMarker(io, source, h.layout.files.moving, record.marker);
         return error.PathAlreadyExists;
@@ -99,7 +157,7 @@ fn level(allocator: std.mem.Allocator, io: std.Io, from_parent: std.Io.Dir, from
         try proof.write(allocator, io, target, proof.origin, bound);
         try hooks.reach(probe, .target_owned, from_parent, from, to_parent, to);
     }
-    const arrived = proof.read(allocator, io, target, proof.origin) catch |err| return if (err == error.FileNotFound) error.UnknownReservation else err;
+    const arrived = try reservation_mod.reservation(allocator, io, target);
     defer arrived.deinit();
     try proof.pair(record, arrived.value, try file.here(target));
     try h.metadata.ensure(io, target, h.layout.files.moving, "");
@@ -129,14 +187,30 @@ fn level(allocator: std.mem.Allocator, io: std.Io, from_parent: std.Io.Dir, from
     }
 }
 
-fn anchorFor(allocator: std.mem.Allocator, io: std.Io, parent: std.Io.Dir, leaf: []const u8, source: proof.Record, target: proof.Record, dir: std.Io.Dir) !void {
+fn anchorFor(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    parent: std.Io.Dir,
+    leaf: []const u8,
+    source: proof.Record,
+    target: proof.Record,
+    dir: std.Io.Dir,
+) !void {
     if (!present(io, parent, leaf)) try proof.write(allocator, io, parent, leaf, target);
     const saved = try proof.read(allocator, io, parent, leaf);
     defer saved.deinit();
     try proof.pair(source, saved.value, try file.here(dir));
 }
 
-fn carry(allocator: std.mem.Allocator, io: std.Io, source: std.Io.Dir, target: std.Io.Dir, record: proof.Record, probe: ?Probe, depth: usize) anyerror!void {
+fn carry(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    source: std.Io.Dir,
+    target: std.Io.Dir,
+    record: proof.Record,
+    probe: ?Probe,
+    depth: usize,
+) anyerror!void {
     for (record.entries) |entry| {
         const current = file.state(source, entry.name) catch |err| switch (err) {
             error.FileNotFound => null,
@@ -147,8 +221,20 @@ fn carry(allocator: std.mem.Allocator, io: std.Io, source: std.Io.Dir, target: s
             if (id.kind == .file) {
                 try file.settleProbed(source, entry.name, target, entry.name, probe);
             } else {
-                if (!try moving(io, source, entry.name) and try endedChild(allocator, io, source, target, entry, record.nonce, depth + 1)) continue;
-                try level(allocator, io, source, entry.name, target, entry.name, "child", record.nonce, probe, depth + 1);
+                if (!try moving(io, source, entry.name) and
+                    try endedChild(allocator, io, source, target, entry, record.nonce, depth + 1)) continue;
+                try level(
+                    allocator,
+                    io,
+                    source,
+                    entry.name,
+                    target,
+                    entry.name,
+                    "child",
+                    record.nonce,
+                    probe,
+                    depth + 1,
+                );
             }
         } else if (entry.id.kind == .file) {
             const id = try file.state(target, entry.name);
@@ -158,19 +244,42 @@ fn carry(allocator: std.mem.Allocator, io: std.Io, source: std.Io.Dir, target: s
             defer child.close(io);
             const bound = try proof.read(allocator, io, child, proof.origin);
             defer bound.deinit();
-            if (!bound.value.source.same(entry.id) or !std.mem.eql(u8, &bound.value.nonce, &record.nonce)) return error.IdentityConflict;
+            if (!bound.value.source.same(entry.id) or
+                !std.mem.eql(u8, &bound.value.nonce, &record.nonce)) return error.IdentityConflict;
             try complete(allocator, io, child, bound.value, depth + 1);
             try h.metadata.expect(io, child, proof.ready, "");
         }
     }
 }
 
-fn endedChild(allocator: std.mem.Allocator, io: std.Io, source: std.Io.Dir, target: std.Io.Dir, entry: proof.Entry, nonce: h.name.Id, depth: usize) !bool {
-    var child = target.openDir(io, entry.name, .{ .iterate = true, .follow_symlinks = false }) catch |err| return if (err == error.FileNotFound) false else err;
+fn endedChild(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    source: std.Io.Dir,
+    target: std.Io.Dir,
+    entry: proof.Entry,
+    nonce: h.name.Id,
+    depth: usize,
+) !bool {
+    var child = target.openDir(
+        io,
+        entry.name,
+        .{
+            .iterate = true,
+            .follow_symlinks = false,
+        },
+    ) catch |err| return if (err == error.FileNotFound)
+        false
+    else
+        err;
     defer child.close(io);
-    const arrived = proof.read(allocator, io, child, proof.origin) catch |err| return if (err == error.FileNotFound) false else err;
+    const arrived = proof.read(allocator, io, child, proof.origin) catch |err| return if (err == error.FileNotFound)
+        false
+    else
+        err;
     defer arrived.deinit();
-    if (!entry.id.same(arrived.value.source) or !std.mem.eql(u8, &nonce, &arrived.value.nonce)) return error.IdentityConflict;
+    if (!entry.id.same(arrived.value.source) or
+        !std.mem.eql(u8, &nonce, &arrived.value.nonce)) return error.IdentityConflict;
     try complete(allocator, io, child, arrived.value, depth);
     try h.metadata.expect(io, child, proof.ready, "");
     var remaining = try source.openDir(io, entry.name, .{ .iterate = true, .follow_symlinks = false });
@@ -183,8 +292,15 @@ fn endedChild(allocator: std.mem.Allocator, io: std.Io, source: std.Io.Dir, targ
     return true;
 }
 
-pub fn finishRecorded(allocator: std.mem.Allocator, io: std.Io, from_parent: std.Io.Dir, target_parent: std.Io.Dir, record: proof.Record) !void {
-    if (!record.from_parent.same(try file.here(from_parent)) or !record.to_parent.same(try file.here(target_parent))) return error.IdentityConflict;
+pub fn finishRecorded(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    from_parent: std.Io.Dir,
+    target_parent: std.Io.Dir,
+    record: proof.Record,
+) !void {
+    if (!record.from_parent.same(try file.here(from_parent)) or
+        !record.to_parent.same(try file.here(target_parent))) return error.IdentityConflict;
     var target = try target_parent.openDir(io, record.to, .{ .iterate = true, .follow_symlinks = false });
     defer target.close(io);
     const arrived = try proof.read(allocator, io, target, proof.origin);
@@ -210,7 +326,13 @@ pub fn finishRecorded(allocator: std.mem.Allocator, io: std.Io, from_parent: std
     try file.syncDir(from_parent);
 }
 
-fn complete(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, record: proof.Record, depth: usize) anyerror!void {
+fn complete(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    dir: std.Io.Dir,
+    record: proof.Record,
+    depth: usize,
+) anyerror!void {
     if (depth >= limits.depth) return error.TooDeep;
     const expected = record.target orelse return error.BadReceipt;
     if (!expected.same(try file.here(dir))) return error.IdentityConflict;
@@ -233,7 +355,8 @@ fn complete(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, record: p
             defer child.close(io);
             const parsed = try proof.read(allocator, io, child, proof.origin);
             defer parsed.deinit();
-            if (!entry.id.same(parsed.value.source) or !std.mem.eql(u8, &record.nonce, &parsed.value.nonce)) return error.IdentityConflict;
+            if (!entry.id.same(parsed.value.source) or
+                !std.mem.eql(u8, &record.nonce, &parsed.value.nonce)) return error.IdentityConflict;
             if (!record.target.?.same(parsed.value.to_parent)) return error.IdentityConflict;
             try complete(allocator, io, child, parsed.value, depth + 1);
             try h.metadata.expect(io, child, proof.ready, "");
@@ -246,7 +369,12 @@ fn cleanSource(io: std.Io, dir: std.Io.Dir, record: proof.Record) !void {
     while (try entries.next(io)) |entry| {
         if (!proof.internal(entry.name)) return error.UnexpectedEntry;
     }
-    for (record.internal) |entry| removeMarker(io, dir, entry.name, entry.id) catch |err| if (err != error.FileNotFound) return err;
+    for (record.internal) |entry| removeMarker(
+        io,
+        dir,
+        entry.name,
+        entry.id,
+    ) catch |err| if (err != error.FileNotFound) return err;
     try removeMarker(io, dir, h.layout.files.moving, record.marker);
 }
 fn removeMarker(io: std.Io, dir: std.Io.Dir, leaf: []const u8, expected: file.State) !void {
@@ -256,22 +384,8 @@ fn removeMarker(io: std.Io, dir: std.Io.Dir, leaf: []const u8, expected: file.St
     try file.syncDir(dir);
 }
 
-pub fn preflight(io: std.Io, dir: std.Io.Dir, depth: usize) anyerror!void {
-    if (depth >= limits.depth) return error.TooDeep;
-    var entries = dir.iterate();
-    while (try entries.next(io)) |entry| {
-        _ = try h.name.component(entry.name);
-        const before = try dir.statFile(io, entry.name, .{ .follow_symlinks = false });
-        if (before.kind == .file) {
-            if (before.nlink != 1) return error.UnexpectedLinkCount;
-        } else if (before.kind == .directory) {
-            var child = try dir.openDir(io, entry.name, .{ .iterate = true, .follow_symlinks = false });
-            defer child.close(io);
-            if ((try child.stat(io)).inode != before.inode) return error.IdentityConflict;
-            try preflight(io, child, depth + 1);
-        } else return error.UnexpectedKind;
-    }
-}
+pub const preflight = preflight_mod.preflight;
+
 fn present(io: std.Io, dir: std.Io.Dir, leaf: []const u8) bool {
     _ = dir.statFile(io, leaf, .{ .follow_symlinks = false }) catch return false;
     return true;

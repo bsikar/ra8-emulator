@@ -3,13 +3,13 @@
 //! asks for the checkpoints the cursor is most likely to be moved to next,
 //! the one just behind the seek's base and the one just past its target.
 //! The base itself is not asked for: the seek restores it at once.
-const std = @import("std");
-const session_api = @import("ra8_session").api;
-const transport = @import("ra8_session").transport;
-const seek_engine = @import("ra8_session").history_seek_engine;
-const prefetch = @import("ra8_session").history_prefetch;
+
 const ObjectId = @import("ra8_session").history_object_id.ObjectId;
 const pool_mod = @import("prefetch_pool.zig");
+const prefetch = @import("ra8_session").history_prefetch;
+const seek_engine = @import("ra8_session").history_seek_engine;
+const session_api = @import("ra8_session").api;
+const transport = @import("ra8_session").transport;
 
 pub const Hook = struct {
     pool: *pool_mod.Pool,

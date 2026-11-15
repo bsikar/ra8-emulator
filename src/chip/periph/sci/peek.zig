@@ -5,8 +5,8 @@
 //! shows that byte and leaves it queued. Every other word a read answers is
 //! already computed from state and changes nothing (CSR, FRSR, FTSR, the
 //! control words, the LIN registers), so a peek of those is the read.
-const sci = @import("sci.zig");
 const lanes = @import("../lanes.zig");
+const sci = @import("sci.zig");
 
 /// The registry's peek for the SCI block.
 pub fn thunk(context: *anyopaque, address: u32, width: u3) u32 {

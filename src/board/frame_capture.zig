@@ -1,6 +1,7 @@
 //! Capture buffer for a scan of the board's panel: the end-of-run report
 //! and `--frames-out` read it, and so does the session's display wait.
 const std = @import("std");
+
 const Board = @import("board.zig").Board;
 
 pub const FrameCapture = struct {
@@ -18,7 +19,13 @@ pub const FrameCapture = struct {
         const pixels = try allocator.alloc(u32, count);
         @memset(pixels, 0);
         board.display.output.capture = .{ .pixels = pixels, .width = width, .height = height };
-        return .{ .allocator = allocator, .pixels = pixels, .width = width, .height = height, .before = board.display.system.frames };
+        return .{
+            .allocator = allocator,
+            .pixels = pixels,
+            .width = width,
+            .height = height,
+            .before = board.display.system.frames,
+        };
     }
 
     pub fn deinit(self: *FrameCapture, board: *Board) void {
@@ -29,7 +36,8 @@ pub const FrameCapture = struct {
     pub fn finish(self: *FrameCapture, board: *Board, sequence: anytype) !void {
         defer board.display.output.capture = null;
         if (board.display.system.frames == self.before) _ = board.display.scanOut();
-        if (board.display.system.frames != self.before)
+        if (board.display.system.frames != self.before) {
             try sequence.record(self.width, self.height, self.pixels, board.time.base.now());
+        }
     }
 };

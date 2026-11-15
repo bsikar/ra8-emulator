@@ -6,15 +6,16 @@
 //! freed, and put on a line at an address, so a second gauge at 0x37 is the
 //! same model at a different endpoint.
 const std = @import("std");
-const catalog = @import("catalog.zig");
-const endpoint = @import("endpoint.zig");
-const eink = @import("eink_it8951/panel.zig");
+
 const button = @import("button/button.zig");
+const catalog = @import("catalog.zig");
+const eink = @import("eink_it8951/panel.zig");
+const endpoint = @import("endpoint.zig");
+const esp_hosted = @import("esp32c6_hosted/hosted.zig");
 const led = @import("led/led.zig");
 const lsm6dso = @import("imu_lsm6dso/lsm6dso.zig");
 const max17048 = @import("gauge_max17048/max17048.zig");
 const modem = @import("modem_at/modem.zig");
-const esp_hosted = @import("esp32c6_hosted/hosted.zig");
 
 pub const imu_name = "lsm6dso";
 pub const gauge_name = "max17048";
@@ -43,7 +44,13 @@ const models = [_]catalog.Model{
 fn ChannelPart(comptime State: type, comptime kind: endpoint.Kind) type {
     return struct {
         fn model(comptime name: []const u8) catalog.Model {
-            return .{ .name = name, .kind = kind, .createFn = Owned(State).create, .destroyFn = Owned(State).destroy, .bindFn = bind };
+            return .{
+                .name = name,
+                .kind = kind,
+                .createFn = Owned(State).create,
+                .destroyFn = Owned(State).destroy,
+                .bindFn = bind,
+            };
         }
 
         fn bind(state: *anyopaque, _: endpoint.Endpoint) catalog.Device {

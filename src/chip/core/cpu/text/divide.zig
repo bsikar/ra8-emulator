@@ -1,8 +1,8 @@
 //! Text for the divide group: sdiv and udiv Rd, Rn, Rm. These have no
 //! 16-bit forms, so we print no .w.
+const divide = @import("../ops/divide.zig");
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const divide = @import("../ops/divide.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = divide.fields(instr);

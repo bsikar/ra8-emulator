@@ -5,10 +5,11 @@
 //! bottom or top half of that lane in Qd, keeping the other half of Qd. A
 //! widening op (VMOVL, VSHLL) reads the bottom or top half-lanes of Qm,
 //! extends them, and shifts them left.
-const qreg = @import("../../qreg.zig");
 const int = @import("../int.zig");
+const qreg = @import("../../qreg.zig");
 const shift = @import("../shift/shift.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// Which half of each double-width lane an op reads or writes (the B/T

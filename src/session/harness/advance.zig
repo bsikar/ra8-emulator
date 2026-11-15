@@ -1,12 +1,17 @@
 //! The display's advance: run CPU0 until the board's time reaches a deadline.
-const std = @import("std");
-const session_api = @import("../api.zig");
+
 const Board = @import("ra8_board").board.Board;
 const board_boundary = @import("../board/boundary.zig");
+const session_api = @import("../api.zig");
 
 /// Runs CPU0 on `session` for `max_ns` of virtual time, whichever core the
 /// session had selected, and puts that selection and the budget back.
-pub fn run(session: *session_api.Session, board: *Board, edge: *board_boundary.BoardBoundary, max_ns: u64) anyerror!void {
+pub fn run(
+    session: *session_api.Session,
+    board: *Board,
+    edge: *board_boundary.BoardBoundary,
+    max_ns: u64,
+) anyerror!void {
     const selected = session.currentCore();
     try session.switchTo(.cpu0);
     defer session.switchTo(selected) catch {};

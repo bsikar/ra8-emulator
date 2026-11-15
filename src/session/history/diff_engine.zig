@@ -4,11 +4,14 @@
 //! Diffs CPU0/CPU1 architectural registers, 4 KiB paged memory spaces,
 //! and peripheral state blocks.
 const std = @import("std");
+
 const manifest_mod = @import("manifest.zig");
 const ObjectId = @import("object_id.zig").ObjectId;
 const position_mod = @import("position.zig");
+
 const Position = position_mod.Position;
 const board_snap = @import("ra8_board").snapshot.run;
+
 const file = board_snap.file;
 const fields = board_snap.fields;
 const regs_mod = @import("ra8_chip").core.cpu.regs;
@@ -80,7 +83,9 @@ pub const CoreRegs = struct {
 
     pub fn fromRegs(r: *const regs_mod.Regs) CoreRegs {
         var cr = CoreRegs{ .present = true };
-        for (0..13) |i| cr.values[i] = r.low[i];
+        for (0..13) |i| {
+            cr.values[i] = r.low[i];
+        }
         cr.values[13] = r.sp();
         cr.values[14] = r.lr;
         cr.values[15] = r.pc;
@@ -313,7 +318,13 @@ pub fn diffManifests(
     get_blob: ?*const fn (ctx: *anyopaque, id: ObjectId) ?[]const u8,
     blob_ctx: ?*anyopaque,
 ) !DiffResult {
-    const pos_a = if (manifest_a) |m| m.position else Position{ .branch = 0, .r = 0, .phase = .cpu0, .o = 0, .gap = .retired };
+    const pos_a = if (manifest_a) |m| m.position else Position{
+        .branch = 0,
+        .r = 0,
+        .phase = .cpu0,
+        .o = 0,
+        .gap = .retired,
+    };
     const pos_b = manifest_b.position;
 
     const pages = try diffPages(allocator, manifest_a, manifest_b);

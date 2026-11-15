@@ -12,6 +12,8 @@ pub const user = [_]user_switch.Switch{
 /// reads high from the first fetch and after every reset.
 pub fn pulled() gpio.Gpio {
     var pins = gpio.Gpio.init();
-    for (user) |one| pins.pullUp(one.port, one.pin);
+    for (user) |one| {
+        pins.pullUp(one.port, one.pin);
+    }
     return pins;
 }

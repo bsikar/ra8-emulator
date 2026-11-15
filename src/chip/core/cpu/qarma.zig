@@ -57,14 +57,18 @@ fn put(out: *u64, index: u6, value: u4) void {
 fn shuffle(value: u64) u64 {
     const positions = [_]u6{ 13, 6, 11, 0, 7, 12, 1, 10, 8, 3, 14, 5, 2, 9, 4, 15 };
     var out: u64 = 0;
-    for (positions, 0..) |position, n| put(&out, @intCast(n), cell(value, position));
+    for (positions, 0..) |position, n| {
+        put(&out, @intCast(n), cell(value, position));
+    }
     return out;
 }
 
 fn inverseShuffle(value: u64) u64 {
     const positions = [_]u6{ 3, 6, 12, 9, 14, 11, 1, 4, 8, 13, 7, 2, 5, 0, 10, 15 };
     var out: u64 = 0;
-    for (positions, 0..) |position, n| put(&out, @intCast(n), cell(value, position));
+    for (positions, 0..) |position, n| {
+        put(&out, @intCast(n), cell(value, position));
+    }
     return out;
 }
 
@@ -73,7 +77,9 @@ fn substitute(value: u64, inverse: bool) u64 {
     const backward = [_]u4{ 5, 0xE, 0xD, 8, 0xA, 0xB, 1, 9, 2, 6, 0xF, 0, 4, 0xC, 7, 3 };
     const table = if (inverse) backward else forward;
     var out: u64 = 0;
-    for (0..16) |i| put(&out, @intCast(i), table[cell(value, @intCast(i))]);
+    for (0..16) |i| {
+        put(&out, @intCast(i), table[cell(value, @intCast(i))]);
+    }
     return out;
 }
 
@@ -107,13 +113,47 @@ fn tweakInverseRotate(value: u4) u4 {
 
 fn tweakShuffle(value: u64) u64 {
     const positions = [_]u6{ 4, 5, 6, 7, 11, 2, 3, 8, 12, 13, 14, 15, 0, 1, 10, 9 };
-    const rotate = [_]bool{ false, false, true, false, true, false, false, true, false, false, false, true, true, false, true, true };
+    const rotate = [_]bool{
+        false,
+        false,
+        true,
+        false,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+    };
     return tweakPermute(value, positions, rotate, false);
 }
 
 fn tweakInverseShuffle(value: u64) u64 {
     const positions = [_]u6{ 12, 13, 5, 6, 0, 1, 2, 3, 7, 15, 14, 4, 8, 9, 10, 11 };
-    const rotate = [_]bool{ true, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true };
+    const rotate = [_]bool{
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+    };
     return tweakPermute(value, positions, rotate, true);
 }
 

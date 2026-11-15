@@ -71,11 +71,27 @@ const forms = [_]V{
 };
 
 const sourced = [_]V{
-    vec("a secure answer keeps its region fields and drops the mpu ones", .{ .source = true, .resp = 0x05C3_037F }, .{ .rd = 0x05CE_0300, .asked = .secure }),
-    vec("a non-secure answer gains nsr and nsrw", .{ .source = true, .resp = 0x0012_0200 }, .{ .rd = 0x003E_0200, .asked = .secure }),
+    vec(
+        "a secure answer keeps its region fields and drops the mpu ones",
+        .{ .source = true, .resp = 0x05C3_037F },
+        .{ .rd = 0x05CE_0300, .asked = .secure },
+    ),
+    vec(
+        "a non-secure answer gains nsr and nsrw",
+        .{ .source = true, .resp = 0x0012_0200 },
+        .{ .rd = 0x003E_0200, .asked = .secure },
+    ),
     vec("a bare answer gets only the default map", .{ .source = true, .resp = 0 }, .{ .rd = r_rw, .asked = .secure }),
-    vec("non-secure state asks the source as non-secure", .{ .source = true, .ns = true, .resp = 0x0010_0000 }, .{ .rd = 0x003C_0000, .asked = .non_secure }),
-    vec("tta asks from the current state", .{ .hw2 = 0xF080, .source = true, .resp = 0x0040_0000 }, .{ .rd = secure_word, .asked = .secure }),
+    vec(
+        "non-secure state asks the source as non-secure",
+        .{ .source = true, .ns = true, .resp = 0x0010_0000 },
+        .{ .rd = 0x003C_0000, .asked = .non_secure },
+    ),
+    vec(
+        "tta asks from the current state",
+        .{ .hw2 = 0xF080, .source = true, .resp = 0x0040_0000 },
+        .{ .rd = secure_word, .asked = .secure },
+    ),
 };
 
 const unclaimed = [_]V{

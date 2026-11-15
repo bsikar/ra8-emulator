@@ -5,9 +5,10 @@
 //! TEXT or on any stop that is not the end of a chunk. `--topic session`
 //! prints session events, such as ThreadX module loads (RA8EMU-1139).
 const std = @import("std");
-const proto = @import("ra8_rpc").session.rpc;
+
 const Client = @import("client.zig").Client;
 const out = @import("print.zig");
+const proto = @import("ra8_rpc").session.rpc;
 
 /// Instructions per run call; small enough that the server's event queue
 /// (128 events) holds a chunk's UART output.
@@ -79,8 +80,18 @@ const Window = struct {
 
 /// Run `options` on `client` and return the exit code.
 pub fn watch(client: *Client, w: anytype, json: bool, options: Options) !u8 {
-    if (options.uart) _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .uart });
-    if (options.session) _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .session });
+    if (options.uart) _ = try client.call(
+        proto.Ack,
+        proto.Subscription,
+        .subscribe,
+        .{ .core = .cpu0, .topic = .uart },
+    );
+    if (options.session) _ = try client.call(
+        proto.Ack,
+        proto.Subscription,
+        .subscribe,
+        .{ .core = .cpu0, .topic = .session },
+    );
     _ = try client.call(proto.Ack, proto.Subscription, .subscribe, .{ .core = .cpu0, .topic = .stop });
     const deadline = client.nowMs() + options.timeout_ms;
     var window: Window = .{};

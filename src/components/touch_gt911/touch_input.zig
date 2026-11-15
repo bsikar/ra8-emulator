@@ -17,10 +17,11 @@
 //! channel, and the boundary raises it when PFS ISEL and IRQCR say the part
 //! would (RA8EMU-375).
 const std = @import("std");
-const gt911 = @import("gt911.zig");
-const gpio = @import("ra8_chip").periph.gpio;
-const pin_irq = @import("ra8_chip").periph.icu.pin_irq;
+
 const ByteSource = @import("ra8_chip").periph.byte_source.ByteSource;
+const gpio = @import("ra8_chip").periph.gpio;
+const gt911 = @import("gt911.zig");
+const pin_irq = @import("ra8_chip").periph.icu.pin_irq;
 const user_switch = @import("../user_switch/user_switch.zig");
 
 /// Longest line kept. A longer one is dropped whole and counted.
@@ -60,7 +61,9 @@ pub const Input = struct {
                 return;
             }
             self.seen = true;
-            for (bytes[0..count]) |byte| self.take(panel, pins, byte);
+            for (bytes[0..count]) |byte| {
+                self.take(panel, pins, byte);
+            }
         }
     }
 

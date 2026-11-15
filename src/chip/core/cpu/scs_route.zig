@@ -16,8 +16,8 @@
 //! the registers wired so far.
 
 const alias = @import("../../periph/scs_alias.zig");
-const scb_bank = @import("../../periph/scb/bank.zig");
 const banked = @import("../banked.zig");
+const scb_bank = @import("../../periph/scb/bank.zig");
 const systick_bank = @import("../systick_bank.zig");
 
 pub const Landing = union(enum) {

@@ -81,10 +81,22 @@ const loads = [_]V{
     ld("ldrbt r1, [r0, #5]", 0xF810, 0x1E05, 0x2000_0204, 0xC3, base),
     ld("ldrsht r1, [r0, #6]", 0xF930, 0x1E06, 0x2000_0204, 0xFFFF_8765, base),
     ld("an unaligned ldr.w goes through as bytes", 0xF8D0, 0x1002, 0x2000_0200, 0x0000_8765, base),
-    vec("ldr.w pc, [r0, #4] branches to the Thumb target", .{ .hw1 = 0xF8D0, .hw2 = 0xF004, .at = 0x2000_0204, .lit = 0x2000_0301 }, .{ .rt = 0x2000_0300 }),
-    vec("ldr.w sp, [r0, #4] loads sp", .{ .hw1 = 0xF8D0, .hw2 = 0xD004, .at = 0x2000_0204, .lit = 0x2000_0300 }, .{ .rt = 0x2000_0300 }),
+    vec(
+        "ldr.w pc, [r0, #4] branches to the Thumb target",
+        .{ .hw1 = 0xF8D0, .hw2 = 0xF004, .at = 0x2000_0204, .lit = 0x2000_0301 },
+        .{ .rt = 0x2000_0300 },
+    ),
+    vec(
+        "ldr.w sp, [r0, #4] loads sp",
+        .{ .hw1 = 0xF8D0, .hw2 = 0xD004, .at = 0x2000_0204, .lit = 0x2000_0300 },
+        .{ .rt = 0x2000_0300 },
+    ),
     vec("ldr.w past RAM faults and keeps rt", .{ .hw1 = 0xF8D0, .hw2 = 0x1FFF }, .{ .fault = .unmapped }),
-    vec("ldr post-indexed past RAM keeps rn", .{ .hw1 = 0xF850, .hw2 = 0x1BFF, .lit = 0 }, .{ .rt = 0, .rn = 0x2000_02FF }),
+    vec(
+        "ldr post-indexed past RAM keeps rn",
+        .{ .hw1 = 0xF850, .hw2 = 0x1BFF, .lit = 0 },
+        .{ .rt = 0, .rn = 0x2000_02FF },
+    ),
 };
 
 const stores = [_]V{
@@ -99,7 +111,11 @@ const stores = [_]V{
     st("strt r1, [r0, #4]", 0xF840, 0x1E04, 0, 0x2000_0204, src, base),
     st("strht r1, [r0, #4]", 0xF820, 0x1E04, 0, 0x2000_0204, 0x3344, base),
     st("an unaligned str.w goes through as bytes", 0xF8C0, 0x1001, 0, 0x2000_0200, 0x2233_4400, base),
-    vec("str.w sp, [r0, #4] stores sp", .{ .hw1 = 0xF8C0, .hw2 = 0xD004, .probe = 0x2000_0204 }, .{ .rt = fill & ~@as(u32, 3), .mem = fill & ~@as(u32, 3) }),
+    vec(
+        "str.w sp, [r0, #4] stores sp",
+        .{ .hw1 = 0xF8C0, .hw2 = 0xD004, .probe = 0x2000_0204 },
+        .{ .rt = fill & ~@as(u32, 3), .mem = fill & ~@as(u32, 3) },
+    ),
     vec("str.w past RAM faults and keeps rn", .{ .hw1 = 0xF8C0, .hw2 = 0x1FFF }, .{ .fault = .unmapped }),
 };
 

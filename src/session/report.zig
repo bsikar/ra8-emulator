@@ -4,14 +4,14 @@
 //! These read the core only through core_view, so any session prints the
 //! same lines for
 //! the same stop.
-const elf = @import("ra8_board").image.elf;
 const core_view = @import("core_view.zig");
 const dwarf_line = @import("dwarf/line/line.zig");
+const elf = @import("ra8_board").image.elf;
 const session_source = @import("source.zig");
 const session_view = @import("view.zig");
+const stop_machine = @import("stop_machine.zig");
 const symbols = @import("symbols.zig");
 const unwind = @import("unwind/unwind.zig");
-const stop_machine = @import("stop_machine.zig");
 
 /// An address as eight hex digits, with `<symbol+offset>` when the image
 /// has a function covering it.
@@ -65,7 +65,10 @@ pub fn backtrace(view: core_view.View, image: ?elf.Image, out: anytype) !void {
 pub fn prefix(out: anytype, stop: stop_machine.Stop, temporary: bool) !void {
     switch (stop) {
         .stepped => {},
-        .breakpoint => |id| try out.print("{s} {d}, ", .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id }),
+        .breakpoint => |id| try out.print(
+            "{s} {d}, ",
+            .{ if (temporary) "Temporary breakpoint" else "Breakpoint", id },
+        ),
         .watchpoint => |hit| try out.print("Watchpoint {d}: {s} of {d} at 0x{X:0>8}, ", .{
             hit.id, @tagName(hit.access), hit.width, hit.address,
         }),
@@ -73,6 +76,9 @@ pub fn prefix(out: anytype, stop: stop_machine.Stop, temporary: bool) !void {
         .unit_break => |index| try out.print("Hardware breakpoint FP_COMP{d}, ", .{index}),
         .unit_watch => |index| try out.print("Hardware watchpoint DWT_COMP{d}, ", .{index}),
         .history_start => try out.print("History start, ", .{}),
-        .replay_failed => |failure| try out.print("Replay failed: {s} source, {s}, ", .{ @tagName(failure.source), @errorName(failure.err) }),
+        .replay_failed => |failure| try out.print(
+            "Replay failed: {s} source, {s}, ",
+            .{ @tagName(failure.source), @errorName(failure.err) },
+        ),
     }
 }

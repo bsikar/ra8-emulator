@@ -64,6 +64,8 @@ pub fn encodingsOf(
     comptime vectors: []const Vector(In, Out),
 ) [vectors.len][]const u8 {
     var names: [vectors.len][]const u8 = undefined;
-    for (vectors, 0..) |v, i| names[i] = v.encoding;
+    for (vectors, 0..) |v, i| {
+        names[i] = v.encoding;
+    }
     return names;
 }

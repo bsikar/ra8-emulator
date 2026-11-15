@@ -1,6 +1,8 @@
 //! JSON request access and response serialization.
 const std = @import("std");
+
 const framing = @import("framing.zig");
+
 pub const Value = std.json.Value;
 
 pub fn get(value: Value, key: []const u8) Value {
@@ -20,11 +22,21 @@ pub fn quote(out: *std.Io.Writer, value: anytype) !void {
     try std.json.Stringify.value(value, .{ .emit_null_optional_fields = false }, out);
 }
 
-pub fn response(allocator: std.mem.Allocator, out: *std.Io.Writer, seq: u32, request: Value, body: []const u8, failure: ?[]const u8) !void {
+pub fn response(
+    allocator: std.mem.Allocator,
+    out: *std.Io.Writer,
+    seq: u32,
+    request: Value,
+    body: []const u8,
+    failure: ?[]const u8,
+) !void {
     var json: std.Io.Writer.Allocating = .init(allocator);
     defer json.deinit();
     const w = &json.writer;
-    try w.print("{{\"seq\":{d},\"type\":\"response\",\"request_seq\":{d},\"command\":", .{ seq, try number(get(request, "seq")) });
+    try w.print(
+        "{{\"seq\":{d},\"type\":\"response\",\"request_seq\":{d},\"command\":",
+        .{ seq, try number(get(request, "seq")) },
+    );
     try quote(w, try text(get(request, "command")));
     try w.print(",\"success\":{s}", .{if (failure == null) "true" else "false"});
     if (failure) |message| {

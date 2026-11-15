@@ -4,8 +4,9 @@
 //! straight out of a byte buffer. Zig reads the same layout as extern structs,
 //! so the offsets are the struct fields and the bounds checks are slices.
 const std = @import("std");
-const memmap = @import("ra8_chip").core.memmap;
+
 const loaded_image = @import("ra8_chip").core.loaded_image;
+const memmap = @import("ra8_chip").core.memmap;
 
 pub const Error = error{
     NotElf32,
@@ -85,7 +86,10 @@ pub const Image = struct {
         if (head.e_phentsize < @sizeOf(ProgramHeader)) return null;
         const start = @as(usize, head.e_phoff) + @as(usize, index) * @as(usize, head.e_phentsize);
         if (start + @sizeOf(ProgramHeader) > self.bytes.len) return null;
-        const ph: *align(1) const ProgramHeader = std.mem.bytesAsValue(ProgramHeader, self.bytes[start..][0..@sizeOf(ProgramHeader)]);
+        const ph: *align(1) const ProgramHeader = std.mem.bytesAsValue(
+            ProgramHeader,
+            self.bytes[start..][0..@sizeOf(ProgramHeader)],
+        );
         if (ph.p_type != pt_load or ph.p_filesz == 0) return null;
         const from = @as(usize, ph.p_offset);
         const to = from + @as(usize, ph.p_filesz);

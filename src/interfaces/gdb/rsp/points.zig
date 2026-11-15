@@ -6,6 +6,7 @@
 //! `Z4` are write, read and access watchpoints over `length` bytes, kept
 //! in the watch table. The requests are `Ztype,address,length`.
 const std = @import("std");
+
 const stop_machine = @import("ra8_session").stop_machine;
 const watch_table = @import("ra8_session").watch.table;
 
@@ -65,13 +66,31 @@ fn removeBreak(machine: *stop_machine.Machine, request: Request, out: []u8) Erro
 }
 
 fn addWatch(machine: *stop_machine.Machine, request: Request, out: []u8) Error![]const u8 {
-    const span = watch_table.Watch.span(request.address, request.length, kindOf(request.kind)) catch return copy(out, request_error);
+    const span = watch_table.Watch.span(
+        request.address,
+        request.length,
+        kindOf(
+            request.kind,
+        ),
+    ) catch return copy(
+        out,
+        request_error,
+    );
     _ = machine.addWatch(span) catch return copy(out, table_full);
     return copy(out, "OK");
 }
 
 fn removeWatch(machine: *stop_machine.Machine, request: Request, out: []u8) Error![]const u8 {
-    const span = watch_table.Watch.span(request.address, request.length, kindOf(request.kind)) catch return copy(out, request_error);
+    const span = watch_table.Watch.span(
+        request.address,
+        request.length,
+        kindOf(
+            request.kind,
+        ),
+    ) catch return copy(
+        out,
+        request_error,
+    );
     for (machine.watches.entries()) |slot| {
         if (slot.watch.first != span.first or slot.watch.last != span.last or slot.watch.kind != span.kind) continue;
         machine.watches.remove(slot.id) catch return copy(out, request_error);

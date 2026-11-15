@@ -1,10 +1,11 @@
 //! Scripted input and widget tree inspection for Session (RA8EMU-810, RA8EMU-811).
 const std = @import("std");
+
 const api = @import("api.zig");
-const widget_tree = @import("widget_tree.zig");
-const tap_part = @import("tap_part.zig");
-const input_script = @import("ra8_components").input_script;
 const gt911 = @import("ra8_components").gt911;
+const input_script = @import("ra8_components").input_script;
+const tap_part = @import("tap_part.zig");
+const widget_tree = @import("widget_tree.zig");
 
 const session_fork = @import("fork.zig");
 
@@ -23,7 +24,14 @@ pub fn tapWidget(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns
     try tapWidgetPart(self, allocator, core, at_ns, name, .centre);
 }
 
-pub fn tapWidgetPart(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8, part: TapPart) anyerror!void {
+pub fn tapWidgetPart(
+    self: *Session,
+    allocator: std.mem.Allocator,
+    core: Core,
+    at_ns: u64,
+    name: []const u8,
+    part: TapPart,
+) anyerror!void {
     const tree = try widgets(self, allocator, core);
     defer allocator.free(tree);
     const point = try tap_part.aim(try tap_part.find(tree, name), part);
@@ -34,7 +42,14 @@ pub fn tap(self: *Session, core: Core, at_ns: u64, x: u16, y: u16) anyerror!void
     try scheduleInput(self, core, at_ns, .{ .tap = .{ .x = x, .y = y } });
 }
 
-pub fn swipe(self: *Session, core: Core, at_ns: u64, from: gt911.Contact, to: gt911.Contact, duration_ns: u64) anyerror!void {
+pub fn swipe(
+    self: *Session,
+    core: Core,
+    at_ns: u64,
+    from: gt911.Contact,
+    to: gt911.Contact,
+    duration_ns: u64,
+) anyerror!void {
     try scheduleInput(self, core, at_ns, .{ .swipe = .{ .from = from, .to = to, .duration_ns = duration_ns } });
 }
 

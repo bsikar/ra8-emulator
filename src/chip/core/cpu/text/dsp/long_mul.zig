@@ -2,8 +2,8 @@
 //! x suffix when Rm's halves are swapped. The operands are always
 //! RdLo, RdHi, Rn, Rm.
 const Instr = @import("../../instr.zig").Instr;
-const text = @import("../text.zig");
 const long = @import("../../ops/dsp/long_mul.zig");
+const text = @import("../text.zig");
 
 fn half(top: bool) []const u8 {
     return if (top) "t" else "b";

@@ -9,8 +9,9 @@
 //! pointer. The session must stop (stopRunning returns once the queue has
 //! no callback in flight) before `detach`, so a callback never sees a sink
 //! that is gone.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const frame = @import("frame.zig");
 
 pub const lock_read_only: u64 = 1; // kCVPixelBufferLock_ReadOnly
@@ -63,7 +64,13 @@ fn keep(media: Media, box: *frame.Mailbox, sample: ?*anyopaque) bool {
 }
 
 /// The delegate method's IMP: (self, _cmd, output, sample, connection).
-pub fn didOutput(_: ?*anyopaque, _: ?*anyopaque, _: ?*anyopaque, sample: ?*anyopaque, _: ?*anyopaque) callconv(.c) void {
+pub fn didOutput(
+    _: ?*anyopaque,
+    _: ?*anyopaque,
+    _: ?*anyopaque,
+    sample: ?*anyopaque,
+    _: ?*anyopaque,
+) callconv(.c) void {
     const sink = active.load(.acquire) orelse return;
     _ = onSample(sink, sample);
 }

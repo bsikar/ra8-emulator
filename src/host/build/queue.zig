@@ -1,5 +1,6 @@
 //! Bounded live output. Disk logs are independent of a slow subscriber.
 const std = @import("std");
+
 pub const Kind = enum(u8) { stdout, stderr, diagnostic };
 pub const Event = struct { sequence: u64 = 0, kind: Kind = .stdout, len: usize = 0, bytes: [4096]u8 = undefined };
 pub const Queue = struct {

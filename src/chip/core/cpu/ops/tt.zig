@@ -11,13 +11,13 @@
 //!
 //! The answer comes from the core's own SAU and the RA8 IDAU
 //! (src/chip/core/cpu/attribution.zig), RA8EMU-352.
-const op = @import("../op.zig");
 const attribution = @import("../attribution.zig");
-const sysreg = @import("../sysreg.zig");
-const tt_mpu = @import("../tt_mpu.zig");
-const tt = @import("../../tt.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
+const sysreg = @import("../sysreg.zig");
+const tt = @import("../../tt.zig");
+const tt_mpu = @import("../tt_mpu.zig");
 
 pub const group: op.Group = .{ .name = "tt", .decode = decode, .oracle = true };
 

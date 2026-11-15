@@ -1,7 +1,8 @@
 //! Rooted project files, read once into the exact bytes later passed to Session.
 const std = @import("std");
-const paths = @import("../workspace/path.zig");
+
 const entry = @import("../workspace/entry.zig");
+const paths = @import("../workspace/path.zig");
 
 pub fn read(allocator: std.mem.Allocator, io: std.Io, root: std.Io.Dir, name: []const u8, limit: usize) ![]u8 {
     var normalized: [4096]u8 = undefined;
@@ -18,7 +19,8 @@ pub fn read(allocator: std.mem.Allocator, io: std.Io, root: std.Io.Dir, name: []
     errdefer allocator.free(bytes);
     if (try file.readPositionalAll(io, bytes, 0) != bytes.len) return error.ProjectFileChanged;
     const after = try file.stat(io);
-    if (before.size != after.size or before.mtime.nanoseconds != after.mtime.nanoseconds) return error.ProjectFileChanged;
+    if (before.size != after.size or
+        before.mtime.nanoseconds != after.mtime.nanoseconds) return error.ProjectFileChanged;
     return bytes;
 }
 

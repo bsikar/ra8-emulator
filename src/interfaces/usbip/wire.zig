@@ -98,7 +98,14 @@ pub const Device = struct {
         std.mem.writeInt(u16, tail[12..14], self.vendor, .big);
         std.mem.writeInt(u16, tail[14..16], self.product, .big);
         std.mem.writeInt(u16, tail[16..18], self.bcd_device, .big);
-        tail[18..24].* = .{ self.class, self.subclass, self.protocol, self.configuration_value, self.configurations, self.interfaces };
+        tail[18..24].* = .{
+            self.class,
+            self.subclass,
+            self.protocol,
+            self.configuration_value,
+            self.configurations,
+            self.interfaces,
+        };
     }
 };
 

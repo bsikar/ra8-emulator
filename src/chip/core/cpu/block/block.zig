@@ -3,10 +3,10 @@
 //!
 //! Formation only. RA8EMU-405 runs blocks from Cpu.run behind a switch and
 //! RA8EMU-404 invalidates them on writes and turns them on.
-const Instr = @import("../instr.zig").Instr;
+const block_end = @import("end.zig");
 const bus = @import("../bus.zig");
 const decode = @import("../decode/decode.zig");
-const block_end = @import("end.zig");
+const Instr = @import("../instr.zig").Instr;
 
 /// The most instructions one block holds.
 pub const cap: usize = 32;

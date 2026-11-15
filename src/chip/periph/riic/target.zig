@@ -33,8 +33,9 @@
 //! RDRF between payload bytes, or clearing the error flags mid-frame the way
 //! ra8_i2c_clear_errors does, no longer skips the script forward a phase.
 const std = @import("std");
-const flag = @import("flags.zig");
+
 const bus = @import("bus.zig");
+const flag = @import("flags.zig");
 
 /// The script the synthetic controller drives.
 pub const script = struct {

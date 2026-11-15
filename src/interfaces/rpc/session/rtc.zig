@@ -1,8 +1,8 @@
 //! The rtc request (RA8EMU-809): the board's RTC calendar in one snapshot,
 //! decoded, for the debugger's time bar.
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const session_rtc = @import("ra8_session").rtc;
 
 const Outcome = rpc.Outcome(proto.RtcReport);
@@ -14,7 +14,14 @@ pub fn rtc(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const clock = context.clock orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     const raw = clock.counters();
     const found = session_rtc.decode(raw);
-    const date = found orelse session_rtc.Calendar{ .year = 0, .month = 0, .day = 0, .hour = 0, .minute = 0, .second = 0 };
+    const date = found orelse session_rtc.Calendar{
+        .year = 0,
+        .month = 0,
+        .day = 0,
+        .hour = 0,
+        .minute = 0,
+        .second = 0,
+    };
     return .{ .ok = .{
         .running = @intFromBool(raw.running),
         .valid = @intFromBool(found != null),

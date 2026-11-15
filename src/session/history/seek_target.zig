@@ -29,6 +29,7 @@
 //! Fraction digits a unit cannot represent are refused unless they are all
 //! zero, so 1.0ns parses and 1.5ns does not; nothing is rounded.
 const std = @import("std");
+
 const position_mod = @import("position.zig");
 
 pub const Error = error{BadValue};
@@ -221,7 +222,9 @@ fn parsePercent(text: []const u8) Error!Target {
 fn parseTime(text: []const u8) Error!Target {
     var digits_end: usize = 0;
     if (text.len > 0 and (text[0] == '+' or text[0] == '-')) digits_end = 1;
-    while (digits_end < text.len and (std.ascii.isDigit(text[digits_end]) or text[digits_end] == '.')) digits_end += 1;
+    while (digits_end < text.len and (std.ascii.isDigit(text[digits_end]) or text[digits_end] == '.')) {
+        digits_end += 1;
+    }
     const exp = unitExp(text[digits_end..]) orelse return Error.BadValue;
     const num = try parseNumber(text[0..digits_end]);
     return .{ .time = .{ .relative = num.relative, .ns = try narrow(try value(num, exp)) } };
@@ -295,7 +298,9 @@ fn value(num: Number, exp: u6) Error!i128 {
 fn pow10(n: u6) u128 {
     var out: u128 = 1;
     var left: u6 = n;
-    while (left > 0) : (left -= 1) out *= 10;
+    while (left > 0) : (left -= 1) {
+        out *= 10;
+    }
     return out;
 }
 

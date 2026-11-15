@@ -58,7 +58,11 @@ pub const all = [_]V{
     vec("movs lsr #1", in(movs, 0x0052, 0, 3), .{ .rd = 1, .flags = 0x2000_0000 }),
     vec("movs lsr #32", in(movs, 0x0012, 0, 0x8000_0000), .{ .flags = 0x6000_0000 }),
     vec("movs asr #32 of a positive value", in(movs, 0x0022, 0, 0x7FFF_FFFF), .{ .flags = 0x4000_0000 }),
-    vec("movs asr #4 of a negative value", in(movs, 0x1022, 0, 0x8000_0000), .{ .rd = 0xF800_0000, .flags = 0x8000_0000 }),
+    vec(
+        "movs asr #4 of a negative value",
+        in(movs, 0x1022, 0, 0x8000_0000),
+        .{ .rd = 0xF800_0000, .flags = 0x8000_0000 },
+    ),
     vec("movs ror #8", in(movs, 0x2032, 0, 0xFF), .{ .rd = 0xFF00_0000, .flags = 0xA000_0000 }),
     vec("movs rrx shifts the carry in", in(movs, 0x0032, 0, 2), .{ .rd = 0x8000_0001, .flags = 0x8000_0000 }),
     vec("mov lsl #31 leaves the flags", in(0xEA4F, 0x70C2, 0, 1), .{ .rd = 0x8000_0000 }),

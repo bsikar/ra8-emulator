@@ -35,8 +35,8 @@
 //! merged into that word so the lanes it does not name keep what they had,
 //! and a write-0-to-clear register is cleared only in the lanes the store
 //! actually named.
-const lanes = @import("../lanes.zig");
 const flag = @import("flags.zig");
+const lanes = @import("../lanes.zig");
 
 /// Whether a window-relative offset is one this block answers.
 pub fn inside(offset: u32) bool {

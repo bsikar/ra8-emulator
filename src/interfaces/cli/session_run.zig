@@ -5,20 +5,21 @@
 //! and explicitly refuses raw-board-only flag combinations that cannot be
 //! recorded.
 const std = @import("std");
+
+const break_sym = @import("ra8_session").zig.break_sym;
 const cli = @import("cli.zig");
+const elf = @import("ra8_board").image.elf;
+const frame_out = @import("frame_out.zig");
+const json_regs = @import("report/json/regs.zig");
+const mem_dump = @import("ra8_session").mem_dump;
+const recorded_camera = @import("ra8_session").board.recorded_camera;
 const report = @import("report.zig");
 const report_dumps = @import("report/dumps.zig");
-const json_regs = @import("report/json/regs.zig");
-const frame_out = @import("frame_out.zig");
-const zig_main = @import("zig/main.zig");
-const served_setup = @import("ra8_rpc").served_setup;
 const served_camera = @import("ra8_rpc").served_camera;
+const served_setup = @import("ra8_rpc").served_setup;
 const session_api = @import("ra8_session").api;
-const recorded_camera = @import("ra8_session").board.recorded_camera;
-const mem_dump = @import("ra8_session").mem_dump;
-const break_sym = @import("ra8_session").zig.break_sym;
-const elf = @import("ra8_board").image.elf;
 const usbip_run = @import("ra8_usbip").exported.run;
+const zig_main = @import("zig/main.zig");
 
 /// Returns a refusal message when `options` mixes incompatible raw-board
 /// flags or invalid Session-history flags, or null when valid.
@@ -39,12 +40,19 @@ pub fn validate(options: cli.Options) ?[]const u8 {
         return "Session history models ra8p1 only; omit --part ra8d2 or pass --part ra8p1";
     }
     if (options.state.save != null or options.state.load != null or options.state.at != null) {
-        return "--save-state/--load-state/--snapshot-at/--restore cannot combine with Session history; use --history DIR";
+        return "--save-state/--load-state/--snapshot-at/--restore cannot combine with Session " ++
+            "history; use --history " ++
+            "DIR";
     }
     if (options.net_tape != null) {
         return "--net-record/--net-replay cannot combine with Session history; Session records C6 traffic directly";
     }
-    if (options.sd_path != null or options.sd_new != null or options.sd_size_mb != null or options.trace_sd or options.dump_sd != null) {
+    if (options.sd_path != null or
+        options.sd_new != null or
+        options.sd_size_mb != null or
+        options.trace_sd or
+        options.dump_sd != null)
+    {
         return "SPI --sd flags are not recorded by Session history; use --sd-image or --sd-dir";
     }
     if (options.sdhi.writable) {
@@ -61,7 +69,9 @@ fn validateRawOnly(options: cli.Options) ?[]const u8 {
     if (options.faults != null or options.attach_count != 0 or options.detach_c6 or
         options.click or options.battery.charging or options.battery.soc_pct != 72)
     {
-        return "raw board hardware flags (--attach/--fault/--faults/--detach/--click/--battery) cannot combine with plain Session history CLI";
+        return "raw board hardware flags (--attach/--fault/--faults/--detach/--click/--battery) " ++
+            "cannot combine with plain Session history " ++
+            "CLI";
     }
     if (options.touch_in != null or options.input_script != null or options.touch_count != 0) {
         return "raw board touch flags (--touch/--input-script) cannot combine with plain Session history CLI";
@@ -82,10 +92,13 @@ fn validateRawOnly(options: cli.Options) ?[]const u8 {
         options.frames.gif_out != null or options.frames.frame_on_settle != null or
         options.frames.video_out != null or options.audio.path != null)
     {
-        return "raw board media export flags (--frames-out/--gif-out/--video-out/--audio-out) cannot combine with plain Session history CLI";
+        return "raw board media export flags (--frames-out/--gif-out/--video-out/--audio-out) " ++
+            "cannot combine with plain Session history " ++
+            "CLI";
     }
     if (options.console_reply.armed()) return "--console-reply cannot combine with plain Session history CLI";
-    if (options.speed != null or options.run_for) return "--speed/--realtime/--run-for cannot combine with plain Session history CLI";
+    if (options.speed != null or
+        options.run_for) return "--speed/--realtime/--run-for cannot combine with plain Session history CLI";
     return null;
 }
 
@@ -154,7 +167,15 @@ pub fn openSession(
         .elf_bytes = elf_bytes,
     };
     const second: ?served_setup.SecondImage = if (options.cpu1_path) |p| .{ .path = p } else null;
-    try setup.openInputs(allocator, io, options.path, options.board_profile, history_opts, second, .{ .card = options.sdhi });
+    try setup.openInputs(
+        allocator,
+        io,
+        options.path,
+        options.board_profile,
+        history_opts,
+        second,
+        .{ .card = options.sdhi },
+    );
     errdefer setup.deinit();
     if (options.history.camera_set or options.camera.kind != .gradient) {
         try served_camera.set(setup, options.camera);
@@ -171,11 +192,17 @@ pub fn openSession(
 pub fn driveSession(setup: *served_setup.Served, sink: *ConsoleSink, options: cli.Options) !session_api.Ended {
     const session = setup.owner.session();
     const bp = break_sym.resolve(setup.owner.image(), options.break_place, options.break_arrival);
-    const bp_id = if (bp) |point| try session.setBreakpoint(.cpu0, .{ .address = @intCast(point.watchedAddress()) }) else null;
+    const bp_id = if (bp) |point| try session.setBreakpoint(
+        .cpu0,
+        .{ .address = @intCast(point.watchedAddress()) },
+    ) else null;
     defer if (bp_id) |id| session.clearBreakpoint(.cpu0, id) catch {};
 
     const total_budget: u64 = @intCast(options.budgetFor(false));
-    const target_ns: ?u64 = if (options.ms) |ms| std.math.mul(u64, ms, std.time.ns_per_ms) catch std.math.maxInt(u64) else null;
+    const target_ns: ?u64 = if (options.ms) |ms|
+        std.math.mul(u64, ms, std.time.ns_per_ms) catch std.math.maxInt(u64)
+    else
+        null;
     var remaining = total_budget;
     var hits: u32 = 0;
     var last: session_api.Ended = .count;
@@ -205,7 +232,12 @@ pub fn driveSession(setup: *served_setup.Served, sink: *ConsoleSink, options: cl
 }
 
 /// Capture guest and host state from `setup` after a run or replay.
-pub fn captureOutcome(allocator: std.mem.Allocator, setup: *served_setup.Served, sink: *const ConsoleSink, ended: session_api.Ended) !Outcome {
+pub fn captureOutcome(
+    allocator: std.mem.Allocator,
+    setup: *served_setup.Served,
+    sink: *const ConsoleSink,
+    ended: session_api.Ended,
+) !Outcome {
     var state_writer: std.Io.Writer.Allocating = .init(allocator);
     defer state_writer.deinit();
     try setup.owner.state.files.writeTo(&state_writer.writer);
@@ -245,7 +277,12 @@ pub fn captureOutcome(allocator: std.mem.Allocator, setup: *served_setup.Served,
 /// Restore `setup` to its opening checkpoint and replay the same run slices
 /// `driveSession` took (same instruction budget, same chunking) with host
 /// output muted, so every host source is served from the history.
-pub fn replayRun(allocator: std.mem.Allocator, setup: *served_setup.Served, sink: *ConsoleSink, options: cli.Options) !Outcome {
+pub fn replayRun(
+    allocator: std.mem.Allocator,
+    setup: *served_setup.Served,
+    sink: *ConsoleSink,
+    options: cli.Options,
+) !Outcome {
     sink.host_lines = 0;
     const plane = setup.owner.transport();
     const bridge = plane.history orelse return error.NoHistory;

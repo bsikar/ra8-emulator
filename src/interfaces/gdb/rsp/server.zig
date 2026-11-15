@@ -9,9 +9,10 @@
 //! What firmware printed through ITM port 0 during a resume goes out as
 //! `O` packets just before its stop reply (src/interfaces/gdb/rsp/console.zig).
 const std = @import("std");
+
+const console = @import("console.zig");
 const packet = @import("packet.zig");
 const rsp_dispatch = @import("dispatch.zig");
-const console = @import("console.zig");
 
 pub const limits = struct {
     /// Bytes the connection's reader buffers per read.

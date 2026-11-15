@@ -1,5 +1,6 @@
 //! CLI arguments for still and sequential panel captures.
 const std = @import("std");
+
 const world_flags = @import("../world_flags.zig");
 
 pub const Options = struct {

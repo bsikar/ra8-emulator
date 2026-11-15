@@ -2,10 +2,10 @@
 //! immediate, and CMN and CMP (ADD and SUB with Rd of PC and S set).
 //! We write `.w` on ADD, SUB, RSB, CMN and CMP, the forms that also
 //! have a 16-bit encoding, and not on ADC or SBC.
-const Instr = @import("../../instr.zig").Instr;
-const text = @import("../text.zig");
 const Fields = @import("../../ops/imm/fields.zig").Fields;
+const Instr = @import("../../instr.zig").Instr;
 const opcodes = @import("../../ops/imm/arith.zig").opcodes;
+const text = @import("../text.zig");
 const value = @import("logic.zig").value;
 
 pub fn print(instr: Instr, out: *text.Text) void {

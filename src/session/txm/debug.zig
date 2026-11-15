@@ -9,6 +9,7 @@
 //! every live module, so a debugger names a module PC and finds a module
 //! function by name only while that module is loaded.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const symbols = @import("../symbols.zig");
 const txm_symbols = @import("symbols.zig");

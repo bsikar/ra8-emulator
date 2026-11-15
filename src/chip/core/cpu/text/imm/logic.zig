@@ -3,11 +3,11 @@
 //! and MVN (Rn of PC). We write `.w` only on TST, TEQ and MOV, the
 //! forms that also have a 16-bit encoding. We print the immediate of
 //! TST, TEQ, MOV and ORN as signed (`#-1`), the rest as unsigned.
+const Fields = @import("../../ops/imm/fields.zig").Fields;
 const Instr = @import("../../instr.zig").Instr;
+const opcodes = @import("../../ops/imm/logic.zig").opcodes;
 const text = @import("../text.zig");
 const thumb_imm = @import("../../thumb_imm.zig");
-const Fields = @import("../../ops/imm/fields.zig").Fields;
-const opcodes = @import("../../ops/imm/logic.zig").opcodes;
 
 const mnemonics = [5][]const u8{ "and", "bic", "orr", "orn", "eor" };
 

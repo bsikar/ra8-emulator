@@ -9,12 +9,14 @@
 //! file is never changed once sealed; compaction writes a new pack of the
 //! live objects and only then removes the packs it replaces.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
+
 const pack_file = history.pack_file;
-const session_pack = @import("ra8_session").history_pack;
-const pack_index = @import("ra8_session").history_pack_index;
 const compaction = @import("ra8_session").history_compaction;
 const ObjectId = @import("ra8_session").history_object_id.ObjectId;
+const pack_index = @import("ra8_session").history_pack_index;
+const session_pack = @import("ra8_session").history_pack;
 
 pub const Report = struct {
     packs_removed: usize = 0,
@@ -42,16 +44,22 @@ pub const PackStore = struct {
         var names: Names = .{ .gpa = gpa };
         defer names.deinit();
         try self.store.vtable.list(self.store.context, .objects, .{ .context = &names, .visit = &Names.visit });
-        for (names.tmps.items) |tmp| try self.store.vtable.remove(self.store.context, .objects, tmp);
+        for (names.tmps.items) |tmp| {
+            try self.store.vtable.remove(self.store.context, .objects, tmp);
+        }
         std.mem.sort(u32, names.packs.items, {}, std.sort.asc(u32));
-        for (names.packs.items) |id| try self.load(id);
+        for (names.packs.items) |id| {
+            try self.load(id);
+        }
         return self;
     }
 
     /// Writes any pending objects and frees the store.
     pub fn close(self: *PackStore) void {
         self.seal() catch {};
-        for (self.sealed.items) |*index| index.deinit(self.gpa);
+        for (self.sealed.items) |*index| {
+            index.deinit(self.gpa);
+        }
         self.sealed.deinit(self.gpa);
         self.building.deinit(self.gpa);
         self.entries.deinit(self.gpa);
@@ -133,12 +141,18 @@ pub const PackStore = struct {
         return null;
     }
 
-    fn decodeVerified(allocator: std.mem.Allocator, expected_id: ObjectId, entry: pack_index.Entry, bytes: []const u8) ![]u8 {
+    fn decodeVerified(
+        allocator: std.mem.Allocator,
+        expected_id: ObjectId,
+        entry: pack_index.Entry,
+        bytes: []const u8,
+    ) ![]u8 {
         const got = try session_pack.decodeRecordFromSlice(allocator, bytes);
         var rec = got.record;
         errdefer rec.deinit(allocator);
         if (got.consumed != bytes.len) return error.CorruptPack;
-        if (rec.compressed_len != entry.compressed_len or rec.uncompressed_len != entry.uncompressed_len) return error.CorruptPack;
+        if (rec.compressed_len != entry.compressed_len or
+            rec.uncompressed_len != entry.uncompressed_len) return error.CorruptPack;
         if (!rec.object_id.eql(expected_id)) return error.ForgedIdentity;
         if (!ObjectId.compute(rec.data).eql(expected_id)) return error.ForgedIdentity;
         return rec.data;
@@ -151,7 +165,9 @@ pub const PackStore = struct {
         var plan = try compaction.planCompaction(self.gpa, self.sealed.items, live, self.next_id);
         defer plan.deinit(self.gpa);
         var report: Report = .{};
-        for (plan.pack_stats) |s| report.bytes_before += s.total_bytes;
+        for (plan.pack_stats) |s| {
+            report.bytes_before += s.total_bytes;
+        }
         if (plan.obsolete_packs.len == 0) return report;
 
         var pack: std.ArrayList(u8) = .empty;
@@ -164,7 +180,13 @@ pub const PackStore = struct {
             const data = (try self.get(self.gpa, item.object_id)) orelse return error.ObjectMissing;
             defer self.gpa.free(data);
             const offset = w.writer.end;
-            const total = try session_pack.encodeRecord(self.gpa, &w.writer, item.object_id, session_pack.flags.page, data);
+            const total = try session_pack.encodeRecord(
+                self.gpa,
+                &w.writer,
+                item.object_id,
+                session_pack.flags.page,
+                data,
+            );
             try entries.append(self.gpa, .{
                 .object_id = item.object_id,
                 .xxh3_prefilter = item.object_id.prefilter(),
@@ -188,7 +210,9 @@ pub const PackStore = struct {
             report.objects_copied = entries.items.len;
             report.bytes_after = pack.items.len;
         }
-        for (plan.obsolete_packs) |old| try self.drop(old);
+        for (plan.obsolete_packs) |old| {
+            try self.drop(old);
+        }
         report.packs_removed = plan.obsolete_packs.len;
         return report;
     }
@@ -289,7 +313,9 @@ const Names = struct {
     tmps: std.ArrayList([]u8) = .empty,
 
     fn deinit(self: *Names) void {
-        for (self.tmps.items) |leaf| self.gpa.free(leaf);
+        for (self.tmps.items) |leaf| {
+            self.gpa.free(leaf);
+        }
         self.tmps.deinit(self.gpa);
         self.packs.deinit(self.gpa);
     }

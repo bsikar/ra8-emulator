@@ -47,10 +47,11 @@
 //! fills the ring faster than the probe empties it.
 const std = @import("std");
 
+pub const block = @import("block.zig");
 const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
 const memmap = @import("../../core/memmap.zig");
-pub const block = @import("block.zig");
 const text = @import("line.zig");
+
 pub const line = text;
 
 /// The window the scan hunts a control block in: the SRAM this tree actually
@@ -189,7 +190,9 @@ pub const Rtt = struct {
         const want = @min(pending, cadence.drain);
         const got = self.take(memory, up, want);
         if (got == 0) return;
-        for (self.segment[0..got]) |byte| self.line.feed(byte);
+        for (self.segment[0..got]) |byte| {
+            self.line.feed(byte);
+        }
         const advanced = (up.read + got) % up.size;
         memory.writeWord(at + block.layout.up0 + block.layout.desc_read, advanced) catch return;
         self.drained += got;

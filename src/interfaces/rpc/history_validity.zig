@@ -1,9 +1,10 @@
 //! Explicit rebuilt-ELF replay overrides only the ELF identity. Unknown
 //! historical provenance and unapplied configuration refuse comparison.
 const std = @import("std");
-const root = @import("ra8_session").history_root;
+
 const board = @import("ra8_board");
 const build = @import("history_build");
+const root = @import("ra8_session").history_root;
 
 pub const snapshot_version = board.snapshot.run.file.version;
 pub const commit = build.commit;
@@ -35,7 +36,8 @@ pub const Error = error{
 /// Codec compatibility remains unchanged; comparison fails closed here.
 pub fn check(r: root.Root) !void {
     try root.check(&r);
-    if (std.mem.allEqual(u8, &r.emulator_commit, 0) or std.mem.allEqual(u8, &commit, 0)) return Error.UnknownBuildIdentity;
+    if (std.mem.allEqual(u8, &r.emulator_commit, 0) or
+        std.mem.allEqual(u8, &commit, 0)) return Error.UnknownBuildIdentity;
     if (!std.mem.eql(u8, &r.emulator_commit, &commit)) return Error.BuildMismatch;
     if (!std.mem.eql(u8, r.model_version, model)) return Error.ModelMismatch;
     if (r.snapshot_version != snapshot_version) return Error.SnapshotVersionMismatch;

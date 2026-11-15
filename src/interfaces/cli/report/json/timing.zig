@@ -2,8 +2,8 @@
 //! the idle seam and what the interrupt controller did with its pends.
 //! Nothing feeds it on the Zig core, so the object is null.
 const clocks = @import("ra8_chip").periph.clocks;
-const nvic = @import("ra8_chip").periph.nvic;
 const idle = @import("ra8_chip").core.idle;
+const nvic = @import("ra8_chip").periph.nvic;
 
 /// What the run's timing hooks accumulated, copied off the report Tally.
 pub const Timing = struct {

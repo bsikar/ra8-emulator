@@ -16,11 +16,12 @@
 //! calls of its site at that position, because one stretch can forward
 //! several guest frames before the board ticks.
 const std = @import("std");
-const hosted = @import("ra8_components").esp_hosted;
-const c6_landing = @import("../history/c6_landing.zig");
+
 const api = @import("../api.zig");
-const line = @import("../line.zig");
 const branch = @import("../history/branch.zig");
+const c6_landing = @import("../history/c6_landing.zig");
+const hosted = @import("ra8_components").esp_hosted;
+const line = @import("../line.zig");
 const Position = @import("../history/position.zig").Position;
 
 const hold = hosted.hold;
@@ -81,14 +82,21 @@ pub const RecordedC6 = struct {
         if (history.recorder == null) return;
         var body: std.Io.Writer.Allocating = .init(self.gpa);
         defer body.deinit();
-        try c6_landing.encode(&body.writer, .{ .kind = kind, .site = site, .ordinal = self.call[@backingInt(site)], .frame = frame });
+        try c6_landing.encode(
+            &body.writer,
+            .{ .kind = kind, .site = site, .ordinal = self.call[@backingInt(site)], .frame = frame },
+        );
         try history.recordLanding(self.session.currentPosition(), c6_landing.whatOf(kind), body.written());
     }
 
     fn due(context: *anyopaque, site: hold.Site, out: []u8) ?hold.Due {
         const self: *RecordedC6 = @ptrCast(@alignCast(context));
         const feeder = if (self.session.replay_feeder) |*f| f else return null;
-        while (feeder.takeLanding(self.session.currentPosition(), @backingInt(site), self.call[@backingInt(site)])) |taken| {
+        while (feeder.takeLanding(
+            self.session.currentPosition(),
+            @backingInt(site),
+            self.call[@backingInt(site)],
+        )) |taken| {
             if (taken.missed) {
                 self.note(Error.MissedLanding);
                 continue;

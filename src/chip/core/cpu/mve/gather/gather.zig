@@ -6,9 +6,10 @@
 //! narrower than the element sign- or zero-extend on load and truncate on
 //! store through contiguous.element. The 64-bit VLDRD/VSTRD forms move
 //! each doubleword as two word beats addressed by `beatAddress`.
-const qreg = @import("../qreg.zig");
 pub const imm_vectors = @import("imm_vectors.zig");
+const qreg = @import("../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 pub const Form = struct { msize: Size, esize: Size, signed: bool, store: bool, os: bool };

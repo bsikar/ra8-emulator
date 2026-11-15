@@ -2,9 +2,9 @@
 //! Rn and Rm, plus Ra for USADA8. Ra = 1111 selects USAD8.
 //!
 //! Left unclaimed: SP or PC in Rd, Rn or Rm, and Ra = SP (UNPREDICTABLE).
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

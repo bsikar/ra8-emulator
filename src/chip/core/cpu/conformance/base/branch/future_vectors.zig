@@ -69,7 +69,12 @@ const unclaimed = [_]V{
     bad("a register form with hw2 0xE003 is unclaimed", 0xF0E3, 0xE003),
     bad("a register form with hw2 0xE801 is unclaimed", 0xF0E3, 0xE801),
     bad("hw1[11] set is unclaimed", 0xF880, 0xE001),
-    .{ .encoding = group, .name = "the 16-bit space is unclaimed", .input = .{ .hw1 = 0xF080, .hw2 = 0xE001, .size = 2 }, .expect = none },
+    .{
+        .encoding = group,
+        .name = "the 16-bit space is unclaimed",
+        .input = .{ .hw1 = 0xF080, .hw2 = 0xE001, .size = 2 },
+        .expect = none,
+    },
 };
 
 pub const covered = vector.encodingsOf(In, Out, &all);

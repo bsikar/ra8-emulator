@@ -14,7 +14,6 @@
 //! later cause is set from and decoded by, so a cause is named once and a
 //! handler's dump and the run report read the word the same way.
 
-const std = @import("std");
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
 /// How a store to CFSR or HFSR clears the bits it wrote ones to. Reached
@@ -26,12 +25,15 @@ pub const route = @import("route.zig");
 
 /// Raising a BusFault for an access the bus refused.
 pub const bus = @import("../bus_fault.zig");
+
 /// The execution priority after PRIMASK and BASEPRI. src/chip/periph/exec_priority.zig.
 pub const exec = @import("../exec_priority.zig");
-/// Raising a UsageFault. src/chip/periph/usage_fault.zig.
-pub const usage = @import("../usage_fault.zig");
+
 /// Raising a SecureFault. src/chip/periph/secure_fault.zig.
 pub const secure = @import("../secure_fault.zig");
+
+/// Raising a UsageFault. src/chip/periph/usage_fault.zig.
+pub const usage = @import("../usage_fault.zig");
 
 /// A CFSR cause, valued by its bit position. Positions not listed are
 /// reserved and read as zero on silicon.
@@ -133,14 +135,20 @@ pub const Words = struct { cfsr: u32 = 0, hfsr: u32 = 0, sfsr: u32 = 0 };
 pub fn line(out: anytype, words: Words) !void {
     if (words.cfsr | words.hfsr | words.sfsr == 0) return;
     try out.print("faults: CFSR 0x{X:0>8}", .{words.cfsr});
-    for (decode(words.cfsr).constSlice()) |cause| try out.print(" {s}", .{@tagName(cause)});
+    for (decode(words.cfsr).constSlice()) |cause| {
+        try out.print(" {s}", .{@tagName(cause)});
+    }
     try out.print(", HFSR 0x{X:0>8}", .{words.hfsr});
-    for (decodeHard(words.hfsr).constSlice()) |cause| try out.print(" {s}", .{@tagName(cause)});
+    for (decodeHard(words.hfsr).constSlice()) |cause| {
+        try out.print(" {s}", .{@tagName(cause)});
+    }
     try out.print(", SFSR 0x{X:0>8}\n", .{words.sfsr});
 }
 
 fn maskOf(comptime E: type) u32 {
     var mask: u32 = 0;
-    inline for (@typeInfo(E).@"enum".field_values) |value| mask |= @as(u32, 1) << value;
+    inline for (@typeInfo(E).@"enum".field_values) |value| {
+        mask |= @as(u32, 1) << value;
+    }
     return mask;
 }

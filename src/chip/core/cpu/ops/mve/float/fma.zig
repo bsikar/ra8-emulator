@@ -4,12 +4,13 @@
 //! (d + n*m), op=1 is VFMS (d - n*m) and sz=1 is F16. D, N and M would name
 //! Q8 and above, so they must be zero. The by-scalar VFMA and VFMAS are in
 //! mve_float_scalar.zig; the lane semantics are in src/chip/core/cpu/mve/float/float.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("../int/int.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.float.Size;
 const Fused = mve.float.Fused;
 

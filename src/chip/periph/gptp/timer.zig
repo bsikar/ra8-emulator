@@ -16,7 +16,6 @@
 //! Here the offset is normalized when it is committed and the sum is
 //! carried to completion, so a nanoseconds read is always below one second
 //! and the seconds it belonged to are in the seconds field.
-const std = @import("std");
 
 /// The GPTP clock and fixed-point scale.
 pub const scale = struct {

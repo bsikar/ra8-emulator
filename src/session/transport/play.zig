@@ -1,13 +1,14 @@
 //! The transport's play and continue queueing and slice execution.
 
 const std = @import("std");
+
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
 const debug_session = @import("../session.zig");
-const session_speed = @import("../speed.zig");
-const transport_mod = @import("transport.zig");
 const line = @import("../line.zig");
 const replay_feeder = @import("../history/replay_feeder.zig");
+const session_speed = @import("../speed.zig");
+const transport_mod = @import("transport.zig");
 const watch_table = @import("../watch/table.zig");
 const window_trail = @import("../history/window_trail.zig");
 

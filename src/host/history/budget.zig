@@ -35,13 +35,37 @@ pub fn ram(physical: u64, override: ?u64) error{BudgetTooSmall}!u64 {
 pub fn partition(cap: u64) error{BudgetTooSmall}!Shares {
     if (cap < bytes.floor) return error.BudgetTooSmall;
     var result: Shares = if (cap > 512 * bytes.mib)
-        .{ .window = 64 * bytes.mib, .frames = 256 * bytes.mib, .checkpoints = 640 * bytes.mib, .output = 64 * bytes.mib, .workers = if (cap >= bytes.gib) 4 else 1 }
+        .{
+            .window = 64 * bytes.mib,
+            .frames = 256 * bytes.mib,
+            .checkpoints = 640 * bytes.mib,
+            .output = 64 * bytes.mib,
+            .workers = if (cap >= bytes.gib) 4 else 1,
+        }
     else if (cap > 256 * bytes.mib)
-        .{ .window = 32 * bytes.mib, .frames = 128 * bytes.mib, .checkpoints = 320 * bytes.mib, .output = 32 * bytes.mib, .workers = if (cap >= 512 * bytes.mib) 1 else 0 }
+        .{
+            .window = 32 * bytes.mib,
+            .frames = 128 * bytes.mib,
+            .checkpoints = 320 * bytes.mib,
+            .output = 32 * bytes.mib,
+            .workers = if (cap >= 512 * bytes.mib) 1 else 0,
+        }
     else if (cap > bytes.floor)
-        .{ .window = 16 * bytes.mib, .frames = 48 * bytes.mib, .checkpoints = 160 * bytes.mib, .output = 32 * bytes.mib, .workers = 0 }
+        .{
+            .window = 16 * bytes.mib,
+            .frames = 48 * bytes.mib,
+            .checkpoints = 160 * bytes.mib,
+            .output = 32 * bytes.mib,
+            .workers = 0,
+        }
     else
-        .{ .window = 16 * bytes.mib, .frames = 0, .checkpoints = 80 * bytes.mib, .output = 32 * bytes.mib, .workers = 0 };
+        .{
+            .window = 16 * bytes.mib,
+            .frames = 0,
+            .checkpoints = 80 * bytes.mib,
+            .output = 32 * bytes.mib,
+            .workers = 0,
+        };
     var excess = result.total() -| cap;
     shrink(&result.checkpoints, 80 * bytes.mib, &excess);
     shrink(&result.frames, 0, &excess);

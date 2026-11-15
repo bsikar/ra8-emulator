@@ -15,7 +15,6 @@
 //! CLUT planes are not among them, so every CLUT entry a driver wrote fell
 //! into the sparse register file and the index bytes in the framebuffer were
 //! hashed as if they were colours.
-const std = @import("std");
 
 /// Where the planes are and how big they are.
 pub const geometry = struct {

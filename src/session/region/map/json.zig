@@ -8,9 +8,10 @@
 //!  "lma","size","kind","copy"}]}],"stack":{"base","size","region"}|null,
 //!  "outside":{"count","bytes","sections":[...]}}
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
-const sections = @import("../../sections.zig");
 const region_map = @import("map.zig");
+const sections = @import("../../sections.zig");
 
 pub fn write(writer: *std.Io.Writer, image: elf.Image, regions: []const region_map.Region) !void {
     const map = try region_map.build(image, regions);

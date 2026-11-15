@@ -8,12 +8,12 @@
 //! The Non-secure aliases (MSP_NS and friends, SYSm 0x88 up) go to the other
 //! Security state's bank in src/chip/core/banked.zig. They are privileged only;
 //! from Non-secure state they read zero and ignore writes.
-const op = @import("../op.zig");
 const banked = @import("../../banked.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
-const sysreg = @import("../sysreg.zig");
+const op = @import("../op.zig");
 const regs = @import("../regs.zig");
+const sysreg = @import("../sysreg.zig");
 
 pub const encodings = struct {
     pub const mrs: u16 = 0xF3EF;
@@ -76,7 +76,11 @@ fn mrs(cpu: *Cpu, instr: Instr) op.Error!void {
     const n = sysmOf(instr);
     if (!nsAlias(n)) {
         const value = sysreg.read(&cpu.regs, n);
-        return cpu.regs.set(rd, if (n == sysreg.sysm.control and !cpu.profile.v8_1m) value & ~pacbti_control else value);
+        return cpu.regs.set(
+            rd,
+            if (n == sysreg.sysm.control and
+                !cpu.profile.v8_1m) value & ~pacbti_control else value,
+        );
     }
     const value = if (sysreg.privileged(&cpu.regs)) cpu.banked.readNs(&cpu.regs, n) else null;
     const visible = value orelse 0;
@@ -91,7 +95,8 @@ fn msr(cpu: *Cpu, instr: Instr) op.Error!void {
         return sysreg.write(&cpu.regs, n, maskOf(instr), control_value);
     }
     if (sysreg.privileged(&cpu.regs)) {
-        const control_value = if (n == banked.sysm.control_ns and !cpu.profile.v8_1m) value & ~pacbti_control else value;
+        const control_value = if (n == banked.sysm.control_ns and
+            !cpu.profile.v8_1m) value & ~pacbti_control else value;
         _ = cpu.banked.writeNs(&cpu.regs, n, control_value);
     }
 }

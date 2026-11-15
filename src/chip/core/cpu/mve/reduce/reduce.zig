@@ -5,10 +5,11 @@
 //! in Qn, and the VMLSDAV forms subtract the odd-lane products. The A
 //! forms start from the accumulator; pass 0 for the plain forms. The sum is
 //! exact and then wraps to the destination width.
-const qreg = @import("../qreg.zig");
 const int = @import("../int/int.zig");
 pub const minmax = @import("minmax/minmax.zig");
+const qreg = @import("../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// How a dual multiply-accumulate pairs and signs its products.

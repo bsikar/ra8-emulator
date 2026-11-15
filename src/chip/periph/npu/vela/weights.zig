@@ -74,7 +74,9 @@ const Palette = struct {
     fn uncompressedBits(self: *const Palette) u5 {
         if (self.size == 0) return self.bits;
         var b: u5 = 0;
-        while ((@as(u32, 1) << b) < self.size) b += 1;
+        while ((@as(u32, 1) << b) < self.size) {
+            b += 1;
+        }
         return b;
     }
 };
@@ -220,7 +222,9 @@ const Decoder = struct {
         const size = try self.bits.get(5);
         p.size = if (size > 0) size + 1 else 0;
         p.bits = @intCast(try self.bits.get(3) + 2);
-        for (p.entries[0..p.size]) |*entry| entry.* = @intCast(try self.bits.get(p.bits));
+        for (p.entries[0..p.size]) |*entry| {
+            entry.* = @intCast(try self.bits.get(p.bits));
+        }
     }
 
     fn decodeSlice(self: *Decoder, h: Header) Error!void {

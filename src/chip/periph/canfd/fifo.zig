@@ -10,7 +10,6 @@
 //! Ported out of board_periph_canfd.c on dev, which keeps one slot: a second
 //! delivery overwrites the first, so an image that transmits twice before
 //! reading loses the older frame with nothing said about it.
-const std = @import("std");
 
 /// A frame as the CFDTM / CFDRF windows carry it: ID, PTR, the status or
 /// control word, then the 64-byte data field. Nineteen words in all.

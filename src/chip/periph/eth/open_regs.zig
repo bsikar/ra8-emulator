@@ -3,8 +3,8 @@
 //! The firmware programs these configuration and interrupt words before it
 //! starts the gateway. The modeled MAC, gateway, forwarding and timer blocks
 //! own behavior; this bank only retains setup words with no modeled side effect.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const addresses = [_]u32{
     0x403C_D004, 0x403C_D010, 0x403C_D020,

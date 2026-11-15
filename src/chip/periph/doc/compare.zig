@@ -31,7 +31,6 @@
 //! reserved and the HAL asserts they are never written, so they are treated as
 //! the reset relation (mismatch) and named as reserved rather than given an
 //! invented shape.
-const std = @import("std");
 
 /// DOCR.DCSEL[2:0] field geometry (HUM Ch 57.2.1 p 3519).
 pub const field = struct {

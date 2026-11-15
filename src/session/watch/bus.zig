@@ -8,11 +8,13 @@
 //! It listens only while armed, which zig_drive does around one
 //! instruction, and never to that instruction's own fetch.
 const std = @import("std");
+
 const bus = @import("ra8_chip").core.cpu.bus;
 const step_hook = @import("../step_hook.zig");
-const until = @import("ra8_chip").core.until;
+
 /// Re-exported for tests/session/unit_view_test.zig.
 pub const unit_view = @import("../unit_view.zig");
+const until = @import("ra8_chip").core.until;
 
 pub const WatchBus = struct {
     inner: bus.Bus,
@@ -30,7 +32,12 @@ pub const WatchBus = struct {
     quiet: bool = false,
 
     pub fn view(self: *WatchBus) bus.Bus {
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .peek = peek, .latch = latch }, .lines = self.inner.lines, .register_state = self.inner.register_state };
+        return .{
+            .ctx = self,
+            .vtable = &.{ .read = read, .write = write, .peek = peek, .latch = latch },
+            .lines = self.inner.lines,
+            .register_state = self.inner.register_state,
+        };
     }
 
     /// Listen to the instruction at `pc`, `size` bytes wide.

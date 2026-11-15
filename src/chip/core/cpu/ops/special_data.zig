@@ -6,10 +6,12 @@
 //! exception return (src/chip/core/cpu/exception/ret.zig). FNC_RETURN is RA8EMU-18's;
 //! BXNS and BLXNS (bit 2 set) belong to TrustZone and stay unclaimed, as do
 //! the UNPREDICTABLE forms.
-const op = @import("../op.zig");
+const bti = @import("../bti.zig");
+
 const Cpu = @import("../cpu.zig").Cpu;
-const Instr = @import("../instr.zig").Instr;
 const flags = @import("../flags.zig");
+const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const regs = @import("../regs.zig");
 
 pub const encodings = struct {
@@ -85,12 +87,12 @@ fn bx(cpu: *Cpu, instr: Instr) op.Error!void {
     const rm = second(instr.hw1);
     const target = read(cpu, instr, rm);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) @import("../bti.zig").setForBranch(&cpu.regs, rm, cpu.profile.v8_1m);
+    if (cpu.regs.exc_return == null) bti.setForBranch(&cpu.regs, rm, cpu.profile.v8_1m);
 }
 
 fn blx(cpu: *Cpu, instr: Instr) op.Error!void {
     const target = cpu.regs.get(second(instr.hw1));
     cpu.regs.set(14, (instr.address +% 2) | 1);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) @import("../bti.zig").setForCall(&cpu.regs, cpu.profile.v8_1m);
+    if (cpu.regs.exc_return == null) bti.setForCall(&cpu.regs, cpu.profile.v8_1m);
 }

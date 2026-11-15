@@ -9,10 +9,12 @@
 //!                           index/ scratch/
 //!   ROOT/trash-ID/          a session on its way out
 //!   ROOT/ID.pointer         kept root only: a kept session left where it was
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
-pub const directory_permissions: std.Io.File.Permissions = if (builtin.os.tag == .windows) .default_dir else .fromMode(0o700);
+pub const directory_permissions: std.Io.File.Permissions = if (builtin.os.tag == .windows) .default_dir else .fromMode(
+    0o700,
+);
 
 /// Files at the top of a session directory.
 pub const files = struct {

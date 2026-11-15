@@ -62,11 +62,23 @@ const words = [_]V{
     load("ldr.w r0, [pc, #0]", 0xF8DF, 0x0000, 0x2000_0104, literal),
     load("ldr.w r5, [pc, #256]", 0xF8DF, 0x5100, 0x2000_0204, literal),
     load("ldr.w r0, [pc, #-4] reads its own word", 0xF85F, 0x0004, 0x2000_0100, literal),
-    vec("ldr.w r0, [pc, #4] from a halfword address aligns PC down", .{ .hw1 = 0xF8DF, .hw2 = 0x0004, .address = 0x2000_0102, .at = 0x2000_0108 }, .{ .rt = literal }),
+    vec(
+        "ldr.w r0, [pc, #4] from a halfword address aligns PC down",
+        .{ .hw1 = 0xF8DF, .hw2 = 0x0004, .address = 0x2000_0102, .at = 0x2000_0108 },
+        .{ .rt = literal },
+    ),
     load("ldr.w r12, [pc, #760] reaches the last word of RAM", 0xF8DF, 0xC2F8, 0x2000_03FC, literal),
     load("ldr.w lr, [pc, #8]", 0xF8DF, 0xE008, 0x2000_010C, literal),
-    vec("ldr.w sp, [pc, #0] loads SP", .{ .hw1 = 0xF8DF, .hw2 = 0xD000, .at = 0x2000_0104, .lit = 0x2000_0300 }, .{ .rt = 0x2000_0300 }),
-    vec("ldr.w pc, [pc, #0] branches to the Thumb target", .{ .hw1 = 0xF8DF, .hw2 = 0xF000, .at = 0x2000_0104, .lit = 0x2000_0201 }, .{ .rt = 0x2000_0200 }),
+    vec(
+        "ldr.w sp, [pc, #0] loads SP",
+        .{ .hw1 = 0xF8DF, .hw2 = 0xD000, .at = 0x2000_0104, .lit = 0x2000_0300 },
+        .{ .rt = 0x2000_0300 },
+    ),
+    vec(
+        "ldr.w pc, [pc, #0] branches to the Thumb target",
+        .{ .hw1 = 0xF8DF, .hw2 = 0xF000, .at = 0x2000_0104, .lit = 0x2000_0201 },
+        .{ .rt = 0x2000_0200 },
+    ),
     faults("ldr.w past RAM faults and leaves rt", 0xF8DF, 0xC2FC),
     faults("ldr.w back below RAM faults and leaves rt", 0xF85F, 0x0108),
 };
@@ -83,7 +95,11 @@ const narrow = [_]V{
     load("ldrh r3, [pc, #6] reads the high half", 0xF8BF, 0x3006, 0x2000_0108, 0x8765),
     load("ldrh r3, [pc, #-4] reads backwards", 0xF83F, 0x3004, 0x2000_0100, 0xC3A9),
     load("ldrsh r4, [pc, #4] sign-extends a negative half", 0xF9BF, 0x4004, 0x2000_0108, 0xFFFF_C3A9),
-    vec("ldrsh r4, [pc, #4] keeps a positive half", .{ .hw1 = 0xF9BF, .hw2 = 0x4004, .at = 0x2000_0108, .lit = 0x1234_5678 }, .{ .rt = 0x5678 }),
+    vec(
+        "ldrsh r4, [pc, #4] keeps a positive half",
+        .{ .hw1 = 0xF9BF, .hw2 = 0x4004, .at = 0x2000_0108, .lit = 0x1234_5678 },
+        .{ .rt = 0x5678 },
+    ),
     load("ldrsh r4, [pc, #-2] reads backwards", 0xF93F, 0x4002, 0x2000_0100, 0xFFFF_8765),
     faults("ldrh past RAM faults and leaves rt", 0xF8BF, 0x32FC),
 };

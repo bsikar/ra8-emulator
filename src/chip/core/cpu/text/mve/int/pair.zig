@@ -1,7 +1,7 @@
 //! Text for vector saturating and pairwise integer operations, per DDI0553 B5.
 const Instr = @import("../../../instr.zig").Instr;
-const ops = @import("../../../ops/mve/int/pair.zig");
 const mve_int = @import("../../../ops/mve/int/int.zig");
+const ops = @import("../../../ops/mve/int/pair.zig");
 const text = @import("../../text.zig");
 
 const sizes = [_][]const u8{ "8", "16", "32" };

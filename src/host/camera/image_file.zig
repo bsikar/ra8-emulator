@@ -7,10 +7,11 @@
 //! is chosen by the file's magic bytes, never its name. Every capture then
 //! shows the same picture.
 const std = @import("std");
-const decoded = @import("decoded_image.zig");
-const ppm = @import("ppm_decode.zig");
+
 const bmp = @import("bmp_decode.zig");
+const decoded = @import("decoded_image.zig");
 const png = @import("png_decode.zig");
+const ppm = @import("ppm_decode.zig");
 
 /// No picture worth capturing comes near this; a bigger file is refused
 /// rather than read into memory.

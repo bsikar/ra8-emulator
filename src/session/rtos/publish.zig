@@ -4,11 +4,11 @@
 //! what it recorded since the last drain at the debugger's chunk boundary,
 //! keeping each event's own core and stamp, so subscribers see the tracer's
 //! order and times rather than the drain's.
-const rtos_trace = @import("trace.zig");
 const rtos_stream = @import("stream.zig");
+const rtos_trace = @import("trace.zig");
 const stream_mod = @import("../event/stream.zig");
-const zig_boundary = @import("../zig/boundary.zig");
 const timebase = @import("ra8_chip").periph.timebase;
+const zig_boundary = @import("../zig/boundary.zig");
 
 /// The board's time base, named for tests.
 pub const TimeBase = timebase.TimeBase;
@@ -31,7 +31,9 @@ pub const Publisher = struct {
         var buffer: [batch]rtos_trace.Event = undefined;
         while (true) {
             const read = self.cursor.read(self.trace, &buffer);
-            for (read) |one| self.stream.publish(eventAt(one, self.nsOf(one.when)));
+            for (read) |one| {
+                self.stream.publish(eventAt(one, self.nsOf(one.when)));
+            }
             if (read.len < buffer.len) return;
         }
     }

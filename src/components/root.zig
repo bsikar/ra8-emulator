@@ -5,35 +5,38 @@
 //! that needs host data declares an interface, and the application fills it
 //! from ra8_host.
 pub const ov5640 = @import("camera_ov5640/sccb.zig");
+
 /// The camera part's frame production: host inputs wrapped and converted
 /// to what the CEU programmed (RA8EMU-1059).
 pub const camera = struct {
-    pub const hosted = @import("camera_ov5640/hosted.zig");
-    pub const converted = @import("camera_ov5640/converted_source.zig");
     pub const convert = @import("camera_ov5640/pixel_convert.zig");
+    pub const converted = @import("camera_ov5640/converted_source.zig");
+    pub const hosted = @import("camera_ov5640/hosted.zig");
 };
-pub const pi4ioe = @import("expander_pi4ioe/pi4ioe.zig");
-pub const gt911 = @import("touch_gt911/gt911.zig");
-pub const touch_input = @import("touch_gt911/touch_input.zig");
-pub const user_switch = @import("user_switch/user_switch.zig");
-pub const eth_phy = @import("eth_phy/phy.zig");
+pub const button = @import("button/button.zig");
+pub const eink = @import("eink_it8951/panel.zig");
 pub const eth_peer = @import("eth_phy/peer.zig");
+pub const eth_phy = @import("eth_phy/phy.zig");
+pub const gt911 = @import("touch_gt911/gt911.zig");
 pub const input_script = @import("touch_gt911/input_script.zig");
+pub const led = @import("led/led.zig");
 pub const lsm6dso = @import("imu_lsm6dso/lsm6dso.zig");
 pub const max17048 = @import("gauge_max17048/max17048.zig");
-pub const button = @import("button/button.zig");
-pub const led = @import("led/led.zig");
-pub const usb = @import("usb/usb.zig");
-pub const nor_flash = @import("nor_flash/flash.zig");
 pub const modem_at = @import("modem_at/modem.zig");
-pub const eink = @import("eink_it8951/panel.zig");
+pub const nor_flash = @import("nor_flash/flash.zig");
+pub const pi4ioe = @import("expander_pi4ioe/pi4ioe.zig");
+pub const touch_input = @import("touch_gt911/touch_input.zig");
+pub const usb = @import("usb/usb.zig");
+pub const user_switch = @import("user_switch/user_switch.zig");
+
 /// The plug layer: endpoints, the catalog, parts, requests and faults.
 pub const model = @import("model.zig");
 pub const sd_card = @import("sd_card/card/card.zig");
+
 /// The ESP32-C6 on the EK-RA8D2, speaking esp-hosted over SPI or UART.
-pub const esp_hosted = @import("esp32c6_hosted/hosted.zig");
 pub const catalog = @import("catalog.zig");
 pub const endpoint = @import("endpoint.zig");
+pub const esp_hosted = @import("esp32c6_hosted/hosted.zig");
 pub const esp_tape = @import("esp32c6_hosted/tape/tape.zig");
 pub const fault = @import("fault/fault.zig");
 pub const parts = @import("parts.zig");

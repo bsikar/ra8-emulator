@@ -7,8 +7,8 @@
 //! underflow, and painting the backdrop over it would hide the fault.
 
 const glcdc = @import("glcdc.zig");
-const scan = @import("scan.zig");
 const mix = @import("mix.zig");
+const scan = @import("scan.zig");
 
 /// Whether either graphics layer has RENB set, believable or not.
 pub fn anyLayerReading(unit: *const glcdc.Glcdc) bool {

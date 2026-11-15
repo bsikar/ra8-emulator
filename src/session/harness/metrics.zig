@@ -1,8 +1,13 @@
 //! On-demand per-core RTOS ownership for device metrics.
+const board = @import("ra8_board");
+const chip = @import("ra8_chip");
+const symbols = @import("../symbols.zig");
+
 const std = @import("std");
-const rtos = @import("../rtos/hook.zig");
-const metrics = @import("../device_metrics.zig");
+
 const elf = @import("ra8_board").image.elf;
+const metrics = @import("../device_metrics.zig");
+const rtos = @import("../rtos/hook.zig");
 
 pub const Track = struct {
     tracer: rtos.Tracer = undefined,
@@ -16,12 +21,21 @@ pub const Track = struct {
 
 pub fn read(state: anytype, core: u1) metrics.Snapshot {
     const cpu = state.loading.cpu[core] orelse return .{};
-    const bytes = state.loading.loaded[core] orelse if (core == 0) state.bytes else return metrics.collect(cpu, &state.cpu0.store.?, null, null, core);
+    const bytes = state.loading.loaded[core] orelse if (core == 0) state.bytes else return metrics.collect(
+        cpu,
+        &state.cpu0.store.?,
+        null,
+        null,
+        core,
+    );
     const image = elf.Image.init(bytes) catch return .{};
     // Reuse an explicitly armed CPU0 trace rather than wrapping its bus twice.
     if (core == 0) if (state.tracer) |*tracer| {
         const track = &state.metrics_tracking[core];
-        if (cpu.metrics_epoch != track.epoch or cpu.retired < track.sampled_retired or cpu.retired < tracer.trace.load.cores[core].since) {
+        if (cpu.metrics_epoch != track.epoch or
+            cpu.retired < track.sampled_retired or
+            cpu.retired < tracer.trace.load.cores[core].since)
+        {
             seed(tracer, cpu, state.loading.memory[core], core);
         }
         track.epoch = cpu.metrics_epoch;
@@ -29,12 +43,15 @@ pub fn read(state: anytype, core: u1) metrics.Snapshot {
         return metrics.collect(cpu, &state.cpu0.store.?, image, &tracer.trace.load, core);
     };
     const track = &state.metrics_tracking[core];
-    const identity = state.loading.hashes[core] orelse @import("ra8_board").snapshot.run.imageIdentity(bytes);
+    const identity = state.loading.hashes[core] orelse board.snapshot.run.imageIdentity(bytes);
     const changed = if (track.identity) |old| !std.mem.eql(u8, &old, &identity) else true;
-    const rewound = track.armed and (cpu.metrics_epoch != track.epoch or cpu.retired < track.sampled_retired or cpu.retired < track.tracer.trace.load.cores[core].since);
+    const rewound = track.armed and
+        (cpu.metrics_epoch != track.epoch or
+            cpu.retired < track.sampled_retired or
+            cpu.retired < track.tracer.trace.load.cores[core].since);
     if (changed or rewound) {
         track.identity = identity;
-        if (@import("../symbols.zig").addressOf(image, rtos.symbol)) |address| {
+        if (symbols.addressOf(image, rtos.symbol)) |address| {
             track.tracer = .{ .address = address, .core = core };
             track.tracer.now = &state.board.time.base.retired;
             track.tracer.trace.fine = &cpu.retired;
@@ -58,7 +75,7 @@ pub fn read(state: anytype, core: u1) metrics.Snapshot {
 }
 
 /// A new epoch starts with the actual running thread and active exception stack.
-fn seed(tracer: *rtos.Tracer, cpu: anytype, memory: ?@import("ra8_chip").core.cpu.memory.guest.Guest, core: u1) void {
+fn seed(tracer: *rtos.Tracer, cpu: anytype, memory: ?chip.core.cpu.memory.guest.Guest, core: u1) void {
     tracer.trace.load = .{ .from = cpu.retired };
     for (cpu.active.stack[0..cpu.active.depth]) |entry| {
         tracer.trace.load.feed(.{ .core = core, .when = cpu.retired, .kind = .enter, .exception = entry.number });
@@ -66,7 +83,14 @@ fn seed(tracer: *rtos.Tracer, cpu: anytype, memory: ?@import("ra8_chip").core.cp
     if (memory) |guest| {
         if (guest.readWord(tracer.address)) |thread| {
             tracer.trace.current[core] = thread;
-            tracer.trace.load.feed(.{ .core = core, .when = cpu.retired, .kind = if (thread == 0) .idle else .switch_to, .thread = thread });
+            tracer.trace.load.feed(
+                .{
+                    .core = core,
+                    .when = cpu.retired,
+                    .kind = if (thread == 0) .idle else .switch_to,
+                    .thread = thread,
+                },
+            );
         } else |_| {}
     }
 }

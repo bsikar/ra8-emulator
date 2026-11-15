@@ -1,6 +1,6 @@
 //! The end-of-run lines for the PLL configuration registers, one PLL at a
 //! time, plus MOSCWTCR and the stores the PRCR gate turned away.
-const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const Config = @import("ra8_chip").periph.pll.config.Config;
 

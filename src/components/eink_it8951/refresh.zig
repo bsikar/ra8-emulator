@@ -1,5 +1,6 @@
 //! The data captured for each IT8951 display-area command.
 const proto = @import("wire.zig");
+
 pub const Event = struct {
     x: u16,
     y: u16,

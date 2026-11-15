@@ -1,9 +1,9 @@
 //! The harness's open options: what an image runs with. Split out of
 //! the harness file so the file stays small; harness.zig re-exports it.
-const part = @import("ra8_chip").core.part;
-const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const file_ops = @import("../file_ops.zig");
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const history_recorder = @import("../history/recorder.zig");
+const part = @import("ra8_chip").core.part;
 
 pub const Options = struct {
     elf_path: []const u8 = "",

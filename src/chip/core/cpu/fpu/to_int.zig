@@ -8,13 +8,16 @@
 //! and saturated to the target range. Saturation raises IOC; an in-range
 //! result that was rounded raises IXC instead.
 const format = @import("format.zig");
+
 const Format = format.Format;
-const unpack_mod = @import("unpack.zig");
-const round = @import("round.zig");
 const fpscr_mod = @import("fpscr.zig");
+const round = @import("round.zig");
+const unpack_mod = @import("unpack.zig");
+
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
 const rounding_mod = @import("rounding.zig");
+
 const Rounding = rounding_mod.Rounding;
 
 pub fn toFixed(comptime fmt: Format, op: fmt.Bits(), fbits: u6, unsigned: bool, mode: RMode, fpscr: *Fpscr) u32 {
@@ -23,7 +26,14 @@ pub fn toFixed(comptime fmt: Format, op: fmt.Bits(), fbits: u6, unsigned: bool, 
 
 /// FPToFixed with the rounding named directly, for the forms whose
 /// encoding fixes it (VCVTA/N/P/M) rather than reading FPSCR.
-pub fn toFixedBy(comptime fmt: Format, op: fmt.Bits(), fbits: u6, unsigned: bool, rounding: Rounding, fpscr: *Fpscr) u32 {
+pub fn toFixedBy(
+    comptime fmt: Format,
+    op: fmt.Bits(),
+    fbits: u6,
+    unsigned: bool,
+    rounding: Rounding,
+    fpscr: *Fpscr,
+) u32 {
     const u = unpack_mod.unpack(fmt, op, fpscr);
     switch (u.kind) {
         .snan, .qnan => {

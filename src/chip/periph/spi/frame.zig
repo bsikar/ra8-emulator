@@ -37,7 +37,6 @@
 //! reaches it reversed and what it drives comes back reversed again. That
 //! is the model's own reading of a headless wire, stated rather than
 //! implied.
-const std = @import("std");
 
 /// Where the command registers sit in a channel's window
 /// (ra8_spi_regs.h: SPCMD0 at +0x14, eight slots of four bytes).

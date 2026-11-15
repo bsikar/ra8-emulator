@@ -5,9 +5,9 @@
 //! 0xE000_EDxx, the Non-secure copy at 0xE002_EDxx (RA8EMU-365). A core that
 //! can reach that copy has `readNonSecure` and `writeNonSecure`; one that
 //! cannot offers only the Secure copy.
+const Candidate = @import("../candidate.zig").Candidate;
 const memmap = @import("../../core/memmap.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
-const Candidate = @import("../candidate.zig").Candidate;
 
 /// The pends in both copies, Secure first.
 pub fn read(core: anytype) !systick_bank.Pends {

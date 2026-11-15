@@ -1,5 +1,6 @@
 //! Shared settled detection for GLCDC scans and e-ink LUT completion.
 const std = @import("std");
+
 const Panel = @import("ra8_components").eink.Panel;
 
 pub const Detector = struct {

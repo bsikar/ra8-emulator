@@ -1,11 +1,13 @@
 //! Headless project builds and receipt-only DAP, sharing the RPC host service.
 const std = @import("std");
-const host = @import("ra8_host");
-const dap = @import("ra8_dap");
-pub const Owner = @import("owner.zig").Owner;
-const listener = @import("../root.zig").dap;
 
-pub const usage = "usage: ra8_emulator project build ROOT CONFIG RECIPE [--zig ABSOLUTE_PATH]\n       ra8_emulator project dap PORT ROOT CONFIG [--zig ABSOLUTE_PATH]\n";
+const dap = @import("ra8_dap");
+const host = @import("ra8_host");
+const listener = @import("../root.zig").dap;
+pub const Owner = @import("owner.zig").Owner;
+
+pub const usage = "usage: ra8_emulator project build ROOT CONFIG RECIPE [--zig ABSOLUTE_PATH]\n" ++
+    "       ra8_emulator project dap PORT ROOT CONFIG [--zig ABSOLUTE_PATH]\n";
 
 pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     perform(allocator, io, argv) catch |err| {
@@ -33,7 +35,10 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     const port = try std.fmt.parseInt(u16, argv[3], 10);
     var owner: Owner = .{ .project = &project };
     defer owner.close();
-    var adapter: dap.adapter.Adapter = .{ .allocator = allocator, .opener = .{ .context = &owner, .openFn = Owner.open } };
+    var adapter: dap.adapter.Adapter = .{
+        .allocator = allocator,
+        .opener = .{ .context = &owner, .openFn = Owner.open },
+    };
     defer adapter.deinit();
     try listener.listen(allocator, io, port, &adapter);
 }
@@ -56,7 +61,11 @@ fn buildProject(project: *host.project.Project, recipe: []const u8) !void {
     };
     var buffer: [4096]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(project.base.io, &buffer);
-    try std.json.Stringify.value(.{ .version = 1, .build_id = id, .receipt = path, .target = project.parsed.?.value.target }, .{}, &writer.interface);
+    try std.json.Stringify.value(
+        .{ .version = 1, .build_id = id, .receipt = path, .target = project.parsed.?.value.target },
+        .{},
+        &writer.interface,
+    );
     try writer.interface.writeByte('\n');
     try writer.interface.flush();
 }

@@ -11,7 +11,6 @@
 //! instructions and never inside one. Reading it is the engine's job, not
 //! this file's: everything here is arithmetic over a value it is handed,
 //! which is what keeps the core's only C boundary in one place.
-const std = @import("std");
 
 /// The console line a run waits on (`--until`), reached as stop.until
 /// because src/root.zig is at its line limit.

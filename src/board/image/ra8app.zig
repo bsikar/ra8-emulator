@@ -10,6 +10,7 @@
 //! does not depend on the host. It does not check the signature: that is the
 //! firmware's verifier, running inside the emulated board.
 const std = @import("std");
+
 const module_place = @import("ra8_chip").core.module_place;
 
 pub const magic: u32 = 0x52413841; // "RA8A"

@@ -38,7 +38,6 @@
 //! overflow. Nothing here writes to the counter either: compare match in PWM
 //! mode clears GTCNT through GTCR's mode bits, and those are not modelled, so
 //! the period is still the only thing that wraps the count.
-const std = @import("std");
 
 /// Where the compare/capture array sits in a channel (ra8_gpt_regs.h).
 pub const off = struct {

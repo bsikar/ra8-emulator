@@ -5,21 +5,22 @@
 //! opening line reads SP and the reset vector off that store, option memory
 //! is read from it, and src/interfaces/cli/zig/run.zig gets no engine.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const Reboot = @import("ra8_chip").core.reboot.Reboot;
+
 const Board = @import("ra8_board").board.Board;
-const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
 const cli = @import("../cli.zig");
-const Parts = @import("../parts.zig").Parts;
-const report = @import("../report.zig");
-const zig_run = @import("run.zig");
+const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
 const dumps = @import("../report/dumps.zig");
-const Stop = @import("ra8_chip").core.stop.Stop;
+const elf = @import("ra8_board").image.elf;
 const fault_file = @import("ra8_session").fault_file;
 const file_ops = @import("ra8_session").file_ops;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
+const Parts = @import("../parts.zig").Parts;
+const Reboot = @import("ra8_chip").core.reboot.Reboot;
+const report = @import("../report.zig");
 const session_files = @import("ra8_host").session_files;
-const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
+const Stop = @import("ra8_chip").core.stop.Stop;
+const zig_run = @import("run.zig");
 
 /// Fitting the board is shared with main's engine path.
 pub const fit = @import("../board_fit.zig").fit;
@@ -58,7 +59,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     const fault_reader = if (options.state.files) |ops| ops.reader else session_files.reader(file_ops.Reader);
     if (options.faults) |path| schedule.open(&board, io, fault_reader, path) catch return 2;
     defer if (options.faults != null) schedule.deinit();
-    if (options.count_pc_len != 0) for (options.count_pc[0..options.count_pc_len]) |at| parts.hits.want(at & ~@as(u32, 1));
+    if (options.count_pc_len != 0) for (options.count_pc[0..options.count_pc_len]) |at| {
+        parts.hits.want(
+            at & ~@as(u32, 1),
+        );
+    };
     const ends: zig_run.Ends = .{
         .stop = if (stop) |*watch| watch else null,
         .point = if (point) |*one| one else null,
@@ -68,7 +73,22 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
         .schedule = if (options.faults != null) &schedule.applier else null,
         .policy = &asked,
     };
-    return fit_verdict(&board, try zig_run.run(out, io, memory, &board, &parts.timebase, image, options, vector_base, table, parts.tap.waiting(), ends));
+    return fit_verdict(
+        &board,
+        try zig_run.run(
+            out,
+            io,
+            memory,
+            &board,
+            &parts.timebase,
+            image,
+            options,
+            vector_base,
+            table,
+            parts.tap.waiting(),
+            ends,
+        ),
+    );
 }
 
 /// CPU0's store, the console tap, the profile table and option memory: what
@@ -77,12 +97,25 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
     const written = try cpu0.attachStore(board, image);
     if (options.console) board.console_input.source = cli.host.bytes.stdin();
     board.console_input.reply = options.console_reply;
-    parts.tap = .{ .echo = if (options.console) io else null, .wait = if (options.until) |text| .{ .needle = text } else null };
+    parts.tap = .{
+        .echo = if (options.console) io else null,
+        .wait = if (options.until) |text| .{ .needle = text } else null,
+    };
     if (options.console_reply.armed()) parts.tap.reply = &board.console_input.reply;
     cli.console_output.configure(&board.serial.line, &parts.tap);
-    if (options.profile) try parts.prepareProfile(io, image, options.profile_folded != null, if (options.cpu == .zig) options.cpu1_path else null);
+    if (options.profile) try parts.prepareProfile(
+        io,
+        image,
+        options.profile_folded != null,
+        if (options.cpu == .zig) options.cpu1_path else null,
+    );
     option_memory.apply(&board.heartbeat, cpu0.own());
-    if (!options.ctl_cpu_load) _ = try report.frames.out.Armed.armForCli(std.heap.page_allocator, io, board, options.frames);
+    if (!options.ctl_cpu_load) _ = try report.frames.out.Armed.armForCli(
+        std.heap.page_allocator,
+        io,
+        board,
+        options.frames,
+    );
     return written;
 }
 
@@ -115,7 +148,10 @@ pub fn announce(out: *std.Io.Writer, memory: Guest, written: u32, vector_base: u
     if (quiet) return;
     const sp = try memory.readWord(vector_base);
     const pc = (try memory.readWord(vector_base + 4)) & ~@as(u32, 1);
-    try out.print("loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n", .{ written, vector_base, sp, pc });
+    try out.print(
+        "loaded {d} bytes, vectors at 0x{X:0>8}, sp 0x{X:0>8}, pc 0x{X:0>8}\n",
+        .{ written, vector_base, sp, pc },
+    );
 }
 
 /// The `--stop-sym` counter, with the `--ns` image read only when a name was

@@ -1,5 +1,6 @@
 //! One fetched Thumb instruction: where it sits, its halfwords and its width.
 const std = @import("std");
+
 const bus = @import("bus.zig");
 
 pub const Instr = struct {

@@ -1,10 +1,10 @@
 //! LSL, LSR and ASR by an immediate, 16-bit (T1/T2/T2). LSL #0 is MOV Rd, Rm
 //! (T2). Outside an IT block they set N, Z and C (C only when something was
 //! shifted); inside one they leave the flags alone.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const flags = @import("../../flags.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 const shift = @import("../../shift.zig");
 
 pub const encodings = struct {

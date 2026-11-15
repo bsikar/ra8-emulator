@@ -2,8 +2,8 @@
 //! when the rounding bit is set. Ra = PC on 0xFB50 is smmul, which drops
 //! the accumulator operand.
 const Instr = @import("../../instr.zig").Instr;
-const text = @import("../text.zig");
 const mulhi = @import("../../ops/dsp/mulhi.zig");
+const text = @import("../text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = mulhi.Fields.of(instr).?;

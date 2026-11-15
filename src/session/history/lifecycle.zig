@@ -5,12 +5,12 @@
 //! graph sink. Parent removal preserves all child lines by truncating only the
 //! segment strictly following the latest child fork.
 const std = @import("std");
+
+const api = @import("../api.zig");
 const branch_mod = @import("branch.zig");
 const branch_prune = @import("branch_prune.zig");
 const branches_codec = @import("branches_codec.zig");
 const cross_seek = @import("cross_seek.zig");
-const seek_engine = @import("seek_engine.zig");
-const api = @import("../api.zig");
 const transport_mod = @import("../transport/transport.zig");
 
 pub const Position = branch_mod.Position;
@@ -142,7 +142,12 @@ pub fn switchBranch(session: *Session, transport: ?*Transport, target_id: Branch
 }
 
 /// Pure branch deletion planning and application over a BranchGraph.
-pub fn removeBranchPure(graph: *BranchGraph, active_line: ?BranchId, target_id: BranchId, confirm: bool) !TruncationPlan {
+pub fn removeBranchPure(
+    graph: *BranchGraph,
+    active_line: ?BranchId,
+    target_id: BranchId,
+    confirm: bool,
+) !TruncationPlan {
     if (!confirm) return Error.ConfirmRequired;
     if (active_line) |act| {
         if (target_id == act) return Error.BranchActive;

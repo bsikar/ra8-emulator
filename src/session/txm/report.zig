@@ -4,7 +4,7 @@
 //! list holds at least one module, so every run without ThreadX modules
 //! reports exactly what it did before. Layout and walk live in
 //! src/session/txm/modules.zig; `--report json` writes the same `Listed`.
-const std = @import("std");
+
 const txm = @import("modules.zig");
 
 /// Modules the report lists; a longer list is cut short.

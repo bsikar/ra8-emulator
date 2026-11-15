@@ -31,13 +31,22 @@ pub const Starts = struct {
 
 /// Write the stack into `into` and say how many frames it holds. `psp` is
 /// the live Process stack pointer, for a walk out of a handler.
-pub fn stackOf(frame: []const u8, registers: unwind.Registers, psp: u32, memory: anytype, starts: ?Starts, into: []u32) usize {
+pub fn stackOf(
+    frame: []const u8,
+    registers: unwind.Registers,
+    psp: u32,
+    memory: anytype,
+    starts: ?Starts,
+    into: []u32,
+) usize {
     if (into.len == 0) return 0;
     const covered = (dwarf_frame.find(frame, registers[unwind.limits.pc]) catch null) != null;
     if (!covered) return framePointer(registers, memory, starts, into);
     var walked: [unwind.limits.frames]unwind.Frame = undefined;
     const count = unwind.walk(frame, registers, psp, memory, walked[0..@min(into.len, walked.len)]);
-    for (walked[0..count], into[0..count]) |found, *address| address.* = found.pc & ~@as(u32, 1);
+    for (walked[0..count], into[0..count]) |found, *address| {
+        address.* = found.pc & ~@as(u32, 1);
+    }
     return count;
 }
 

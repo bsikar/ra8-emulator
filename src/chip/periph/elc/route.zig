@@ -12,7 +12,7 @@
 //! rather than the first match: a firmware that starts two peripherals off
 //! one timer event is doing the ordinary thing, and answering only the first
 //! would silently drop the second.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
 /// ELSR0..ELSR52 (FSP R_ELC_Type, ra8_elc.h k_ra8_elc_elsr_count).

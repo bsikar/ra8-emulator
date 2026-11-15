@@ -18,7 +18,9 @@ pub fn bankAt(i: u5) u32 {
 pub fn qAt(n: u3) u128 {
     var q: u128 = 0;
     var k: u5 = 4;
-    while (k > 0) : (k -= 1) q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    while (k > 0) : (k -= 1) {
+        q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    }
     return q;
 }
 
@@ -59,13 +61,37 @@ const vpnot = [_]V{
 };
 
 const vpsel = [_]V{
-    vec("vpsel q0, q1, q2 by halves", .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_00FF }, .{ .q = 0x5A000B0C_5A000A0B_5A000506_5A000405, .vpr = 0x0000_00FF }),
-    vec("vpsel with p0 all set takes qn", .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_FFFF }, .{ .q = qAt(1), .vpr = 0x0000_FFFF }),
+    vec(
+        "vpsel q0, q1, q2 by halves",
+        .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_00FF },
+        .{ .q = 0x5A000B0C_5A000A0B_5A000506_5A000405, .vpr = 0x0000_00FF },
+    ),
+    vec(
+        "vpsel with p0 all set takes qn",
+        .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_FFFF },
+        .{ .q = qAt(1), .vpr = 0x0000_FFFF },
+    ),
     vec("vpsel with p0 clear takes qm", .{ .hw1 = 0xFE33, .hw2 = 0x0F05 }, .{ .q = qAt(2), .vpr = 0 }),
-    vec("vpsel picks byte by byte", .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_5555 }, .{ .q = 0x5A000B08_5A000A07_5A000906_5A000805, .vpr = 0x0000_5555 }),
-    vec("vpsel q7, q0, q7", .{ .hw1 = 0xFE31, .hw2 = 0xEF0F, .vpr = 0x0000_FF00 }, .{ .q = 0x5A000304_5A000203_5A001D1E_5A001C1D, .vpr = 0x0000_FF00 }),
-    vec("vpsel in a block reads raw p0 and ends it", .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0088_00FF }, .{ .q = 0x5A000B0C_5A000A0B_5A000506_5A000405, .vpr = 0x0000_00FF }),
-    vec("vpsel with eci a0a1 keeps the done beats", .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_FFFF, .it = 0x20 }, .{ .q = 0x5A000708_5A000607_5A000102_5A000001, .vpr = 0x0000_FFFF }),
+    vec(
+        "vpsel picks byte by byte",
+        .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_5555 },
+        .{ .q = 0x5A000B08_5A000A07_5A000906_5A000805, .vpr = 0x0000_5555 },
+    ),
+    vec(
+        "vpsel q7, q0, q7",
+        .{ .hw1 = 0xFE31, .hw2 = 0xEF0F, .vpr = 0x0000_FF00 },
+        .{ .q = 0x5A000304_5A000203_5A001D1E_5A001C1D, .vpr = 0x0000_FF00 },
+    ),
+    vec(
+        "vpsel in a block reads raw p0 and ends it",
+        .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0088_00FF },
+        .{ .q = 0x5A000B0C_5A000A0B_5A000506_5A000405, .vpr = 0x0000_00FF },
+    ),
+    vec(
+        "vpsel with eci a0a1 keeps the done beats",
+        .{ .hw1 = 0xFE33, .hw2 = 0x0F05, .vpr = 0x0000_FFFF, .it = 0x20 },
+        .{ .q = 0x5A000708_5A000607_5A000102_5A000001, .vpr = 0x0000_FFFF },
+    ),
 };
 
 const unclaimed = [_]V{

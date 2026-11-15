@@ -6,11 +6,12 @@
 //! they finish in whatever order the firmware serves them; replies carry
 //! their seqnum, which is all usbip asks.
 const std = @import("std");
-const wire = @import("wire.zig");
-const urb = @import("urb.zig");
+
 const control = @import("control.zig");
-const usbfs = @import("ra8_chip").periph.usbfs;
 const traffic = @import("ra8_board").usb.traffic;
+const urb = @import("urb.zig");
+const usbfs = @import("ra8_chip").periph.usbfs;
+const wire = @import("wire.zig");
 
 pub const slot_count = 8;
 /// The most data one URB moves here; cdc-acm asks for 1280 at most.
@@ -68,11 +69,19 @@ pub const Session = struct {
     /// URBs still waiting on the firmware.
     pub fn pending(self: *const Session) usize {
         var count: usize = 0;
-        for (self.slots) |entry| count += @intFromBool(entry != null);
+        for (self.slots) |entry| {
+            count += @intFromBool(entry != null);
+        }
         return count;
     }
 
-    fn submit(self: *Session, request: wire.Submit, head: []const u8, reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
+    fn submit(
+        self: *Session,
+        request: wire.Submit,
+        head: []const u8,
+        reader: *std.Io.Reader,
+        writer: *std.Io.Writer,
+    ) !void {
         const carried = request.outBytes();
         if (request.length > max_length) {
             try reader.discardAll(carried);
@@ -103,7 +112,12 @@ pub const Session = struct {
     fn journal(self: *const Session, now: urb.Transfer, before: urb.Transfer, done: bool) void {
         if (!done and now.moved == before.moved and now.stage == before.stage) return;
         var head: [traffic.Progress.len]u8 = undefined;
-        const progress: traffic.Progress = .{ .seqnum = now.submit.seqnum, .moved = now.moved, .stage = @backingInt(now.stage), .done = done };
+        const progress: traffic.Progress = .{
+            .seqnum = now.submit.seqnum,
+            .moved = now.moved,
+            .stage = @backingInt(now.stage),
+            .done = done,
+        };
         progress.encode(&head);
         self.note(.progress, &head, &.{});
     }

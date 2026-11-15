@@ -6,10 +6,10 @@
 //! The IDAU is the board's RA8 map when it gives one (RA8EMU-277, address
 //! bit 28 and SRAMSABARn); with none it is the empty IDAU, which leaves the
 //! SAU to decide, as it did before.
+const attribution = @import("attribution.zig");
 const sau = @import("../../periph/sau/sau.zig");
 const sau_attr = @import("../../periph/sau/attribution.zig");
 const tt = @import("../tt.zig");
-const attribution = @import("attribution.zig");
 
 pub const SauSource = struct {
     unit: *const sau.Sau,

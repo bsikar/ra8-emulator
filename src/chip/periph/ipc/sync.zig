@@ -51,7 +51,6 @@
 //! latched and counted but nothing is delivered: the NMI path into the
 //! engine is a later slice, and the status bit a driver polls is the part a
 //! headless run can check today.
-const std = @import("std");
 
 /// Semaphore geometry (ra8_ipc_regs.h, IPCSEM0 0x000 .. IPCSEM15 0x03C).
 pub const sem = struct {
@@ -211,7 +210,9 @@ pub const Sync = struct {
     /// Reads that found a semaphore already taken, across the whole file.
     pub fn contentions(self: *const Sync) u32 {
         var total: u32 = 0;
-        for (&self.semaphores) |*one| total +%= one.contentions;
+        for (&self.semaphores) |*one| {
+            total +%= one.contentions;
+        }
         return total;
     }
 

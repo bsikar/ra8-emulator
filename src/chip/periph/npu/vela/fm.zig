@@ -8,7 +8,6 @@
 //! and the shape helpers add the one back. Opcodes from Arm's Vela 3.12.0
 //! (Apache-2.0) ethos_u55_regs.py `cmd0`. Any other cmd0 set is reported
 //! as not modelled.
-const std = @import("std");
 
 /// One feature map's registers, raw.
 pub const Map = struct {

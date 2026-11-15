@@ -4,9 +4,9 @@
 //! it waits on changes until the peripherals move, and they move only at a
 //! boundary, so `Cpu.run` ends the stretch when the core is still asleep and
 //! the board's clock goes straight to its next edge.
+const active = @import("active.zig");
 const bus = @import("../bus.zig");
 const Cpu = @import("../cpu.zig").Cpu;
-const active = @import("active.zig");
 const dispatch = @import("dispatch.zig");
 
 /// What the core is waiting for.

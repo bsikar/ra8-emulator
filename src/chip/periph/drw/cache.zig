@@ -101,7 +101,9 @@ pub const Framebuffer = struct {
     pub fn flush(self: *Framebuffer, memory: ?Guest) void {
         self.flushes +%= 1;
         var index: usize = 0;
-        while (index < self.used) : (index += 1) self.writeBack(memory, self.cells[index]);
+        while (index < self.used) : (index += 1) {
+            self.writeBack(memory, self.cells[index]);
+        }
         self.used = 0;
     }
 
@@ -177,11 +179,15 @@ pub const Texture = struct {
 /// write-back above and the rasterizer in drw.zig move pixels through this
 /// shape, so the arithmetic is here once rather than in both.
 pub fn pack(slot: []u8, value: u32) void {
-    for (slot, 0..) |*byte, index| byte.* = @truncate(value >> @intCast(index * 8));
+    for (slot, 0..) |*byte, index| {
+        byte.* = @truncate(value >> @intCast(index * 8));
+    }
 }
 
 pub fn unpack(slot: []const u8) u32 {
     var value: u32 = 0;
-    for (slot, 0..) |byte, index| value |= @as(u32, byte) << @intCast(index * 8);
+    for (slot, 0..) |byte, index| {
+        value |= @as(u32, byte) << @intCast(index * 8);
+    }
     return value;
 }

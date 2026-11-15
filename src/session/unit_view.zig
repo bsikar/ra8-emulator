@@ -3,11 +3,11 @@
 //! DHCSR or DFSR reads what the stop machine holds. The Zig core
 //! has no such pass, so watch.bus.zig lays this view over the bytes a
 //! firmware load read instead.
-const stop_machine = @import("stop_machine.zig");
-const fpb = @import("fpb.zig");
-const dwt = @import("ra8_chip").periph.dwt;
-const itm = @import("ra8_chip").periph.itm;
 const dcb = @import("ra8_chip").periph.dcb;
+const dwt = @import("ra8_chip").periph.dwt;
+const fpb = @import("fpb.zig");
+const itm = @import("ra8_chip").periph.itm;
+const stop_machine = @import("stop_machine.zig");
 
 /// The word at the word-aligned `address` as a load sees it, or null when
 /// no debug unit owns it. `stored` is what memory holds there.
@@ -38,7 +38,9 @@ pub fn overlay(machine: *const stop_machine.Machine, address: u32, into: []u8) v
 }
 
 fn copy(into: []u8, from: []const u8) void {
-    for (into, from) |*dest, byte| dest.* = byte;
+    for (into, from) |*dest, byte| {
+        dest.* = byte;
+    }
 }
 
 fn readLittle(bytes: [4]u8) u32 {

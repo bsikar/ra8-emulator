@@ -14,10 +14,10 @@ const std = @import("std");
 
 const Board = @import("board.zig").Board;
 
-const periph = @import("ra8_chip").periph.registry;
 const acmphs = @import("ra8_chip").periph.acmphs;
 const adc = @import("ra8_chip").periph.adc;
 const agt = @import("ra8_chip").periph.agt;
+const bus_card = @import("ra8_components").sd_card.bus_card;
 const cac = @import("ra8_chip").periph.cac;
 const cache = @import("ra8_chip").periph.cache;
 const canfd = @import("ra8_chip").periph.canfd;
@@ -28,8 +28,7 @@ const doc = @import("ra8_chip").periph.doc;
 const dotf = @import("ra8_chip").periph.dotf;
 const dtc = @import("ra8_chip").periph.dtc;
 const elc = @import("ra8_chip").periph.elc;
-const gpio = @import("ra8_chip").periph.gpio;
-const switches = @import("switches.zig");
+const fault_clear = @import("ra8_chip").periph.fault.clear;
 const gpt = @import("ra8_chip").periph.gpt;
 const gptp = @import("ra8_chip").periph.gptp;
 const icu = @import("ra8_chip").periph.icu;
@@ -42,8 +41,10 @@ const mipi_phy = @import("ra8_chip").periph.mipi.phy;
 const mpu = @import("ra8_chip").periph.mpu;
 const mpu_guard = @import("ra8_chip").core.mpu_guard;
 const mram = @import("ra8_chip").periph.mram;
+const nor_flash = @import("ra8_components").nor_flash;
 const npu = @import("ra8_chip").periph.npu;
 const pdm = @import("ra8_chip").periph.pdm;
+const periph = @import("ra8_chip").periph.registry;
 const pfs = @import("ra8_chip").periph.pfs;
 const poeg = @import("ra8_chip").periph.poeg;
 const prcr = @import("ra8_chip").periph.prcr;
@@ -51,18 +52,15 @@ const reset = @import("ra8_chip").periph.reset;
 const rtc = @import("ra8_chip").periph.rtc;
 const sau = @import("ra8_chip").periph.sau;
 const scb = @import("ra8_chip").periph.scb;
-const fault_clear = @import("ra8_chip").periph.fault.clear;
 const sci = @import("ra8_chip").periph.sci;
 const sd_card = @import("ra8_components").sd_card;
-const bus_card = @import("ra8_components").sd_card.bus_card;
 const sdhi = @import("ra8_chip").periph.sdhi;
 const spi = @import("ra8_chip").periph.spi;
 const sram = @import("ra8_chip").periph.sram;
 const ssie = @import("ra8_chip").periph.ssie;
+const switches = @import("switches.zig");
 const ulpt = @import("ra8_chip").periph.ulpt;
 const wdt = @import("ra8_chip").periph.wdt;
-const xspi = @import("ra8_chip").periph.xspi;
-const nor_flash = @import("ra8_components").nor_flash;
 
 /// A fresh board, with nothing on the bus yet.
 pub fn build(allocator: std.mem.Allocator) Board {

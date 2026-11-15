@@ -5,6 +5,7 @@
 //! The report is a contract agents parse, so each section names its fields
 //! here by hand and this writer only handles commas, nesting and escaping.
 const std = @import("std");
+
 pub const clock = @import("clock.zig");
 pub const i2c = @import("i2c.zig");
 pub const mem = @import("mem.zig");
@@ -86,12 +87,14 @@ fn scalar(out: anytype, value: anytype) !void {
 /// A quoted, escaped JSON string.
 pub fn string(out: anytype, text: []const u8) !void {
     try out.writeByte('"');
-    for (text) |c| switch (c) {
-        '"' => try out.writeAll("\\\""),
-        '\\' => try out.writeAll("\\\\"),
-        '\n' => try out.writeAll("\\n"),
-        0...9, 11...0x1f => try out.print("\\u{x:0>4}", .{c}),
-        else => try out.writeByte(c),
-    };
+    for (text) |c| {
+        switch (c) {
+            '"' => try out.writeAll("\\\""),
+            '\\' => try out.writeAll("\\\\"),
+            '\n' => try out.writeAll("\\n"),
+            0...9, 11...0x1f => try out.print("\\u{x:0>4}", .{c}),
+            else => try out.writeByte(c),
+        }
+    }
     try out.writeByte('"');
 }

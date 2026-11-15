@@ -27,6 +27,7 @@
 //! the watch checks the concrete ones (three heads, two equal steps)
 //! before it asks.
 const std = @import("std");
+
 const td = @import("../trip_decode.zig");
 
 pub const max_words: usize = 8;

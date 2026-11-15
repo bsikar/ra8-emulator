@@ -1,9 +1,10 @@
 //! A handle on the Zig core's store with the bus-initiator identity used by the
 //! shared external-memory fabric.
 const std = @import("std");
+
+pub const bus = @import("bus.zig");
 const Initiator = @import("../initiator.zig").Initiator;
 const Store = @import("../store.zig").Store;
-pub const bus = @import("bus.zig");
 
 pub const Error = error{Unmapped};
 pub const MapError = error{ Mapped, Full, OutOfMemory };

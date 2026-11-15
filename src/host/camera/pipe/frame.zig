@@ -7,6 +7,7 @@
 //! rgb24 (R, G, B), yuyv422 written as `yuyv` (Y0 U Y1 V, BT.601 studio
 //! range) and rgb565 (little-endian, ffmpeg's rgb565le).
 const std = @import("std");
+
 const decoded = @import("../decoded_image.zig");
 const yuv = @import("../y4m/frame.zig");
 

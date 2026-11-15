@@ -32,7 +32,9 @@ fn insert(out: []Entry, count: usize, entry: Entry) usize {
     if (at >= out.len) return count;
     const kept = @min(count + 1, out.len);
     var slot: usize = kept - 1;
-    while (slot > at) : (slot -= 1) out[slot] = out[slot - 1];
+    while (slot > at) : (slot -= 1) {
+        out[slot] = out[slot - 1];
+    }
     out[at] = entry;
     return kept;
 }

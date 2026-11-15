@@ -7,12 +7,11 @@
 //! frame aimed at a PHY the board does not have, and a write to a register
 //! the PHY measures itself, are the other two.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
-const eth_phy = @import("ra8_components").eth_phy;
-const eth_mac = @import("ra8_chip").periph.eth.mac;
 const eth = @import("ra8_chip").periph.eth;
+const eth_mac = @import("ra8_chip").periph.eth.mac;
+const eth_phy = @import("ra8_components").eth_phy;
 const net = @import("ra8_board").net;
-const pdctr = @import("ra8_chip").periph.pdctr;
+const Writer = @import("../report.zig").Writer;
 
 pub fn sections(board: *Board, out: Writer) !void {
     try domain(board, out);
@@ -160,7 +159,8 @@ fn domain(board: *Board, out: Writer) !void {
 fn unpowered(index: usize, port: *const eth.Port, out: Writer) !void {
     if (port.dropped_unpowered == 0 and port.dark_reads == 0) return;
     try out.print(
-        "ETHA{d}: DROPPED {d} write(s) and read {d} window(s) back as zero, ESWM domain gated off (clear PDCTRESWM.PDDE first)\n",
+        "ETHA{d}: DROPPED {d} write(s) and read {d} window(s) back as zero, ESWM domain " ++
+            "gated off (clear PDCTRESWM.PDDE first)\n",
         .{ index, port.dropped_unpowered, port.dark_reads },
     );
 }

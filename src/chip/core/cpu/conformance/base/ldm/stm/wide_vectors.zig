@@ -11,6 +11,7 @@
 //! list are UNPREDICTABLE and left unclaimed, as are neighbouring spaces
 //! and the 16-bit encodings.
 const std = @import("std");
+
 const vector = @import("../../../vector.zig");
 
 /// RAM is 1 KiB at `ram_base`. Each word in it reads `pattern(address)`;
@@ -62,7 +63,22 @@ pub const Out = struct {
 
 const V = vector.Vector(In, Out);
 const group = "ldm_stm_wide";
-pub const none: Out = .{ .claimed = false, .r0 = 0, .r1 = 0, .r2 = 0, .r3 = 0, .sp = 0, .lr = 0, .pc = 0, .thumb = false, .wm8 = 0, .wm4 = 0, .w0 = 0, .w4 = 0, .w8 = 0 };
+pub const none: Out = .{
+    .claimed = false,
+    .r0 = 0,
+    .r1 = 0,
+    .r2 = 0,
+    .r3 = 0,
+    .sp = 0,
+    .lr = 0,
+    .pc = 0,
+    .thumb = false,
+    .wm8 = 0,
+    .wm4 = 0,
+    .w0 = 0,
+    .w4 = 0,
+    .w8 = 0,
+};
 
 /// The state a run that changes nothing leaves, with `base` in Rn.
 fn idle(rn: u4, base: u32) Out {
@@ -94,7 +110,9 @@ fn idle(rn: u4, base: u32) Out {
 /// A claimed vector: the idle state for its Rn and base, with `changes`.
 fn based(name: []const u8, hw1: u16, hw2: u16, base: u32, changes: anytype) V {
     var out = idle(@intCast(hw1 & 0xF), base);
-    inline for (std.meta.fieldNames(@TypeOf(changes))) |field| @field(out, field) = @field(changes, field);
+    inline for (std.meta.fieldNames(@TypeOf(changes))) |field| {
+        @field(out, field) = @field(changes, field);
+    }
     return .{ .encoding = group, .name = name, .input = .{ .hw1 = hw1, .hw2 = hw2, .base = base }, .expect = out };
 }
 
@@ -122,7 +140,12 @@ const loads = [_]V{
     v("ldm r1!, {r2, r3}", 0xE8B1, 0x000C, .{ .r1 = b + 8, .r2 = 0xC000_0201, .r3 = 0xC000_0205 }),
     v("pop.w {r1, r2}", 0xE8BD, 0x0006, .{ .sp = b + 8, .r1 = 0xC000_0201, .r2 = 0xC000_0205 }),
     v("pop.w {r1, pc}", 0xE8BD, 0x8002, .{ .sp = b + 8, .r1 = 0xC000_0201, .pc = 0xC000_0204 }),
-    v("pop.w {r0-r3}", 0xE8BD, 0x000F, .{ .sp = b + 16, .r0 = 0xC000_0201, .r1 = 0xC000_0205, .r2 = 0xC000_0209, .r3 = 0xC000_020D }),
+    v(
+        "pop.w {r0-r3}",
+        0xE8BD,
+        0x000F,
+        .{ .sp = b + 16, .r0 = 0xC000_0201, .r1 = 0xC000_0205, .r2 = 0xC000_0209, .r3 = 0xC000_020D },
+    ),
     based("ldm at a halfword address faults", 0xE8B0, 0x0006, b + 2, .{ .fault = .unaligned }),
     based("ldm past RAM faults", 0xE8B0, 0x0006, ram_end, .{ .fault = .unmapped }),
     based("ldm running off RAM keeps every register", 0xE8B0, 0x0006, ram_end - 4, .{ .fault = .unmapped }),
@@ -155,7 +178,12 @@ const unclaimed = [_]V{
     bad("pop.w of one register is unclaimed", 0xE8BD, 0x0002),
     bad("the acq_rel space is not ldm", 0xE8D0, 0x1FAF),
     bad("the ldmib space is unclaimed", 0xE990, 0x0006),
-    .{ .encoding = group, .name = "the 16-bit space is unclaimed", .input = .{ .hw1 = 0xE890, .hw2 = 0x0006, .size = 2 }, .expect = none },
+    .{
+        .encoding = group,
+        .name = "the 16-bit space is unclaimed",
+        .input = .{ .hw1 = 0xE890, .hw2 = 0x0006, .size = 2 },
+        .expect = none,
+    },
 };
 
 pub const covered = vector.encodingsOf(In, Out, &all);

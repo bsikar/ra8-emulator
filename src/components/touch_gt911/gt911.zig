@@ -181,7 +181,9 @@ pub const Panel = struct {
 
 fn readId(into: []u8) usize {
     const served = @min(into.len, product_id.len);
-    for (into[0..served], product_id[0..served]) |*slot, byte| slot.* = byte;
+    for (into[0..served], product_id[0..served]) |*slot, byte| {
+        slot.* = byte;
+    }
     return served;
 }
 

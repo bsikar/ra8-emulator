@@ -61,8 +61,16 @@ pub const all = [_]V{
     pick("GE 1010 alternates the other way", 0xA, 0x11BB_33DD),
     pick("GE 0011 takes the low halfword from Rn", 0x3, 0xAABB_3344),
     pick("GE 1100 takes the high halfword from Rn", 0xC, 0x1122_CCDD),
-    vec("sel r12, lr, r4", .{ .hw1 = 0xFAAE, .hw2 = 0xFC84, .ge = 0x6, .n = 0x0102_0304, .m = 0x0A0B_0C0D }, .{ .rd = 0x0A02_030D, .ge = 0x6 }),
-    vec("sel r1, r1, r1 keeps the value", .{ .hw1 = sel, .hw2 = 0xF181, .ge = 0x5, .n = n, .m = n }, .{ .rd = n, .ge = 0x5 }),
+    vec(
+        "sel r12, lr, r4",
+        .{ .hw1 = 0xFAAE, .hw2 = 0xFC84, .ge = 0x6, .n = 0x0102_0304, .m = 0x0A0B_0C0D },
+        .{ .rd = 0x0A02_030D, .ge = 0x6 },
+    ),
+    vec(
+        "sel r1, r1, r1 keeps the value",
+        .{ .hw1 = sel, .hw2 = 0xF181, .ge = 0x5, .n = n, .m = n },
+        .{ .rd = n, .ge = 0x5 },
+    ),
     bad("Rd of sp is unclaimed", sel, 0xFD82),
     bad("Rd of pc is unclaimed", sel, 0xFF82),
     bad("Rn of sp is unclaimed", 0xFAAD, plain),

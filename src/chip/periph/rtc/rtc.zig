@@ -1,4 +1,4 @@
-//! RTC: the calendar that keeps time, and an alarm that goes off once.
+//! RTC calendar, edge-triggered alarm and periodic-event model.
 //!
 //! The RTC sits at 0x4020_2000 in an 0x80 window (ra8_rtc_regs.h). Firmware
 //! brings it up by clearing RCR2 and waiting for the mode bit to read back,
@@ -8,9 +8,6 @@
 //! loop, so a register that does not answer is an image that never leaves
 //! init, which is why the block is a faithful shadow with a real time mirror
 //! behind it rather than a handful of interpreted bits.
-//!
-//! Ported from board_periph_rtc.c on dev, with four things that model does
-//! not do.
 //!
 //! A COUNTER IS NOT WRITABLE WHILE THE CLOCK RUNS. dev stores into the
 //! calendar counters whenever firmware asks and reseeds the running mirror
@@ -51,14 +48,14 @@
 //! count source used to sit on that list and no longer does: it is read in
 //! source.zig, which carries the rule and says what is still not
 //! modelled there.
-const std = @import("std");
+const bounded = @import("../../core/bounded.zig");
 
-const periph = @import("../registry.zig");
 pub const clock = @import("clock.zig");
-pub const reset = @import("reset.zig");
 pub const frequency = @import("frequency.zig");
-pub const source = @import("source.zig");
+const periph = @import("../registry.zig");
+pub const reset = @import("reset.zig");
 const rtc_pace = @import("pace.zig");
+pub const source = @import("source.zig");
 
 /// RTC geometry (ra8_rtc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.
@@ -127,7 +124,7 @@ pub const event = struct {
 pub const seconds_per_tick: u8 = 1;
 
 /// Both events can come due in the same boundary.
-pub const Due = @import("../../core/bounded.zig").Bounded(u16, 2);
+pub const Due = bounded.Bounded(u16, 2);
 
 /// The modelled RTC: the register shadow firmware reads, the binary time
 /// behind it, and what the run should be told happened.

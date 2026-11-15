@@ -10,7 +10,6 @@
 //! This is that something. A requested address is counted on every
 //! execution and on nothing else. The counting knows nothing about the
 //! engine that runs the code, so it can be tested without one.
-const std = @import("std");
 
 pub const limits = struct {
     /// Addresses a run can count at once. A code hook is attached per

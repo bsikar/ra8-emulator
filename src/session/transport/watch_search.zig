@@ -2,6 +2,7 @@
 //! intervals to find the latest write to an armed write watch, and lands on it.
 
 const std = @import("std");
+
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
 const position_mod = @import("../history/position.zig");
@@ -20,7 +21,11 @@ fn isTransportCancelled(context: *anyopaque) bool {
     return self.job == null or self.cancelled;
 }
 
-fn transportComparePositions(context: *anyopaque, a: position_mod.Position, b: position_mod.Position) anyerror!std.math.Order {
+fn transportComparePositions(
+    context: *anyopaque,
+    a: position_mod.Position,
+    b: position_mod.Position,
+) anyerror!std.math.Order {
     const self: *Transport = @ptrCast(@alignCast(context));
     return self.session.comparePositions(a, b);
 }
@@ -35,7 +40,9 @@ fn replaySession(
     const self: *Transport = @ptrCast(@alignCast(context));
     _ = range;
 
-    self.restoreBase(.{ .checkpoint = .{ .id = base.id, .object = base.object, .position = base.position } }) catch return reverse_watch.Error.ReplayFailed;
+    self.restoreBase(
+        .{ .checkpoint = .{ .id = base.id, .object = base.object, .position = base.position } },
+    ) catch return reverse_watch.Error.ReplayFailed;
 
     const store = self.session.store() orelse return reverse_watch.Error.ReplayFailed;
     const prev_observer = store.observer;
@@ -148,7 +155,16 @@ pub fn landingSlice(self: *Transport, rc: *reverse_mod.Rc, grid: anytype) !?api.
 
 pub fn watchStop(self: *Transport, hit: reverse_watch.Hit) !api.Ended {
     const slot = matchingWatch(self.session, hit.address, hit.len) orelse return error.NoHit;
-    return .{ .stop = .{ .watchpoint = .{ .id = slot.id, .address = hit.address, .width = @intCast(hit.len), .access = .write } } };
+    return .{
+        .stop = .{
+            .watchpoint = .{
+                .id = slot.id,
+                .address = hit.address,
+                .width = @intCast(hit.len),
+                .access = .write,
+            },
+        },
+    };
 }
 
 fn checkWatches(session: *api.Session, address: ?u32, len: u32, out_range: ?*reverse_watch.Range) ?watch_table.Slot {

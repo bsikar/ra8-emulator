@@ -1,6 +1,7 @@
 //! The core sections alone, as they sit in a full save stream (section 2.5):
 //! what a reverse window saves for a slot that touched no board state.
 const std = @import("std");
+
 const run_file = @import("ra8_board").snapshot.run;
 const state = @import("state.zig");
 

@@ -13,6 +13,7 @@
 //! WHY: this is the arithmetic TFLite Micro's int8 per-channel CONV_2D and
 //! DEPTHWISE_CONV_2D perform, which is what a Vela-compiled model has to reproduce.
 const std = @import("std");
+
 const bias = @import("bias.zig");
 const round = @import("round.zig");
 

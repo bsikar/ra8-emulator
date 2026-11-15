@@ -5,39 +5,49 @@
 //! them saves them beside this (RA8EMU-660). Preparation decodes every
 //! section into detached guest resources while retaining the target's wiring.
 //! Only a successful preparation can commit those resources to the live board.
+const chip = @import("ra8_chip");
+const components = @import("ra8_components");
+const rswitch = @import("rswitch.zig");
+const sd = @import("sd.zig");
+const storage = @import("storage.zig");
+const usb = @import("usb.zig");
+const wire = @import("wire.zig");
+const wired = @import("wired.zig");
+
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
-const time = @import("ra8_chip").snapshot.time;
-const Part = @import("ra8_chip").core.part.Part;
+const file = @import("ra8_snapshot").file;
 pub const inputs = @import("inputs.zig");
 pub const inventory = @import("inventory.zig");
+const Part = @import("ra8_chip").core.part.Part;
+const time = @import("ra8_chip").snapshot.time;
 
 pub const Error = file.Error || fields.Error || error{ Missing, WrongPart, UnsupportedAttachments };
 
 /// The board-shaped sections after time, in kind order. Appending is a
 /// format change.
 const sections = .{
-    @import("ra8_chip").snapshot.timers,
-    @import("ra8_chip").periph.sci.snapshot,
-    @import("sd.zig"),
-    @import("wire.zig"),
-    @import("ra8_chip").periph.drw.snapshot,
-    @import("ra8_chip").periph.glcdc.snapshot,
-    @import("ra8_components").eink.snapshot,
-    @import("ra8_chip").snapshot.clocks,
-    @import("ra8_chip").snapshot.security,
-    @import("ra8_chip").snapshot.controllers,
-    @import("storage.zig"),
-    @import("ra8_chip").snapshot.signals,
-    @import("ra8_chip").snapshot.datapath,
-    @import("ra8_chip").snapshot.media,
-    @import("wired.zig"),
-    @import("ra8_chip").snapshot.channels,
-    @import("usb.zig"),
-    @import("rswitch.zig"),
-    @import("ra8_chip").periph.npu.snapshot,
-    @import("ra8_components").esp_hosted.snapshot,
+    chip.snapshot.timers,
+    chip.periph.sci.snapshot,
+    sd,
+    wire,
+    chip.periph.drw.snapshot,
+    chip.periph.glcdc.snapshot,
+    components.eink.snapshot,
+    chip.snapshot.clocks,
+    chip.snapshot.security,
+    chip.snapshot.controllers,
+    storage,
+    chip.snapshot.signals,
+    chip.snapshot.datapath,
+    chip.snapshot.media,
+    wired,
+    chip.snapshot.channels,
+    usb,
+    rswitch,
+    chip.periph.npu.snapshot,
+    components.esp_hosted.snapshot,
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
@@ -55,7 +65,9 @@ fn saveMode(board: anytype, writer: anytype, owned: bool) !void {
     try file.writeSectionHeader(writer, .part, 1);
     try fields.write(writer, @as(u8, @backingInt(board.part)));
     try time.save(&board.time, writer);
-    inline for (sections) |section| try section.save(board, writer);
+    inline for (sections) |section| {
+        try section.save(board, writer);
+    }
     var counter: std.Io.Writer.Discarding = .init(&.{});
     try board.bus.saveSnapshot(&counter.writer);
     try file.writeSectionHeader(writer, .registry, counter.fullCount());
@@ -73,7 +85,9 @@ pub fn load(board: anytype, bytes: []const u8) !void {
 fn decode(board: anytype, bytes: []const u8) LoadError()!void {
     try partOf(board.part, bytes);
     try time.load(&board.time, bytes);
-    inline for (sections) |section| try section.load(board, bytes);
+    inline for (sections) |section| {
+        try section.load(board, bytes);
+    }
     const registry = try file.Reader.find(bytes, .registry) orelse return Error.Missing;
     try board.bus.loadSnapshot(registry.payload);
 }
@@ -81,7 +95,9 @@ fn decode(board: anytype, bytes: []const u8) LoadError()!void {
 /// Every error a load can end in: this file's and each section's.
 fn LoadError() type {
     comptime var all = Error || time.Error || error{OutOfMemory};
-    inline for (sections) |section| all = all || section.Error;
+    inline for (sections) |section| {
+        all = all || section.Error;
+    }
     return all;
 }
 
@@ -90,7 +106,7 @@ fn LoadError() type {
 pub fn Prepared(comptime B: type) type {
     return struct {
         next: *B,
-        reboot: ?@import("ra8_chip").core.reboot.Reboot = null,
+        reboot: ?chip.core.reboot.Reboot = null,
         disk: []const u8 = &.{},
 
         pub fn deinit(self: *@This()) void {

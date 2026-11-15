@@ -4,10 +4,10 @@
 //!
 //! T3 conditions 0b111x encode the miscellaneous control space (MSR, MRS,
 //! hints, barriers), which is not a branch and is left to its own group.
-const op = @import("../../op.zig");
+const cond = @import("../../cond.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-const cond = @import("../../cond.zig");
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     pub const hw1_mask: u16 = 0xF800;

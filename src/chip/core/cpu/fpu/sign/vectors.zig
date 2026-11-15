@@ -27,17 +27,47 @@ pub const abs32 = [_]V32{
 
 pub const neg64 = [_]V64{
     .{ .encoding = "VNEG (floating-point)", .name = "+0", .input = 0, .expect = 0x8000_0000_0000_0000 },
-    .{ .encoding = "VNEG (floating-point)", .name = "1.0", .input = 0x3FF0_0000_0000_0000, .expect = 0xBFF0_0000_0000_0000 },
+    .{
+        .encoding = "VNEG (floating-point)",
+        .name = "1.0",
+        .input = 0x3FF0_0000_0000_0000,
+        .expect = 0xBFF0_0000_0000_0000,
+    },
     .{ .encoding = "VNEG (floating-point)", .name = "denormal", .input = 0x1, .expect = 0x8000_0000_0000_0001 },
-    .{ .encoding = "VNEG (floating-point)", .name = "default NaN", .input = 0x7FF8_0000_0000_0000, .expect = 0xFFF8_0000_0000_0000 },
-    .{ .encoding = "VNEG (floating-point)", .name = "sNaN payload kept", .input = 0x7FF0_0000_0000_0001, .expect = 0xFFF0_0000_0000_0001 },
+    .{
+        .encoding = "VNEG (floating-point)",
+        .name = "default NaN",
+        .input = 0x7FF8_0000_0000_0000,
+        .expect = 0xFFF8_0000_0000_0000,
+    },
+    .{
+        .encoding = "VNEG (floating-point)",
+        .name = "sNaN payload kept",
+        .input = 0x7FF0_0000_0000_0001,
+        .expect = 0xFFF0_0000_0000_0001,
+    },
 };
 
 pub const abs64 = [_]V64{
     .{ .encoding = "VABS (floating-point)", .name = "-0", .input = 0x8000_0000_0000_0000, .expect = 0 },
-    .{ .encoding = "VABS (floating-point)", .name = "-1.0", .input = 0xBFF0_0000_0000_0000, .expect = 0x3FF0_0000_0000_0000 },
-    .{ .encoding = "VABS (floating-point)", .name = "-inf", .input = 0xFFF0_0000_0000_0000, .expect = 0x7FF0_0000_0000_0000 },
-    .{ .encoding = "VABS (floating-point)", .name = "negative sNaN", .input = 0xFFF0_0000_0000_0001, .expect = 0x7FF0_0000_0000_0001 },
+    .{
+        .encoding = "VABS (floating-point)",
+        .name = "-1.0",
+        .input = 0xBFF0_0000_0000_0000,
+        .expect = 0x3FF0_0000_0000_0000,
+    },
+    .{
+        .encoding = "VABS (floating-point)",
+        .name = "-inf",
+        .input = 0xFFF0_0000_0000_0000,
+        .expect = 0x7FF0_0000_0000_0000,
+    },
+    .{
+        .encoding = "VABS (floating-point)",
+        .name = "negative sNaN",
+        .input = 0xFFF0_0000_0000_0001,
+        .expect = 0x7FF0_0000_0000_0001,
+    },
 };
 
 pub const claimed = [_][]const u8{

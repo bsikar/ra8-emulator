@@ -2,16 +2,17 @@
 //! holds the root gate and an OS owner lock, validates markers and host,
 //! and resolves the target before rename and before delete.
 const std = @import("std");
+
+const Base = @import("base.zig").Base;
 const layout = @import("layout.zig");
-const name = @import("name.zig");
-const owner = @import("owner.zig");
 const lock = @import("lock.zig");
 const machine = @import("machine.zig");
 const metadata = @import("metadata.zig");
+const move = @import("move/root.zig");
+const name = @import("name.zig");
+const owner = @import("owner.zig");
 const provenance = @import("lease.zig");
 const rename_file = @import("rename.zig");
-const move = @import("move/root.zig");
-const Base = @import("base.zig").Base;
 
 pub const Options = struct {
     /// Explicit rm may remove kept sessions, but never a live/foreign one.
@@ -77,7 +78,14 @@ pub fn withHeld(root: *const Base, entry: []const u8, options: Options, held: st
 }
 
 /// Move `entry` to the trash name of its session and delete it there.
-fn trashed(root: *const Base, entry: []const u8, kind: name.Kind, id: []const u8, probe: ?move.probe.Probe, authorities: []const std.Io.File) !void {
+fn trashed(
+    root: *const Base,
+    entry: []const u8,
+    kind: name.Kind,
+    id: []const u8,
+    probe: ?move.probe.Probe,
+    authorities: []const std.Io.File,
+) !void {
     {
         var dir = try root.dir.openDir(root.io, entry, .{ .iterate = true, .follow_symlinks = false });
         defer dir.close(root.io);
@@ -89,7 +97,13 @@ fn trashed(root: *const Base, entry: []const u8, kind: name.Kind, id: []const u8
     root.dir.access(root.io, bin, .{}) catch |err| switch (err) {
         error.FileNotFound => {
             try root.owns(entry);
-            try move.dispatch.directory(.{ .source = root, .target = root, .authorities = authorities }, entry, bin, layout.moves.trash, probe);
+            try move.dispatch.directory(
+                .{ .source = root, .target = root, .authorities = authorities },
+                entry,
+                bin,
+                layout.moves.trash,
+                probe,
+            );
             return purgeOwned(root, bin);
         },
         else => return err,

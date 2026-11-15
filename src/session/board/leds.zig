@@ -11,6 +11,8 @@ pub const Led = struct { rgb565: u16, on: bool };
 /// Every user LED on `board`, in the GPIO table's order.
 pub fn of(board: *Board) [gpio.led_count]Led {
     var lit: [gpio.led_count]Led = undefined;
-    for (gpio.leds, 0..) |led, i| lit[i] = .{ .rgb565 = led.rgb565, .on = board.pins.ledLevel(i) == 1 };
+    for (gpio.leds, 0..) |led, i| {
+        lit[i] = .{ .rgb565 = led.rgb565, .on = board.pins.ledLevel(i) == 1 };
+    }
     return lit;
 }

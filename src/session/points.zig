@@ -1,5 +1,5 @@
 //! Breakpoint and watchpoint operations on Session (RA8EMU-765).
-const std = @import("std");
+
 const api = @import("api.zig");
 const breakpoint = @import("breakpoint.zig");
 const watch_table = @import("watch/table.zig");

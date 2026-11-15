@@ -7,10 +7,11 @@
 //! (src/chip/core/cpu/exception/ret.zig). The stack-limit check runs at the core's
 //! instruction boundary; PUSH checks before it writes any words.
 const std = @import("std");
-const op = @import("../op.zig");
+
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// Bits [15:9] of the first halfword.

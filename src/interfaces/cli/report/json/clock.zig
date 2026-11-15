@@ -4,10 +4,10 @@
 //! lowpower.zig and monitors.zig print. The clock-generation blocks from
 //! modules.zig follow in json_modules.zig. Every key is always present.
 const Board = @import("ra8_board").board.Board;
-const div = @import("ra8_chip").periph.sysclk.div;
-const lvd = @import("ra8_chip").periph.lvd;
 const Config = @import("ra8_chip").periph.pll.config.Config;
+const div = @import("ra8_chip").periph.sysclk.div;
 const json_modules = @import("modules.zig");
+const lvd = @import("ra8_chip").periph.lvd;
 
 /// The whole `clocks` object, keyed inside the document.
 pub fn section(j: anytype, board: *Board) !void {
@@ -30,8 +30,12 @@ fn system(j: anytype, board: *Board) !void {
     try j.field("unstable_selects", unit.unstable_selects);
     try j.field("reserved_selects", unit.reserved_selects);
     try j.open("domains", '[');
-    for (div.domains) |domain| try one(j, domain.name, unit.ratioOf(domain), div.codeAt(unit.divcr, domain.at));
-    for (div.domains2) |domain| try one(j, domain.name, unit.ratioOf2(domain), div.codeAt(unit.divcr2, domain.at));
+    for (div.domains) |domain| {
+        try one(j, domain.name, unit.ratioOf(domain), div.codeAt(unit.divcr, domain.at));
+    }
+    for (div.domains2) |domain| {
+        try one(j, domain.name, unit.ratioOf2(domain), div.codeAt(unit.divcr2, domain.at));
+    }
     try j.close(']');
     try j.close('}');
 }

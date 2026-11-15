@@ -8,7 +8,6 @@
 //!
 //! The `--ram-budget` command-line option has a hard floor of 128 MiB.
 //! Default ram_budget is clamp(physical RAM / 8, 256 MiB, 1 GiB).
-const std = @import("std");
 
 pub const min_ram_budget: usize = 128 * 1024 * 1024;
 pub const default_ram_budget_min: usize = 256 * 1024 * 1024;

@@ -4,6 +4,7 @@
 //! traffic back with no socket, which is what a replay does. The board
 //! names the seam so the session and the bridge need not know each other.
 const std = @import("std");
+
 const usbfs = @import("ra8_chip").periph.usbfs;
 
 /// What the host did, as the bridge saw it.

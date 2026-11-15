@@ -11,11 +11,12 @@
 //! change MIN or MAX. Mixed zero points and a LUT, tanh or sigmoid
 //! activation are error.OperatorNotModelled rather than a guess.
 const std = @import("std");
-const regs = @import("regs.zig");
+
+const addr = @import("addr.zig");
 const dma = @import("dma.zig");
 const fm = @import("fm.zig");
 const quant = @import("quant.zig");
-const addr = @import("addr.zig");
+const regs = @import("regs.zig");
 
 pub const mode_min: u16 = 3;
 pub const mode_max: u16 = 4;
@@ -82,14 +83,30 @@ fn pinned(flags: u16, bit: u16, coordinate: u32) u32 {
 }
 
 /// The IFM2 operand at (y, x, c), after broadcasting.
-pub fn second(memory: anytype, regions: *const dma.Regions, inputs: Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!i32 {
+pub fn second(
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: Inputs,
+    f: addr.Format,
+    y: u32,
+    x: u32,
+    c: u32,
+) Error!i32 {
     const maps = inputs.maps;
     const flags = maps.ifm2_broadcast;
     if (flags & broadcast_scalar != 0) {
         // The scalar is a 16-bit value at the IFM's signedness.
         return if (f.signed) @as(i16, @bitCast(maps.ifm2_scalar)) else maps.ifm2_scalar;
     }
-    const at = addr.address(inputs.bases.ifm2, maps.ifm2, inputs.quant.ifm2_stride, f, pinned(flags, broadcast_h, y), pinned(flags, broadcast_w, x), pinned(flags, broadcast_c, c));
+    const at = addr.address(
+        inputs.bases.ifm2,
+        maps.ifm2,
+        inputs.quant.ifm2_stride,
+        f,
+        pinned(flags, broadcast_h, y),
+        pinned(flags, broadcast_w, x),
+        pinned(flags, broadcast_c, c),
+    );
     return load(memory, try location(regions, maps.ifm2.region, at, f.size), f);
 }
 

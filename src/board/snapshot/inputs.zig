@@ -1,9 +1,11 @@
 //! Board-side input queues and parser progress, not host stream handles.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 const Reboot = @import("ra8_chip").core.reboot.Reboot;
 pub const valid = @import("input_validation.zig").valid;
+
 const script_skip = .{"events"};
 const touch_skip = .{ "source", "switches", "line" };
 const reply_skip = .{ "prompt", "text" };
@@ -18,7 +20,9 @@ pub fn save(board: anytype, writer: *std.Io.Writer) !void {
 fn body(board: anytype, writer: *std.Io.Writer) !void {
     const script = &board.input_script;
     try fields.writeExcept(writer, script.*, script_skip);
-    for (script.events[0..script.len]) |event| try fields.write(writer, event);
+    for (script.events[0..script.len]) |event| {
+        try fields.write(writer, event);
+    }
     try fields.writeExcept(writer, board.touch_input, touch_skip);
     try writer.writeAll(board.touch_input.line[0..board.touch_input.len]);
     try fields.writeExcept(writer, board.console_input.reply, reply_skip);
@@ -38,7 +42,9 @@ pub fn load(board: anytype, bytes: []const u8) !Loaded {
     try fields.readOver(&cursor, &board.input_script, script_skip);
     const script = &board.input_script;
     if (script.len > script.events.len or script.cursor > script.len) return error.BadValue;
-    for (script.events[0..script.len]) |*event| event.* = try fields.read(@TypeOf(event.*), &cursor);
+    for (script.events[0..script.len]) |*event| {
+        event.* = try fields.read(@TypeOf(event.*), &cursor);
+    }
     if (!valid(script.*, board.time.base.now())) return error.BadValue;
     try fields.readOver(&cursor, &board.touch_input, touch_skip);
     const touch = &board.touch_input;

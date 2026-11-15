@@ -6,13 +6,15 @@
 //! read-only or load-copy ELF segments alongside post-load flash programming,
 //! so each sector's bytes are normalized with `state_memory.Mask`.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const fields = @import("ra8_board").snapshot.run.fields;
 const mram_mod = @import("ra8_chip").periph.mram;
+
 const mram_snap = mram_mod.snapshot;
-const xspi_mod = @import("ra8_chip").periph.xspi;
-const nor_snap = @import("ra8_components").nor_flash.snapshot;
 const memory = @import("state_memory.zig");
+const nor_snap = @import("ra8_components").nor_flash.snapshot;
+const xspi_mod = @import("ra8_chip").periph.xspi;
 
 pub const sector_len: u32 = memory.page;
 pub const Error = fields.Error || memory.Error;
@@ -76,10 +78,14 @@ fn candidateSectors(a: nor_snap.Staged, b: ?nor_snap.Staged, mask: memory.Mask, 
     if (needed > buf.len) return null;
     var list = std.ArrayListUnmanaged(u32).initBuffer(buf);
     var i: u32 = 0;
-    while (i < a.sectors.count) : (i += 1) list.appendAssumeCapacity(a.sectors.number(i));
+    while (i < a.sectors.count) : (i += 1) {
+        list.appendAssumeCapacity(a.sectors.number(i));
+    }
     if (b) |nb| {
         var j: u32 = 0;
-        while (j < nb.sectors.count) : (j += 1) list.appendAssumeCapacity(nb.sectors.number(j));
+        while (j < nb.sectors.count) : (j += 1) {
+            list.appendAssumeCapacity(nb.sectors.number(j));
+        }
     }
     if (mask.a) |img| collectImageSectors(img, a.capacity, &list, buf);
     if (mask.b) |img| collectImageSectors(img, a.capacity, &list, buf);
@@ -126,11 +132,15 @@ pub fn hash(hasher: *std.crypto.hash.Blake3, parsed: Parsed, mask: memory.Mask) 
     hasher.update(std.mem.asBytes(&std.mem.nativeToLittle(u32, parsed.nor.capacity)));
     var buf: [2048]u32 = undefined;
     if (candidateSectors(parsed.nor, null, mask, &buf)) |sectors| {
-        for (sectors) |sec| hashSector(hasher, parsed, mask, sec);
+        for (sectors) |sec| {
+            hashSector(hasher, parsed, mask, sec);
+        }
     } else {
         const total = parsed.nor.capacity / sector_len;
         var sec: u32 = 0;
-        while (sec < total) : (sec += 1) hashSector(hasher, parsed, mask, sec);
+        while (sec < total) : (sec += 1) {
+            hashSector(hasher, parsed, mask, sec);
+        }
     }
 }
 

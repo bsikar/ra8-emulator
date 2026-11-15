@@ -25,12 +25,13 @@
 //! VLLDM with LSPACT set only clears it, so it never checks alignment.
 //! NSACR is not read: both forms are UNDEFINED from Non-secure state.
 const std = @import("std");
-const op = @import("../op.zig");
-const Cpu = @import("../cpu.zig").Cpu;
-const Instr = @import("../instr.zig").Instr;
-const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
+
 const control_bits = @import("../regs.zig").control_bits;
 const cpacr = @import("../fpu/cpacr.zig");
+const Cpu = @import("../cpu.zig").Cpu;
+const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
+const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const sysreg = @import("../sysreg.zig");
 
 pub const encodings = struct {
@@ -99,11 +100,15 @@ fn store(cpu: *Cpu, at: u32) op.Error!void {
         fp.context.fpccr.user = @intFromBool(!handler and cpu.regs.control & control_bits.npriv != 0);
     } else {
         const ts = fp.context.fpccr.ts == 1;
-        for (0..words(ts)) |i| try put(cpu, at +% slot(i), fp.bank.readS(@intCast(i)));
+        for (0..words(ts)) |i| {
+            try put(cpu, at +% slot(i), fp.bank.readS(@intCast(i)));
+        }
         try put(cpu, at +% offset.fpscr, fp.fpscr.bits());
         if (cpu.profile.mve) try put(cpu, at +% offset.vpr, @bitCast(fp.vpr));
         if (ts) {
-            for (0..32) |i| fp.bank.writeS(@intCast(i), 0);
+            for (0..32) |i| {
+                fp.bank.writeS(@intCast(i), 0);
+            }
             fp.fpscr = Fpscr.fromBits(0);
             fp.vpr = @bitCast(@as(u32, 0));
         }
@@ -118,7 +123,9 @@ fn load(cpu: *Cpu, at: u32) op.Error!void {
     } else {
         if (at & 7 != 0) return error.Unaligned;
         const ts = fp.context.fpccr.ts == 1;
-        for (0..words(ts)) |i| fp.bank.writeS(@intCast(i), try get(cpu, at +% slot(i)));
+        for (0..words(ts)) |i| {
+            fp.bank.writeS(@intCast(i), try get(cpu, at +% slot(i)));
+        }
         fp.fpscr = Fpscr.fromBits(try get(cpu, at +% offset.fpscr));
         if (cpu.profile.mve) fp.vpr = @bitCast(try get(cpu, at +% offset.vpr));
     }

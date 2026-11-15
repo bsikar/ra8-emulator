@@ -5,11 +5,12 @@
 //! Qd T 1110 0 0 M 0 Qm 1 and shifts by the source width. D and M would
 //! name Q8 and above, so both must be zero. The semantics are widen in
 //! src/chip/core/cpu/mve/int.width.zig.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_int = @import("int/int.zig");
+const op = @import("../../op.zig");
+
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_widen", .decode = decode, .oracle = false };

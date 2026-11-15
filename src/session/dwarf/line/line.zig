@@ -6,13 +6,14 @@
 //! carries on past it. A lookup walks every unit until one answers, which
 //! is quick next to the stop that asked for it.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const symbols = @import("../../symbols.zig");
-const dwarf_cursor = @import("../cursor.zig");
-const line_header = @import("header.zig");
+
 const compilation = @import("../compilation.zig");
-pub const path = @import("path.zig");
+const dwarf_cursor = @import("../cursor.zig");
+const elf = @import("ra8_board").image.elf;
 pub const find = @import("find.zig");
+const line_header = @import("header.zig");
+pub const path = @import("path.zig");
+const symbols = @import("../../symbols.zig");
 
 const Cursor = dwarf_cursor.Cursor;
 pub const Error = dwarf_cursor.Error;
@@ -96,7 +97,11 @@ pub const Rows = struct {
                 self.state = start();
                 return row;
             },
-            0x02 => self.state.address = if (operands.bytes.len >= 8) @truncate(try operands.int(u64)) else try operands.int(u32),
+            0x02,
+            => self.state.address = if (operands.bytes.len >= 8)
+                @truncate(try operands.int(u64))
+            else
+                try operands.int(u32),
             // define_file, set_discriminator and vendor opcodes change no row.
             else => {},
         }
@@ -116,7 +121,9 @@ pub const Rows = struct {
             // operand; column and isa take one. None of them moves a row.
             else => {
                 var operands = self.header.standard_lengths[opcode - 1];
-                while (operands > 0) : (operands -= 1) _ = try self.cursor.uleb();
+                while (operands > 0) : (operands -= 1) {
+                    _ = try self.cursor.uleb();
+                }
             },
         }
         return null;
@@ -159,7 +166,8 @@ fn covering(header: Header, address: u32) Error!?Span {
     var previous: ?Row = null;
     while (try rows.next()) |row| {
         if (previous) |before| {
-            if (before.address <= address and address < row.address) return .{ .row = before, .end = try lineEnd(&rows, before, row) };
+            if (before.address <= address and
+                address < row.address) return .{ .row = before, .end = try lineEnd(&rows, before, row) };
         }
         previous = if (row.end_sequence) null else row;
     }
@@ -182,7 +190,13 @@ pub fn ofImage(image: elf.Image) Sections {
     return .{
         .line = section(image, ".debug_line"),
         .strings = .{ .line_str = section(image, ".debug_line_str"), .str = section(image, ".debug_str") },
-        .units = .{ .info = section(image, ".debug_info"), .abbrev = section(image, ".debug_abbrev"), .strings = section(image, ".debug_str"), .line_strings = section(image, ".debug_line_str"), .string_offsets = section(image, ".debug_str_offsets") },
+        .units = .{
+            .info = section(image, ".debug_info"),
+            .abbrev = section(image, ".debug_abbrev"),
+            .strings = section(image, ".debug_str"),
+            .line_strings = section(image, ".debug_line_str"),
+            .string_offsets = section(image, ".debug_str_offsets"),
+        },
     };
 }
 

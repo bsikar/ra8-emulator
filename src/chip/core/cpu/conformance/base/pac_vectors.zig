@@ -82,15 +82,31 @@ pub const all = lr_forms ++ general ++ unclaimed;
 const lr_forms = [_]V{
     vec("pac signs lr with sp under the privileged key", .{ .hw1 = hint, .hw2 = 0x801D }, .{ .r12 = p_lr }),
     vec("pac with signing off leaves r12", .{ .hw1 = hint, .hw2 = 0x801D, .control = 0 }, .{}),
-    vec("pac unprivileged uses the unprivileged key", .{ .hw1 = hint, .hw2 = 0x801D, .control = unpriv_on }, .{ .r12 = u_lr }),
+    vec(
+        "pac unprivileged uses the unprivileged key",
+        .{ .hw1 = hint, .hw2 = 0x801D, .control = unpriv_on },
+        .{ .r12 = u_lr },
+    ),
     vec("pac unprivileged with only pac_en leaves r12", .{ .hw1 = hint, .hw2 = 0x801D, .control = unpriv_off }, .{}),
     vec("pac privileged with only upac_en leaves r12", .{ .hw1 = hint, .hw2 = 0x801D, .control = 0x80 }, .{}),
     vec("pacbti signs and clears epsr.b", .{ .hw1 = hint, .hw2 = 0x800D }, .{ .r12 = p_lr, .bti = false }),
-    vec("pacbti with signing off still clears epsr.b", .{ .hw1 = hint, .hw2 = 0x800D, .control = 0 }, .{ .bti = false }),
+    vec(
+        "pacbti with signing off still clears epsr.b",
+        .{ .hw1 = hint, .hw2 = 0x800D, .control = 0 },
+        .{ .bti = false },
+    ),
     vec("aut passes with the right code", .{ .hw1 = hint, .hw2 = 0x802D, .r12 = p_lr }, .{ .r12 = p_lr }),
     vec("aut with a wrong code faults", .{ .hw1 = hint, .hw2 = 0x802D }, .{ .fault = failed }),
-    vec("aut unprivileged passes with the unprivileged code", .{ .hw1 = hint, .hw2 = 0x802D, .control = unpriv_on, .r12 = u_lr }, .{ .r12 = u_lr }),
-    vec("aut unprivileged refuses the privileged code", .{ .hw1 = hint, .hw2 = 0x802D, .control = unpriv_on, .r12 = p_lr }, .{ .fault = failed, .r12 = p_lr }),
+    vec(
+        "aut unprivileged passes with the unprivileged code",
+        .{ .hw1 = hint, .hw2 = 0x802D, .control = unpriv_on, .r12 = u_lr },
+        .{ .r12 = u_lr },
+    ),
+    vec(
+        "aut unprivileged refuses the privileged code",
+        .{ .hw1 = hint, .hw2 = 0x802D, .control = unpriv_on, .r12 = p_lr },
+        .{ .fault = failed, .r12 = p_lr },
+    ),
     vec("aut with signing off passes any code", .{ .hw1 = hint, .hw2 = 0x802D, .control = 0 }, .{}),
 };
 
@@ -102,10 +118,22 @@ const general = [_]V{
     vec("autg r0, r1, r2 passes with the right code", .{ .hw1 = 0xFB51, .hw2 = 0x0F02, .r0 = p_g }, .{ .r0 = p_g }),
     vec("autg with a wrong code faults", .{ .hw1 = 0xFB51, .hw2 = 0x0F02 }, .{ .fault = failed }),
     vec("autg with signing off passes any code", .{ .hw1 = 0xFB51, .hw2 = 0x0F02, .control = 0 }, .{}),
-    vec("bxaut r0, r3, r2 branches with interworking", .{ .hw1 = 0xFB53, .hw2 = 0x0F12, .r0 = p_b }, .{ .r0 = p_b, .pc = 0x2000_0240 }),
+    vec(
+        "bxaut r0, r3, r2 branches with interworking",
+        .{ .hw1 = 0xFB53, .hw2 = 0x0F12, .r0 = p_b },
+        .{ .r0 = p_b, .pc = 0x2000_0240 },
+    ),
     vec("bxaut with a wrong code faults and stays", .{ .hw1 = 0xFB53, .hw2 = 0x0F12 }, .{ .fault = failed }),
-    vec("bxaut with signing off still branches", .{ .hw1 = 0xFB53, .hw2 = 0x0F12, .control = 0 }, .{ .pc = 0x2000_0240 }),
-    vec("bxaut ip, lr, sp returns", .{ .hw1 = 0xFB5E, .hw2 = 0xCF1D, .r12 = p_lr }, .{ .r12 = p_lr, .pc = 0x2000_0180 }),
+    vec(
+        "bxaut with signing off still branches",
+        .{ .hw1 = 0xFB53, .hw2 = 0x0F12, .control = 0 },
+        .{ .pc = 0x2000_0240 },
+    ),
+    vec(
+        "bxaut ip, lr, sp returns",
+        .{ .hw1 = 0xFB5E, .hw2 = 0xCF1D, .r12 = p_lr },
+        .{ .r12 = p_lr, .pc = 0x2000_0180 },
+    ),
 };
 
 const unclaimed = [_]V{

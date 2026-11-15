@@ -8,10 +8,10 @@
 //!
 //! The source answers for a Non-secure fetch: an exempt address takes the
 //! accessing state, so it should answer non_secure.
-const sau_attr = @import("../../periph/sau/attribution.zig");
-const tt = @import("../tt.zig");
 const Instr = @import("instr.zig").Instr;
+const sau_attr = @import("../../periph/sau/attribution.zig");
 const sg = @import("ops/sg.zig");
+const tt = @import("../tt.zig");
 
 pub const State = sau_attr.State;
 

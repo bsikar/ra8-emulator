@@ -1,21 +1,15 @@
 //! Text for MVE contiguous element-sized loads/stores, per DDI0553 B5.
+const qreg = @import("../../../mve/qreg.zig");
+
 const Instr = @import("../../../instr.zig").Instr;
 const ops = @import("../../../ops/mve/vldr/vldr.zig");
 const text = @import("../../text.zig");
 
-fn suffix(size: @import("../../../mve/qreg.zig").Size) []const u8 {
+fn suffix(size: qreg.Size) []const u8 {
     return switch (size) {
         .byte => "b",
         .half => "h",
         .word => "w",
-    };
-}
-
-fn width(size: @import("../../../mve/qreg.zig").Size) []const u8 {
-    return switch (size) {
-        .byte => "8",
-        .half => "16",
-        .word => "32",
     };
 }
 
@@ -29,7 +23,19 @@ pub fn printPredicated(instr: Instr, out: *text.Text, pred: []const u8) void {
     const qd: u3 = @intCast(instr.hw2 >> 13);
     const rn = text.names[instr.hw1 & 15];
     const root = if (load) "vldr" else "vstr";
-    const dtype = if (load) (if (size == .byte) ".u8" else if (size == .half) ".u16" else ".u32") else if (size == .byte) ".8" else if (size == .half) ".16" else ".32";
+    const dtype = if (load)
+        (if (size == .byte)
+            ".u8"
+        else if (size == .half)
+            ".u16"
+        else
+            ".u32")
+    else if (size == .byte)
+        ".8"
+    else if (size == .half)
+        ".16"
+    else
+        ".32";
     const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@backingInt(size)));
     const add = instr.hw1 >> 7 & 1 == 1;
     const pre = instr.hw1 >> 8 & 1 == 1;

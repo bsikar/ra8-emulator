@@ -4,11 +4,11 @@
 //! seek loads the checkpoints near its target ahead of time, and lets the
 //! history bridge take a loaded snapshot instead of reading it again.
 //! A RAM-only history has nothing to load ahead, so it gets no pool.
-const std = @import("std");
+
 const history_resources = @import("ra8_host").history.resources;
 const history_storage = @import("ra8_host").history.storage;
-const pool_mod = @import("prefetch_pool.zig");
 const hook_mod = @import("prefetch_hook.zig");
+const pool_mod = @import("prefetch_pool.zig");
 const served_setup = @import("served_setup.zig");
 
 /// The pool and the transport hook that drives it.

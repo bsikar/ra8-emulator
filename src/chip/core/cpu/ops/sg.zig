@@ -13,10 +13,10 @@
 //!
 //! The attribution comes from Cpu.attribution; with none set every address
 //! is Secure, so the Non-secure cases only arise once a board supplies one.
-const op = @import("../op.zig");
 const attribution = @import("../attribution.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 /// Both halfwords of SG.
 pub const encoding: u16 = 0xE97F;

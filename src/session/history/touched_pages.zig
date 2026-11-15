@@ -13,8 +13,9 @@
 //! first capture, or one recorded before this existed) has no set, and the
 //! search replays its interval.
 const std = @import("std");
-const SpaceId = @import("manifest.zig").SpaceId;
+
 const dirty_pages = @import("dirty_pages.zig");
+const SpaceId = @import("manifest.zig").SpaceId;
 
 /// One 4 KiB page of one paged space.
 pub const PageKey = struct {
@@ -33,7 +34,9 @@ pub const Touched = struct {
     pub fn fromDirty(allocator: std.mem.Allocator, since: u32, dirty: *const dirty_pages.DirtyPages) !Touched {
         var self: Touched = .{ .allocator = allocator, .since = since, .masks = undefined };
         var made: usize = 0;
-        errdefer for (self.masks[0..made]) |m| allocator.free(m);
+        errdefer for (self.masks[0..made]) |m| {
+            allocator.free(m);
+        };
         for (dirty.masks, 0..) |words, i| {
             self.masks[i] = try allocator.dupe(u64, words);
             made += 1;
@@ -42,7 +45,9 @@ pub const Touched = struct {
     }
 
     pub fn deinit(self: *Touched) void {
-        for (self.masks) |words| self.allocator.free(words);
+        for (self.masks) |words| {
+            self.allocator.free(words);
+        }
         self.* = undefined;
     }
 
@@ -72,7 +77,9 @@ pub const Touched = struct {
         at += 4;
         var self: Touched = .{ .allocator = allocator, .since = since, .masks = undefined };
         var made: usize = 0;
-        errdefer for (self.masks[0..made]) |m| allocator.free(m);
+        errdefer for (self.masks[0..made]) |m| {
+            allocator.free(m);
+        };
         for (0..dirty_pages.space_count) |i| {
             if (at + 4 > bytes.len) return error.Truncated;
             const count = std.mem.readInt(u32, bytes[at..][0..4], .little);
@@ -94,7 +101,9 @@ pub const Touched = struct {
         const since = try reader.readInt(u32, .little);
         var self: Touched = .{ .allocator = allocator, .since = since, .masks = undefined };
         var made: usize = 0;
-        errdefer for (self.masks[0..made]) |m| allocator.free(m);
+        errdefer for (self.masks[0..made]) |m| {
+            allocator.free(m);
+        };
         for (0..dirty_pages.space_count) |i| {
             const count = try reader.readInt(u32, .little);
             const words = try allocator.alloc(u64, count);

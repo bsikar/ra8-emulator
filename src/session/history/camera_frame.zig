@@ -15,6 +15,7 @@
 //! A reader that finds the CRC wrong or a length that lies refuses the
 //! record: replay feeding the guest altered pixels would diverge silently.
 const std = @import("std");
+
 const flate = std.compress.flate;
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 

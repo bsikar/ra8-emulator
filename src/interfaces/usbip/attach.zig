@@ -3,8 +3,9 @@
 //! on it. The end-to-end check drives these against `--usbip PORT`; the
 //! tests drive them against the server's own replies.
 const std = @import("std");
-const wire = @import("wire.zig");
+
 const client = @import("client.zig");
+const wire = @import("wire.zig");
 
 pub const Error = error{ Refused, Unexpected, Overflow };
 
@@ -20,12 +21,19 @@ pub fn first(reader: *std.Io.Reader, writer: *std.Io.Writer, record: *[wire.devi
     if (count == 0) return null;
     try readRecord(reader, record);
     var scratch: [wire.device_len]u8 = undefined;
-    for (1..count) |_| try readRecord(reader, &scratch);
+    for (1..count) |_| {
+        try readRecord(reader, &scratch);
+    }
     return try client.Listed.decode(record);
 }
 
 /// Import `busid`; the stream carries URBs once this returns.
-pub fn import(reader: *std.Io.Reader, writer: *std.Io.Writer, busid: []const u8, record: *[wire.device_len]u8) !client.Listed {
+pub fn import(
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
+    busid: []const u8,
+    record: *[wire.device_len]u8,
+) !client.Listed {
     var request: [client.import_len]u8 = undefined;
     try client.importRequest(&request, busid);
     try writer.writeAll(&request);
@@ -36,7 +44,13 @@ pub fn import(reader: *std.Io.Reader, writer: *std.Io.Writer, busid: []const u8,
 }
 
 /// Send one URB with its OUT data and read its reply, IN data into `in_buf`.
-pub fn transfer(reader: *std.Io.Reader, writer: *std.Io.Writer, urb: client.Urb, out_data: []const u8, in_buf: []u8) !client.Returned {
+pub fn transfer(
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
+    urb: client.Urb,
+    out_data: []const u8,
+    in_buf: []u8,
+) !client.Returned {
     var header: [wire.basic_len]u8 = undefined;
     client.submit(&header, urb);
     try writer.writeAll(&header);

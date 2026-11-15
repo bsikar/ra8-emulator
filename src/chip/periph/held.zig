@@ -2,7 +2,8 @@
 //!
 //! `Nvic.held` counts them all together, which is enough to notice that
 //! something is being refused and not enough to act on. Four things refuse
-//! a candidate and they want different fixes: PRIMASK is a seam question, a running handler of equal or better priority is
+//! a candidate and they want different fixes: PRIMASK is a seam question, a running handler of equal or better priority
+//! is
 //! the architecture working correctly, the nesting guard is a model limit,
 //! and a missing vector is the image's own business.
 //!
@@ -14,7 +15,6 @@
 //! against a fresh SysTick pend either. Which of those two is happening
 //! was not readable from one number, and every fire re-derived it by
 //! sweeping something. Now the run says it.
-const std = @import("std");
 
 /// One counter per reason a candidate was refused.
 pub const Held = struct {

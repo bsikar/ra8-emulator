@@ -6,9 +6,9 @@
 //! Nothing feeds it on the Zig core, so it is null.
 const elf = @import("ra8_board").image.elf;
 const pc_hits = @import("ra8_session").pc_hits;
-const tally_mod = @import("ra8_session").tally;
-const taken_in = @import("ra8_session").taken_in;
 const symbol = @import("where.zig").symbol;
+const taken_in = @import("ra8_session").taken_in;
+const tally_mod = @import("ra8_session").tally;
 
 /// The run's site tables, borrowed from the report Tally.
 pub const Sites = struct {

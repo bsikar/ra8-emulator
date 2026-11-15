@@ -6,8 +6,8 @@
 //! included (`#-0x0`, `#-0x4`). An added offset follows the usual
 //! decimal-below-ten rule.
 const Instr = @import("../instr.zig").Instr;
-const text = @import("text.zig");
 const preload = @import("../ops/preload.zig");
+const text = @import("text.zig");
 
 const pc: u4 = 15;
 

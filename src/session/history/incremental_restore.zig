@@ -4,13 +4,14 @@
 //! Applying the diff must yield a machine byte-identical to a full restore.
 //! Clean pages are preserved without re-copying or re-hashing.
 const std = @import("std");
+
 const manifest_mod = @import("manifest.zig");
 const ObjectId = @import("object_id.zig").ObjectId;
 const Position = @import("position.zig").Position;
 const snap_state = @import("../root.zig").board.state;
+
 const Files = snap_state.Files;
 const memmap = @import("ra8_chip").core.memmap;
-const file = @import("ra8_snapshot").file;
 
 pub const page_size: usize = 0x1000; // 4096 bytes
 

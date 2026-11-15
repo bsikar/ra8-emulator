@@ -6,13 +6,14 @@
 //! the saturating/halving one. U is unsigned for the second group, rounding
 //! for VQDMULH, ignored by VADD/VSUB, and makes VMUL into VBRSR, whose
 //! Rm[7:0] is a bit count rather than a lane value. Rm of SP or PC is CONSTRAINED UNPREDICTABLE and left unclaimed.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("int.zig");
+const op = @import("../../../op.zig");
 const pair = @import("pair.zig");
+
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_int_scalar", .decode = decode, .oracle = false };
@@ -78,7 +79,9 @@ fn decode(instr: Instr) ?op.Exec {
 /// The scalar in every lane of a vector.
 pub fn splat(scalar: u32, size: Size) u128 {
     var out: u128 = 0;
-    for (0..mve.qreg.lanes(size)) |k| out = mve.qreg.setElem(out, size, @intCast(k), scalar);
+    for (0..mve.qreg.lanes(size)) |k| {
+        out = mve.qreg.setElem(out, size, @intCast(k), scalar);
+    }
     return out;
 }
 

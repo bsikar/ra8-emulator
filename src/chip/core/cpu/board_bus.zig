@@ -6,27 +6,32 @@
 //! peripheral bus, which folds the alias itself. A peripheral access is one
 //! register access of 1, 2 or 4 bytes; any other width there is refused
 //! rather than split, since splitting would change what the peripheral sees.
-const std = @import("std");
 const bus = @import("bus.zig");
+const scs_files = @import("scs_files.zig");
+
+/// Public so a test can build the latch without a root export.
+const std = @import("std");
+
+const banked = @import("../banked.zig");
+pub const fault_clear = @import("../../periph/fault/clear.zig");
+const fp_scb = @import("fpu/scb.zig");
+const fp_state = @import("fpu/state.zig");
 const GuestBus = @import("memory/guest/bus.zig").GuestBus;
-const registry = @import("../../periph/registry.zig");
 const memmap = @import("../memmap.zig");
-const sau = @import("../../periph/sau/sau.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
 const mpu_ns = @import("../../periph/mpu/ns.zig");
-/// Public so a test can build the latch without a root export.
-pub const fault_clear = @import("../../periph/fault/clear.zig");
-const fp_state = @import("fpu/state.zig");
-const fp_scb = @import("fpu/scb.zig");
-const banked = @import("../banked.zig");
+const registry = @import("../../periph/registry.zig");
+const sau = @import("../../periph/sau/sau.zig");
+
 /// Public so its tests reach it without a root export.
-pub const scs_route = @import("scs_route.zig");
 const fault_status = @import("../../periph/fault/status.zig");
+pub const scs_route = @import("scs_route.zig");
+
 /// Public so its tests reach it without a root export.
-pub const mpu_check = @import("mpu_check.zig");
-const systick_cut = @import("systick_cut.zig");
-pub const nvic_registers = @import("nvic_registers.zig");
 const itm_port = @import("../../periph/itm.zig");
+pub const mpu_check = @import("mpu_check.zig");
+pub const nvic_registers = @import("nvic_registers.zig");
+const systick_cut = @import("systick_cut.zig");
 
 /// CFSR's banked bits, UFSR and MMFSR (src/chip/periph/scb/bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;
@@ -66,7 +71,19 @@ pub const BoardBus = struct {
 
     pub fn view(self: *BoardBus) bus.Bus {
         const memory = self.memory.view();
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peekRegister }, .direct = memory.direct, .lines = memory.lines, .register_state = .{ .ctx = self, .vtable = &.{ .read = readState, .write = writeState } } };
+        return .{
+            .ctx = self,
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .latch = latch,
+                .repeat = repeat,
+                .peek = peekRegister,
+            },
+            .direct = memory.direct,
+            .lines = memory.lines,
+            .register_state = .{ .ctx = self, .vtable = &.{ .read = readState, .write = writeState } },
+        };
     }
 
     fn readState(ctx: *anyopaque, address: u32, into: []u8) bus.Error!void {
@@ -217,7 +234,7 @@ pub const BoardBus = struct {
         std.mem.writeInt(u32, &word, if (halves.clears) 0 else halves.read(shared, copy), .little);
         @memcpy(word[within..][0..bytes.len], bytes);
         const words = halves.write(shared, copy, std.mem.readInt(u32, &word, .little));
-        try putWord(memory, halves.non_secure, words.non_secure);
+        try scs_files.putWord(memory, halves.non_secure, words.non_secure);
         std.mem.writeInt(u32, &word, words.shared, .little);
         try self.scs.store(self.memory, halves.shared, &word);
     }
@@ -228,7 +245,11 @@ pub const BoardBus = struct {
         // A Non-secure fault's UFSR and MMFSR bits sit in the Non-secure
         // copy; folded in, the report shows one word (RA8EMU-444).
         const ns_bits = self.peek(memmap.scb.cfsr + 0x2_0000) & cfsr_banked;
-        return .{ .cfsr = self.peek(memmap.scb.cfsr) | ns_bits, .hfsr = self.peek(memmap.scb.hfsr), .sfsr = self.peek(0xE000_EDE4) };
+        return .{
+            .cfsr = self.peek(memmap.scb.cfsr) | ns_bits,
+            .hfsr = self.peek(memmap.scb.hfsr),
+            .sfsr = self.peek(0xE000_EDE4),
+        };
     }
 
     fn peek(self: *BoardBus, given: u32) u32 {
@@ -260,7 +281,7 @@ pub const BoardBus = struct {
     fn raise(self: *BoardBus, address: u32, bits: u32) bus.Error!void {
         if (bits == 0) return;
         const memory = self.memory.view();
-        try putWord(memory, address, try memory.readWord(address) | bits);
+        try scs_files.putWord(memory, address, try memory.readWord(address) | bits);
     }
 };
 
@@ -313,72 +334,12 @@ pub const Scs = struct {
             unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
             unit.apply(memory) catch return bus.Error.Unmapped;
         }
-        if (self.partitions) |unit| try bankPartition(memory, unit, address, bytes);
-        if (self.regions) |unit| try bankRegion(memory, unit, address, bytes, 0);
+        if (self.partitions) |unit| try scs_files.bankPartition(memory, unit, address, bytes);
+        if (self.regions) |unit| try scs_files.bankRegion(memory, unit, address, bytes, 0);
         if (self.regions_ns) |unit| if (mpu_ns.normalOf(address)) |normal| {
-            try bankRegion(memory, unit, normal, bytes, mpu_ns.offset);
+            try scs_files.bankRegion(memory, unit, normal, bytes, mpu_ns.offset);
         };
-        if (self.fp) |state| try fileFp(memory, state, address, bytes);
-        if (self.itm) |port| try fileItm(memory, port, address, bytes);
+        if (self.fp) |state| try scs_files.fileFp(memory, state, address, bytes);
+        if (self.itm) |port| try scs_files.fileItm(memory, port, address, bytes);
     }
 };
-
-/// File a word store into the SAU window and, when it moved RNR, put the
-/// selected region's pair back in RAM so the next RBAR/RLAR read gives the
-/// region RNR names rather than the last one programmed.
-fn bankPartition(memory: bus.Bus, unit: *sau.Sau, address: u32, bytes: []const u8) bus.Error!void {
-    if (bytes.len != 4 or address < memmap.sau.ctrl or address > memmap.sau.rlar) return;
-    const word = std.mem.readInt(u32, bytes[0..4], .little);
-    if (unit.observe(address, word) == .none) return;
-    const pair = unit.bankedPair();
-    try putWord(memory, memmap.sau.rbar, pair.rbar);
-    try putWord(memory, memmap.sau.rlar, pair.rlar);
-}
-
-/// File a word store into the MPU window and, when it moved RNR, put the
-/// four pairs RNR now selects back in RAM. A CTRL store is taken into the
-/// table by `observe`.
-/// `shift` is where the bank's copy sits above the normal window.
-fn bankRegion(memory: bus.Bus, unit: *mpu.Mpu, address: u32, bytes: []const u8, shift: u32) bus.Error!void {
-    if (bytes.len != 4 or address < memmap.mpu.type_ or address > memmap.mpu.mair1) return;
-    const word = std.mem.readInt(u32, bytes[0..4], .little);
-    if (unit.observe(address, word) != .rebank) return;
-    const pairs = [_][2]u32{
-        .{ memmap.mpu.rbar, memmap.mpu.rlar },
-        .{ memmap.mpu.rbar_a1, memmap.mpu.rlar_a1 },
-        .{ memmap.mpu.rbar_a2, memmap.mpu.rlar_a2 },
-        .{ memmap.mpu.rbar_a3, memmap.mpu.rlar_a3 },
-    };
-    for (pairs, 0..) |where, offset| {
-        const words = unit.pairFor(@intCast(offset));
-        try putWord(memory, where[0] + shift, words[0]);
-        try putWord(memory, where[1] + shift, words[1]);
-    }
-}
-
-/// File a word store to FPCCR, FPCAR or FPDSCR in the FP state and put the
-/// masked value back in RAM, so a plain RAM read agrees with the model.
-fn fileFp(memory: bus.Bus, state: *fp_state.State, address: u32, bytes: []const u8) bus.Error!void {
-    if (bytes.len != fp_scb.width) return;
-    if (!fp_scb.write(state, address, std.mem.readInt(u32, bytes[0..4], .little))) return;
-    try putWord(memory, address, fp_scb.read(state, address).?);
-}
-
-/// File a store into the ITM's registers and put back what a read of the
-/// register sees, so a stimulus port polled after a character still reads
-/// FIFOREADY rather than the character (RA8EMU-629).
-fn fileItm(memory: bus.Bus, port: *itm_port.Itm, address: u32, bytes: []const u8) bus.Error!void {
-    if (address < itm_port.base or address - itm_port.base >= itm_port.limits.span) return;
-    const offset = address - itm_port.base;
-    const width = @min(bytes.len, 4);
-    var padded = @as([4]u8, @splat(0));
-    @memcpy(padded[0..width], bytes[0..width]);
-    if (!port.write(offset, std.mem.readInt(u32, &padded, .little), @intCast(width))) return;
-    if (port.peek(offset)) |word| try putWord(memory, address, word);
-}
-
-fn putWord(memory: bus.Bus, address: u32, value: u32) bus.Error!void {
-    var bytes: [4]u8 = undefined;
-    std.mem.writeInt(u32, &bytes, value, .little);
-    try memory.write(address, &bytes);
-}

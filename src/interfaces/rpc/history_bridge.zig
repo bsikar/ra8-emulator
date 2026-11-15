@@ -4,13 +4,14 @@
 //! puts the machine back through the checkpoint objects; a session with
 //! no history binds nothing and its seeks stay refused.
 const std = @import("std");
-const ra8_session = @import("ra8_session");
+
 const history = @import("ra8_host").history;
 const history_bind = @import("history_bind.zig");
 const history_ram = @import("history_ram.zig");
 const history_segments = @import("history_segments.zig");
-const prefetch_pool = @import("prefetch_pool.zig");
 const object_read = @import("object_read.zig");
+const prefetch_pool = @import("prefetch_pool.zig");
+const ra8_session = @import("ra8_session");
 
 const seek_engine = ra8_session.history_seek_engine;
 const seek_facts = ra8_session.history_seek_facts;
@@ -101,7 +102,11 @@ pub const Bridge = struct {
         // every checkpoint, which a zeroed position says. A session with
         // no log still refuses above.
         const window = windowFacts(self.session);
-        if (self.session.grid) |grid| return .{ .current = grid.at, .checkpoints = gathered.checkpoints, .window = window };
+        if (self.session.grid) |grid| return .{
+            .current = grid.at,
+            .checkpoints = gathered.checkpoints,
+            .window = window,
+        };
         return .{ .current = .{}, .checkpoints = gathered.checkpoints, .window = window };
     }
 
@@ -110,7 +115,13 @@ pub const Bridge = struct {
     pub fn windowFacts(session: *ra8_session.api.Session) ?seek_engine.WindowFacts {
         const w = session.window orelse return null;
         if (!w.ready()) return null;
-        return .{ .start = w.start() orelse return null, .end = w.end() orelse return null, .at = w.at() orelse return null, .line = w.line, .slots = w.count() };
+        return .{
+            .start = w.start() orelse return null,
+            .end = w.end() orelse return null,
+            .at = w.at() orelse return null,
+            .line = w.line,
+            .slots = w.count(),
+        };
     }
 
     pub fn loadTouchedRecords(self: *Bridge, checkpoints: []seek_engine.Checkpoint) !void {

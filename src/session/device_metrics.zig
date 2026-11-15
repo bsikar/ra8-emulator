@@ -1,6 +1,9 @@
 //! Bounded snapshots for the device health pane (RA8EMU-1240).
-const load = @import("rtos/load.zig");
+const api = @import("api.zig");
+const chip = @import("ra8_chip");
+
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const load = @import("rtos/load.zig");
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 const symbols = @import("symbols.zig");
 
@@ -22,7 +25,7 @@ pub const Stack = struct {
     }
 };
 fn stackAddress(address: u32) u32 {
-    const map = @import("ra8_chip").core.memmap;
+    const map = chip.core.memmap;
     if (address >= map.ns_sram_base and address <= map.ns_sram_end) return address - map.ns_offset;
     if (address >= map.ns_sdram_base and address <= map.ns_sdram_end) return address - map.ns_offset;
     return address;
@@ -48,9 +51,20 @@ pub const Hook = struct {
     readFn: *const fn (*anyopaque, u1) Snapshot,
 };
 
-pub fn collect(cpu: ?*const cpu_mod.Cpu, store: ?*const Store, image: ?symbols.Image, traced: ?*const load.Load, core: u1) Snapshot {
+pub fn collect(
+    cpu: ?*const cpu_mod.Cpu,
+    store: ?*const Store,
+    image: ?symbols.Image,
+    traced: ?*const load.Load,
+    core: u1,
+) Snapshot {
     const live = cpu orelse return .{};
-    var out: Snapshot = .{ .attached = true, .epoch = live.metrics_epoch, .active = live.slots, .idle = live.idle_cycles };
+    var out: Snapshot = .{
+        .attached = true,
+        .epoch = live.metrics_epoch,
+        .active = live.slots,
+        .idle = live.idle_cycles,
+    };
     out.msp.pointer = live.regs.msp;
     out.psp.pointer = live.regs.psp;
     if (image) |elf| {
@@ -60,8 +74,16 @@ pub fn collect(cpu: ?*const cpu_mod.Cpu, store: ?*const Store, image: ?symbols.I
     }
     if (store) |memory| {
         const tracker = memory.touches();
-        out.sram = .{ .known = tracker.valid, .pages = tracker.sram.count(), .capacity = @TypeOf(tracker.*).sram_capacity };
-        out.sdram = .{ .known = tracker.valid, .pages = tracker.sdram.count(), .capacity = if (memory.port) |port| port.sdram.len else 0 };
+        out.sram = .{
+            .known = tracker.valid,
+            .pages = tracker.sram.count(),
+            .capacity = @TypeOf(tracker.*).sram_capacity,
+        };
+        out.sdram = .{
+            .known = tracker.valid,
+            .pages = tracker.sdram.count(),
+            .capacity = if (memory.port) |port| port.sdram.len else 0,
+        };
     }
     if (traced) |original| {
         var current = original.*;
@@ -92,7 +114,10 @@ pub const Window = struct {
     pub fn sample(self: *Window, snapshot: *const Snapshot) void {
         const a = snapshot.active -| self.active;
         const i = snapshot.idle -| self.idle;
-        const valid = self.primed and snapshot.epoch == self.epoch and snapshot.active >= self.active and snapshot.idle >= self.idle;
+        const valid = self.primed and
+            snapshot.epoch == self.epoch and
+            snapshot.active >= self.active and
+            snapshot.idle >= self.idle;
         self.epoch = snapshot.epoch;
         self.active = snapshot.active;
         self.idle = snapshot.idle;
@@ -102,7 +127,7 @@ pub const Window = struct {
     }
 };
 
-pub fn read(self: *@import("api.zig").Session, core: @import("api.zig").Core) Snapshot {
+pub fn read(self: *api.Session, core: api.Core) Snapshot {
     const hook = self.metrics orelse return .{};
     return hook.readFn(hook.context, @intCast(@backingInt(core)));
 }

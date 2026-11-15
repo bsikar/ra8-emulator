@@ -17,9 +17,9 @@
 //! RA8EMU-137), hw1 bit 0 set (UQRSHLL and SQRSHRL, RA8EMU-139), type 01
 //! and 11, hw2 bits 7:6 set, and the UNPREDICTABLE Rm of SP, PC, RdaLo or
 //! RdaHi.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 
 pub const Kind = enum { lsll, asrl };
 

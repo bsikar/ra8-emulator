@@ -14,6 +14,8 @@ pub fn print(instr: Instr, out: *text.Text) void {
     const root = if (load) "vld" else "vst";
     out.put("{s}{d}{d}.{s} {{q{d}", .{ root, count, pattern, sizes[(instr.hw2 >> 7) & 3], qd });
     var i: u3 = 1;
-    while (i < count) : (i += 1) out.put(", q{d}", .{qd + i});
+    while (i < count) : (i += 1) {
+        out.put(", q{d}", .{qd + i});
+    }
     out.put("}}, [{s}]{s}", .{ rn, if (writeback) "!" else "" });
 }

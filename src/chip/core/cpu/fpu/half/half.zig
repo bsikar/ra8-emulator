@@ -10,14 +10,16 @@
 //! NaN becomes a signed zero and an infinity or an overflow becomes the
 //! largest magnitude, each with IOC and nothing else.
 const format = @import("../format.zig");
+
 const Real = format.Real;
 const Format = format.Format;
-const unpack_mod = @import("../unpack.zig");
-const nan = @import("../nan.zig");
-const round = @import("../round.zig");
 const convertNaN = @import("../convert/convert.zig").convertNaN;
 const Fpscr = @import("../fpscr.zig").Fpscr;
+const nan = @import("../nan.zig");
+const round = @import("../round.zig");
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
+
 const half = format.half;
 
 /// FPConvert from `from` into a half-precision value.

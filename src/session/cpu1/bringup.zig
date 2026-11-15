@@ -2,24 +2,27 @@
 //! debug front and the session server. CPU1 reads its own image, runs on
 //! its own Zig core paired with CPU0 for exclusive access, and waits
 //! parked in the session until it is given the session or run by core.
+const chip = @import("ra8_chip");
+
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
+
 const board_wiring = @import("ra8_board").wiring;
-const dwt = @import("ra8_chip").periph.dwt;
-const cpuid = @import("ra8_chip").periph.cpuid;
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const exclusive_peer = @import("ra8_chip").core.cpu.exclusive_peer;
-const second_core = @import("ra8_chip").core.second.core;
 const cpu1_image = @import("image.zig");
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const cpuid = @import("ra8_chip").periph.cpuid;
+const dwt = @import("ra8_chip").periph.dwt;
+const elf = @import("ra8_board").image.elf;
+const exclusive_peer = @import("ra8_chip").core.cpu.exclusive_peer;
 const file_ops = @import("../file_ops.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const harness = @import("../harness/harness.zig");
-const step_hook = @import("../step_hook.zig");
-const stop_machine = @import("../stop_machine.zig");
-const watch_bus = @import("../watch/bus.zig");
 const rtos_hook = @import("../rtos/hook.zig");
 const rtos_publish = @import("../rtos/publish.zig");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const second_core = @import("ra8_chip").core.second.core;
+const step_hook = @import("../step_hook.zig");
+const stop_machine = @import("../stop_machine.zig");
 const symbols = @import("../symbols.zig");
+const watch_bus = @import("../watch/bus.zig");
 const widget_tree = @import("../widget_tree.zig");
 
 /// Holds what CPU1 runs on; it stays put while the session has it.
@@ -41,7 +44,14 @@ pub const Cpu1 = struct {
 
     /// Bring CPU1 up from the ELF at `path` read through `reader` beside
     /// `opened`, park it in the session and give the session back to CPU0.
-    pub fn open(self: *Cpu1, allocator: std.mem.Allocator, io: std.Io, reader: file_ops.Reader, opened: *harness.Harness, path: []const u8) !void {
+    pub fn open(
+        self: *Cpu1,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        reader: file_ops.Reader,
+        opened: *harness.Harness,
+        path: []const u8,
+    ) !void {
         if (opened.session().root != null) return error.HistoryAlreadyRooted;
         const bytes = try reader.readAlloc(io, path, allocator, second_core.limits.image_bytes);
         defer allocator.free(bytes);
@@ -67,11 +77,17 @@ pub const Cpu1 = struct {
         self.watching = .{ .inner = cpu1.bus, .driver = &self.driver };
         cpu1.bus = self.watching.view();
         exclusive_peer.pair(opened.primaryCpu(), cpu1);
-        @import("ra8_chip").core.scheduler.pairEvents(opened.primaryCpu(), cpu1);
+        chip.core.scheduler.pairEvents(opened.primaryCpu(), cpu1);
         self.paired = opened.primaryCpu();
         const live = opened.session();
         live.widget_tree_addresses[1] = symbols.addressOf(self.image.?, widget_tree.symbol);
-        live.live.other = .{ .core = .{ .cpu = cpu1 }, .machine = &self.machine, .watch = &self.watching, .index = 1, .budget = live.live.budget };
+        live.live.other = .{
+            .core = .{ .cpu = cpu1 },
+            .machine = &self.machine,
+            .watch = &self.watching,
+            .index = 1,
+            .budget = live.live.budget,
+        };
         opened.attachCore(.cpu1, cpu1, self.pair.guest());
         opened.bindSecondDriver(&self.pair);
         opened.state.edge.pair = &self.pair;
@@ -100,7 +116,12 @@ pub const Cpu1 = struct {
         cpu0.bus = self.listener.onBus(cpu0.bus);
         if (cpu0.source) |inner| cpu0.source = self.listener.onSource(inner);
         const live = opened.session();
-        self.publisher = .{ .trace = &tracer.trace, .stream = &live.event_stream, .inner = live.live.boundary, .time = &opened.board().time.base };
+        self.publisher = .{
+            .trace = &tracer.trace,
+            .stream = &live.event_stream,
+            .inner = live.live.boundary,
+            .time = &opened.board().time.base,
+        };
         live.live.boundary = self.publisher.hook();
         return true;
     }

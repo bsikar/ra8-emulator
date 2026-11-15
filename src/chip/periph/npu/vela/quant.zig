@@ -6,7 +6,6 @@
 //! parameter, which is how Vela's `cmd1_with_offset` emits them; the stride
 //! sets carry the stride in the payload. Values are kept raw. Opcodes from
 //! Arm's Vela 3.12.0 (Apache-2.0) ethos_u55_regs.py `cmd0` and `cmd1`.
-const std = @import("std");
 
 /// A scale the operators multiply by, then shift right.
 pub const Scale = struct { scale: u32 = 0, shift: u16 = 0 };

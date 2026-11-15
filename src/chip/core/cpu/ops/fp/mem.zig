@@ -15,12 +15,16 @@
 //! S[Vd:D]<15:0>; VSTR.16 with a PC base stays unclaimed, and there is no
 //! 16-bit VLDM/VSTM. Alignment checks wait on the core lane's MemA support
 //! (RA8EMU-85).
-const op = @import("../../op.zig");
-const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
-const transfer = @import("../../fpu/transfer/transfer.zig");
+const std = @import("std");
+
+const regs = @import("../../regs.zig");
+
 const alignment = @import("../../alignment.zig");
+const Cpu = @import("../../cpu.zig").Cpu;
 const Fpscr = @import("../../fpu/fpscr.zig").Fpscr;
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+const transfer = @import("../../fpu/transfer/transfer.zig");
 
 pub const group: op.Group = .{ .name = "fp_mem", .decode = decode, .oracle = false };
 
@@ -93,8 +97,29 @@ pub fn isMultiple(instr: Instr) bool {
 
 /// The plan for `base`, Rn's value (or, for a PC base, the PC it reads).
 pub fn plan(b: Bits, base: u32) transfer.Plan {
-    if (isSingle(b)) return transfer.single(.{ .u = b.u, .rn = b.rn, .base = base, .d = b.d, .imm8 = b.imm8, .double = b.double, .store = !b.load });
-    return transfer.multiple(.{ .p = b.p, .u = b.u, .w = b.w, .rn = b.rn, .base = base, .d = b.d, .imm8 = b.imm8, .double = b.double });
+    if (isSingle(b)) return transfer.single(
+        .{
+            .u = b.u,
+            .rn = b.rn,
+            .base = base,
+            .d = b.d,
+            .imm8 = b.imm8,
+            .double = b.double,
+            .store = !b.load,
+        },
+    );
+    return transfer.multiple(
+        .{
+            .p = b.p,
+            .u = b.u,
+            .w = b.w,
+            .rn = b.rn,
+            .base = base,
+            .d = b.d,
+            .imm8 = b.imm8,
+            .double = b.double,
+        },
+    );
 }
 
 fn decode(instr: Instr) ?op.Exec {
@@ -121,7 +146,7 @@ fn runSystem(cpu: *Cpu, instr: Instr) op.Error!void {
     const offset_addr = if (b.add == 1) base +% delta else base -% delta;
     const address = if (b.p == 1) offset_addr else base;
     if (b.w == 1 and b.rn == 13 and offset_addr < cpu.regs.spLimit()) return error.StackOverflow;
-    const inactive = cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & @import("../../regs.zig").control_bits.fpca == 0;
+    const inactive = cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & regs.control_bits.fpca == 0;
     if (reg == 14 and inactive) {
         // DDI0553's FPCXT_NS load case does not read memory for an inactive context.
         updateBase(cpu, b);
@@ -136,9 +161,9 @@ fn runSystem(cpu: *Cpu, instr: Instr) op.Error!void {
     } else {
         const value = storeSystem(cpu, reg, inactive);
         try writeWord(cpu, address, value);
-        if (reg == 15 or (reg == 14 and !inactive and cpu.regs.control & @import("../../regs.zig").control_bits.sfpa == 0)) {
+        if (reg == 15 or (reg == 14 and !inactive and cpu.regs.control & regs.control_bits.sfpa == 0)) {
             cpu.fp.fpscr = cpu.fp.context.defaultFpscr();
-            if (reg == 15) cpu.regs.control &= ~@import("../../regs.zig").control_bits.sfpa;
+            if (reg == 15) cpu.regs.control &= ~regs.control_bits.sfpa;
         }
     }
     updateBase(cpu, b);
@@ -169,7 +194,7 @@ fn loadSystem(cpu: *Cpu, reg: u4, value: u32, inactive: bool) void {
 }
 
 fn loadFpcxt(cpu: *Cpu, payload: u32) void {
-    const control_bits = @import("../../regs.zig").control_bits;
+    const control_bits = regs.control_bits;
     cpu.regs.control = (cpu.regs.control & ~control_bits.sfpa) | (@as(u32, @truncate(payload >> 31)) << 3);
     cpu.fp.fpscr = Fpscr.fromBits(payload & 0x0FFF_FFFF);
 }
@@ -197,11 +222,15 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     try alignment.memA(p.start, 4);
     var words: [32]u32 = undefined;
     if (b.load) {
-        for (words[0..p.words], 0..) |*word, k| word.* = try readWord(cpu, p.start +% @as(u32, @intCast(k)) * 4);
+        for (words[0..p.words], 0..) |*word, k| {
+            word.* = try readWord(cpu, p.start +% @as(u32, @intCast(k)) * 4);
+        }
         transfer.load(p, &cpu.fp.bank, &words);
     } else {
         transfer.store(p, &cpu.fp.bank, &words);
-        for (words[0..p.words], 0..) |word, k| try writeWord(cpu, p.start +% @as(u32, @intCast(k)) * 4, word);
+        for (words[0..p.words], 0..) |word, k| {
+            try writeWord(cpu, p.start +% @as(u32, @intCast(k)) * 4, word);
+        }
     }
     if (p.wback) |value| cpu.regs.set(b.rn, value);
 }
@@ -231,9 +260,9 @@ fn runHalf(cpu: *Cpu, instr: Instr) op.Error!void {
     var bytes: [2]u8 = undefined;
     if (instr.hw1 >> 4 & 1 == 1) {
         try cpu.bus.read(address, &bytes);
-        cpu.fp.bank.writeS(d, @import("std").mem.readInt(u16, &bytes, .little));
+        cpu.fp.bank.writeS(d, std.mem.readInt(u16, &bytes, .little));
     } else {
-        @import("std").mem.writeInt(u16, &bytes, @truncate(cpu.fp.bank.readS(d)), .little);
+        std.mem.writeInt(u16, &bytes, @truncate(cpu.fp.bank.readS(d)), .little);
         try cpu.bus.write(address, &bytes);
     }
 }
@@ -241,11 +270,11 @@ fn runHalf(cpu: *Cpu, instr: Instr) op.Error!void {
 fn readWord(cpu: *Cpu, address: u32) op.Error!u32 {
     var bytes: [4]u8 = undefined;
     try cpu.bus.read(address, &bytes);
-    return @import("std").mem.readInt(u32, &bytes, .little);
+    return std.mem.readInt(u32, &bytes, .little);
 }
 
 fn writeWord(cpu: *Cpu, address: u32, value: u32) op.Error!void {
     var bytes: [4]u8 = undefined;
-    @import("std").mem.writeInt(u32, &bytes, value, .little);
+    std.mem.writeInt(u32, &bytes, value, .little);
     try cpu.bus.write(address, &bytes);
 }

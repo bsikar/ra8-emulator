@@ -8,7 +8,6 @@
 //! newline simply never appears there. And an over-long line is counted apart
 //! from the lines the firmware actually ended, so a report cannot claim a line
 //! that was really the model running out of buffer.
-const std = @import("std");
 
 pub const limits = struct {
     /// Characters buffered before the model gives up waiting for a newline.

@@ -3,9 +3,9 @@
 //! ops/parallel.zig leave behind. No flags change.
 //!
 //! Left unclaimed: SP or PC in Rd, Rn or Rm (UNPREDICTABLE).
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const xpsr_bits = @import("../regs.zig").xpsr_bits;
 
 pub const encodings = struct {

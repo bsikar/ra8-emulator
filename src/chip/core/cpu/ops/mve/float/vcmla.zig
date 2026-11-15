@@ -5,12 +5,12 @@
 //! Q8 and above, so they must be zero. Bit 5 clear is VCADD
 //! (mve_float_vcadd.zig). The lane semantics are in
 //! src/chip/core/cpu/mve/float/complex/complex.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("../int/int.zig");
+const op = @import("../../../op.zig");
 
 pub const group: op.Group = .{ .name = "mve_float_vcmla", .decode = decode, .oracle = false };
 

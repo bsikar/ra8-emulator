@@ -4,6 +4,7 @@
 //! An intra-segment frame stores only the minimal bounding box of differing pixels
 //! against the segment keyframe, compressed with std.compress.flate level 1.
 const std = @import("std");
+
 const frame_types = @import("frame_types.zig");
 
 pub const Rect = frame_types.Rect;
@@ -38,10 +39,14 @@ pub fn diffBox(before: []const u8, after: []const u8, width: u32) ?Rect {
     if (width == 0 or before.len != after.len or before.len % width != 0) return null;
     const rows = before.len / width;
     var top: usize = 0;
-    while (top < rows and firstDiff(before, after, width, top) == null) top += 1;
+    while (top < rows and firstDiff(before, after, width, top) == null) {
+        top += 1;
+    }
     if (top == rows) return null;
     var bottom: usize = rows - 1;
-    while (firstDiff(before, after, width, bottom) == null) bottom -= 1;
+    while (firstDiff(before, after, width, bottom) == null) {
+        bottom -= 1;
+    }
     var left: usize = width;
     var right: usize = 0;
     for (top..bottom + 1) |row| {
@@ -128,7 +133,14 @@ pub fn decompress(allocator: std.mem.Allocator, compressed: []const u8, uncompre
     var inflater: std.compress.flate.Decompress = .init(&reader, .raw, window);
     inflater.reader.readSliceAll(uncompressed) catch |err| return switch (err) {
         error.EndOfStream => Error.Truncated,
-        error.ReadFailed => if (inflater.err) |ie| (if (ie == error.EndOfStream) Error.Truncated else Error.Corrupt) else Error.Corrupt,
+        error.ReadFailed,
+        => if (inflater.err) |ie|
+            (if (ie == error.EndOfStream)
+                Error.Truncated
+            else
+                Error.Corrupt)
+        else
+            Error.Corrupt,
     };
     _ = inflater.reader.takeByte() catch |err| switch (err) {
         error.EndOfStream => {},

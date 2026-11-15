@@ -4,7 +4,8 @@
 //! on the board that answer costs a dozen reads of the NVIC and SCB through
 //! the bus. Inside one stretch nothing can change it unless the core itself
 //! touches peripheral or system space, takes an exception or returns from
-//! one (the SDRAM aperture sits among the peripherals and is neither): the board's clocks and peripherals only move at a stretch boundary.
+//! one (the SDRAM aperture sits among the peripherals and is neither): the board's clocks and peripherals only move at
+//! a stretch boundary.
 //! So once the source has answered "nothing pending", that answer stands
 //! until one of those happens or the next stretch starts.
 //!
@@ -12,8 +13,8 @@
 //! `Cpu.run` call `stir` as each stretch starts.
 const bus_mod = @import("../bus.zig");
 const Entry = @import("active.zig").Entry;
-const Source = @import("source.zig").Source;
 const external_port = @import("../memory/external_port.zig");
+const Source = @import("source.zig").Source;
 
 /// The first address of peripheral space. Everything below it is flash and
 /// RAM, which never decides what is pending.

@@ -25,15 +25,17 @@
 //! block, the wake-up masks, SELSR) is nobody's yet, and the sparse register
 //! file answers a poll of an unmodelled register better than a block that
 //! flatly returns zero for it, so the block claims the table and no more.
+pub const irqcr = @import("irqcr.zig");
+const lanes = @import("../lanes.zig");
 const memmap = @import("../../core/memmap.zig");
 const periph = @import("../registry.zig");
-const lanes = @import("../lanes.zig");
-pub const irqcr = @import("irqcr.zig");
+
 /// Host-driven pin edges and the ISEL/IRQMD test they pass (RA8EMU-375).
 pub const pin_irq = @import("pin_irq.zig");
 
 /// INTSELR: which core each event interrupts (src/chip/periph/icu/intsel.zig).
 pub const intsel = @import("intsel.zig");
+
 /// NMIER, NMICLR, NMISR and WUPEN0/1 (src/chip/periph/icu/nmi.zig).
 pub const nmi = @import("nmi.zig");
 
@@ -184,8 +186,12 @@ pub const Icu = struct {
     /// still latched would be re-pended into a firmware that has not put its
     /// vector table back yet.
     pub fn clearLatches(self: *Icu) void {
-        for (&self.links) |*link| link.* &= ~field.ir;
-        for (&self.cpu1) |*link| link.* &= ~field.ir;
+        for (&self.links) |*link| {
+            link.* &= ~field.ir;
+        }
+        for (&self.cpu1) |*link| {
+            link.* &= ~field.ir;
+        }
     }
 
     /// A read is served from the IELSR word the access lands in and then cut

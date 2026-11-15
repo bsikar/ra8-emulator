@@ -1,12 +1,15 @@
 //! The Zig core's host-backed memory store. Off-chip SDRAM and OSPI sit
 //! behind the external port the board attaches (RA8EMU-1041).
+const touched_api = @import("touched.zig");
+
 const std = @import("std");
-const memmap = @import("../../memmap.zig");
-const external_port = @import("external_port.zig");
-const Initiator = @import("initiator.zig").Initiator;
-const extra = @import("extra.zig");
-const observer = @import("observer.zig");
+
 const code_lines = @import("../code_lines.zig");
+const external_port = @import("external_port.zig");
+const extra = @import("extra.zig");
+const Initiator = @import("initiator.zig").Initiator;
+const memmap = @import("../../memmap.zig");
+const observer = @import("observer.zig");
 
 pub const Error = error{OutOfMemory};
 pub const AccessError = error{Unmapped} || Error;
@@ -24,7 +27,7 @@ pub const LocatedMut = struct { base: u32, offset: usize, bytes: []u8 };
 pub const SdramSet = std.StaticBitSet(128 * 1024 * 1024 / 4096);
 
 pub const Store = struct {
-    touched: @import("touched.zig").Tracker = .{},
+    touched: touched_api.Tracker = .{},
     sdram_resident: SdramSet = .empty,
     sdram_demand_zero: bool = false,
     pages: [memmap.ram.len]?[]u8 = @splat(null),
@@ -134,15 +137,17 @@ pub const Store = struct {
         if (self.lender) |first| return first.noteSdramResident(offset, len);
         const end = @min((offset + len - 1) / 4096 + 1, self.sdram_resident.capacity());
         var page = offset / 4096;
-        while (page < end) : (page += 1) self.sdram_resident.set(page);
+        while (page < end) : (page += 1) {
+            self.sdram_resident.set(page);
+        }
     }
 
-    pub fn touches(self: *const Store) *const @import("touched.zig").Tracker {
+    pub fn touches(self: *const Store) *const touched_api.Tracker {
         if (self.lender) |first| return first.touches();
         return &self.touched;
     }
 
-    pub fn touchesMut(self: *Store) *@import("touched.zig").Tracker {
+    pub fn touchesMut(self: *Store) *touched_api.Tracker {
         if (self.lender) |first| return first.touchesMut();
         return &self.touched;
     }
@@ -164,7 +169,11 @@ pub const Store = struct {
     pub fn locate(self: *const Store, address: u32, len: usize) ?Located {
         if (self.port) |*port| {
             if (port.geometry.locate(address, len)) |hit| {
-                if (hit.kind == .sdram) return .{ .base = memmap.sdram_base, .offset = hit.offset, .bytes = port.sdram[hit.offset..][0..len] };
+                if (hit.kind == .sdram) return .{
+                    .base = memmap.sdram_base,
+                    .offset = hit.offset,
+                    .bytes = port.sdram[hit.offset..][0..len],
+                };
                 return null;
             }
             if (port.geometry.overlaps(address, len)) return null;
@@ -186,7 +195,11 @@ pub const Store = struct {
     pub fn locateMut(self: *Store, address: u32, len: usize) ?LocatedMut {
         if (self.port) |*port| {
             if (port.geometry.locate(address, len)) |hit| {
-                if (hit.kind == .sdram) return .{ .base = memmap.sdram_base, .offset = hit.offset, .bytes = port.sdram[hit.offset..][0..len] };
+                if (hit.kind == .sdram) return .{
+                    .base = memmap.sdram_base,
+                    .offset = hit.offset,
+                    .bytes = port.sdram[hit.offset..][0..len],
+                };
                 return null;
             }
             if (port.geometry.overlaps(address, len)) return null;
@@ -226,7 +239,13 @@ pub const Store = struct {
             switch (hit.kind) {
                 .ospi => if (!(try port.flash.write(hit.offset, bytes))) return AccessError.Unmapped,
                 .sdram => {
-                    self.hookBytes(initiator, memmap.sdram_base, hit.offset, port.sdram[hit.offset..][0..bytes.len], bytes);
+                    self.hookBytes(
+                        initiator,
+                        memmap.sdram_base,
+                        hit.offset,
+                        port.sdram[hit.offset..][0..bytes.len],
+                        bytes,
+                    );
                     @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
                 },
             }
@@ -310,7 +329,9 @@ pub const Store = struct {
     pub fn notifyCodeRanges(self: *const Store) void {
         for (memmap.ram, self.owned) |entry, mine| {
             if (!mine) continue;
-            if (entry.base != memmap.dtcm_base and entry.base != memmap.mram_base and entry.base != memmap.sram_base) continue;
+            if (entry.base != memmap.dtcm_base and
+                entry.base != memmap.mram_base and
+                entry.base != memmap.sram_base) continue;
             self.fan().notify(entry.base, @intCast(entry.end() - entry.base));
         }
     }
@@ -321,10 +342,19 @@ pub const Store = struct {
         return self.pages[indexOf(base) orelse return null];
     }
 
-    inline fn hookBytes(self: *Store, initiator: Initiator, base: u32, offset: usize, pre: []const u8, new: []const u8) void {
+    inline fn hookBytes(
+        self: *Store,
+        initiator: Initiator,
+        base: u32,
+        offset: usize,
+        pre: []const u8,
+        new: []const u8,
+    ) void {
         if (base == memmap.sdram_base) self.noteSdramResident(offset, new.len);
         self.touchesMut().note(base, offset, new.len);
-        if (self.trail()) |o| o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new });
+        if (self.trail()) |o| o.bytes(
+            .{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new },
+        );
     }
 };
 
@@ -345,6 +375,11 @@ fn indexOf(base: u32) ?usize {
 }
 
 fn allocate(size: u32) Error![]u8 {
-    const ptr = std.heap.PageAllocator.map(size, .fromByteUnits(std.heap.page_size_min)) orelse return Error.OutOfMemory;
+    const ptr = std.heap.PageAllocator.map(
+        size,
+        .fromByteUnits(
+            std.heap.page_size_min,
+        ),
+    ) orelse return Error.OutOfMemory;
     return ptr[0..size];
 }

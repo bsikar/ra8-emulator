@@ -15,11 +15,12 @@
 //! keeps what it needs to open it (`Later`) and does so at the first
 //! capture the run makes live, once it is back at the recorded end.
 const std = @import("std");
-const frame_source = @import("ra8_chip").periph.frame_source;
-const hosted = @import("ra8_components").camera.hosted;
+
+const api = @import("../api.zig");
 const Board = @import("ra8_board").board.Board;
 const camera_frame = @import("../history/camera_frame.zig");
-const api = @import("../api.zig");
+const frame_source = @import("ra8_chip").periph.frame_source;
+const hosted = @import("ra8_components").camera.hosted;
 const line = @import("../line.zig");
 
 /// What the port wraps and what `Later` opens.
@@ -168,7 +169,12 @@ pub const RecordedCamera = struct {
 
 /// `source` wrapped in the recorded port. The port owns `source` from here;
 /// on an error the caller still does.
-pub fn wrap(gpa: std.mem.Allocator, session: *api.Session, source: frame_source.FrameSource, format_control: *const u8) !frame_source.FrameSource {
+pub fn wrap(
+    gpa: std.mem.Allocator,
+    session: *api.Session,
+    source: frame_source.FrameSource,
+    format_control: *const u8,
+) !frame_source.FrameSource {
     if (from(source) != null) return source;
     const self = try gpa.create(RecordedCamera);
     self.* = .{ .gpa = gpa, .inner = source, .session = session, .format_control = format_control };

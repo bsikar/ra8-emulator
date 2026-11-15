@@ -1,5 +1,6 @@
 //! Release artifacts, copied from the upstream release index, never a moving latest.
 const std = @import("std");
+
 pub const Artifact = struct {
     host: []const u8,
     version: []const u8 = "0.17.0",
@@ -9,10 +10,34 @@ pub const Artifact = struct {
     executable: []const u8,
 };
 pub const zig = [_]Artifact{
-    .{ .host = "aarch64-macos", .url = "https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz", .sha256 = "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a", .archive_bytes = 53_985_220, .executable = "zig-aarch64-macos-0.17.0/zig" },
-    .{ .host = "x86_64-macos", .url = "https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz", .sha256 = "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6", .archive_bytes = 59_317_572, .executable = "zig-x86_64-macos-0.17.0/zig" },
-    .{ .host = "x86_64-linux", .url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz", .sha256 = "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026", .archive_bytes = 57_332_648, .executable = "zig-x86_64-linux-0.17.0/zig" },
-    .{ .host = "x86_64-windows", .url = "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip", .sha256 = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428", .archive_bytes = 100_268_137, .executable = "zig-x86_64-windows-0.17.0/zig.exe" },
+    .{
+        .host = "aarch64-macos",
+        .url = "https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz",
+        .sha256 = "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a",
+        .archive_bytes = 53_985_220,
+        .executable = "zig-aarch64-macos-0.17.0/zig",
+    },
+    .{
+        .host = "x86_64-macos",
+        .url = "https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz",
+        .sha256 = "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6",
+        .archive_bytes = 59_317_572,
+        .executable = "zig-x86_64-macos-0.17.0/zig",
+    },
+    .{
+        .host = "x86_64-linux",
+        .url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
+        .sha256 = "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026",
+        .archive_bytes = 57_332_648,
+        .executable = "zig-x86_64-linux-0.17.0/zig",
+    },
+    .{
+        .host = "x86_64-windows",
+        .url = "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip",
+        .sha256 = "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428",
+        .archive_bytes = 100_268_137,
+        .executable = "zig-x86_64-windows-0.17.0/zig.exe",
+    },
 };
 
 /// Reference pin for a future RA board profile, not a declaration of compatibility
@@ -24,7 +49,9 @@ pub const fsp_candidate = .{
     .sha256 = "a6925c8ff8566003de7147ac5594398ca44703985b03898d53e524e651a3645b",
     .archive_bytes = @as(u64, 180_347_017),
     .managed_eligible = false,
-    .verification_source = "GitHub release asset SHA256 digest; profile compatibility and contained component licenses require review",
+    .verification_source = "GitHub release asset SHA256 digest; profile compatibility and contained " ++
+        "component licenses require " ++
+        "review",
 };
 
 pub fn forHost(host: []const u8) !Artifact {

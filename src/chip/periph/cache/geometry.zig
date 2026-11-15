@@ -78,7 +78,9 @@ pub fn lineBytes(value: u32) u32 {
 pub fn dminFor(bytes: u32) u32 {
     var words = bytes / word_bytes;
     var field: u32 = 0;
-    while (words > 1) : (words >>= 1) field += 1;
+    while (words > 1) : (words >>= 1) {
+        field += 1;
+    }
     return field & ctr.dmin_mask;
 }
 

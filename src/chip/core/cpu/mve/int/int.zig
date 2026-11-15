@@ -6,12 +6,13 @@
 //! or unsigned and work at full precision before the result is narrowed.
 //! Every function works on the whole 128-bit vector; predication and
 //! beats are applied by whoever writes the result back.
-const qreg = @import("../qreg.zig");
 pub const insert = @import("insert/insert.zig");
 pub const mul = @import("mul/mul.zig");
+const qreg = @import("../qreg.zig");
 pub const shift = @import("shift/shift.zig");
 pub const vectors = @import("vectors.zig");
 pub const width = @import("width/width.zig");
+
 const Size = qreg.Size;
 
 pub const Op = enum { add, sub, mul };

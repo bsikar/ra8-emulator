@@ -2,6 +2,7 @@
 //! be one plain path component before it reaches a file call, so nothing
 //! can name a file outside its session directory.
 const std = @import("std");
+
 const layout = @import("layout.zig");
 
 pub const id_len = 32;
@@ -22,10 +23,12 @@ pub const Entry = struct { kind: Kind, id: []const u8 = "" };
 /// a Windows device name.
 pub fn component(text: []const u8) error{BadName}![]const u8 {
     if (text.len == 0 or text.len > limits.component) return error.BadName;
-    for (text) |byte| switch (byte) {
-        'a'...'z', 'A'...'Z', '0'...'9', '_', '-', '.' => {},
-        else => return error.BadName,
-    };
+    for (text) |byte| {
+        switch (byte) {
+            'a'...'z', 'A'...'Z', '0'...'9', '_', '-', '.' => {},
+            else => return error.BadName,
+        }
+    }
     if (text[0] == '.' or text[0] == '-' or text[text.len - 1] == '.') return error.BadName;
     if (device(text[0 .. std.mem.indexOfScalar(u8, text, '.') orelse text.len])) return error.BadName;
     return text;
@@ -41,10 +44,12 @@ fn device(stem: []const u8) bool {
 
 pub fn isId(text: []const u8) bool {
     if (text.len != id_len) return false;
-    for (text) |byte| switch (byte) {
-        '0'...'9', 'a'...'f' => {},
-        else => return false,
-    };
+    for (text) |byte| {
+        switch (byte) {
+            '0'...'9', 'a'...'f' => {},
+            else => return false,
+        }
+    }
     return true;
 }
 

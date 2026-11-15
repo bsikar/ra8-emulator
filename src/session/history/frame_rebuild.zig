@@ -3,8 +3,9 @@
 //! cache state, so a caller decodes outside any lock it copied the
 //! payload bytes under.
 const std = @import("std");
-const frame_types = @import("frame_types.zig");
+
 const frame_crop = @import("frame_crop.zig");
+const frame_types = @import("frame_types.zig");
 const picture = @import("checkpoint_picture.zig");
 
 pub const Error = error{NoKeyframe} || frame_types.Error || frame_crop.Error;

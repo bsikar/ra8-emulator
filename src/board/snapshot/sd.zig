@@ -7,14 +7,15 @@
 //! RA8EMU-1104). Not saved: the card's line on SCI0 (a pointer to the card,
 //! wiring) and the volume `--sd-new` formatted (run report only).
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
-const fields = @import("ra8_snapshot").fields;
+
 const blocks = @import("ra8_snapshot").blocks;
+const Bus = @import("ra8_components").sd_card.bus_card.Card;
 const cards = @import("ra8_components").sd_card.snapshot;
+const Controller = @import("ra8_chip").periph.sdhi.Sdhi;
+const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 const host = @import("ra8_chip").periph.sdhi.snapshot;
 const Spi = @import("ra8_components").sd_card.Card;
-const Bus = @import("ra8_components").sd_card.bus_card.Card;
-const Controller = @import("ra8_chip").periph.sdhi.Sdhi;
 
 const Prepared = struct { spi: cards.Staged(Spi), controller: Controller, bus: cards.Staged(Bus) };
 
@@ -49,7 +50,11 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
 /// Parse every card, controller field and block index without changing state
 /// or allocating block maps. Startup admission uses the same parser as load.
 pub fn validate(bytes: []const u8) Error!void {
-    const blank = .{ .sd = Spi.init(std.heap.page_allocator), .card = Controller.init(), .host_card = Bus.init(std.heap.page_allocator) };
+    const blank = .{
+        .sd = Spi.init(std.heap.page_allocator),
+        .card = Controller.init(),
+        .host_card = Bus.init(std.heap.page_allocator),
+    };
     _ = try prepare(&blank, bytes);
 }
 

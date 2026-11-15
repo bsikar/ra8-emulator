@@ -6,18 +6,21 @@
 //! one of them has raised it. The two are separated because the order here
 //! is load-bearing in a way the field list is not, the same reason the bus
 //! order sits in wiring.zig rather than beside the blocks it attaches.
+const chip = @import("ra8_chip");
+
 const core_clock = @import("core_clock.zig");
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 
-const Board = @import("board.zig").Board;
-const reset = @import("ra8_chip").periph.reset;
-const pin_irq = @import("ra8_chip").periph.icu.pin_irq;
 const agt_sched = @import("ra8_chip").periph.agt.sched;
-const gpt_sched = @import("ra8_chip").periph.gpt.sched;
-const rtc_sched = @import("ra8_chip").periph.rtc.sched;
+const Board = @import("board.zig").Board;
 const event_sink = @import("event_sink.zig");
+const gpt_sched = @import("ra8_chip").periph.gpt.sched;
+const pin_irq = @import("ra8_chip").periph.icu.pin_irq;
+
 /// Whether a sleeping core may run to the next queued event: src/board/quiet_due.zig.
 pub const quiet_due = @import("quiet_due.zig");
+const reset = @import("ra8_chip").periph.reset;
+const rtc_sched = @import("ra8_chip").periph.rtc.sched;
 
 /// Cycles at the time base's rate until the next event on the board's
 /// queue, zero when nothing is queued or it is already due. The run loop
@@ -59,7 +62,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
     return tickFrom(self, core, instructions, .cpu0);
 }
 
-pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("ra8_chip").periph.registry.Issuer) !void {
+pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
@@ -97,7 +100,13 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: @import("r
     }
     self.console_input.poll(&self.serial);
     self.touch_input.poll(&self.wire.panel, &self.pins);
-    self.input_script.dispatchObserved(self.time.base.now(), &self.wire.panel, &self.pins, &self.touch_input, self.input_landing);
+    self.input_script.dispatchObserved(
+        self.time.base.now(),
+        &self.wire.panel,
+        &self.pins,
+        &self.touch_input,
+        self.input_landing,
+    );
     try raisePinEdges(self, core);
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());
@@ -128,7 +137,9 @@ fn raisePinEdges(self: *Board, core: Guest) !void {
 
 /// Every event one block has due this boundary, offered one at a time.
 fn drain(self: *Board, core: Guest, events: anytype) !void {
-    for (events.constSlice()) |event| try raise(self, core, event);
+    for (events.constSlice()) |event| {
+        try raise(self, core, event);
+    }
 }
 
 /// One event, offered to all three consumers of one. The links first, and
@@ -171,7 +182,7 @@ pub fn takeResetRequests(self: *Board, core: anytype) !void {
     return takeResetRequestsFrom(self, core, .cpu0);
 }
 
-pub fn takeResetRequestsFrom(self: *Board, core: anytype, issuer: @import("ra8_chip").periph.registry.Issuer) !void {
+pub fn takeResetRequestsFrom(self: *Board, core: anytype, issuer: chip.periph.registry.Issuer) !void {
     if (self.watchdog.reset_requested) {
         self.watchdog.reset_requested = false;
         if (self.run_hook) |hook| hook.resetFn(hook.context, .watchdog, self.time.base.now());
@@ -196,7 +207,7 @@ pub fn resetFor(self: *Board, source: reset.Source) void {
     resetForFrom(self, source, .cpu0);
 }
 
-pub fn resetForFrom(self: *Board, source: reset.Source, issuer: @import("ra8_chip").periph.registry.Issuer) void {
+pub fn resetForFrom(self: *Board, source: reset.Source, issuer: chip.periph.registry.Issuer) void {
     if (self.event_sink) |sink| sink.resetFn(sink.context, issuer, source, self.time.base.now());
     self.causes.request(source);
     self.events.clearLatches();

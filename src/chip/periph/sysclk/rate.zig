@@ -13,10 +13,9 @@
 //! LOCO and the sub-clock have no frequency there, so they answer null, as
 //! does a prohibited divider or PLL code. Null means "rate unknown": a
 //! caller keeps the rate it had rather than guessing one.
-const sysclk = @import("sysclk.zig");
 const div = @import("div.zig");
 const pll_config = @import("../pll/config.zig");
-const pll_div = @import("../pll/div.zig");
+const sysclk = @import("sysclk.zig");
 
 pub const moco_hz: u64 = 8_000_000;
 pub const hoco_hz: u64 = 20_000_000;

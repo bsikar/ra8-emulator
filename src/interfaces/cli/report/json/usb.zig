@@ -4,10 +4,10 @@
 //! src/interfaces/cli/report/usb/usb.zig, usb_cable.zig print. Every key is always present; the
 //! refusal counts are the same sums the human report prints.
 const Board = @import("ra8_board").board.Board;
-const Host = @import("ra8_chip").periph.usbhs.Host;
 const Echo = @import("ra8_components").usb.echo.Device;
-const usb_cable = @import("../usb/cable.zig");
+const Host = @import("ra8_chip").periph.usbhs.Host;
 const json_usbfs = @import("usbfs.zig");
+const usb_cable = @import("../usb/cable.zig");
 
 /// The whole `usb` object, keyed inside the document.
 pub fn section(j: anytype, board: *Board) !void {

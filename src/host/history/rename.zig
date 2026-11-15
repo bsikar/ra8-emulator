@@ -1,11 +1,21 @@
 //! One immutable closed-payload rename intent, resolved by exact identities.
 const std = @import("std");
+
 const h = @import("root.zig");
+
 const file = h.move.file;
 pub const limits = struct {
     pub const note = 4096;
 };
-pub const Note = struct { version: u32, space: h.layout.Space, from: []const u8, to: []const u8, top: file.State, area: file.State, source: file.State };
+pub const Note = struct {
+    version: u32,
+    space: h.layout.Space,
+    from: []const u8,
+    to: []const u8,
+    top: file.State,
+    area: file.State,
+    source: file.State,
+};
 pub const Pending = struct {
     parsed: std.json.Parsed(Note),
     inode: std.Io.File.INode,
@@ -15,26 +25,60 @@ pub const Pending = struct {
     }
 };
 
-pub fn begin(io: std.Io, top: std.Io.Dir, dir: std.Io.Dir, space: h.layout.Space, from: []const u8, to: []const u8) !void {
+pub fn begin(
+    io: std.Io,
+    top: std.Io.Dir,
+    dir: std.Io.Dir,
+    space: h.layout.Space,
+    from: []const u8,
+    to: []const u8,
+) !void {
     _ = try h.paths.leaf(space, from);
     _ = try h.paths.leaf(space, to);
     const source = try file.state(dir, from);
     if (source.kind != .file or source.links != 1) return error.UnexpectedLinkCount;
-    const note: Note = .{ .version = 1, .space = space, .from = from, .to = to, .top = try file.here(top), .area = try file.here(dir), .source = source };
+    const note: Note = .{
+        .version = 1,
+        .space = space,
+        .from = from,
+        .to = to,
+        .top = try file.here(top),
+        .area = try file.here(dir),
+        .source = source,
+    };
     const bytes = try std.json.Stringify.valueAlloc(std.heap.page_allocator, note, .{});
     defer std.heap.page_allocator.free(bytes);
     if (bytes.len > limits.note) return error.BadMetadata;
-    const held = try top.createFile(io, h.layout.files.renaming, .{ .read = true, .exclusive = true, .resolve_beneath = true });
+    const held = try top.createFile(
+        io,
+        h.layout.files.renaming,
+        .{ .read = true, .exclusive = true, .resolve_beneath = true },
+    );
     defer held.close(io);
     try h.metadata.ordinary(try held.stat(io));
     try held.writeStreamingAll(io, bytes);
     try held.sync(io);
     try file.syncDir(top);
 }
-pub fn linked(io: std.Io, top: std.Io.Dir, dir: std.Io.Dir, space: h.layout.Space, from: []const u8, to: []const u8) !void {
+pub fn linked(
+    io: std.Io,
+    top: std.Io.Dir,
+    dir: std.Io.Dir,
+    space: h.layout.Space,
+    from: []const u8,
+    to: []const u8,
+) !void {
     return linkedProbed(io, top, dir, space, from, to, null);
 }
-pub fn linkedProbed(io: std.Io, top: std.Io.Dir, dir: std.Io.Dir, space: h.layout.Space, from: []const u8, to: []const u8, probe: ?h.move.probe.Probe) !void {
+pub fn linkedProbed(
+    io: std.Io,
+    top: std.Io.Dir,
+    dir: std.Io.Dir,
+    space: h.layout.Space,
+    from: []const u8,
+    to: []const u8,
+    probe: ?h.move.probe.Probe,
+) !void {
     try settle(io, top);
     try begin(io, top, dir, space, from, to);
     const inode = (try top.statFile(io, h.layout.files.renaming, .{ .follow_symlinks = false })).inode;
@@ -59,7 +103,12 @@ pub fn pending(io: std.Io, top: std.Io.Dir) !?Pending {
     var bytes: [limits.note]u8 = undefined;
     const count = try held.readPositionalAll(io, bytes[0..@intCast(stat.size)], 0);
     if (count != stat.size) return error.BadMetadata;
-    const parsed = std.json.parseFromSlice(Note, std.heap.page_allocator, bytes[0..count], .{ .allocate = .alloc_always }) catch return error.BadMetadata;
+    const parsed = std.json.parseFromSlice(
+        Note,
+        std.heap.page_allocator,
+        bytes[0..count],
+        .{ .allocate = .alloc_always },
+    ) catch return error.BadMetadata;
     return .{ .parsed = parsed, .inode = stat.inode };
 }
 
@@ -103,7 +152,11 @@ fn inspect(io: std.Io, top: std.Io.Dir, note: Note) !Inspected {
     _ = try h.paths.leaf(note.space, note.from);
     _ = try h.paths.leaf(note.space, note.to);
     if (!note.top.same(try file.here(top))) return error.IdentityConflict;
-    var dir = try top.openDir(io, if (note.space == .top) "." else @tagName(note.space), .{ .iterate = true, .follow_symlinks = false });
+    var dir = try top.openDir(
+        io,
+        if (note.space == .top) "." else @tagName(note.space),
+        .{ .iterate = true, .follow_symlinks = false },
+    );
     errdefer dir.close(io);
     if (!note.area.same(try file.here(dir))) return error.IdentityConflict;
     const source = file.state(dir, note.from) catch |err| switch (err) {

@@ -1,6 +1,6 @@
 //! EPSR.B tracking for Armv8.1-M branch target identification.
-const regs = @import("regs.zig");
 const Instr = @import("instr.zig").Instr;
+const regs = @import("regs.zig");
 
 pub const bit: u32 = 1 << 21;
 

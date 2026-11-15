@@ -3,24 +3,27 @@
 //! This is the part of the machine that is not the CPU. main.zig wires a run,
 //! the engine owns the CPU, and everything behind an address in the peripheral
 //! window lives here so neither knows the list. report.zig narrates a run.
-const std = @import("std");
-const Tick = @import("ra8_chip").core.tick.Tick;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const i2c = @import("i2c.zig");
-const wiring = @import("wiring.zig");
-const construct = @import("construct.zig");
-const boundary = @import("boundary.zig");
-const frame_tap = @import("frame_tap.zig");
-const part = @import("ra8_chip").core.part;
-const reboot = @import("ra8_chip").core.reboot;
-const periph = @import("ra8_chip").periph.registry;
+const components = @import("ra8_components");
+const event_sink_api = @import("event_sink.zig");
+const memory = @import("external/memory.zig");
+const run_hook_api = @import("run_hook.zig");
+
+const acmphs = @import("ra8_chip").periph.acmphs;
 const adc = @import("ra8_chip").periph.adc;
 const agt = @import("ra8_chip").periph.agt;
 const bkup = @import("ra8_chip").periph.bkup;
-const acmphs = @import("ra8_chip").periph.acmphs;
+const boundary = @import("boundary.zig");
+const bus_card = @import("ra8_components").sd_card.bus_card;
 const cac = @import("ra8_chip").periph.cac;
+const cache = @import("ra8_chip").periph.cache;
 const canfd = @import("ra8_chip").periph.canfd;
 const ceu = @import("ra8_chip").periph.ceu;
+const ckcr = @import("ra8_chip").periph.ckcr;
+const ckdiv = @import("ra8_chip").periph.ckdiv;
+const clocks = @import("ra8_chip").periph.clocks;
+const construct = @import("construct.zig");
+const cpscu = @import("ra8_chip").periph.cpscu;
+const cpu_ctrl = @import("ra8_chip").periph.cpu_ctrl;
 const crc = @import("ra8_chip").periph.crc;
 const dac = @import("ra8_chip").periph.dac;
 const dma_bank = @import("ra8_chip").periph.dma_bank;
@@ -31,69 +34,69 @@ const drw = @import("ra8_chip").periph.drw;
 const dtc = @import("ra8_chip").periph.dtc;
 const eink = @import("ra8_components").eink;
 const elc = @import("ra8_chip").periph.elc;
+const esp_hosted = @import("ra8_components").esp_hosted;
+const fault_clear = @import("ra8_chip").periph.fault.clear;
+const frame_tap = @import("frame_tap.zig");
 const glcdc = @import("ra8_chip").periph.glcdc;
 const gpio = @import("ra8_chip").periph.gpio;
-const clocks = @import("ra8_chip").periph.clocks;
-const pfs = @import("ra8_chip").periph.pfs;
 const gpt = @import("ra8_chip").periph.gpt;
 const gptp = @import("ra8_chip").periph.gptp;
+const gt911 = @import("ra8_components").gt911;
+const gtclkcr = @import("ra8_chip").periph.gtclkcr;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const i2c = @import("i2c.zig");
 const icu = @import("ra8_chip").periph.icu;
 const ipc = @import("ra8_chip").periph.ipc;
+const iwdt = @import("ra8_chip").periph.iwdt;
+const lpm = @import("ra8_chip").periph.lpm;
 const lvd = @import("ra8_chip").periph.lvd;
 const mipi_csi = @import("ra8_chip").periph.mipi.csi;
 const mipi_dsi = @import("ra8_chip").periph.mipi.dsi;
 const mipi_phy = @import("ra8_chip").periph.mipi.phy;
 const modem = @import("ra8_components").modem_at;
-const net = @import("net.zig");
+const mpu = @import("ra8_chip").periph.mpu;
+const mpu_guard = @import("ra8_chip").core.mpu_guard;
 const mram = @import("ra8_chip").periph.mram;
-const sdramc = @import("ra8_chip").periph.sdramc;
-const cpu_ctrl = @import("ra8_chip").periph.cpu_ctrl;
 const mrms = @import("ra8_chip").periph.mrms;
 const mstp = @import("ra8_chip").periph.mstp;
-const octaclk = @import("ra8_chip").periph.octaclk;
-const pscu = @import("ra8_chip").periph.pscu;
-const cpscu = @import("ra8_chip").periph.cpscu;
-const gtclkcr = @import("ra8_chip").periph.gtclkcr;
+const net = @import("net.zig");
+const nor_flash = @import("ra8_components").nor_flash;
 const npu = @import("ra8_chip").periph.npu;
-const ckcr = @import("ra8_chip").periph.ckcr;
-const ckdiv = @import("ra8_chip").periph.ckdiv;
+const octaclk = @import("ra8_chip").periph.octaclk;
 const oscsf = @import("ra8_chip").periph.oscsf;
-const subclock = @import("ra8_chip").periph.subclock;
-const sysclk = @import("ra8_chip").periph.sysclk;
-const lpm = @import("ra8_chip").periph.lpm;
-const pll = @import("ra8_chip").periph.pll;
-const vscr = @import("ra8_chip").periph.vscr;
-const voltage_hazard = @import("ra8_chip").periph.voltage_hazard;
+const part = @import("ra8_chip").core.part;
 const pdctr = @import("ra8_chip").periph.pdctr;
 const pdm = @import("ra8_chip").periph.pdm;
+const periph = @import("ra8_chip").periph.registry;
+const pfs = @import("ra8_chip").periph.pfs;
+const pll = @import("ra8_chip").periph.pll;
 const poeg = @import("ra8_chip").periph.poeg;
 const prcr = @import("ra8_chip").periph.prcr;
+const pscu = @import("ra8_chip").periph.pscu;
+const reboot = @import("ra8_chip").core.reboot;
 const reset = @import("ra8_chip").periph.reset;
 const rtc = @import("ra8_chip").periph.rtc;
 const rtt = @import("ra8_chip").periph.rtt;
-const cache = @import("ra8_chip").periph.cache;
-const mpu = @import("ra8_chip").periph.mpu;
 const sau = @import("ra8_chip").periph.sau;
-const mpu_guard = @import("ra8_chip").core.mpu_guard;
 const scb = @import("ra8_chip").periph.scb;
-const fault_clear = @import("ra8_chip").periph.fault.clear;
 const sci = @import("ra8_chip").periph.sci;
-const esp_hosted = @import("ra8_components").esp_hosted;
 const sci_input = @import("ra8_chip").periph.sci.input;
-const gt911 = @import("ra8_components").gt911;
 const sd_card = @import("ra8_components").sd_card;
 const sd_format = @import("ra8_components").sd_card.format;
-const bus_card = @import("ra8_components").sd_card.bus_card;
 const sdhi = @import("ra8_chip").periph.sdhi;
+const sdramc = @import("ra8_chip").periph.sdramc;
 const spi = @import("ra8_chip").periph.spi;
 const sram = @import("ra8_chip").periph.sram;
 const ssie = @import("ra8_chip").periph.ssie;
+const subclock = @import("ra8_chip").periph.subclock;
+const sysclk = @import("ra8_chip").periph.sysclk;
+const Tick = @import("ra8_chip").core.tick.Tick;
 const ulpt = @import("ra8_chip").periph.ulpt;
 const usb = @import("usb/usb.zig");
-const iwdt = @import("ra8_chip").periph.iwdt;
+const voltage_hazard = @import("ra8_chip").periph.voltage_hazard;
+const vscr = @import("ra8_chip").periph.vscr;
 const wdt = @import("ra8_chip").periph.wdt;
 const xspi = @import("ra8_chip").periph.xspi;
-const nor_flash = @import("ra8_components").nor_flash;
 
 pub const Board = struct {
     /// Where a catalog model's device goes on this board (RA8EMU-490).
@@ -105,7 +108,7 @@ pub const Board = struct {
     /// GTCLKCR, the GPT bank's clock domain, writable only while stopped.
     gpt_clock: gtclkcr.Unit,
     time: clocks.Time = .{}, // RA8EMU-179 virtual time and its event queue
-    run_hook: ?@import("run_hook.zig").RunHook = null, // RA8EMU-1047 pacing and soak, session-held
+    run_hook: ?run_hook_api.RunHook = null, // RA8EMU-1047 pacing and soak, session-held
     events: icu.Icu,
     /// The event link controller: where a source event drives a peripheral
     /// rather than an NVIC line, and the only way firmware raises an event.
@@ -157,7 +160,7 @@ pub const Board = struct {
     /// An unset CMS keeps the IDAU's bit-28 answer for code (RA8EMU-389/420).
     memory_monitors: pscu.samon.Unit = .{},
     /// OSPI/SDRAM geometry and timing from the board profile (RA8EMU-643).
-    external_memory: @import("external/memory.zig").Config = .{},
+    external_memory: memory.Config = .{},
     /// The IDAU over those words and address bit 28 (RA8EMU-277). Pointed
     /// at sram_attribution in attach(), where the board's address is final.
     idau: sau.idau.Map = .{},
@@ -217,10 +220,10 @@ pub const Board = struct {
     console_input: sci_input.Input = .{},
     /// Host touches sampled at each board boundary under `--touch @PATH`.
     touch_input: gt911.host.Input = .{},
-    input_script: @import("ra8_components").input_script.Script = .{},
+    input_script: components.input_script.Script = .{},
     /// The input landing observer (slice 16), set by the session when it
     /// records history; the boundary passes it into every script dispatch.
-    input_landing: ?*const @import("ra8_components").input_script.Script.Landing = null,
+    input_landing: ?*const components.input_script.Script.Landing = null,
     /// The system I2C bus: the RIIC controller and the port expander and
     /// camera on it. Populated in attach(), the way the SPI line is.
     wire: i2c.Wire = .{},
@@ -345,7 +348,7 @@ pub const Board = struct {
     /// main.zig points it at the run's seam; a test's board leaves it null.
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.
-    event_sink: ?@import("event_sink.zig").EventSink = null,
+    event_sink: ?event_sink_api.EventSink = null,
     /// Passive per-boundary frame taps: slot mirror and subscriber fan-out.
     frame_tap: ?*frame_tap.Tap = null,
     frame_taps: frame_tap.FanOut = .{},
@@ -362,9 +365,7 @@ pub const Board = struct {
     }
 
     /// A fresh board; what each block starts as lives in construct.zig.
-    pub fn init(allocator: std.mem.Allocator) Board {
-        return construct.build(allocator);
-    }
+    pub const init = construct.build;
 
     pub fn deinit(self: *Board) void {
         self.capture.source.close();
@@ -376,24 +377,12 @@ pub const Board = struct {
         self.bus.deinit();
         self.panel.deinit();
     }
-    pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
-        return boundary.tick(self, core, instructions);
-    }
-    pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: periph.Issuer) !void {
-        return boundary.tickFrom(self, core, instructions, issuer);
-    }
-    pub fn raise(self: *Board, core: Guest, event: u16) !void {
-        return boundary.raise(self, core, event);
-    }
-    pub fn takeResetRequests(self: *Board, core: anytype) !void {
-        return boundary.takeResetRequests(self, core);
-    }
-    pub fn requestReset(self: *Board, source: reset.Source) void {
-        boundary.resetFor(self, source);
-    }
-    pub fn requestResetFrom(self: *Board, source: reset.Source, issuer: periph.Issuer) void {
-        boundary.resetForFrom(self, source, issuer);
-    }
+    pub const tick = boundary.tick;
+    pub const tickFrom = boundary.tickFrom;
+    pub const raise = boundary.raise;
+    pub const takeResetRequests = boundary.takeResetRequests;
+    pub const requestReset = boundary.resetFor;
+    pub const requestResetFrom = boundary.resetForFrom;
     pub fn ticker(self: *Board) Tick {
         return .{ .context = self, .tickFn = boundary.tickThunk, .dueFn = boundary.cyclesToDue };
     }

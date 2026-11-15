@@ -24,10 +24,10 @@
 //!
 //! The shadow and the address -> bit table are plain data and arithmetic, so
 //! everything below is tested directly rather than only through a full run.
-const std = @import("std");
-const periph = @import("../registry.zig");
+
 pub const drops = @import("drops.zig");
 const octaclk = @import("../octaclk.zig");
+const periph = @import("../registry.zig");
 const pscu = @import("../pscu.zig");
 
 /// R_MSTP geometry (HUM Ch 11.2.6..11.2.10). The Non-secure alias at
@@ -49,7 +49,6 @@ fn id(register: u16, bit: u16) u16 {
     return (register << 8) | bit;
 }
 
-const reg_a: u16 = 0;
 const reg_b: u16 = 1;
 const reg_c: u16 = 2;
 const reg_d: u16 = 3;

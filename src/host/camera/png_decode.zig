@@ -3,6 +3,7 @@
 //! dropped. Every chunk's CRC is checked; IDAT data is inflated with the
 //! standard library's zlib and the five scanline filters are undone in place.
 const std = @import("std");
+
 const decoded = @import("decoded_image.zig");
 
 const Image = decoded.Image;

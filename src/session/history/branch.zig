@@ -8,6 +8,7 @@
 //! ancestor. Two positions compare by (r, phase, o, gap) only when both lie
 //! on one line; otherwise error.OtherLine.
 const std = @import("std");
+
 const history_position = @import("position.zig");
 const history_record = @import("record.zig");
 
@@ -105,7 +106,9 @@ pub const BranchGraph = struct {
     pub fn setActive(self: *BranchGraph, id: BranchId) void {
         self.active_branch = id;
         var it = self.nodes.valueIterator();
-        while (it.next()) |node| node.is_live = (node.id == id);
+        while (it.next()) |node| {
+            node.is_live = (node.id == id);
+        }
     }
 
     /// Inserts or updates an existing branch node, adjusting next_branch_id accordingly.

@@ -8,6 +8,7 @@
 //! stacked exception frame (unwind/exception.zig) to the interrupted pc,
 //! which is looked up as it is, since nothing called from there.
 const std = @import("std");
+
 const core_view = @import("../core_view.zig");
 const dwarf_frame = @import("../dwarf/frame.zig");
 pub const exception = @import("exception.zig");
@@ -38,7 +39,9 @@ const order = [_]core_view.Cortex{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, 
 /// The core's registers, in DWARF order.
 pub fn registersOf(core: core_view.View) core_view.Error!Registers {
     var registers: Registers = undefined;
-    for (order, 0..) |which, index| registers[index] = try core.register(which);
+    for (order, 0..) |which, index| {
+        registers[index] = try core.register(which);
+    }
     return registers;
 }
 
@@ -54,12 +57,14 @@ pub fn caller(frame: []const u8, registers: Registers, innermost: bool, memory: 
     if (returns >= dwarf_frame.limits.registers) return null;
     const cfa = wrap(registers[row.cfa.register], row.cfa.offset);
     var next = registers;
-    for (row.rules, 0..) |rule, index| switch (rule) {
-        .same => {},
-        .undefined => if (index == returns) return null,
-        .offset => |offset| next[index] = try memory.readWord(wrap(cfa, offset)),
-        .register => |from| next[index] = registers[from],
-    };
+    for (row.rules, 0..) |rule, index| {
+        switch (rule) {
+            .same => {},
+            .undefined => if (index == returns) return null,
+            .offset => |offset| next[index] = try memory.readWord(wrap(cfa, offset)),
+            .register => |from| next[index] = registers[from],
+        }
+    }
     next[limits.sp] = cfa;
     next[limits.pc] = next[returns];
     return next;

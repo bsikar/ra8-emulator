@@ -2,13 +2,19 @@
 //! stored file read whole, the way the twice-replay comparison reads a
 //! committed log segment and a checkpoint's object (RA8EMU-1196).
 const std = @import("std");
+
 const layout = @import("layout.zig");
 const storage = @import("storage.zig");
 
 /// Reads one stored file whole. The caller frees the bytes; a file whose
 /// length lies (the read runs out before the stated length) refuses
 /// rather than handing a shorter read back as if it were whole.
-pub fn read(store: storage.Store, space: layout.Space, text: []const u8, gpa: std.mem.Allocator) (std.mem.Allocator.Error || anyerror)![]u8 {
+pub fn read(
+    store: storage.Store,
+    space: layout.Space,
+    text: []const u8,
+    gpa: std.mem.Allocator,
+) (std.mem.Allocator.Error || anyerror)![]u8 {
     const file = try store.vtable.open(store.context, space, text, .read);
     defer file.vtable.close(file.context);
     const len = try file.vtable.length(file.context);

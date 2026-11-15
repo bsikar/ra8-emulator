@@ -1,12 +1,12 @@
 //! The metrics request (0x012E, RA8EMU-1241): samples host and guest device telemetry.
-const std = @import("std");
 const builtin = @import("builtin");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
-const ra8_host = @import("ra8_host");
+const std = @import("std");
+
 const device_metrics = @import("ra8_session").device_metrics;
-const api = @import("ra8_session").api;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const ra8_host = @import("ra8_host");
+const rpc = @import("ra8_rpc_wire");
 
 pub const Outcome = rpc.Outcome(proto.MetricsReport);
 

@@ -58,14 +58,14 @@
 //! on every turn no matter how many pipes had answers standing. BRDY and BEMP
 //! now latch alongside their per-pipe bit; int.zig holds the latch and
 //! says what the rest of the register is and is not.
+pub const loop = @import("loop.zig");
 const regs = @import("../regs.zig");
 const usbhs_dfifo = @import("../dfifo.zig");
+const usbhs_far = @import("../far.zig");
 const usbhs_fifo = @import("../fifo.zig");
 const usbhs_int = @import("../int.zig");
-const usbhs_far = @import("../far.zig");
 const usbhs_pipe = @import("../pipe.zig");
 const usbhs_setup = @import("../setup.zig");
-pub const loop = @import("loop.zig");
 
 pub const Transfer = struct {
     port: usbhs_fifo.Port = .{},
@@ -351,8 +351,12 @@ pub const Transfer = struct {
         self.brdy = 0;
         self.bemp = 0;
         self.intsts0.busReset();
-        for (&self.port.in) |*staging| staging.clear();
-        for (&self.port.out) |*staging| staging.clear();
+        for (&self.port.in) |*staging| {
+            staging.clear();
+        }
+        for (&self.port.out) |*staging| {
+            staging.clear();
+        }
         self.held = 0;
         self.data.release();
     }

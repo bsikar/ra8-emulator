@@ -11,12 +11,13 @@
 //! the mask. A rotation negates its operand by flipping the sign bit, which
 //! is exact, so VCMLA stays one FPMulAdd per lane.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
 const Format = format.Format;
-const qreg = @import("../../qreg.zig");
-const predicate = @import("../../predicate.zig");
 const float = @import("../float.zig");
+const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 /// VCADD: rotation 90 gives (n.re - m.im, n.im + m.re), 270 the other way.
@@ -66,7 +67,17 @@ pub fn cmla(d: u128, n: u128, m: u128, size: float.Size, rot: u2, accumulate: bo
 
 /// One lane of a VCMLA/VCMUL pair starting at `e`: the operand pair the
 /// rotation picks, then d + n * m (fused) or n * m.
-fn halfOf(d: u128, n: u128, m: u128, size: float.Size, rot: u2, accumulate: bool, e: u8, lane_index: u8, work: *Fpscr) u32 {
+fn halfOf(
+    d: u128,
+    n: u128,
+    m: u128,
+    size: float.Size,
+    rot: u2,
+    accumulate: bool,
+    e: u8,
+    lane_index: u8,
+    work: *Fpscr,
+) u32 {
     const qs = float.qsize(size);
     const odd = lane_index != e;
     // rot 0: n.re*m.re, n.re*m.im; 90: n.im*-m.im, n.im*m.re;
@@ -88,7 +99,15 @@ fn halfOf(d: u128, n: u128, m: u128, size: float.Size, rot: u2, accumulate: bool
     };
 }
 
-fn product(comptime fmt: Format, acc: fmt.Bits(), x: fmt.Bits(), y: fmt.Bits(), negate: bool, accumulate: bool, work: *Fpscr) fmt.Bits() {
+fn product(
+    comptime fmt: Format,
+    acc: fmt.Bits(),
+    x: fmt.Bits(),
+    y: fmt.Bits(),
+    negate: bool,
+    accumulate: bool,
+    work: *Fpscr,
+) fmt.Bits() {
     const y2 = if (negate) y ^ signBit(fmt) else y;
     if (accumulate) return fpu.fma.mulAdd(fmt, acc, x, y2, work);
     return fpu.mul.mul(fmt, x, y2, work);

@@ -11,12 +11,14 @@
 //! hw2 bit 8 picks doublewords. Q8+ (D or M) and a load whose Qd is Qm
 //! stay unclaimed.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
+const alignment = @import("../../../alignment.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const alignment = @import("../../../alignment.zig");
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const gather = mve.gather;
 
 pub const group: op.Group = .{ .name = "mve_gather_imm", .decode = decode, .oracle = false };

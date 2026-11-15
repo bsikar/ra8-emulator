@@ -3,11 +3,11 @@
 //! hw2 is mask[2:0] 0 1111 0100 1101, with M as mask[3]. A zero mask is a
 //! different encoding and stays unclaimed. Each predicated MVE instruction
 //! advances the block itself when it retires.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-const vpt = @import("../../mve/vpt.zig");
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
+const vpt = @import("../../mve/vpt.zig");
 
 pub const group: op.Group = .{ .name = "mve_vpst", .decode = decode, .oracle = false };
 

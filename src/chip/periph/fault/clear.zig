@@ -2,7 +2,8 @@
 //!
 //! Every bit in CFSR (0xE000_ED28), HFSR (0xE000_ED2C) and SFSR
 //! (0xE000_EDE4) is cleared by writing a one to it, and a zero leaves it
-//! alone (DDI0553 D1.2.11, D1.2.12, and SFSR in the Security Extension). A fault handler acknowledges a fault with `CFSR = CFSR`: it
+//! alone (DDI0553 D1.2.11, D1.2.12, and SFSR in the Security Extension). A fault handler acknowledges a fault with
+//! `CFSR = CFSR`: it
 //! writes back exactly the bits it read, and they go down. The PPB here is
 //! plain RAM, so that store leaves the word exactly as it was, and the
 //! handler that checks the status went down reads the same fault forever.

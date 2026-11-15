@@ -1,11 +1,11 @@
 //! 16-bit B<cond> (T1) and B (T2). Both branch relative to the PC the
 //! instruction sees, its own address plus 4. Conditions 0b1110 and 0b1111 of
 //! the T1 space are UDF and SVC, which are not branches.
-const op = @import("../../op.zig");
-const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const cond = @import("../../cond.zig");
+const Cpu = @import("../../cpu.zig").Cpu;
 pub const future = @import("future.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 pub const wide = @import("wide.zig");
 
 pub const encodings = struct {

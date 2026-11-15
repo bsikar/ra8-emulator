@@ -16,7 +16,9 @@ const base = [4]u8{ 0xC4, 0xD3, 0xE2, 0xF1 };
 /// Si's starting value.
 pub fn bankAt(i: u5) u32 {
     var w: u32 = 0;
-    for (base, 0..) |b, k| w |= @as(u32, b +% @as(u8, i)) << @intCast(8 * k);
+    for (base, 0..) |b, k| {
+        w |= @as(u32, b +% @as(u8, i)) << @intCast(8 * k);
+    }
     return w;
 }
 
@@ -24,7 +26,9 @@ pub fn bankAt(i: u5) u32 {
 pub fn qAt(n: u3) u128 {
     var q: u128 = 0;
     var k: u5 = 4;
-    while (k > 0) : (k -= 1) q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    while (k > 0) : (k -= 1) {
+        q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    }
     return q;
 }
 
@@ -60,25 +64,57 @@ const to_core = [_]V{
     vec("vmov.32 r1, q0[3] through d1[1]", .{ .hw1 = 0xEE31, .hw2 = 0x1B10 }, .{ .q = qAt(0), .rt = 0xF4E5_D6C7 }),
     vec("vmov.s16 r2, q1[5] sign-extends", .{ .hw1 = 0xEE13, .hw2 = 0x2B70 }, .{ .q = qAt(1), .rt = 0xFFFF_F7E8 }),
     vec("vmov.u16 r2, q1[5] zero-extends", .{ .hw1 = 0xEE93, .hw2 = 0x2B70 }, .{ .q = qAt(1), .rt = 0x0000_F7E8 }),
-    vec("vmov.s8 r3, q4[15] of a positive byte", .{ .hw1 = 0xEE79, .hw2 = 0x3B70 }, .{ .q = qAt(4), .rt = 0x0000_0004 }),
+    vec(
+        "vmov.s8 r3, q4[15] of a positive byte",
+        .{ .hw1 = 0xEE79, .hw2 = 0x3B70 },
+        .{ .q = qAt(4), .rt = 0x0000_0004 },
+    ),
     vec("vmov.s8 r4, q4[0] sign-extends", .{ .hw1 = 0xEE58, .hw2 = 0x4B10 }, .{ .q = qAt(4), .rt = 0xFFFF_FFD4 }),
     vec("vmov.u8 r4, q4[0] zero-extends", .{ .hw1 = 0xEED8, .hw2 = 0x4B10 }, .{ .q = qAt(4), .rt = 0x0000_00D4 }),
-    vec("vmov.s16 lr, q4[1] of a positive half", .{ .hw1 = 0xEE18, .hw2 = 0xEB70 }, .{ .q = qAt(4), .rt = 0x0000_01F2 }),
+    vec(
+        "vmov.s16 lr, q4[1] of a positive half",
+        .{ .hw1 = 0xEE18, .hw2 = 0xEB70 },
+        .{ .q = qAt(4), .rt = 0x0000_01F2 },
+    ),
 };
 
 const to_lane = [_]V{
     vec("vmov.32 q0[2], r5", .{ .hw1 = 0xEE01, .hw2 = 0x5B10 }, .{ .q = 0xF4E5D6C7_12345678_F2E3D4C5_F1E2D3C4 }),
-    vec("vmov.16 q7[7], r6 takes the low half", .{ .hw1 = 0xEE2F, .hw2 = 0x6B70, .rt = 0xABCD_1234 }, .{ .q = 0x1234F2E3_0F00F1E2_0EFFF0E1_0DFEEFE0, .rt = 0xABCD_1234 }),
-    vec("vmov.8 q2[9], r7 takes the low byte", .{ .hw1 = 0xEE45, .hw2 = 0x7B30, .rt = 0xFFFF_FF99 }, .{ .q = 0xFCEDDECF_FBEC99CE_FAEBDCCD_F9EADBCC, .rt = 0xFFFF_FF99 }),
-    vec("vmov.32 q0[0], r12", .{ .hw1 = 0xEE00, .hw2 = 0xCB10, .rt = 0 }, .{ .q = 0xF4E5D6C7_F3E4D5C6_F2E3D4C5_00000000, .rt = 0 }),
+    vec(
+        "vmov.16 q7[7], r6 takes the low half",
+        .{ .hw1 = 0xEE2F, .hw2 = 0x6B70, .rt = 0xABCD_1234 },
+        .{ .q = 0x1234F2E3_0F00F1E2_0EFFF0E1_0DFEEFE0, .rt = 0xABCD_1234 },
+    ),
+    vec(
+        "vmov.8 q2[9], r7 takes the low byte",
+        .{ .hw1 = 0xEE45, .hw2 = 0x7B30, .rt = 0xFFFF_FF99 },
+        .{ .q = 0xFCEDDECF_FBEC99CE_FAEBDCCD_F9EADBCC, .rt = 0xFFFF_FF99 },
+    ),
+    vec(
+        "vmov.32 q0[0], r12",
+        .{ .hw1 = 0xEE00, .hw2 = 0xCB10, .rt = 0 },
+        .{ .q = 0xF4E5D6C7_F3E4D5C6_F2E3D4C5_00000000, .rt = 0 },
+    ),
 };
 
 const beats = [_]V{
     vec("eci a0 skips a lane in beat 0", .{ .hw1 = 0xEE00, .hw2 = 0x5B10, .it = 0x10 }, .{ .q = qAt(0) }),
-    vec("eci a0a1 still moves a lane in beat 2", .{ .hw1 = 0xEE01, .hw2 = 0x5B10, .it = 0x20 }, .{ .q = 0xF4E5D6C7_12345678_F2E3D4C5_F1E2D3C4 }),
+    vec(
+        "eci a0a1 still moves a lane in beat 2",
+        .{ .hw1 = 0xEE01, .hw2 = 0x5B10, .it = 0x20 },
+        .{ .q = 0xF4E5D6C7_12345678_F2E3D4C5_F1E2D3C4 },
+    ),
     vec("eci a0 leaves rt when reading beat 0", .{ .hw1 = 0xEE10, .hw2 = 0x0B10, .it = 0x10 }, .{ .q = qAt(0) }),
-    vec("eci a0a1a2 still reads beat 3", .{ .hw1 = 0xEE31, .hw2 = 0x1B10, .it = 0x40 }, .{ .q = qAt(0), .rt = 0xF4E5_D6C7 }),
-    vec("a vpt block is neither applied nor advanced", .{ .hw1 = 0xEE10, .hw2 = 0x0B10, .vpr = 0x0088_0000 }, .{ .q = qAt(0), .rt = 0xF1E2_D3C4, .vpr = 0x0088_0000 }),
+    vec(
+        "eci a0a1a2 still reads beat 3",
+        .{ .hw1 = 0xEE31, .hw2 = 0x1B10, .it = 0x40 },
+        .{ .q = qAt(0), .rt = 0xF4E5_D6C7 },
+    ),
+    vec(
+        "a vpt block is neither applied nor advanced",
+        .{ .hw1 = 0xEE10, .hw2 = 0x0B10, .vpr = 0x0088_0000 },
+        .{ .q = qAt(0), .rt = 0xF1E2_D3C4, .vpr = 0x0088_0000 },
+    ),
 };
 
 const unclaimed = [_]V{

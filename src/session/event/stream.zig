@@ -6,6 +6,8 @@
 //! and a full queue discards its oldest telemetry first (RA8EMU-1179): those
 //! kinds are lossy. State-change kinds are dropped only when the queue holds
 //! no telemetry, and events preserve publication order.
+const drive = @import("../zig/drive.zig");
+
 const std = @import("std");
 
 pub const Core = enum(u8) { cpu0, cpu1 };
@@ -14,9 +16,43 @@ pub const Event = struct {
     virtual_ns: u64 = 0,
     kind: Kind,
     address: ?u32 = null,
-    ended: ?@import("../zig/drive.zig").Ended = null,
+    ended: ?drive.Ended = null,
     payload: Payload = .none,
-    pub const Kind = enum { loaded, paused, stopped, rewound, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged, uart_byte, gpio_changed, led_changed, lcd_frame, fault, reset, watchdog, rtos_switch, rtos_idle, isr_enter, isr_leave, module_loaded, module_unloaded, module_faulted, bkpt_skipped, console_input, camera_changed };
+    pub const Kind = enum {
+        loaded,
+        paused,
+        stopped,
+        rewound,
+        register_written,
+        memory_written,
+        breakpoint_set,
+        breakpoint_cleared,
+        watchpoint_set,
+        watchpoint_cleared,
+        speed_changed,
+        input_scheduled,
+        fault_set,
+        fault_cleared,
+        plugged,
+        unplugged,
+        uart_byte,
+        gpio_changed,
+        led_changed,
+        lcd_frame,
+        fault,
+        reset,
+        watchdog,
+        rtos_switch,
+        rtos_idle,
+        isr_enter,
+        isr_leave,
+        module_loaded,
+        module_unloaded,
+        module_faulted,
+        bkpt_skipped,
+        console_input,
+        camera_changed,
+    };
 
     pub const Rect = struct { x: u16, y: u16, width: u16, height: u16 };
     pub const Payload = union(enum) {
@@ -34,7 +70,21 @@ pub const Event = struct {
 /// A full queue evicts telemetry kinds first (RA8EMU-1179).
 fn telemetry(kind: Event.Kind) bool {
     return switch (kind) {
-        .uart_byte, .gpio_changed, .led_changed, .lcd_frame, .fault, .reset, .watchdog, .rtos_switch, .rtos_idle, .isr_enter, .isr_leave, .module_loaded, .module_unloaded, .module_faulted => true,
+        .uart_byte,
+        .gpio_changed,
+        .led_changed,
+        .lcd_frame,
+        .fault,
+        .reset,
+        .watchdog,
+        .rtos_switch,
+        .rtos_idle,
+        .isr_enter,
+        .isr_leave,
+        .module_loaded,
+        .module_unloaded,
+        .module_faulted,
+        => true,
         else => false,
     };
 }
@@ -89,10 +139,14 @@ const Queue = struct {
         _ = self.dropped.fetchAdd(1, .monotonic);
     }
     fn read(self: *Queue, out: []Event) Read {
-        while (!self.mutex.tryLock()) std.atomic.spinLoopHint();
+        while (!self.mutex.tryLock()) {
+            std.atomic.spinLoopHint();
+        }
         defer self.mutex.unlock();
         const count = @min(self.len, out.len);
-        for (0..count) |i| out[i] = self.items[(self.head + i) % capacity];
+        for (0..count) |i| {
+            out[i] = self.items[(self.head + i) % capacity];
+        }
         self.head = (self.head + count) % capacity;
         self.len -= count;
         return .{ .count = count, .dropped = self.dropped.swap(0, .monotonic) };
@@ -125,7 +179,9 @@ pub const Stream = struct {
     /// (RA8EMU-1179).
     pub fn nearFull(self: *Stream) bool {
         for (&self.queues) |*slot| if (slot.*) |*queue| {
-            while (!queue.mutex.tryLock()) std.atomic.spinLoopHint();
+            while (!queue.mutex.tryLock()) {
+                std.atomic.spinLoopHint();
+            }
             defer queue.mutex.unlock();
             if (queue.len * 2 >= capacity) return true;
         };

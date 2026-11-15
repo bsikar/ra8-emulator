@@ -2,9 +2,10 @@
 //! host, plugged into the board's USB stick (RA8EMU-1020: the host read
 //! lives here, not in the board).
 const std = @import("std");
+
+const disk_file = @import("ra8_host").disk_file;
 const usb = @import("ra8_board").usb;
 const usb_plug = @import("ra8_board").usb.plug;
-const disk_file = @import("ra8_host").disk_file;
 
 /// The disk bytes a spec names, owned by `allocator`.
 pub fn load(allocator: std.mem.Allocator, io: std.Io, spec: []const u8) ![]u8 {

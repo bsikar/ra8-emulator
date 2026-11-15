@@ -8,11 +8,11 @@
 //! checked against the halfwords now in memory before each entry is handed
 //! out, so rewritten code never runs stale. A null answer sends the step down its own fetch and decode,
 //! which reports any fault or unknown encoding exactly as before.
-const Instr = @import("../instr.zig").Instr;
-const bus = @import("../bus.zig");
-const decode = @import("../decode/decode.zig");
 const block = @import("block.zig");
+const bus = @import("../bus.zig");
 const code_lines = @import("../code_lines.zig");
+const decode = @import("../decode/decode.zig");
+const Instr = @import("../instr.zig").Instr;
 
 /// Direct-mapped by start address; a power of two.
 pub const slots: usize = 1024;
@@ -52,8 +52,9 @@ pub const BlockCache = struct {
     pub fn next(self: *BlockCache, from: bus.Bus, core: decode.profile.Profile, address: u32) ?block.Entry {
         if (self.lines.dirty) self.drop();
         if (self.current) |walking| {
-            if (self.index < walking.len and walking.entries[self.index].instr.address == address)
+            if (self.index < walking.len and walking.entries[self.index].instr.address == address) {
                 return self.take(from, walking);
+            }
         }
         const found = &self.blocks[(address >> 1) & (slots - 1)];
         if (found.len != 0 and found.start == address) {

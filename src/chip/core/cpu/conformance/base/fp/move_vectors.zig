@@ -57,29 +57,65 @@ const single = [_]V{
     vec("vmov s0, r1", .{ .hw1 = 0xEE00, .hw2 = 0x1A10 }, .{ .s_a = r1, .s_b = bankAt(1) }),
     vec("vmov r1, s0", .{ .hw1 = 0xEE10, .hw2 = 0x1A10 }, .{ .r1 = bankAt(0), .s_a = bankAt(0), .s_b = bankAt(1) }),
     vec("vmov s1, r1 takes N as the low bit", .{ .hw1 = 0xEE00, .hw2 = 0x1A90 }, .{ .s_a = bankAt(0), .s_b = r1 }),
-    vec("vmov r1, s31", .{ .hw1 = 0xEE1F, .hw2 = 0x1A90, .watch = 30 }, .{ .r1 = bankAt(31), .s_a = bankAt(30), .s_b = bankAt(31) }),
+    vec(
+        "vmov r1, s31",
+        .{ .hw1 = 0xEE1F, .hw2 = 0x1A90, .watch = 30 },
+        .{ .r1 = bankAt(31), .s_a = bankAt(30), .s_b = bankAt(31) },
+    ),
     vec("vmov s30, r1", .{ .hw1 = 0xEE0F, .hw2 = 0x1A10, .watch = 30 }, .{ .s_a = r1, .s_b = bankAt(31) }),
-    vec("vmov r2, s2", .{ .hw1 = 0xEE11, .hw2 = 0x2A10, .watch = 2 }, .{ .r2 = bankAt(2), .s_a = bankAt(2), .s_b = bankAt(3) }),
+    vec(
+        "vmov r2, s2",
+        .{ .hw1 = 0xEE11, .hw2 = 0x2A10, .watch = 2 },
+        .{ .r2 = bankAt(2), .s_a = bankAt(2), .s_b = bankAt(3) },
+    ),
 };
 
 const half = [_]V{
-    vec("vmov.f16 s0, r1 keeps the low half", .{ .hw1 = 0xEE00, .hw2 = 0x1910 }, .{ .s_a = r1 & 0xFFFF, .s_b = bankAt(1) }),
-    vec("vmov.f16 r1, s3 keeps the low half", .{ .hw1 = 0xEE11, .hw2 = 0x1990, .watch = 3 }, .{ .r1 = bankAt(3) & 0xFFFF, .s_a = bankAt(3), .s_b = bankAt(4) }),
+    vec(
+        "vmov.f16 s0, r1 keeps the low half",
+        .{ .hw1 = 0xEE00, .hw2 = 0x1910 },
+        .{ .s_a = r1 & 0xFFFF, .s_b = bankAt(1) },
+    ),
+    vec(
+        "vmov.f16 r1, s3 keeps the low half",
+        .{ .hw1 = 0xEE11, .hw2 = 0x1990, .watch = 3 },
+        .{ .r1 = bankAt(3) & 0xFFFF, .s_a = bankAt(3), .s_b = bankAt(4) },
+    ),
 };
 
 const pair = [_]V{
     vec("vmov s0, s1, r1, r2", .{ .hw1 = 0xEC42, .hw2 = 0x1A10 }, .{ .s_a = r1, .s_b = r2 }),
-    vec("vmov r1, r2, s0, s1", .{ .hw1 = 0xEC52, .hw2 = 0x1A10 }, .{ .r1 = bankAt(0), .r2 = bankAt(1), .s_a = bankAt(0), .s_b = bankAt(1) }),
-    vec("vmov s3, s4, r1, r2 takes M as the low bit", .{ .hw1 = 0xEC42, .hw2 = 0x1A31, .watch = 3 }, .{ .s_a = r1, .s_b = r2 }),
-    vec("vmov r1, r2, s30, s31", .{ .hw1 = 0xEC52, .hw2 = 0x1A1F, .watch = 30 }, .{ .r1 = bankAt(30), .r2 = bankAt(31), .s_a = bankAt(30), .s_b = bankAt(31) }),
+    vec(
+        "vmov r1, r2, s0, s1",
+        .{ .hw1 = 0xEC52, .hw2 = 0x1A10 },
+        .{ .r1 = bankAt(0), .r2 = bankAt(1), .s_a = bankAt(0), .s_b = bankAt(1) },
+    ),
+    vec(
+        "vmov s3, s4, r1, r2 takes M as the low bit",
+        .{ .hw1 = 0xEC42, .hw2 = 0x1A31, .watch = 3 },
+        .{ .s_a = r1, .s_b = r2 },
+    ),
+    vec(
+        "vmov r1, r2, s30, s31",
+        .{ .hw1 = 0xEC52, .hw2 = 0x1A1F, .watch = 30 },
+        .{ .r1 = bankAt(30), .r2 = bankAt(31), .s_a = bankAt(30), .s_b = bankAt(31) },
+    ),
     vec("vmov s0, s1, r1, r1 writes both", .{ .hw1 = 0xEC41, .hw2 = 0x1A10 }, .{ .s_a = r1, .s_b = r1 }),
 };
 
 const double = [_]V{
     vec("vmov d0, r1, r2 puts rt low", .{ .hw1 = 0xEC42, .hw2 = 0x1B10 }, .{ .s_a = r1, .s_b = r2 }),
-    vec("vmov r1, r2, d0 reads low then high", .{ .hw1 = 0xEC52, .hw2 = 0x1B10 }, .{ .r1 = bankAt(0), .r2 = bankAt(1), .s_a = bankAt(0), .s_b = bankAt(1) }),
+    vec(
+        "vmov r1, r2, d0 reads low then high",
+        .{ .hw1 = 0xEC52, .hw2 = 0x1B10 },
+        .{ .r1 = bankAt(0), .r2 = bankAt(1), .s_a = bankAt(0), .s_b = bankAt(1) },
+    ),
     vec("vmov d15, r1, r2", .{ .hw1 = 0xEC42, .hw2 = 0x1B1F, .watch = 30 }, .{ .s_a = r1, .s_b = r2 }),
-    vec("vmov r1, r2, d7", .{ .hw1 = 0xEC52, .hw2 = 0x1B17, .watch = 14 }, .{ .r1 = bankAt(14), .r2 = bankAt(15), .s_a = bankAt(14), .s_b = bankAt(15) }),
+    vec(
+        "vmov r1, r2, d7",
+        .{ .hw1 = 0xEC52, .hw2 = 0x1B17, .watch = 14 },
+        .{ .r1 = bankAt(14), .r2 = bankAt(15), .s_a = bankAt(14), .s_b = bankAt(15) },
+    ),
 };
 
 const unclaimed = [_]V{

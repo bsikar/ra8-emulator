@@ -2,12 +2,13 @@
 //! `scratch/` that the host removes by itself when they are closed, or when
 //! the process dies holding them. POSIX unlinks the name right after the
 //! open; Windows opens with FILE_FLAG_DELETE_ON_CLOSE.
-const std = @import("std");
 const builtin = @import("builtin");
-const win32 = @import("../win32.zig");
+const std = @import("std");
+
 const name = @import("name.zig");
-const Session = @import("session.zig").Session;
 const paths = @import("paths.zig");
+const Session = @import("session.zig").Session;
+const win32 = @import("../win32.zig");
 
 pub const Area = enum { frames, scratch };
 
@@ -38,11 +39,23 @@ fn openWindows(session: *const Session, area: Area, leaf: []const u8) !std.Io.Fi
     const unc = std.mem.startsWith(u8, session.base.path, "\\\\");
     const prefix: []const u8 = if (unc) "\\\\?\\UNC\\" else "\\\\?\\";
     const root_path = if (unc) session.base.path[2..] else session.base.path;
-    const path = try std.fmt.allocPrint(allocator, "{s}{s}\\{s}\\{s}\\{s}", .{ prefix, root_path, &session.id, @tagName(area), leaf });
+    const path = try std.fmt.allocPrint(
+        allocator,
+        "{s}{s}\\{s}\\{s}\\{s}",
+        .{ prefix, root_path, &session.id, @tagName(area), leaf },
+    );
     defer allocator.free(path);
     const wide = try std.unicode.wtf8ToWtf16LeAllocZ(allocator, path);
     defer allocator.free(wide);
-    const handle = win32.CreateFileW(wide, access.generic_read_write, access.share_all, null, access.create_new, access.temporary | access.delete_on_close, null);
+    const handle = win32.CreateFileW(
+        wide,
+        access.generic_read_write,
+        access.share_all,
+        null,
+        access.create_new,
+        access.temporary | access.delete_on_close,
+        null,
+    );
     if (handle == win32.invalid_handle) {
         return if (present(session, area, leaf)) error.PathAlreadyExists else error.ScratchOpenFailed;
     }

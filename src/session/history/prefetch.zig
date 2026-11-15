@@ -18,6 +18,7 @@
 //! it started in, so a result that comes back after a newer command is
 //! discarded instead of kept.
 const std = @import("std");
+
 const ObjectId = @import("object_id.zig").ObjectId;
 
 pub const mib: u64 = 1024 * 1024;
@@ -98,7 +99,9 @@ pub const Prefetch = struct {
     }
 
     pub fn deinit(self: *Prefetch) void {
-        for (self.ready.items) |entry| self.allocator.free(entry.bytes);
+        for (self.ready.items) |entry| {
+            self.allocator.free(entry.bytes);
+        }
         self.ready.deinit(self.allocator);
         self.queue.deinit(self.allocator);
         self.claimed.deinit(self.allocator);
@@ -137,7 +140,10 @@ pub const Prefetch = struct {
             self.allocator.free(bytes);
             return .over_budget;
         }
-        self.ready.append(self.allocator, .{ .id = job.request.id, .object = job.request.object, .bytes = bytes }) catch |err| {
+        self.ready.append(
+            self.allocator,
+            .{ .id = job.request.id, .object = job.request.object, .bytes = bytes },
+        ) catch |err| {
             self.allocator.free(bytes);
             return err;
         };

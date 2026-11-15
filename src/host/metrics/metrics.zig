@@ -1,11 +1,15 @@
 //! Allocation-free process health sampling (RA8EMU-1239).
-pub const macos = @import("macos.zig");
-pub const linux = @import("linux.zig");
+const windows = @import("windows.zig");
+
 const builtin = @import("builtin");
+
+pub const linux = @import("linux.zig");
+pub const macos = @import("macos.zig");
+
 const platform = switch (builtin.os.tag) {
-    .macos => @import("macos.zig"),
-    .linux => @import("linux.zig"),
-    .windows => @import("windows.zig"),
+    .macos => macos,
+    .linux => linux,
+    .windows => windows,
     else => struct {
         pub fn read() !Raw {
             return error.Unsupported;
@@ -59,11 +63,21 @@ pub const Sampler = struct {
 
     /// Public so deterministic counters, reset and rollover can be tested.
     pub fn record(self: *Sampler, raw: Raw, now_ns: u64) void {
-        var sample = Sample{ .footprint = raw.footprint, .peak_footprint = raw.peak_footprint, .rss = raw.rss, .vsz = raw.vsz, .swap = raw.swap, .swap_available = raw.swap_available, .threads = raw.threads };
+        var sample = Sample{
+            .footprint = raw.footprint,
+            .peak_footprint = raw.peak_footprint,
+            .rss = raw.rss,
+            .vsz = raw.vsz,
+            .swap = raw.swap,
+            .swap_available = raw.swap_available,
+            .threads = raw.threads,
+        };
         if (self.previous) |old| {
             const elapsed = now_ns -| self.previous_ns;
             if (elapsed > 0 and raw.cpu_ns >= old.cpu_ns) {
-                sample.cpu_percent = @as(f64, @floatFromInt(raw.cpu_ns - old.cpu_ns)) * 100 / @as(f64, @floatFromInt(elapsed));
+                const cpu_ns: f64 = @floatFromInt(raw.cpu_ns - old.cpu_ns);
+                const elapsed_ns: f64 = @floatFromInt(elapsed);
+                sample.cpu_percent = cpu_ns * 100 / elapsed_ns;
                 sample.cpu_total_percent = sample.cpu_percent / @as(f64, @floatFromInt(@max(raw.cores, 1)));
             }
         }

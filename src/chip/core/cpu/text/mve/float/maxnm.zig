@@ -1,7 +1,7 @@
 //! Text for MVE vector maxnum/minnum, per DDI0553 B5.
 const Instr = @import("../../../instr.zig").Instr;
-const ops = @import("../../../ops/mve/float/maxnm.zig");
 const mve_int = @import("../../../ops/mve/int/int.zig");
+const ops = @import("../../../ops/mve/float/maxnm.zig");
 const text = @import("../../text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {

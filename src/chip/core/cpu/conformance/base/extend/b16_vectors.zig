@@ -64,8 +64,16 @@ pub const all = [_]V{
     ext("sxtab16 adds negative bytes", sxtab16, ror0, 0x0010_0010, 0x00FF_00FF, 0x000F_000F),
     ext("uxtab16 lanes wrap without carrying", uxtab16, ror0, 0xFFFF_FFFF, 0x0001_0001, 0),
     ext("uxtab16 ror #8", uxtab16, ror8, 0x1000_2000, 0x1122_3344, 0x1011_2033),
-    vec("sxtab16 r12, lr, r4", .{ .hw1 = 0xFA2E, .hw2 = 0xFC84, .n = 0x0100_0100, .m = 0x00FE_0002 }, .{ .rd = 0x00FE_0102 }),
-    vec("uxtab16 r1, r1, r1 reads before writing", .{ .hw1 = uxtab16, .hw2 = 0xF181, .n = 0x0002_0003, .m = 0x0002_0003 }, .{ .rd = 0x0004_0006 }),
+    vec(
+        "sxtab16 r12, lr, r4",
+        .{ .hw1 = 0xFA2E, .hw2 = 0xFC84, .n = 0x0100_0100, .m = 0x00FE_0002 },
+        .{ .rd = 0x00FE_0102 },
+    ),
+    vec(
+        "uxtab16 r1, r1, r1 reads before writing",
+        .{ .hw1 = uxtab16, .hw2 = 0xF181, .n = 0x0002_0003, .m = 0x0002_0003 },
+        .{ .rd = 0x0004_0006 },
+    ),
     bad("Rd of sp is unclaimed", sxtb16, 0xFD82),
     bad("Rd of pc is unclaimed", uxtb16, 0xFF82),
     bad("Rm of sp is unclaimed", sxtab16, 0xF08D),

@@ -15,7 +15,9 @@
 //!   payload:           compressed_len bytes
 //!   crc32c:            4 bytes (Castagnoli CRC32-C over record header + payload)
 const std = @import("std");
+
 const ObjectId = @import("object_id.zig").ObjectId;
+
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 
 pub const magic: [8]u8 = "RA8PACK1".*;
@@ -82,7 +84,12 @@ fn compressFlate1(allocator: std.mem.Allocator, data: []const u8) ![]u8 {
     const window = try allocator.alloc(u8, std.compress.flate.max_window_len);
     defer allocator.free(window);
 
-    var deflater = std.compress.flate.Compress.init(&out.writer, window, .raw, .level_1) catch return Error.CompressFailed;
+    var deflater = std.compress.flate.Compress.init(
+        &out.writer,
+        window,
+        .raw,
+        .level_1,
+    ) catch return Error.CompressFailed;
     deflater.writer.writeAll(data) catch return Error.CompressFailed;
     deflater.finish() catch return Error.CompressFailed;
 

@@ -12,7 +12,7 @@
 //! `cmd1`. An address is up to 40 bits: Vela's cmd1_with_address puts the
 //! low 32 bits in the payload and the bits above them in the command's
 //! 16-bit parameter, so an address register is payload | param << 32.
-const std = @import("std");
+
 const vela = @import("vela.zig");
 
 pub const set_ifm_base0: u10 = 0x000;

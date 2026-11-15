@@ -6,10 +6,10 @@
 //! The non-predicated DLS, WLS and LE stay with ops/lob.zig, whose decode
 //! refuses every form claimed here. Refused here as well: SP or PC as the
 //! count register (PC is a related encoding: LCTP, LE or LE forever).
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const lob = @import("../../../lob.zig");
+const op = @import("../../op.zig");
 const tail = @import("../../mve/all.zig").tail;
 
 pub const encodings = struct {
@@ -53,16 +53,18 @@ pub fn fields(instr: Instr) ?Fields {
     if (instr.size != 4) return null;
     const hw1 = instr.hw1;
     const hw2 = instr.hw2;
-    if (hw1 == e.letp_first and hw2 & e.branch_mask == e.branch)
+    if (hw1 == e.letp_first and hw2 & e.branch_mask == e.branch) {
         return .{ .kind = .letp, .offset = distance(hw2) };
+    }
     if (hw1 == e.lctp_first and hw2 == e.lctp_second) return .{ .kind = .lctp };
     if (hw1 & e.setup_mask != e.setup) return null;
     const rn: u4 = @truncate(hw1 & e.rn_mask);
     if (rn == e.sp or rn == e.pc) return null;
     const size: u2 = @truncate(hw1 >> e.size_shift);
     if (hw2 == e.dlstp_second) return .{ .kind = .dlstp, .size = size, .rn = rn };
-    if (hw2 & e.branch_mask == e.branch)
+    if (hw2 & e.branch_mask == e.branch) {
         return .{ .kind = .wlstp, .size = size, .rn = rn, .offset = distance(hw2) };
+    }
     return null;
 }
 

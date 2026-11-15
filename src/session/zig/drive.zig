@@ -2,12 +2,14 @@
 //! runs; here the debugger owns the loop, so it builds the same event,
 //! asks the machine, and only then lets the core execute.
 const std = @import("std");
-const zig_core = @import("core.zig");
-const stop_machine = @import("../stop_machine.zig");
+
 const call_decode = @import("../call_decode.zig");
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
+const stop_machine = @import("../stop_machine.zig");
 const watch_bus = @import("../watch/bus.zig");
+const zig_core = @import("core.zig");
 const zig_cycles = @import("cycles.zig");
+
 /// Re-exported for tests/session/zig/monitor_test.zig.
 pub const zig_monitor = @import("monitor.zig");
 
@@ -48,25 +50,51 @@ pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64) E
 /// As `run`, with `watch` listening to the loads and stores each
 /// instruction makes (RA8EMU-113). It listens only while the instruction runs, so neither the
 /// debugger's own reads nor the instruction's fetch count as an access.
-pub fn runWatched(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus) Ended {
+pub fn runWatched(
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    count: u64,
+    watch: ?*watch_bus.WatchBus,
+) Ended {
     return runClocked(core, machine, count, watch, null);
 }
 
 /// As `runWatched`, with a non-writing projection for DWT cycle comparators.
-pub fn runClocked(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock) Ended {
+pub fn runClocked(
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    count: u64,
+    watch: ?*watch_bus.WatchBus,
+    clock: ?*zig_cycles.Clock,
+) Ended {
     var retired: u64 = 0;
     return runCounted(core, machine, count, watch, clock, &retired);
 }
 
 /// As `runClocked`, adding architectural slots to the legacy-named output.
 /// The scheduler accounts for sleep tails separately as elapsed time.
-pub fn runCounted(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64) Ended {
+pub fn runCounted(
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    count: u64,
+    watch: ?*watch_bus.WatchBus,
+    clock: ?*zig_cycles.Clock,
+    retired: *u64,
+) Ended {
     return runTarget(core, machine, count, watch, clock, retired, null);
 }
 
 /// Stop at a canonical per-core slot count after polling and waking, before
 /// the next instruction. A phase-end target is checked in the next phase.
-pub fn runTarget(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, retired: *u64, target: ?u64) Ended {
+pub fn runTarget(
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    count: u64,
+    watch: ?*watch_bus.WatchBus,
+    clock: ?*zig_cycles.Clock,
+    retired: *u64,
+    target: ?u64,
+) Ended {
     // The board moved, or the debugger wrote state, since the last chunk:
     // the poll asks the source afresh before trusting a hush again.
     if (core.cpu.quiet) |hushing| hushing.stirAll();

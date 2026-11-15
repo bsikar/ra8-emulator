@@ -25,11 +25,11 @@
 //!
 //! The map itself, and which lanes of a word each register occupies, is
 //! src/chip/periph/elc/regs.zig; this file is the behaviour behind it.
-const std = @import("std");
 const Bounded = @import("../../core/bounded.zig").Bounded;
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
+
 /// The link table lives next door; re-exported so a caller that has the
 /// block also has the slot vocabulary.
 pub const route = @import("route.zig");

@@ -52,8 +52,8 @@
 //! region captured wrongly here is now a fault taken wrongly rather than a
 //! line in the report, which is why `observe` says what each store meant
 //! rather than leaving the caller to work it out from the address.
-const memmap = @import("../../core/memmap.zig");
 pub const fault = @import("fault.zig");
+const memmap = @import("../../core/memmap.zig");
 
 /// The register block's fixed shape: how many data regions this core reports,
 /// and where DREGION sits in TYPE.
@@ -93,12 +93,13 @@ pub const field = struct {
     pub const limit_low: u32 = 0x1F;
 };
 
+pub const background = @import("background.zig");
+pub const escalate = @import("escalate.zig");
+
 /// One data region as the firmware left it: the inclusive span it covers, and
 /// the three bits that decide which accesses into it are allowed.
 /// The Non-secure MPU's copy on the Zig core's bus. src/chip/periph/mpu/ns.zig.
 pub const ns = @import("ns.zig");
-pub const background = @import("background.zig");
-pub const escalate = @import("escalate.zig");
 
 pub const Region = struct {
     base: u32 = 0,
@@ -200,7 +201,8 @@ pub const Mpu = struct {
     /// Read the window: keep TYPE read-only, and see which way CTRL.ENABLE
     /// has moved. A word store to CTRL has already been taken in `observe`,
     /// so the edge it counts here is the one that never reached it: a narrow
-    /// store, which the window hook leaves to the RAM underneath. The region table is NOT read here: it is built from the
+    /// store, which the window hook leaves to the RAM underneath. The region table is NOT read here: it is built from
+    /// the
     /// stores themselves in `observe`, because the last store any
     /// configuration leaves behind is a cleared RLAR for the unused tail and
     /// a poll would only ever see that.

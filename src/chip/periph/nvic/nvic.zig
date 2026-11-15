@@ -15,17 +15,17 @@
 //! VTOR. Returning is the mirror: the handler branches to EXC_RETURN, which is
 //! an unmapped fetch to such a model, and the run loop unwinds
 //! the frame instead of reporting a fault.
-const held_reasons = @import("../held.zig");
-const candidates = @import("../candidate.zig");
-const passed_pends = @import("../passed.zig");
-const std = @import("std");
-const memmap = @import("../../core/memmap.zig");
-const clocks = @import("../clocks.zig");
-const exc_return = @import("../exc_return.zig");
-pub const clear = @import("clear.zig");
+
 pub const banked = @import("banked.zig");
-pub const debug_monitor = @import("../debug_monitor.zig");
+const candidates = @import("../candidate.zig");
+pub const clear = @import("clear.zig");
+const clocks = @import("../clocks.zig");
 const dcb = @import("../dcb.zig");
+pub const debug_monitor = @import("../debug_monitor.zig");
+const exc_return = @import("../exc_return.zig");
+const held_reasons = @import("../held.zig");
+const memmap = @import("../../core/memmap.zig");
+const passed_pends = @import("../passed.zig");
 const standing_pends = @import("../standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the

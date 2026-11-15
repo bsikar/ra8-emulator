@@ -9,11 +9,12 @@
 //! FPSCR rounding mode, so widening is exact and narrowing can raise OFC,
 //! UFC and IXC.
 const format = @import("../format.zig");
+
 const Format = format.Format;
-const unpack_mod = @import("../unpack.zig");
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
 
 pub fn convert(comptime from: Format, comptime to: Format, op: from.Bits(), fpscr: *Fpscr) to.Bits() {

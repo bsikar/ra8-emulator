@@ -31,7 +31,6 @@
 //! left where the two emulator trees and the image already agree, and the
 //! compare flags sit above it in AGTCR's order rather than moving it on a
 //! header this tree cannot check against the manual.
-const std = @import("std");
 
 /// ULPTCR status flags, in AGTCR's order.
 pub const flag = struct {

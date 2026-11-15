@@ -6,13 +6,14 @@
 //! FPSCR.QC is set only from lanes the VPT block leaves active. Size 11, D
 //! or N set (Q8+), and Rm of SP or PC stay unclaimed. Lane semantics are in
 //! src/chip/core/cpu/mve/int/mul/mul.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("int.zig");
+const op = @import("../../../op.zig");
 const pair = @import("pair.zig");
+
 const Size = mve.qreg.Size;
 const DoublingForm = mve.int.mul.DoublingForm;
 
@@ -67,7 +68,13 @@ fn execFor(comptime size: Size) op.Exec {
             const n = mve.qreg.read(&cpu.fp.bank, qn);
             const result = mve.int.mul.doublingMultiplyAccumulateHigh(da, n, scalar, size, form);
             const live = pair.activeLanes(mve_beats.mask(cpu), size);
-            if (mve.int.mul.doublingMultiplyAccumulateHigh(da & live, n & live, scalar, size, form).saturated) cpu.fp.fpscr.qc = 1;
+            if (mve.int.mul.doublingMultiplyAccumulateHigh(
+                da & live,
+                n & live,
+                scalar,
+                size,
+                form,
+            ).saturated) cpu.fp.fpscr.qc = 1;
             mve_int.writePredicated(cpu, qda, result.value);
         }
     }.exec;

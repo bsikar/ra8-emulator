@@ -1,9 +1,9 @@
 //! UDF, the permanently undefined instruction (T1 and T2). It never runs:
 //! the core takes it as a UsageFault with CFSR.UNDEFINSTR set, and the
 //! stacked return address is the UDF itself.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const group: op.Group = .{ .name = "udf", .decode = decode, .oracle = false };
 

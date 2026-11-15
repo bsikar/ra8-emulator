@@ -2,6 +2,7 @@
 //! on the Worker the application hands over (RA8EMU-1020), or inline
 //! without one.
 const std = @import("std");
+
 const dns = @import("dns.zig");
 const eth = @import("../eth.zig");
 const frame = @import("../frame.zig");
@@ -58,7 +59,11 @@ pub const Host = struct {
         self.thread = null;
         self.job = null;
         if (job.valid) _ = queue.push(&job.response);
-        if (job.valid and tapes.mode == .record) tapes.storeDns(job.request[0..job.request_len], job.answer[0..job.answer_len]);
+        if (job.valid and
+            tapes.mode == .record) tapes.storeDns(
+            job.request[0..job.request_len],
+            job.answer[0..job.answer_len],
+        );
         job.release();
     }
 

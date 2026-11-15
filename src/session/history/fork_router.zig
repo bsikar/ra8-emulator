@@ -11,10 +11,12 @@
 //!    and applies the intervention.
 
 const std = @import("std");
+
 const branch_mod = @import("branch.zig");
 const history_position = @import("position.zig");
 const history_record = @import("record.zig");
 const session_root = @import("../root.zig");
+
 const stream = session_root.event.stream;
 const core_view = session_root.core_view;
 const endpoint = @import("ra8_components").endpoint;
@@ -60,10 +62,22 @@ pub const RouteDecision = enum {
 /// Duplicates any borrowed slice in `action` using `allocator`.
 pub fn dupeAction(allocator: std.mem.Allocator, action: Action) !Action {
     switch (action) {
-        .memory => |m| return .{ .memory = .{ .core = m.core, .address = m.address, .bytes = try allocator.dupe(u8, m.bytes) } },
+        .memory => |m| return .{
+            .memory = .{
+                .core = m.core,
+                .address = m.address,
+                .bytes = try allocator.dupe(u8, m.bytes),
+            },
+        },
         .console => |c| return .{ .console = .{ .core = c.core, .bytes = try allocator.dupe(u8, c.bytes) } },
         .camera => |cam| return .{ .camera = .{ .core = cam.core, .spec = try allocator.dupe(u8, cam.spec) } },
-        .plug => |p| return .{ .plug = .{ .core = p.core, .at = p.at, .name = if (p.name) |n| try allocator.dupe(u8, n) else null } },
+        .plug => |p| return .{
+            .plug = .{
+                .core = p.core,
+                .at = p.at,
+                .name = if (p.name) |n| try allocator.dupe(u8, n) else null,
+            },
+        },
         .load => |l| return .{ .load = .{ .core = l.core, .image = try allocator.dupe(u8, l.image) } },
         else => return action,
     }

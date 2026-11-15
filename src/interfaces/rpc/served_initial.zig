@@ -1,15 +1,23 @@
 //! Admit frozen startup images before a kept history can recover or write.
+const served_card = @import("served_card.zig");
+const served_media = @import("served_media.zig");
+const served_setup = @import("served_setup.zig");
+const session = @import("ra8_session");
+
 const std = @import("std");
-const root = @import("ra8_session").history_root;
-const Image = @import("served_second.zig").Image;
+
 const history = @import("ra8_host").history;
+const Image = @import("served_second.zig").Image;
+const root = @import("ra8_session").history_root;
 
 /// A kept root is immutable; recovery must not move it under another name.
 pub fn checkRootRename(io: std.Io, dir: std.Io.Dir) !void {
     var pending = (try history.rename.pending(io, dir)) orelse return;
     defer pending.deinit();
     const note = pending.parsed.value;
-    if (note.space == .top and (std.mem.eql(u8, note.from, history.layout.files.root) or std.mem.eql(u8, note.to, history.layout.files.root))) return error.RootRenamePending;
+    if (note.space == .top and
+        (std.mem.eql(u8, note.from, history.layout.files.root) or
+            std.mem.eql(u8, note.to, history.layout.files.root))) return error.RootRenamePending;
 }
 
 pub const Images = struct {
@@ -21,7 +29,12 @@ pub const Images = struct {
     owned_second: ?[]u8 = null,
 
     pub fn init(gpa: std.mem.Allocator, io: std.Io, path: []const u8, bytes: ?[]const u8, second: ?Image) Images {
-        return .{ .gpa = gpa, .io = io, .first = if (bytes) |b| .{ .bytes = b } else .{ .path = path }, .second = second };
+        return .{
+            .gpa = gpa,
+            .io = io,
+            .first = if (bytes) |b| .{ .bytes = b } else .{ .path = path },
+            .second = second,
+        };
     }
 
     pub fn deinit(self: *Images) void {
@@ -53,7 +66,12 @@ pub const Images = struct {
             .bytes => |bytes| return bytes,
             .path => |path| {
                 if (owned.*) |bytes| return bytes;
-                const bytes = try std.Io.Dir.cwd().readFileAlloc(self.io, path, self.gpa, .limited(@import("ra8_session").harness.limits.max_elf_bytes));
+                const bytes = try std.Io.Dir.cwd().readFileAlloc(
+                    self.io,
+                    path,
+                    self.gpa,
+                    .limited(session.harness.limits.max_elf_bytes),
+                );
                 owned.* = bytes;
                 return bytes;
             },
@@ -62,8 +80,8 @@ pub const Images = struct {
 };
 
 /// Reopen uses only the frozen root; host paths are never consulted again.
-pub fn media(self: anytype, startup: @import("served_setup.zig").Startup) !void {
-    const codec = @import("served_media.zig");
+pub fn media(self: anytype, startup: served_setup.Startup) !void {
+    const codec = served_media;
     if (self.history) |bind| if (bind.reopened) {
         if (bind.media_bytes) |bytes| try codec.load(self.owner.board(), bytes);
         if (self.owner.session().persistent_recorder) |recorder| recorder.root_bytes = bind.media_bytes.?.len;
@@ -72,7 +90,7 @@ pub fn media(self: anytype, startup: @import("served_setup.zig").Startup) !void 
     };
     if (startup.media) |bytes| {
         try codec.load(self.owner.board(), bytes);
-    } else try @import("served_card.zig").stage(self, startup.card);
+    } else try served_card.stage(self, startup.card);
     const recorder = self.owner.session().persistent_recorder orelse return;
     self.media = try codec.save(self.gpa, self.owner.board(), recorder);
 }

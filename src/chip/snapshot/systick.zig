@@ -6,9 +6,10 @@
 //! Not saved, because the run sets them when it is built: `per_chunk` and
 //! `words`. A load keeps the target's own.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
-const fields = @import("ra8_snapshot").fields;
+
 const Clocks = @import("../periph/clocks.zig").Clocks;
+const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -22,7 +23,9 @@ pub fn save(bases: [2]*const Clocks, writer: anytype) !void {
 }
 
 fn body(bases: [2]*const Clocks, writer: anytype) !void {
-    for (bases) |base| try fields.writeExcept(writer, base.*, wiring);
+    for (bases) |base| {
+        try fields.writeExcept(writer, base.*, wiring);
+    }
 }
 
 /// All or nothing: neither base changes until both read cleanly.

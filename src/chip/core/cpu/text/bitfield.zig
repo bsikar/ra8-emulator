@@ -1,9 +1,9 @@
 //! Text for the bitfield group: SBFX, UBFX, BFI and BFC (BFI with Rn of
 //! PC). We print the field as lsb and width, both as ordinary
 //! immediates; the insert's width comes from its msb.
+const Fields = @import("../ops/bitfield.zig").Fields;
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const Fields = @import("../ops/bitfield.zig").Fields;
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = Fields.of(instr).?;

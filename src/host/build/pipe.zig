@@ -1,9 +1,13 @@
 //! Read one available compiler-output chunk without blocking the control loop.
+const builtin = @import("builtin");
+
 const std = @import("std");
+
 const windows = @import("../win32.zig");
+
 pub fn read(io: std.Io, file: std.Io.File, bytes: []u8) !?usize {
     var count = bytes.len;
-    if (@import("builtin").os.tag == .windows) {
+    if (builtin.os.tag == .windows) {
         var available: u32 = 0;
         if (!windows.PeekNamedPipe(file.handle, null, 0, null, &available, null).toBool()) {
             return switch (std.os.windows.GetLastError()) {

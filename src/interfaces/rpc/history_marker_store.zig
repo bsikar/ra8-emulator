@@ -3,6 +3,7 @@
 //! it from the history session's index space, next to the log and the
 //! objects the bind already puts there.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
 const late_marker = @import("ra8_session").history_late_marker;
 

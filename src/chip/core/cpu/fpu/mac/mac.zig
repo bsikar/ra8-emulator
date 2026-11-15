@@ -3,10 +3,10 @@
 //! applied to the product or the accumulator as the encoding asks. Flags
 //! from both steps land in the same FPSCR, and FPNeg flips a NaN's sign like
 //! any other value, so a NaN product or accumulator comes out negated.
-const Format = @import("../format.zig").Format;
 const add_mod = @import("../add/add.zig");
-const mul_mod = @import("../mul/mul.zig");
+const Format = @import("../format.zig").Format;
 const Fpscr = @import("../fpscr.zig").Fpscr;
+const mul_mod = @import("../mul/mul.zig");
 pub const vectors = @import("vectors.zig");
 
 /// VMLA: d + n*m.

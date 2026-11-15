@@ -33,9 +33,9 @@ const buf = @import("buffer.zig");
 const clk = @import("clock.zig");
 const compare = @import("compare.zig");
 const lk = @import("lock.zig");
-const win = @import("window.zig");
 const md = @import("mode.zig");
 const prd = @import("period.zig");
+const win = @import("window.zig");
 
 /// Where each register this model interprets sits in a channel. The map is
 /// the window's; this is the name the code here reaches it by.

@@ -1,10 +1,10 @@
 //! SXTH, SXTB, UXTH and UXTB (T1): Rd = Rm with its low halfword or byte
 //! sign- or zero-extended. The 16-bit forms take no rotation and set no
 //! flags.
-const op = @import("../../op.zig");
+pub const b16 = @import("b16.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-pub const b16 = @import("b16.zig");
+const op = @import("../../op.zig");
 pub const wide = @import("wide.zig");
 
 pub const encodings = struct {

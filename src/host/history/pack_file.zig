@@ -4,8 +4,12 @@
 //! inside the session directory's objects area. Atomic file commits write to a
 //! temporary file, sync to disk, and atomically rename. Session layer format
 //! knowledge is not duplicated here; this file only transfers raw bytes.
+const builtin = @import("builtin");
+
+const file_api = @import("move/file.zig");
+
 const std = @import("std");
-const layout = @import("layout.zig");
+
 const paths = @import("paths.zig");
 const Session = @import("session.zig").Session;
 
@@ -120,7 +124,7 @@ pub fn writeAtomic(session: *const Session, leaf: []const u8, bytes: []const u8)
     tmp_file.close(io);
 
     try dir.rename(tmp_name, dir, leaf, io);
-    if (@import("builtin").os.tag == .linux) try @import("move/file.zig").syncDir(dir);
+    if (builtin.os.tag == .linux) try file_api.syncDir(dir);
 }
 
 fn vtableAppend(context: *anyopaque, leaf: []const u8, bytes: []const u8) anyerror!void {

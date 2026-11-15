@@ -1,5 +1,6 @@
 //! Active command bytes and counters, without undefined buffer tails.
 const std = @import("std");
+
 const fields = @import("ra8_snapshot").fields;
 const Modem = @import("modem.zig").Modem;
 

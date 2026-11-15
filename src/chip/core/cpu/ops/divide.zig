@@ -3,10 +3,10 @@
 //! SDIV of INT_MIN by -1
 //! wraps to INT_MIN. SP or PC in any field is UNPREDICTABLE and left
 //! unclaimed, so the core stops rather than guess.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const memmap = @import("../../memmap.zig");
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

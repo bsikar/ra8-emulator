@@ -15,7 +15,12 @@ const orr = "VORR (immediate) T1";
 const bic = "VBIC (immediate) T1";
 
 fn v(encoding: []const u8, name: []const u8, op: u1, cmode: u4, imm8: u8, expect: u128) V {
-    return .{ .encoding = encoding, .name = name, .input = .{ .op = op, .cmode = cmode, .imm8 = imm8 }, .expect = expect };
+    return .{
+        .encoding = encoding,
+        .name = name,
+        .input = .{ .op = op, .cmode = cmode, .imm8 = imm8 },
+        .expect = expect,
+    };
 }
 
 pub const vectors = [_]V{

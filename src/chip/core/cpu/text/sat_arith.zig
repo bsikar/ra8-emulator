@@ -1,8 +1,8 @@
 //! Text for the sat_arith group: qadd, qdadd, qsub and qdsub, printed as
 //! Rd, Rm, Rn (the operand order the Arm ARM uses).
 const Instr = @import("../instr.zig").Instr;
-const text = @import("text.zig");
 const sat = @import("../ops/sat_arith.zig");
+const text = @import("text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const kind: sat.Kind = @fromBackingInt(@intCast((instr.hw2 >> 4) & 0x3));

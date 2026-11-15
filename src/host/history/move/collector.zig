@@ -3,8 +3,9 @@
 //! without an owner for the child and a failure to start one refuses the
 //! exchange before it begins. It parks until the caller either reaps the
 //! child itself or hands it over.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const linux = std.os.linux;
 
 const Shared = struct {

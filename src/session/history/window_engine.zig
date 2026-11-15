@@ -1,30 +1,21 @@
-//! The reverse window (section 2.5): a byte-bounded run of slots on one
-//! line, [start, end], with a cursor inside it, built once by replay and
-//! then walked slot by slot in either direction.
+//! Byte-bounded reverse window on one history line (section 2.5).
+//! Slots hold trail byte/register deltas plus XOR deltas of adjacent machine state.
+//! RAM/CPU slots undo and redo by swapping; board slots restore pre-state and
+//! re-execute, refusing a divergent post digest with the slot's position.
 //!
-//! Each slot keeps the joined trail's byte records and register deltas
-//! (window_trail.zig) for guest memory and the core, and an XOR delta of
-//! the state beside guest memory (window_delta.zig). A slot whose delta
-//! stays inside the core and clock sections is a RAM/CPU slot: undo and
-//! redo swap its bytes and put the core sections back. Any other slot
-//! touched the board: undo restores its pre-state sections, and redo
-//! re-executes it from that pre-state and checks the stored post digest,
-//! refusing visibly with the slot's position on a mismatch.
-//!
-//! A hot checkpoint, the whole save stream, sits at or before the window
-//! start, so a window that evicted its oldest slots can still be rebuilt.
-//! The window belongs to the line it was built on: switching lines or a
-//! fork drops it. Building lives in window_rebuild.zig, the per-slot
-//! recording in window_record.zig.
+//! A hot checkpoint at or before the window start permits rebuilding after eviction.
+//! Switching lines or forking drops the window. window_rebuild builds it;
+//! window_record records each slot. Byte accounting includes headers and payloads.
 const std = @import("std");
-const trail_mod = @import("trail.zig");
-const wtrail_mod = @import("window_trail.zig");
+
 const delta_mod = @import("window_delta.zig");
 const digest_mod = @import("window_digest.zig");
 const port_mod = @import("window_port.zig");
-const record = @import("window_record.zig");
 const rebuild_mod = @import("window_rebuild.zig");
+const record = @import("window_record.zig");
 const store_mod = @import("ra8_chip").core.cpu.memory.store;
+const trail_mod = @import("trail.zig");
+const wtrail_mod = @import("window_trail.zig");
 
 const Allocator = std.mem.Allocator;
 pub const Port = port_mod.Port;
@@ -100,7 +91,13 @@ pub const ReverseWindow = struct {
     refused_slot: ?usize = null,
     rebuild: ?rebuild_mod.Job = null,
 
-    pub fn init(allocator: Allocator, port: Port, recording: *trail_mod.Recording, store: *store_mod.Store, budget: usize) ReverseWindow {
+    pub fn init(
+        allocator: Allocator,
+        port: Port,
+        recording: *trail_mod.Recording,
+        store: *store_mod.Store,
+        budget: usize,
+    ) ReverseWindow {
         return .{
             .allocator = allocator,
             .port = port,
@@ -120,7 +117,9 @@ pub const ReverseWindow = struct {
 
     /// Forgets every slot, the hot checkpoint and the line.
     pub fn drop(self: *ReverseWindow) void {
-        while (self.count() > 0) self.evictOldest();
+        while (self.count() > 0) {
+            self.evictOldest();
+        }
         self.slots.clearRetainingCapacity();
         self.head = 0;
         self.image.clearRetainingCapacity();
@@ -373,7 +372,9 @@ pub const ReverseWindow = struct {
 
     /// Evicts the oldest slots until the window fits its byte budget.
     pub fn enforceBudget(self: *ReverseWindow) void {
-        while (self.count() > 1 and self.usedBytes() > self.budget) self.evictOldest();
+        while (self.count() > 1 and self.usedBytes() > self.budget) {
+            self.evictOldest();
+        }
     }
 
     fn checkWalk(self: *ReverseWindow) !void {

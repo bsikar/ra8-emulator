@@ -1,12 +1,12 @@
 //! The ESP32-C6 side of the esp-hosted SPI link, one frame at a time.
-const frame = @import("frame.zig");
-const event = @import("event.zig");
-const rpc = @import("rpc.zig");
-const station = @import("station.zig");
 const dhcp = @import("dhcp.zig");
+const event = @import("event.zig");
+const frame = @import("frame.zig");
 const gateway = @import("gateway.zig");
 const net = @import("net.zig");
 const Queue = @import("queue.zig").Queue;
+const rpc = @import("rpc.zig");
+const station = @import("station.zig");
 
 /// Octets of the host capabilities announcement kept for inspection.
 pub const caps_capacity: usize = 17;

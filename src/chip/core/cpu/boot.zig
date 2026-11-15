@@ -5,35 +5,39 @@
 //! encoding no group in src/chip/core/cpu/ops/table.zig claims. This file prints
 //! one line saying which, so a corpus sweep can tell how far each image
 //! gets; main then prints the board's own report (report/run.zig, zigCore).
+const itm_api = @import("../../periph/itm.zig");
+const stop_report = @import("stop_report.zig");
+const stretch_run = @import("stretches.zig");
+
 const std = @import("std");
-const Guest = @import("memory/guest/guest.zig").Guest;
-const GuestBus = @import("memory/guest/bus.zig").GuestBus;
-const BoardBus = @import("board_bus.zig").BoardBus;
-const registry = @import("../../periph/registry.zig");
-const cpu_mod = @import("cpu.zig");
-const sleep_pace = @import("../sleep_pace.zig");
-const Choice = @import("choice.zig").Choice;
-const NvicSource = @import("exception/nvic_source.zig").NvicSource;
-const QuietSource = @import("exception/quiet_source.zig").QuietSource;
-const DecodeCache = @import("decode/cache.zig").DecodeCache;
-const BlockCache = @import("block/cache.zig").BlockCache;
-const sau = @import("../../periph/sau/sau.zig");
-const SauSource = @import("sau_source.zig").SauSource;
-const DataGate = @import("data_gate.zig").Gate;
+
 const Attribution = @import("attribution.zig").Attribution;
-const mpu = @import("../../periph/mpu/mpu.zig");
+const BlockCache = @import("block/cache.zig").BlockCache;
+const BoardBus = @import("board_bus.zig").BoardBus;
+const Bus = @import("bus.zig").Bus;
+const bus_fault = @import("../../periph/bus_fault.zig");
+const Choice = @import("choice.zig").Choice;
+const code_lines = @import("code_lines.zig");
+const cpu_mod = @import("cpu.zig");
+const DataGate = @import("data_gate.zig").Gate;
+const DecodeCache = @import("decode/cache.zig").DecodeCache;
+const exclusive_peer = @import("exclusive_peer.zig");
 const fault_clear = @import("../../periph/fault/clear.zig");
 const fault_status = @import("../../periph/fault/status.zig");
-const bus_fault = @import("../../periph/bus_fault.zig");
-const Bus = @import("bus.zig").Bus;
-const code_lines = @import("code_lines.zig");
-const exclusive_peer = @import("exclusive_peer.zig");
-const FpState = @import("fpu/state.zig").State;
+const Guest = @import("memory/guest/guest.zig").Guest;
+const GuestBus = @import("memory/guest/bus.zig").GuestBus;
+const mpu = @import("../../periph/mpu/mpu.zig");
 const mpu_check = @import("mpu_check.zig");
+const NvicSource = @import("exception/nvic_source.zig").NvicSource;
+const QuietSource = @import("exception/quiet_source.zig").QuietSource;
+const Reboot = @import("../reboot.zig").Reboot;
+const registry = @import("../../periph/registry.zig");
+const sau = @import("../../periph/sau/sau.zig");
+const SauSource = @import("sau_source.zig").SauSource;
+const scheduler = @import("../scheduler/scheduler.zig");
 const Source = @import("exception/source.zig").Source;
 const Until = @import("../until.zig").Until;
-const Reboot = @import("../reboot.zig").Reboot;
-const scheduler = @import("../scheduler/scheduler.zig");
+
 /// The register file a `--cpu zig` run hands back when it ends.
 pub const Regs = @import("regs.zig").Regs;
 
@@ -140,7 +144,7 @@ pub const Wiring = struct {
     /// the run returns, for a retire listener that reads it (RA8EMU-971).
     core: ?*?*cpu_mod.Cpu = null,
     /// Port 0 of the ITM, kept as text on a plain run (RA8EMU-629).
-    itm: ?*@import("../../periph/itm.zig").Itm = null,
+    itm: ?*itm_api.Itm = null,
     /// `--bus-errors`: a refused data and fetch accesses raise BusFaults,
     /// counted here (RA8EMU-641); null ends the run on them instead.
     bus_errors: ?*bus_fault.Tally = null,
@@ -152,9 +156,22 @@ pub const Wiring = struct {
 /// `periph` is the board's peripheral bus; a `--cpu zig` run reaches the
 /// peripherals through it.
 /// `ran` is set to how many instructions a `--cpu zig` run retired.
-pub fn start(out: anytype, choice: Choice, memory: Guest, periph: ?*registry.Bus, vector_base: u32, budget: u64, ran: *u64, wiring: Wiring) !u8 {
+pub fn start(
+    out: anytype,
+    choice: Choice,
+    memory: Guest,
+    periph: ?*registry.Bus,
+    vector_base: u32,
+    budget: u64,
+    ran: *u64,
+    wiring: Wiring,
+) !u8 {
     return switch (choice) {
-        .zig => if (periph) |board| runOnBoard(out, memory, board, vector_base, budget, ran, wiring) else run(out, memory, vector_base, budget, wiring.retire_listener),
+        .zig,
+        => if (periph) |board|
+            runOnBoard(out, memory, board, vector_base, budget, ran, wiring)
+        else
+            run(out, memory, vector_base, budget, wiring.retire_listener),
     };
 }
 
@@ -163,23 +180,84 @@ pub fn start(out: anytype, choice: Choice, memory: Guest, periph: ?*registry.Bus
 /// the core stopped short of it.
 pub fn run(out: anytype, memory: Guest, vector_base: u32, budget: u64, retire_listener: ?cpu_mod.RetireListener) !u8 {
     var reach = GuestBus.of(&memory, false);
-    return runOn(out, reach.view(), vector_base, budget, null, null, null, .{ .retire = retire_listener }, null, null, false, null, null);
+    return runOn(
+        out,
+        reach.view(),
+        vector_base,
+        budget,
+        null,
+        null,
+        null,
+        .{ .retire = retire_listener },
+        null,
+        null,
+        false,
+        null,
+        null,
+    );
 }
 
 /// As `run`, with the peripheral windows answered by the board's bus.
-pub fn runOnBoard(out: anytype, memory: Guest, periph: *registry.Bus, vector_base: u32, budget: u64, ran: ?*u64, wiring: Wiring) !u8 {
-    var board: BoardBus = .{ .memory = GuestBus.of(&memory, wiring.fast_memory), .periph = periph, .scs = .{ .partitions = wiring.partitions, .regions = wiring.regions, .regions_ns = wiring.regions_ns, .clears = wiring.clears, .cut = wiring.cut, .itm = wiring.itm } };
+pub fn runOnBoard(
+    out: anytype,
+    memory: Guest,
+    periph: *registry.Bus,
+    vector_base: u32,
+    budget: u64,
+    ran: ?*u64,
+    wiring: Wiring,
+) !u8 {
+    var board: BoardBus = .{
+        .memory = GuestBus.of(&memory, wiring.fast_memory),
+        .periph = periph,
+        .scs = .{
+            .partitions = wiring.partitions,
+            .regions = wiring.regions,
+            .regions_ns = wiring.regions_ns,
+            .clears = wiring.clears,
+            .cut = wiring.cut,
+            .itm = wiring.itm,
+        },
+    };
     var partitions: SauSource = undefined;
     const source: ?Attribution = if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
     } else null;
-    return runOn(out, board.view(), vector_base, budget, ran, wiring.boundary, wiring.wrap, .{ .retire = wiring.retire_listener, .fetch = wiring.fetch_guard, .bus_errors = wiring.bus_errors, .snapshot = wiring.snapshot, .peer = wiring.peer, .core = wiring.core }, &board, source, wiring.blocks, wiring.until, wiring.final);
+    return runOn(
+        out,
+        board.view(),
+        vector_base,
+        budget,
+        ran,
+        wiring.boundary,
+        wiring.wrap,
+        .{
+            .retire = wiring.retire_listener,
+            .fetch = wiring.fetch_guard,
+            .bus_errors = wiring.bus_errors,
+            .snapshot = wiring.snapshot,
+            .peer = wiring.peer,
+            .core = wiring.core,
+        },
+        &board,
+        source,
+        wiring.blocks,
+        wiring.until,
+        wiring.final,
+    );
 }
 
 /// What the core reports to, per instruction: after it retires and before
 /// it is fetched.
-const Watch = struct { retire: ?cpu_mod.RetireListener = null, fetch: ?cpu_mod.FetchGuard = null, bus_errors: ?*bus_fault.Tally = null, snapshot: ?Snapshot = null, peer: ?*cpu_mod.Cpu = null, core: ?*?*cpu_mod.Cpu = null };
+const Watch = struct {
+    retire: ?cpu_mod.RetireListener = null,
+    fetch: ?cpu_mod.FetchGuard = null,
+    bus_errors: ?*bus_fault.Tally = null,
+    snapshot: ?Snapshot = null,
+    peer: ?*cpu_mod.Cpu = null,
+    core: ?*?*cpu_mod.Cpu = null,
+};
 
 /// The run's decoded-block cache, joined to the machine's fanout; null when
 /// the run asked for none.
@@ -192,7 +270,21 @@ fn formCache(fan: *code_lines.Fanout, blocks: bool) !?*BlockCache {
     return cache;
 }
 
-fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, boundary: ?Boundary, wrap: ?Wrap, watch: Watch, board: ?*BoardBus, source: ?Attribution, blocks: bool, until: ?*Until, final: ?*Regs) !u8 {
+fn runOn(
+    out: anytype,
+    memory: Bus,
+    vector_base: u32,
+    budget: u64,
+    ran: ?*u64,
+    boundary: ?Boundary,
+    wrap: ?Wrap,
+    watch: Watch,
+    board: ?*BoardBus,
+    source: ?Attribution,
+    blocks: bool,
+    until: ?*Until,
+    final: ?*Regs,
+) !u8 {
     var pending: NvicSource = .{};
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
@@ -236,16 +328,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         gate = .{ .source = from, .current = &cpu.banked.current };
         cpu.bus.gate = &gate;
     }
-    if (board) |b| {
-        b.scs.fp = &cpu.fp;
-        b.security = &cpu.banked;
-        cpu.cut = b.scs.cut;
-        if (b.scs.regions) |unit| {
-            check = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };
-            b.armCheck(&check);
-            cpu.mpu = &check;
-        }
-    }
+    if (board) |b| armBoard(&cpu, b, &check);
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     if (wrap) |w| if (w.regsFn) |lend| lend(w.context, &cpu.regs);
     cpu.reset(vector_base) catch {
@@ -257,11 +340,7 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
         owed.in = try load(hook.context, &cpu);
     };
     const stopped = try stretches(&cpu, budget, boundary, until, &owed, watch.snapshot);
-    if (watch.snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, &cpu, owed.out);
-    if (owed.out != 0) if (boundary) |edge| {
-        try edge.closeFn(edge.context, owed.out);
-        if (edge.saved) |saved| saved.next();
-    };
+    try closeSnapshot(&cpu, owed.out, boundary, watch.snapshot);
     if (ran) |count| count.* = cpu.retired;
     if (final) |into| into.* = cpu.regs;
     const code = try report(out, cpu, stopped);
@@ -272,120 +351,24 @@ fn runOn(out: anytype, memory: Bus, vector_base: u32, budget: u64, ran: ?*u64, b
     return code;
 }
 
-/// The budget in stretches, each closed by the boundary. A stretch the core
-/// stops inside is not closed: it never ran to its edge. `owed` carries a
-/// stretch across a save and a load (RA8EMU-700).
-pub fn stretches(cpu: *cpu_mod.Cpu, budget: u64, boundary: ?Boundary, until: ?*Until, owed: *Owed, snapshot: ?Snapshot) !cpu_mod.Stop {
-    _ = until;
-    const edge = boundary orelse return cpu.run(budget);
-    if (cpu.cut) |latch| latch.instruction = &cpu.slots;
-    var local: scheduler.State = .{};
-    const saved = edge.saved orelse &local;
-    if (saved.stretch.full == 0) saved.stretch.carry = owed.in;
-    owed.out = 0;
-    var left = budget;
-    while (left > 0) {
-        // A loaded run can begin after CPU0 already finished this interval.
-        if (saved.cut or saved.at.phase != .cpu0) {
-            if (saved.at.phase == .cpu0) saved.endCpu0(true, false);
-            if (saved.at.phase == .cpu1) saved.endCpu0(false, false);
-            try edge.closeFn(edge.context, saved.stretch.carry);
-            saved.next();
-            if (edge.doneFn) |done| if (done(edge.context)) return .count;
-            if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
-            if (snapshot) |hook| try midway(hook, cpu);
-            continue;
-        }
-        if (saved.stretch.full == 0) saved.open(widthOf(cpu, edge), cpu.slots);
-        const width: u32 = @intCast(@min(left, saved.stretch.left()));
-        const before = cpu.slots;
-        const stopped = cpu.runToCount(width, cpu.slots + width);
-        const ran: u32 = @intCast(cpu.slots - before);
-        const elapsed = if (stopped == .count and cpu.waiting != null) width else ran;
-        saved.advance(elapsed, ran);
-        left -= elapsed;
-        const cut_pending = if (cpu.cut) |latch| latch.takePending() else null;
-        const cut = cut_pending != null;
-        saved.cut = cut;
-        saved.cut_pending = cut_pending orelse .{};
-        if (stopped != .count) {
-            owed.out = saved.stretch.carry;
-            return stopped;
-        }
-        if (!cut and saved.stretch.carry < saved.stretch.full) {
-            owed.out = saved.stretch.carry;
-            return .count;
-        }
-        saved.endCpu0(cut, false);
-        try edge.closeFn(edge.context, saved.stretch.carry);
-        saved.next();
-        if (edge.doneFn) |done| if (done(edge.context)) return .count;
-        if (edge.reboot) |pending| if (pending.requested) try rebooted(cpu, pending);
-        if (snapshot) |hook| try midway(hook, cpu);
+pub const stretches = stretch_run.stretches;
+pub const report = stop_report.report;
+
+fn armBoard(cpu: *cpu_mod.Cpu, b: *BoardBus, check: *mpu_check.Check) void {
+    b.scs.fp = &cpu.fp;
+    b.security = &cpu.banked;
+    cpu.cut = b.scs.cut;
+    if (b.scs.regions) |unit| {
+        check.* = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };
+        b.armCheck(check);
+        cpu.mpu = check;
     }
-    return .count;
 }
 
-/// A `--snapshot-at` write, once its time has come (RA8EMU-769).
-fn midway(hook: Snapshot, cpu: *const cpu_mod.Cpu) !void {
-    const due = hook.dueFn orelse return;
-    const write = hook.atFn orelse return;
-    if (due(hook.context)) try write(hook.context, cpu);
-}
-
-/// The next stretch's width: the boundary's, reached to the next edge by
-/// its `sleepFn` while the core sleeps with nothing to wake it.
-fn widthOf(cpu: *cpu_mod.Cpu, edge: Boundary) u32 {
-    _ = cpu;
-    const normal = @max(1, edge.widthFn(edge.context));
-    const reach = edge.sleepFn orelse return normal;
-    return @max(normal, reach(edge.context, normal));
-}
-
-/// A warm reboot of the Zig core: SP and PC from the vector table, PRIMASK clear, handler frames
-/// abandoned, RAM kept. The retired count is the run's, so it carries on.
-fn rebooted(cpu: *cpu_mod.Cpu, pending: *Reboot) !void {
-    pending.requested = false;
-    pending.performed +%= 1;
-    const retired = cpu.retired;
-    try cpu.reset(pending.vector_base);
-    cpu.retired = retired;
-}
-
-pub fn report(out: anytype, cpu: cpu_mod.Cpu, stopped: cpu_mod.Stop) !u8 {
-    switch (stopped) {
-        .count => {
-            try out.print("zig core: ran {d} instructions clean, pc 0x{X:0>8}\n", .{ cpu.retired, cpu.regs.pc });
-            return 0;
-        },
-        .unknown => |instr| try out.print(
-            "zig core: unknown encoding at {f} after {d} instructions\n",
-            .{ instr, cpu.retired },
-        ),
-        .invalid_state => |at| try out.print(
-            "zig core: EPSR.T clear at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-        .bus_fault => |at| try out.print(
-            "zig core: bus fault at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-        .invalid_return => |at| try out.print(
-            "zig core: invalid exception return at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-        .breakpoint => |at| try out.print(
-            "zig core: BKPT halted at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-        .unaligned => |at| try out.print(
-            "zig core: unaligned MemA access at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-        .stack_overflow => |at| try out.print(
-            "zig core: stack limit overrun at 0x{X:0>8} after {d} instructions\n",
-            .{ at, cpu.retired },
-        ),
-    }
-    return 1;
+fn closeSnapshot(cpu: *cpu_mod.Cpu, carried: u32, boundary: ?Boundary, snapshot: ?Snapshot) !void {
+    if (snapshot) |hook| if (hook.saveFn) |save| try save(hook.context, cpu, carried);
+    if (carried != 0) if (boundary) |edge| {
+        try edge.closeFn(edge.context, carried);
+        if (edge.saved) |saved| saved.next();
+    };
 }

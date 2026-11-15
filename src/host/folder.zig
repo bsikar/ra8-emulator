@@ -43,7 +43,9 @@ pub const Folder = struct {
     }
 
     pub fn free(allocator: std.mem.Allocator, entries: []Entry) void {
-        for (entries) |entry| allocator.free(entry.name);
+        for (entries) |entry| {
+            allocator.free(entry.name);
+        }
         allocator.free(entries);
     }
 

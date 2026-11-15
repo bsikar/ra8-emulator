@@ -5,16 +5,17 @@
 //! by write observer hits on active fetching layer spans or GLCDC register writes.
 //! Rate-capped to at most one copy per 1/60 s host time via injected clock.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const board_tap = @import("ra8_board").frame_tap;
-const glcdc_mod = @import("ra8_chip").periph.glcdc;
-const observer = @import("ra8_chip").core.cpu.memory.observer;
-const Store = @import("ra8_chip").core.cpu.memory.store.Store;
-const scheduler = @import("ra8_chip").core.scheduler;
-const frame_types = @import("frame_types.zig");
-const frame_queue = @import("frame_queue.zig");
 const frame_cache = @import("frame_cache.zig");
+const frame_queue = @import("frame_queue.zig");
+const frame_types = @import("frame_types.zig");
+const glcdc_mod = @import("ra8_chip").periph.glcdc;
 const nav_index = @import("nav_index.zig");
+const observer = @import("ra8_chip").core.cpu.memory.observer;
+const scheduler = @import("ra8_chip").core.scheduler;
+const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 
 pub const Position = frame_types.Position;
 pub const Glcdc = glcdc_mod.Glcdc;

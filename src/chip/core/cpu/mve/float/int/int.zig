@@ -11,17 +11,27 @@
 //! its flags count only when its first byte is, and the result is merged
 //! under the mask.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const Rounding = fpu.rounding.Rounding;
 const format = fpu.format;
-const qreg = @import("../../qreg.zig");
-const predicate = @import("../../predicate.zig");
 const float = @import("../float.zig");
+const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 /// Each float lane of `m` to a signed or `unsigned` integer with `fbits`
 /// fraction bits, rounded by `rounding`.
-pub fn toInt(d: u128, m: u128, size: float.Size, unsigned: bool, rounding: Rounding, fbits: u6, mask: u16, fpscr: *Fpscr) u128 {
+pub fn toInt(
+    d: u128,
+    m: u128,
+    size: float.Size,
+    unsigned: bool,
+    rounding: Rounding,
+    fbits: u6,
+    mask: u16,
+    fpscr: *Fpscr,
+) u128 {
     const qs = float.qsize(size);
     const bytes: u4 = if (size == .half) 2 else 4;
     var out = d;

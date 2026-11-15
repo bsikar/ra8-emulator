@@ -10,14 +10,15 @@
 //! set, or already in HardFault) is lockup, which the caller reports as a
 //! stop instead.
 const std = @import("std");
-const bus = @import("../bus.zig");
-const memmap = @import("../../memmap.zig");
-const fault_route = @import("../../../periph/fault/route.zig");
-const status = @import("../../../periph/fault/status.zig");
+
 const active = @import("active.zig");
-const dispatch = @import("dispatch.zig");
+const bus = @import("../bus.zig");
 const Cpu = @import("../cpu.zig").Cpu;
+const dispatch = @import("dispatch.zig");
+const fault_route = @import("../../../periph/fault/route.zig");
+const memmap = @import("../../memmap.zig");
 const State = @import("../../banked.zig").State;
+const status = @import("../../../periph/fault/status.zig");
 const target = @import("target.zig");
 
 pub const Error = bus.Error || error{Lockup};

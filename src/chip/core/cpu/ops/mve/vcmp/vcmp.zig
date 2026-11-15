@@ -7,14 +7,15 @@
 //! advances. Size 3 is VPNOT, VPSEL and VPST, and the FP compares have
 //! hw1 0xEE31 or 0xFE31, so neither is claimed. Rm of SP or PC is left
 //! unclaimed. Lane semantics are in src/chip/core/cpu/mve/compare/compare.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
+pub const fp = @import("fp.zig");
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
-const vpst = @import("../vpst.zig");
+const op = @import("../../../op.zig");
 const scalar_ops = @import("../int/scalar.zig");
-pub const fp = @import("fp.zig");
+const vpst = @import("../vpst.zig");
+
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_vcmp", .decode = decode, .oracle = false };

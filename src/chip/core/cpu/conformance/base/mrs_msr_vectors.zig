@@ -58,7 +58,17 @@ pub const Out = struct {
 
 const V = vector.Vector(In, Out);
 const group = "mrs_msr";
-const none: Out = .{ .claimed = false, .r0 = 0, .apsr = 0, .primask = 0, .basepri = 0, .msp = 0, .psp = 0, .msplim = 0, .ns_msp = 0 };
+const none: Out = .{
+    .claimed = false,
+    .r0 = 0,
+    .apsr = 0,
+    .primask = 0,
+    .basepri = 0,
+    .msp = 0,
+    .psp = 0,
+    .msplim = 0,
+    .ns_msp = 0,
+};
 
 const mrs_hw1 = 0xF3EF;
 /// MSR with r1 as the source.
@@ -103,11 +113,31 @@ const reads = [_]V{
     mrs("mrs control", 20, 0),
     mrs("mrs pac_key_p_0", 0x20, 0),
     mrs("mrs msp_ns from Secure", 0x88, seed.ns_msp),
-    vec("unprivileged mrs msp reads zero", .{ .hw1 = mrs_hw1, .hw2 = 0x8008, .npriv = true }, .{ .r0 = 0, .control = 1 }),
-    vec("unprivileged mrs primask reads zero", .{ .hw1 = mrs_hw1, .hw2 = 0x8010, .npriv = true }, .{ .r0 = 0, .control = 1 }),
-    vec("unprivileged mrs control reads it", .{ .hw1 = mrs_hw1, .hw2 = 0x8014, .npriv = true }, .{ .r0 = 1, .control = 1 }),
-    vec("unprivileged mrs apsr reads the flags", .{ .hw1 = mrs_hw1, .hw2 = 0x8000, .npriv = true }, .{ .r0 = seed.apsr, .control = 1 }),
-    vec("unprivileged mrs msp_ns reads zero", .{ .hw1 = mrs_hw1, .hw2 = 0x8088, .npriv = true }, .{ .r0 = 0, .control = 1 }),
+    vec(
+        "unprivileged mrs msp reads zero",
+        .{ .hw1 = mrs_hw1, .hw2 = 0x8008, .npriv = true },
+        .{ .r0 = 0, .control = 1 },
+    ),
+    vec(
+        "unprivileged mrs primask reads zero",
+        .{ .hw1 = mrs_hw1, .hw2 = 0x8010, .npriv = true },
+        .{ .r0 = 0, .control = 1 },
+    ),
+    vec(
+        "unprivileged mrs control reads it",
+        .{ .hw1 = mrs_hw1, .hw2 = 0x8014, .npriv = true },
+        .{ .r0 = 1, .control = 1 },
+    ),
+    vec(
+        "unprivileged mrs apsr reads the flags",
+        .{ .hw1 = mrs_hw1, .hw2 = 0x8000, .npriv = true },
+        .{ .r0 = seed.apsr, .control = 1 },
+    ),
+    vec(
+        "unprivileged mrs msp_ns reads zero",
+        .{ .hw1 = mrs_hw1, .hw2 = 0x8088, .npriv = true },
+        .{ .r0 = 0, .control = 1 },
+    ),
     vec("mrs into r12 leaves r0", .{ .hw1 = mrs_hw1, .hw2 = 0x8C00 }, .{ .r12 = seed.apsr }),
 };
 
@@ -128,13 +158,29 @@ const writes = [_]V{
     vec("msr faultmask sets it in Thread mode", msr(19, 2, 1), .{ .faultmask = 1 }),
     vec("msr faultmask cannot set it in HardFault", .{ .hw1 = msr_hw1, .hw2 = 0x8813, .ipsr = 3, .rs = 1 }, .{}),
     vec("msr control sets nPRIV and SPSEL", msr(20, 2, 3), .{ .control = 3 }),
-    vec("msr control keeps SPSEL in Handler mode", .{ .hw1 = msr_hw1, .hw2 = 0x8814, .ipsr = 11, .rs = 3 }, .{ .control = 1 }),
+    vec(
+        "msr control keeps SPSEL in Handler mode",
+        .{ .hw1 = msr_hw1, .hw2 = 0x8814, .ipsr = 11, .rs = 3 },
+        .{ .control = 1 },
+    ),
     vec("msr control cannot write SFPA", msr(20, 2, 0x0C), .{ .control = 4 }),
     vec("msr msp_ns from Secure drops bits 1:0", msr(0x88, 2, 0x3000_1003), .{ .ns_msp = 0x3000_1000 }),
-    vec("unprivileged msr msp is ignored", .{ .hw1 = msr_hw1, .hw2 = 0x8808, .npriv = true, .rs = 0x2000_2000 }, .{ .control = 1 }),
+    vec(
+        "unprivileged msr msp is ignored",
+        .{ .hw1 = msr_hw1, .hw2 = 0x8808, .npriv = true, .rs = 0x2000_2000 },
+        .{ .control = 1 },
+    ),
     vec("unprivileged msr primask is ignored", .{ .hw1 = msr_hw1, .hw2 = 0x8810, .npriv = true }, .{ .control = 1 }),
-    vec("unprivileged msr msp_ns is ignored", .{ .hw1 = msr_hw1, .hw2 = 0x8888, .npriv = true, .rs = 4 }, .{ .control = 1 }),
-    vec("unprivileged msr apsr writes the flags", .{ .hw1 = msr_hw1, .hw2 = 0x8800, .npriv = true }, .{ .apsr = 0x0007_0000, .control = 1 }),
+    vec(
+        "unprivileged msr msp_ns is ignored",
+        .{ .hw1 = msr_hw1, .hw2 = 0x8888, .npriv = true, .rs = 4 },
+        .{ .control = 1 },
+    ),
+    vec(
+        "unprivileged msr apsr writes the flags",
+        .{ .hw1 = msr_hw1, .hw2 = 0x8800, .npriv = true },
+        .{ .apsr = 0x0007_0000, .control = 1 },
+    ),
 };
 
 const unclaimed = [_]V{

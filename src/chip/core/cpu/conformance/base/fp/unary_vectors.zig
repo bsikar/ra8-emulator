@@ -66,33 +66,85 @@ const immediate = [_]V{
 
 const single = [_]V{
     vec("vmov.f32 s0, s1", .{ .hw1 = 0xEEB0, .hw2 = 0x0A60, .src = 0x1234_5678 }, .{ .dst = 0x1234_5678 }),
-    vec("vmov.f32 s1, s0 takes D as the low bit", .{ .hw1 = 0xEEF0, .hw2 = 0x0A40, .src = 0x0BAD_F00D, .src_reg = 0, .dst_reg = 1 }, .{ .dst = 0x0BAD_F00D }),
-    vec("vmov.f32 s31, s30", .{ .hw1 = 0xEEF0, .hw2 = 0xFA4F, .src = 0x4242_4242, .src_reg = 30, .dst_reg = 31 }, .{ .dst = 0x4242_4242 }),
-    vec("vmov.f32 keeps a signalling nan", .{ .hw1 = 0xEEB0, .hw2 = 0x0A60, .src = 0x7F80_0001 }, .{ .dst = 0x7F80_0001 }),
+    vec(
+        "vmov.f32 s1, s0 takes D as the low bit",
+        .{ .hw1 = 0xEEF0, .hw2 = 0x0A40, .src = 0x0BAD_F00D, .src_reg = 0, .dst_reg = 1 },
+        .{ .dst = 0x0BAD_F00D },
+    ),
+    vec(
+        "vmov.f32 s31, s30",
+        .{ .hw1 = 0xEEF0, .hw2 = 0xFA4F, .src = 0x4242_4242, .src_reg = 30, .dst_reg = 31 },
+        .{ .dst = 0x4242_4242 },
+    ),
+    vec(
+        "vmov.f32 keeps a signalling nan",
+        .{ .hw1 = 0xEEB0, .hw2 = 0x0A60, .src = 0x7F80_0001 },
+        .{ .dst = 0x7F80_0001 },
+    ),
     vec("vabs.f32 of -1.5", .{ .hw1 = 0xEEB0, .hw2 = 0x0AE0, .src = 0xBFC0_0000 }, .{ .dst = 0x3FC0_0000 }),
     vec("vabs.f32 of -0", .{ .hw1 = 0xEEB0, .hw2 = 0x0AE0, .src = 0x8000_0000 }, .{ .dst = 0 }),
-    vec("vabs.f32 of a negative nan moves bits", .{ .hw1 = 0xEEB0, .hw2 = 0x0AE0, .src = 0xFFC0_0000 }, .{ .dst = 0x7FC0_0000 }),
+    vec(
+        "vabs.f32 of a negative nan moves bits",
+        .{ .hw1 = 0xEEB0, .hw2 = 0x0AE0, .src = 0xFFC0_0000 },
+        .{ .dst = 0x7FC0_0000 },
+    ),
     vec("vneg.f32 of 1.0", .{ .hw1 = 0xEEB1, .hw2 = 0x0A60, .src = 0x3F80_0000 }, .{ .dst = 0xBF80_0000 }),
     vec("vneg.f32 of +0", .{ .hw1 = 0xEEB1, .hw2 = 0x0A60, .src = 0 }, .{ .dst = 0x8000_0000 }),
-    vec("vneg.f32 of a signalling nan raises nothing", .{ .hw1 = 0xEEB1, .hw2 = 0x0A60, .src = 0x7F80_0001 }, .{ .dst = 0xFF80_0001 }),
+    vec(
+        "vneg.f32 of a signalling nan raises nothing",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0A60, .src = 0x7F80_0001 },
+        .{ .dst = 0xFF80_0001 },
+    ),
 };
 
 const sqrt = [_]V{
     vec("vsqrt.f32 of 4 is exact", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x4080_0000 }, .{ .dst = 0x4000_0000 }),
-    vec("vsqrt.f32 of 2 rounds and raises ixc", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x4000_0000 }, .{ .dst = 0x3FB5_04F3, .fpscr = ixc }),
-    vec("vsqrt.f32 of -1 is the default nan", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0xBF80_0000 }, .{ .dst = 0x7FC0_0000, .fpscr = ioc }),
+    vec(
+        "vsqrt.f32 of 2 rounds and raises ixc",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x4000_0000 },
+        .{ .dst = 0x3FB5_04F3, .fpscr = ixc },
+    ),
+    vec(
+        "vsqrt.f32 of -1 is the default nan",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0xBF80_0000 },
+        .{ .dst = 0x7FC0_0000, .fpscr = ioc },
+    ),
     vec("vsqrt.f32 of -0 is -0", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x8000_0000 }, .{ .dst = 0x8000_0000 }),
     vec("vsqrt.f32 of +inf is +inf", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x7F80_0000 }, .{ .dst = 0x7F80_0000 }),
-    vec("vsqrt.f32 quiets a signalling nan", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x7F80_0001 }, .{ .dst = 0x7FC0_0001, .fpscr = ioc }),
+    vec(
+        "vsqrt.f32 quiets a signalling nan",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x7F80_0001 },
+        .{ .dst = 0x7FC0_0001, .fpscr = ioc },
+    ),
     vec("vsqrt.f32 passes a quiet nan", .{ .hw1 = 0xEEB1, .hw2 = 0x0AE0, .src = 0x7FC0_1234 }, .{ .dst = 0x7FC0_1234 }),
 };
 
 const double = [_]V{
-    vec("vmov.f64 d0, d1", .{ .hw1 = 0xEEB0, .hw2 = 0x0B41, .double = true, .src = 0x0123_4567_89AB_CDEF }, .{ .dst = 0x0123_4567_89AB_CDEF }),
-    vec("vabs.f64 of -2.0", .{ .hw1 = 0xEEB0, .hw2 = 0x0BC1, .double = true, .src = 0xC000_0000_0000_0000 }, .{ .dst = 0x4000_0000_0000_0000 }),
-    vec("vneg.f64 of 1.0", .{ .hw1 = 0xEEB1, .hw2 = 0x0B41, .double = true, .src = 0x3FF0_0000_0000_0000 }, .{ .dst = 0xBFF0_0000_0000_0000 }),
-    vec("vsqrt.f64 of 4.0", .{ .hw1 = 0xEEB1, .hw2 = 0x0BC1, .double = true, .src = 0x4010_0000_0000_0000 }, .{ .dst = 0x4000_0000_0000_0000 }),
-    vec("vsqrt.f64 of 2.0 rounds and raises ixc", .{ .hw1 = 0xEEB1, .hw2 = 0x0BC1, .double = true, .src = 0x4000_0000_0000_0000 }, .{ .dst = 0x3FF6_A09E_667F_3BCD, .fpscr = ixc }),
+    vec(
+        "vmov.f64 d0, d1",
+        .{ .hw1 = 0xEEB0, .hw2 = 0x0B41, .double = true, .src = 0x0123_4567_89AB_CDEF },
+        .{ .dst = 0x0123_4567_89AB_CDEF },
+    ),
+    vec(
+        "vabs.f64 of -2.0",
+        .{ .hw1 = 0xEEB0, .hw2 = 0x0BC1, .double = true, .src = 0xC000_0000_0000_0000 },
+        .{ .dst = 0x4000_0000_0000_0000 },
+    ),
+    vec(
+        "vneg.f64 of 1.0",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0B41, .double = true, .src = 0x3FF0_0000_0000_0000 },
+        .{ .dst = 0xBFF0_0000_0000_0000 },
+    ),
+    vec(
+        "vsqrt.f64 of 4.0",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0BC1, .double = true, .src = 0x4010_0000_0000_0000 },
+        .{ .dst = 0x4000_0000_0000_0000 },
+    ),
+    vec(
+        "vsqrt.f64 of 2.0 rounds and raises ixc",
+        .{ .hw1 = 0xEEB1, .hw2 = 0x0BC1, .double = true, .src = 0x4000_0000_0000_0000 },
+        .{ .dst = 0x3FF6_A09E_667F_3BCD, .fpscr = ixc },
+    ),
 };
 
 const half = [_]V{

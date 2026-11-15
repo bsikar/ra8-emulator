@@ -4,9 +4,9 @@
 //! of PC). We write `.w` on everything but ORN, RSB and RRX, which
 //! have no 16-bit twin. The shift suffix is decimal; the shift aliases print
 //! their amount as an ordinary immediate.
+const dp = @import("../../ops/dp/shifted.zig");
 const Instr = @import("../../instr.zig").Instr;
 const text = @import("../text.zig");
-const dp = @import("../../ops/dp/shifted.zig");
 
 const opcodes = dp.opcodes;
 const kinds = [4][]const u8{ "lsl", "lsr", "asr", "ror" };
@@ -24,7 +24,17 @@ pub fn print(instr: Instr, out: *text.Text) void {
         return suffix(f, out);
     }
     const wide: []const u8 = if (f.opcode == opcodes.orn or f.opcode == opcodes.rsb) "" else ".w";
-    out.put("{s}{s}{s} {s}, {s}, {s}", .{ mnemonic(f.opcode), s, wide, text.names[f.rd], text.names[f.rn], text.names[f.rm] });
+    out.put(
+        "{s}{s}{s} {s}, {s}, {s}",
+        .{
+            mnemonic(f.opcode),
+            s,
+            wide,
+            text.names[f.rd],
+            text.names[f.rn],
+            text.names[f.rm],
+        },
+    );
     suffix(f, out);
 }
 

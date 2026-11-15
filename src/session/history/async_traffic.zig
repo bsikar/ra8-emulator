@@ -5,7 +5,9 @@
 //! traffic is queued into AsyncQueue without mutating the machine or creating forks.
 //! When execution reaches the line's recorded end, the queue is drained in order.
 //! When a past fork disconnects the network, the queue is cleared with a report.
-const std = @import("std");
+const line = @import("../line.zig");
+const position = @import("position.zig");
+
 const api = @import("../api.zig");
 const async_queue = @import("async_queue.zig");
 
@@ -29,7 +31,7 @@ pub const UsbipTrafficHook = struct {
     context: *anyopaque,
     deliverFn: *const fn (context: *anyopaque, data: []const u8) anyerror!void,
     /// Stage the disconnected host in the new branch's transaction.
-    recordForkFn: ?*const fn (context: *anyopaque, at: @import("position.zig").Position) anyerror!void = null,
+    recordForkFn: ?*const fn (context: *anyopaque, at: position.Position) anyerror!void = null,
     /// Drop the old host only once the fork and its intervention succeed.
     forkedFn: ?*const fn (context: *anyopaque) void = null,
 };
@@ -53,7 +55,7 @@ pub const AsyncTraffic = struct {
 
 /// Returns whether the machine cursor is strictly before the active line's recorded end.
 pub fn isCursorInPast(session: *const api.Session) bool {
-    return @import("../line.zig").inPast(session);
+    return line.inPast(session);
 }
 
 /// Ingests asynchronous host traffic. Queues if in past; delivers immediately if live.

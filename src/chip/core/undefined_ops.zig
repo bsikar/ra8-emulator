@@ -31,6 +31,7 @@
 //! is a run whose results downstream of it mean nothing, and the report no
 //! longer calls such a run clean without qualification.
 const std = @import("std");
+
 const loaded_image = @import("loaded_image.zig");
 const long_shift = @import("long_shift.zig");
 
@@ -112,7 +113,9 @@ pub const Found = struct {
     /// anything, which the report already says rather than implying a
     /// silent zero.
     pub fn stopOnRun(self: *Found) void {
-        for (self.kept()) |*site| site.stop = true;
+        for (self.kept()) |*site| {
+            site.stop = true;
+        }
     }
 
     /// The site that ended the run, if one did.

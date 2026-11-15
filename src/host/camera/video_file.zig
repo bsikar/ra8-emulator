@@ -10,6 +10,7 @@
 //! the last frame the clip wraps with `,loop` and holds its last frame
 //! otherwise. A trailing frame cut short by the end of the file is dropped.
 const std = @import("std");
+
 const decoded = @import("decoded_image.zig");
 pub const y4m = @import("y4m/header.zig");
 pub const yuv = @import("y4m/frame.zig");

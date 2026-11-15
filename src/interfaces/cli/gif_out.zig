@@ -2,6 +2,7 @@
 //! The encoder only produces bytes; this owns the file, syncs it once the
 //! last frame is written and closes it.
 const std = @import("std");
+
 const gif = @import("ra8_render").gif;
 
 pub const Writer = struct {

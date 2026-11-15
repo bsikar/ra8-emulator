@@ -7,11 +7,11 @@
 //! purpose to prove it is dead, then clears the bit and carries on. Only the
 //! gate at the end of the run tells them apart, so that is what is asked
 //! here rather than the counters alone.
+const std = @import("std");
+
 const ckcr = @import("ra8_chip").periph.ckcr;
 const ckdiv = @import("ra8_chip").periph.ckdiv;
-const oscsf = @import("ra8_chip").periph.oscsf;
 const mrms = @import("ra8_chip").periph.mrms;
-const std = @import("std");
 
 const Board = @import("ra8_board").board.Board;
 
@@ -157,7 +157,8 @@ pub fn section(board: *Board, out: Writer) !void {
     const verdict = board.modules.verdict();
     if (verdict.anyStopped()) {
         try out.print(
-            "module stop: DROPPED {d} read(s) and {d} write(s) to stopped peripheral(s), last {s}, firmware forgot to cancel module stop\n",
+            "module stop: DROPPED {d} read(s) and {d} write(s) to stopped peripheral(s), " ++
+                "last {s}, firmware forgot to cancel module stop\n",
             .{ verdict.stopped_reads, verdict.stopped_writes, verdict.last_stopped },
         );
     }

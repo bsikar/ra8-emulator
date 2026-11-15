@@ -41,13 +41,29 @@ const masks = [_]V{
     vec("vpst mask 1100", .{ .hw1 = 0xFE71, .hw2 = 0x8F4D }, .{ .vpr = 0x00CC_00FF }),
     vec("vpst mask 1111", .{ .hw1 = 0xFE71, .hw2 = 0xEF4D }, .{ .vpr = 0x00FF_00FF }),
     vec("vpst leaves p0 alone", .{ .hw2 = 0x4F4D, .vpr = 0x0000_ABCD }, .{ .vpr = 0x0022_ABCD }),
-    vec("vpst replaces an open block's masks", .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0022_1234 }, .{ .vpr = 0x0088_1234 }),
+    vec(
+        "vpst replaces an open block's masks",
+        .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0022_1234 },
+        .{ .vpr = 0x0088_1234 },
+    ),
 };
 
 const resumed = [_]V{
-    vec("eci a0 still writes both masks", .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x10 }, .{ .vpr = 0x0088_00FF }),
-    vec("eci a0a1 keeps mask01", .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x20 }, .{ .vpr = 0x0085_00FF }),
-    vec("eci a0a1a2 keeps mask01", .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x40 }, .{ .vpr = 0x0085_00FF }),
+    vec(
+        "eci a0 still writes both masks",
+        .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x10 },
+        .{ .vpr = 0x0088_00FF },
+    ),
+    vec(
+        "eci a0a1 keeps mask01",
+        .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x20 },
+        .{ .vpr = 0x0085_00FF },
+    ),
+    vec(
+        "eci a0a1a2 keeps mask01",
+        .{ .hw1 = 0xFE71, .hw2 = 0x0F4D, .vpr = 0x0055_00FF, .it = 0x40 },
+        .{ .vpr = 0x0085_00FF },
+    ),
 };
 
 const unclaimed = [_]V{

@@ -11,11 +11,11 @@
 //! It stays off whenever anyone watches single instructions (a retire
 //! listener, the lockstep wrapper, which runs without a quiet source) and
 //! for any block that is not tracked, so rewritten code never counts.
-const Cpu = @import("cpu.zig").Cpu;
-const regs_mod = @import("regs.zig");
-const it_state = @import("it_state.zig");
 const block = @import("block/block.zig");
 const block_cache = @import("block/cache.zig");
+const Cpu = @import("cpu.zig").Cpu;
+const it_state = @import("it_state.zig");
+const regs_mod = @import("regs.zig");
 
 /// The narrow NOP hint.
 const nop: u16 = 0xBF00;

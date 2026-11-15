@@ -2,9 +2,9 @@
 //! instruction. Word 0 is the initial Main stack pointer and word 1 is the
 //! reset handler, whose bit 0 becomes EPSR.T.
 const bus = @import("bus.zig");
+const Cpu = @import("cpu.zig").Cpu;
 const regs_mod = @import("regs.zig");
 pub const scs = @import("exception/reset_scs.zig");
-const Cpu = @import("cpu.zig").Cpu;
 
 /// LR after reset. All ones is an illegal exception return, so a reset
 /// handler that returns faults instead of running off into memory.

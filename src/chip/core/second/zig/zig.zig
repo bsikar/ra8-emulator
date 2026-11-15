@@ -11,30 +11,30 @@
 //! Its NVIC, decode cache and block cache are its own too, and it polls
 //! the NVIC through its own quiet source, as CPU0 does (RA8EMU-440).
 const std = @import("std");
-const registry = @import("../../../periph/registry.zig");
-const cpu_mod = @import("../../cpu/cpu.zig");
+
+const BlockCache = @import("../../cpu/block/cache.zig").BlockCache;
 const BoardBus = @import("../../cpu/board_bus.zig").BoardBus;
+const cpu_mod = @import("../../cpu/cpu.zig");
+const cpuid = @import("../../../periph/cpuid.zig");
+const DecodeCache = @import("../../cpu/decode/cache.zig").DecodeCache;
+const fault_clear = @import("../../../periph/fault/clear.zig");
 const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
 const GuestBus = @import("../../cpu/memory/guest/bus.zig").GuestBus;
-const mpu_check = @import("../../cpu/mpu_check.zig");
-const NvicSource = @import("../../cpu/exception/nvic_source.zig").NvicSource;
-const QuietSource = @import("../../cpu/exception/quiet_source.zig").QuietSource;
-const DecodeCache = @import("../../cpu/decode/cache.zig").DecodeCache;
-const BlockCache = @import("../../cpu/block/cache.zig").BlockCache;
-const code_lines = @import("../../cpu/code_lines.zig");
-const part = @import("../../part/part.zig");
-const Second = @import("../core.zig").Second;
-const sau = @import("../../../periph/sau/sau.zig");
-const mpu = @import("../../../periph/mpu/mpu.zig");
-const fault_clear = @import("../../../periph/fault/clear.zig");
-const mpu_guard = @import("../../mpu_guard.zig");
-const scb = @import("../../../periph/scb/scb.zig");
-const cpuid = @import("../../../periph/cpuid.zig");
 const loaded_image = @import("../../loaded_image.zig");
+const mpu = @import("../../../periph/mpu/mpu.zig");
+const mpu_check = @import("../../cpu/mpu_check.zig");
+const mpu_guard = @import("../../mpu_guard.zig");
+const NvicSource = @import("../../cpu/exception/nvic_source.zig").NvicSource;
+const part = @import("../../part/part.zig");
+const QuietSource = @import("../../cpu/exception/quiet_source.zig").QuietSource;
+const registry = @import("../../../periph/registry.zig");
+pub const run = @import("run.zig");
+const sau = @import("../../../periph/sau/sau.zig");
+const scb = @import("../../../periph/scb/scb.zig");
+const Second = @import("../core.zig").Second;
+const second_core = @import("../core.zig");
 const Store = @import("../../cpu/memory/store.zig").Store;
 const Wiring = @import("../wiring.zig").Wiring;
-const second_core = @import("../core.zig");
-pub const run = @import("run.zig");
 
 /// What CPU1's Zig core reads from outside its memory: its own SAU, MPU
 /// table and fault clears, and the table it resets from.
@@ -45,7 +45,12 @@ pub const Units = struct {
     vector_base: u32,
 
     pub fn of(second: *Second) Units {
-        return .{ .partitions = &second.partitions, .regions = &second.regions, .clears = &second.clears, .vector_base = second.state.vector_base };
+        return .{
+            .partitions = &second.partitions,
+            .regions = &second.regions,
+            .clears = &second.clears,
+            .vector_base = second.state.vector_base,
+        };
     }
 };
 
@@ -74,7 +79,12 @@ pub const SecondZig = struct {
             .scs = .{ .partitions = units.partitions, .regions = units.regions, .clears = units.clears },
         };
         self.quiet = .{ .inner = self.pending.source(), .memory = self.board.view() };
-        self.cpu = .{ .bus = self.quiet.bus(), .source = self.quiet.source(), .quiet = &self.quiet, .profile = part.cpu1_profile };
+        self.cpu = .{
+            .bus = self.quiet.bus(),
+            .source = self.quiet.source(),
+            .quiet = &self.quiet,
+            .profile = part.cpu1_profile,
+        };
         self.cpu.decoded = &self.decoded;
         self.board.security = &self.cpu.banked;
         // CPACR reaches CPU1's own FP state (RA8EMU-950).
@@ -157,7 +167,13 @@ pub const Parts = struct {
 /// Prime CPU1's PPB windows into `memory` as an M33, load `image` there,
 /// and open `core` over it reset from the image's vector table
 /// (RA8EMU-574, shared with the run path by RA8EMU-588).
-pub fn bringUp(core: *SecondZig, memory: Guest, wiring: Wiring, parts: Parts, image: loaded_image.Image) !second_core.Seeded {
+pub fn bringUp(
+    core: *SecondZig,
+    memory: Guest,
+    wiring: Wiring,
+    parts: Parts,
+    image: loaded_image.Image,
+) !second_core.Seeded {
     const setup = memory.asInitiator(.none);
     try wiring.prime(setup, .{
         .partitions = parts.partitions,
@@ -168,7 +184,12 @@ pub fn bringUp(core: *SecondZig, memory: Guest, wiring: Wiring, parts: Parts, im
         .clears = parts.clears,
     });
     const seeded = try second_core.seedImage(setup, image);
-    const units: Units = .{ .partitions = parts.partitions, .regions = parts.regions, .clears = parts.clears, .vector_base = seeded.vector_base };
+    const units: Units = .{
+        .partitions = parts.partitions,
+        .regions = parts.regions,
+        .clears = parts.clears,
+        .vector_base = seeded.vector_base,
+    };
     try core.openOn(memory, units, wiring.bus);
     return seeded;
 }

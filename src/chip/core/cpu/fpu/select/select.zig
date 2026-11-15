@@ -4,6 +4,7 @@
 //! or not, passes through untouched and no FPSCR flag is ever raised.
 
 pub const vectors = @import("vectors.zig");
+
 /// The four conditions VSEL encodes, by their cc field.
 pub const Cond = enum(u2) { eq = 0b00, vs = 0b01, ge = 0b10, gt = 0b11 };
 

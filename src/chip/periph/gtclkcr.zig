@@ -41,8 +41,8 @@
 //! this register, and `programmed()` is here for whatever takes it on. No
 //! clock rate is derived either: BPEN selects PCLKA as the synchronous
 //! source, and this emulator has no frequency behind PCLKA to select.
-const periph = @import("registry.zig");
 const mstp = @import("mstp/mstp.zig");
+const periph = @import("registry.zig");
 
 pub const win_base: u32 = 0x4032_3F10;
 pub const win_span: u32 = 4;

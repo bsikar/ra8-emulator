@@ -64,7 +64,9 @@ pub const EventQueue = struct {
 
     fn removeAt(self: *EventQueue, index: usize) void {
         var at = index;
-        while (at + 1 < self.count) : (at += 1) self.items[at] = self.items[at + 1];
+        while (at + 1 < self.count) : (at += 1) {
+            self.items[at] = self.items[at + 1];
+        }
         self.count -= 1;
     }
 };

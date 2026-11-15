@@ -6,6 +6,7 @@
 //! missing or invalid, the current file is adopted if valid. If neither decodes,
 //! recovery yields a graph rebuilt from log branch records or the base line.
 const std = @import("std");
+
 const branch_mod = @import("branch.zig");
 const codec = @import("branches_codec.zig");
 const history_format = @import("format.zig");

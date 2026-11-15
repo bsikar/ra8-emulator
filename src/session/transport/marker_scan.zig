@@ -8,6 +8,7 @@
 //! landing or intervention is written for a position the log already holds.
 
 const std = @import("std");
+
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
 const line = @import("../line.zig");
@@ -92,7 +93,10 @@ fn walk(
             .core => return Error.ScanFault,
             .stop => |stop| switch (stop) {
                 .breakpoint => |hit| if (hit == id) {
-                    const order = session.comparePositions(line.currentPosition(session), router.recordedEnd()) catch .gt;
+                    const order = session.comparePositions(
+                        line.currentPosition(session),
+                        router.recordedEnd(),
+                    ) catch .gt;
                     if (order != .gt) try note(session, allocator, out);
                 },
                 else => {},

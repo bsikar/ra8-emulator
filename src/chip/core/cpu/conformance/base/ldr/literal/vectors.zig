@@ -43,7 +43,11 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 pub const all = [_]V{
     vec("ldr r0, [pc, #0]", .{ .hw1 = 0x4800, .at = 0x2000_0104 }, .{}),
     vec("ldr r0, [pc, #4]", .{ .hw1 = 0x4801, .at = 0x2000_0108 }, .{}),
-    vec("ldr r0, [pc, #0] from a halfword address aligns PC down", .{ .hw1 = 0x4800, .address = 0x2000_0102, .at = 0x2000_0104 }, .{}),
+    vec(
+        "ldr r0, [pc, #0] from a halfword address aligns PC down",
+        .{ .hw1 = 0x4800, .address = 0x2000_0102, .at = 0x2000_0104 },
+        .{},
+    ),
     vec("ldr r0, [pc, #4] from a halfword address", .{ .hw1 = 0x4801, .address = 0x2000_0102, .at = 0x2000_0108 }, .{}),
     vec("ldr r7, [pc, #8]", .{ .hw1 = 0x4F02, .rt = 7, .at = 0x2000_010C }, .{}),
     vec("ldr r3, [pc, #760] reaches the last word of RAM", .{ .hw1 = 0x4BBE, .rt = 3, .at = 0x2000_03FC }, .{}),

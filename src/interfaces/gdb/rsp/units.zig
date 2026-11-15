@@ -11,10 +11,11 @@
 //! (src/session/core_view.zig), so a Zig session hands its stores on
 //! the same way (RA8EMU-483).
 const std = @import("std");
+
 const core_view = @import("ra8_session").core_view;
-const stop_machine = @import("ra8_session").stop_machine;
-const dwt = @import("ra8_chip").periph.dwt;
 const dcb = @import("ra8_chip").periph.dcb;
+const dwt = @import("ra8_chip").periph.dwt;
+const stop_machine = @import("ra8_session").stop_machine;
 
 /// Hand a debugger store of `length` bytes at `address` to the models.
 pub fn forward(core: core_view.View, machine: *stop_machine.Machine, address: u32, length: usize) void {

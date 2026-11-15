@@ -8,44 +8,38 @@
 //! this part and has to answer regardless of MSTPCRx; and the blocks that
 //! paint into or read out of RAM need guest memory handed to them as they go
 //! on. Keeping it here leaves board.zig as the list of what the board is.
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
-const sau = @import("ra8_chip").periph.sau;
-const mpu = @import("ra8_chip").periph.mpu;
-const mpu_guard = @import("ra8_chip").core.mpu_guard;
 const cpuid = @import("ra8_chip").periph.cpuid;
 const dwt = @import("ra8_chip").periph.dwt;
-const scb = @import("ra8_chip").periph.scb;
-const fault_clear = @import("ra8_chip").periph.fault.clear;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const mpu = @import("ra8_chip").periph.mpu;
+const sau = @import("ra8_chip").periph.sau;
+const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
 
 const Board = @import("board.zig").Board;
-const second_wiring = @import("ra8_chip").core.second.wiring;
 const plug = @import("plug.zig");
+const second_wiring = @import("ra8_chip").core.second.wiring;
 
 const bkup = @import("ra8_chip").periph.bkup;
+const bus_line = @import("ra8_components").sd_card.bus_line;
+const ckcr = @import("ra8_chip").periph.ckcr;
+const ckdiv = @import("ra8_chip").periph.ckdiv;
+const cpscu = @import("ra8_chip").periph.cpscu;
 const dmac = @import("ra8_chip").periph.dmac;
 const drw = @import("ra8_chip").periph.drw;
+const dtc = @import("ra8_chip").periph.dtc;
 const eink = @import("ra8_components").eink;
+const gtclkcr = @import("ra8_chip").periph.gtclkcr;
+const lpm = @import("ra8_chip").periph.lpm;
 const modem = @import("ra8_components").modem_at;
-const ckcr = @import("ra8_chip").periph.ckcr;
 const octaclk = @import("ra8_chip").periph.octaclk;
-const mrms = @import("ra8_chip").periph.mrms;
-const ckdiv = @import("ra8_chip").periph.ckdiv;
 const oscsf = @import("ra8_chip").periph.oscsf;
+const pdctr = @import("ra8_chip").periph.pdctr;
+const pll = @import("ra8_chip").periph.pll;
+const sd_card = @import("ra8_components").sd_card;
 const subclock = @import("ra8_chip").periph.subclock;
-const reset = @import("ra8_chip").periph.reset;
 const sysclk = @import("ra8_chip").periph.sysclk;
 const voltage_hazard = @import("ra8_chip").periph.voltage_hazard;
-const lpm = @import("ra8_chip").periph.lpm;
-const pll = @import("ra8_chip").periph.pll;
-const gtclkcr = @import("ra8_chip").periph.gtclkcr;
-const pscu = @import("ra8_chip").periph.pscu;
-const cpscu = @import("ra8_chip").periph.cpscu;
-const dtc = @import("ra8_chip").periph.dtc;
 const vscr = @import("ra8_chip").periph.vscr;
-const pdctr = @import("ra8_chip").periph.pdctr;
-const sd_card = @import("ra8_components").sd_card;
-const bus_line = @import("ra8_components").sd_card.bus_line;
 
 /// The module-stop shadow, the attribution words that decide which of its
 /// bits a Secure store may move, and the gate the rest of the bus hangs off.
@@ -151,10 +145,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.interval.block());
     try self.bus.add(self.pwm.block());
     try self.bus.add(self.ptp.block());
-    self.events.issuer = &self.bus.issuer;
-    try self.bus.add(self.events.block());
-    try self.bus.add(self.events.pinsBlock());
-    for (self.events.sideBlocks()) |block| try self.bus.add(block);
+    try attachEvents(self);
     try self.bus.add(self.links.block());
     try attachTransfers(self);
     try self.bus.add(self.dma_module.block());
@@ -275,46 +266,12 @@ fn attachProtected(self: *Board) !void {
     try self.bus.add(self.backup.block());
     self.battery_switch = bkup.pcr1.Pcr1.init(&self.protection);
     try self.bus.add(self.battery_switch.block());
-    self.oscillators = oscsf.Oscillators.init(&self.protection);
-    try self.bus.add(self.oscillators.block());
-    self.subclk = subclock.Unit.init(&self.protection);
-    try self.bus.add(self.subclk.block());
-    self.loco = subclock.loco.Unit.init(&self.protection);
-    try self.bus.add(self.loco.block());
-    // The tree asks the oscillators whether the source it was told to select
-    // had stabilised, so it goes on after them.
-    // The core voltage range is step 2 of the same protected bring-up, and it
-    // has to exist before the tree: the tree tells the brown-out watch about
-    // every clock select, and the watch reads this range live.
-    self.voltage = vscr.Unit.init(&self.protection);
-    try self.bus.add(self.voltage.block());
-    self.brownout = voltage_hazard.Watch.init(&self.voltage);
-    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators, &self.brownout);
-    try self.bus.add(self.tree.block());
-    self.branches = ckcr.Ckcr.init(&self.protection);
-    for (0..ckcr.windows.len) |which| try self.bus.add(self.branches.block(which));
-    // MSTPB16/B17 may only be released once OCTACKCR has handshaken (HUM
-    // Ch 11.2.7 Note 3), so the watch reads the selects live and both the
-    // module-stop window and the command engine it uncovers consult it.
-    self.octa = octaclk.Octa.init(&self.branches);
-    self.modules.octa = &self.octa;
-    self.flash.octa = &self.octa;
-    self.flash.part = self.nor.nor();
-    // The dividers ask the selects whether the branch is gated, so they go
-    // on after the selects they are paired with.
-    self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
-    for (0..ckdiv.windows.len) |which| try self.bus.add(self.ratios.block(which));
-    // PLL1's configuration asks PRCR before a store, as the clock tree does.
-    self.plls = pll.Unit.init(&self.protection, &self.oscillators);
-    // GTCLKCR is the GPT bank's clock domain, and only the module-stop
-    // model can say whether the window to change it is still open.
-    self.gpt_clock = gtclkcr.Unit.init(&self.modules);
-    try self.bus.add(self.gpt_clock.block());
-    try self.bus.add(self.pwm_delay.block());
-    for (0..pll.slots.len) |which| try self.bus.add(self.plls.block(which));
+    try attachProtectedClocks(self);
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
-    for (0..lpm.slots.len) |which| try self.bus.add(self.low_power.block(which));
+    for (0..lpm.slots.len) |which| {
+        try self.bus.add(self.low_power.block(which));
+    }
     try self.bus.add(self.standby_cancel.block());
     self.domains = pdctr.Domains.init(&self.protection);
     try self.bus.add(self.domains.graphics.block());
@@ -336,8 +293,67 @@ fn attachProtected(self: *Board) !void {
     // the bus initiators, the bus-initiator MPUs and the second CPU, behind PRC4 too.
     self.chip_attribution = cpscu.Unit.init(&self.protection);
     try self.bus.add(self.chip_attribution.block());
-    for (self.sram_attribution.blocks()) |window| try self.bus.add(window);
+    for (self.sram_attribution.blocks()) |window| {
+        try self.bus.add(window);
+    }
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.part == .ra8p1);
-    for (self.memory_monitors.blocks()) |window| try self.bus.add(window);
+    for (self.memory_monitors.blocks()) |window| {
+        try self.bus.add(window);
+    }
     if (self.memory_monitors.cms) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
+}
+
+fn attachEvents(self: *Board) !void {
+    self.events.issuer = &self.bus.issuer;
+    try self.bus.add(self.events.block());
+    try self.bus.add(self.events.pinsBlock());
+    for (self.events.sideBlocks()) |block| {
+        try self.bus.add(block);
+    }
+}
+
+fn attachProtectedClocks(self: *Board) !void {
+    self.oscillators = oscsf.Oscillators.init(&self.protection);
+    try self.bus.add(self.oscillators.block());
+    self.subclk = subclock.Unit.init(&self.protection);
+    try self.bus.add(self.subclk.block());
+    self.loco = subclock.loco.Unit.init(&self.protection);
+    try self.bus.add(self.loco.block());
+    // The tree asks the oscillators whether the source it was told to select
+    // had stabilised, so it goes on after them.
+    // The core voltage range is step 2 of the same protected bring-up, and it
+    // has to exist before the tree: the tree tells the brown-out watch about
+    // every clock select, and the watch reads this range live.
+    self.voltage = vscr.Unit.init(&self.protection);
+    try self.bus.add(self.voltage.block());
+    self.brownout = voltage_hazard.Watch.init(&self.voltage);
+    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators, &self.brownout);
+    try self.bus.add(self.tree.block());
+    self.branches = ckcr.Ckcr.init(&self.protection);
+    for (0..ckcr.windows.len) |which| {
+        try self.bus.add(self.branches.block(which));
+    }
+    // MSTPB16/B17 may only be released once OCTACKCR has handshaken (HUM
+    // Ch 11.2.7 Note 3), so the watch reads the selects live and both the
+    // module-stop window and the command engine it uncovers consult it.
+    self.octa = octaclk.Octa.init(&self.branches);
+    self.modules.octa = &self.octa;
+    self.flash.octa = &self.octa;
+    self.flash.part = self.nor.nor();
+    // The dividers ask the selects whether the branch is gated, so they go
+    // on after the selects they are paired with.
+    self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
+    for (0..ckdiv.windows.len) |which| {
+        try self.bus.add(self.ratios.block(which));
+    }
+    // PLL1's configuration asks PRCR before a store, as the clock tree does.
+    self.plls = pll.Unit.init(&self.protection, &self.oscillators);
+    // GTCLKCR is the GPT bank's clock domain, and only the module-stop
+    // model can say whether the window to change it is still open.
+    self.gpt_clock = gtclkcr.Unit.init(&self.modules);
+    try self.bus.add(self.gpt_clock.block());
+    try self.bus.add(self.pwm_delay.block());
+    for (0..pll.slots.len) |which| {
+        try self.bus.add(self.plls.block(which));
+    }
 }

@@ -82,11 +82,13 @@
 //! it, and a store to it is refused there for the same reason a store to
 //! MSTATR is refused here.
 const std = @import("std");
+
+const cells = @import("otp.zig");
 const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
 const maci = @import("../maci.zig");
-const cells = @import("otp.zig");
+const periph = @import("../registry.zig");
+
 pub const otp = cells;
 pub const code = @import("code.zig");
 const mram_regs = @import("regs.zig");
@@ -108,9 +110,10 @@ pub const code_page = code.page;
 /// MSUINITR, the set-up init kick, and its rule: init.zig.
 pub const init_reg = @import("init.zig");
 
+pub const entry = @import("entry.zig");
+
 /// MENTRYR, the mode gate and its key: entry.zig.
 pub const entry_reg = @import("entry.zig");
-pub const entry = @import("entry.zig");
 pub const init = @import("init.zig");
 pub const snapshot = @import("snapshot.zig");
 

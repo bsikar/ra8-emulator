@@ -127,7 +127,9 @@ pub const Ports = struct {
 
     pub fn refusals(self: *const Ports) u32 {
         var total: u32 = 0;
-        for (&self.ports) |port| total += port.refusals();
+        for (&self.ports) |port| {
+            total += port.refusals();
+        }
         return total;
     }
 

@@ -5,6 +5,7 @@
 //! Its own file so cli.zig keeps room for flags: what a contact spec looks
 //! like is a separate question from which flags exist.
 const std = @import("std");
+
 const gt911 = @import("ra8_components").gt911;
 
 /// Whether `flag` is one of the touch flags this file reads.
@@ -18,7 +19,9 @@ pub fn claims(flag: []const u8) bool {
 pub fn take(options: anytype, flag: []const u8, spec: []const u8) !void {
     if (std.mem.eql(u8, flag, "--touch-seq")) {
         var points = std.mem.splitScalar(u8, spec, ',');
-        while (points.next()) |point| try queue(options, try parseWith(point, ':'));
+        while (points.next()) |point| {
+            try queue(options, try parseWith(point, ':'));
+        }
         return;
     }
     if (spec.len > 1 and spec[0] == '@') {

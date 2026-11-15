@@ -11,7 +11,7 @@
 //! The one thing this does that dev's sink does not: it is bounded and it
 //! pushes back. dev's TX sink swallows every frame, so a descriptor is
 //! completed whatever happened to it.
-const std = @import("std");
+
 const desc = @import("ra8_chip").periph.eth.desc;
 const line = @import("ra8_chip").periph.eth.line;
 

@@ -8,9 +8,10 @@
 //! re-applied as the run reaches them. A slice that crosses the end
 //! records again from the next slice on.
 const std = @import("std");
+
 const api = @import("api.zig");
-const line = @import("line.zig");
 const async_traffic = @import("history/async_traffic.zig");
+const line = @import("line.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -41,7 +42,10 @@ fn drive(self: *Session, core: Core, command: ?api.Run) anyerror!api.Ended {
     clampToNextItem(self);
     const retired_before = self.live.core.cpu.retired;
     const ended = if (command) |cmd| blk: {
-        break :blk if (self.window_driver) |driver| try driver.goFn(driver.context, self, cmd) else try self.live.go(cmd);
+        break :blk if (self.window_driver) |driver|
+            try driver.goFn(driver.context, self, cmd)
+        else
+            try self.live.go(cmd);
     } else try self.live.goOn();
     if (self.live.boundary == null) try advanceBoard(self, core, self.live.core.cpu.retired - retired_before);
     line.notePosition(self, line.currentPosition(self));
@@ -52,14 +56,28 @@ fn drive(self: *Session, core: Core, command: ?api.Run) anyerror!api.Ended {
     }
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
     self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-    if (self.history) |h| if ((command != null and command != .cont) or !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);
+    if (self.history) |h| if ((command != null and
+        command != .cont) or
+        !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);
     if (ended == .core) {
         const address: ?u32 = switch (ended.core) {
             .count => null,
             .unknown => |instruction| instruction.address,
             inline else => |at| at,
         };
-        self.publish(.{ .core = stopped, .kind = .fault, .address = address, .payload = .{ .fault = .{ .cause = @backingInt(std.meta.activeTag(ended.core)), .address = address } } });
+        self.publish(
+            .{
+                .core = stopped,
+                .kind = .fault,
+                .address = address,
+                .payload = .{
+                    .fault = .{
+                        .cause = @backingInt(std.meta.activeTag(ended.core)),
+                        .address = address,
+                    },
+                },
+            },
+        );
     }
     // Queued host traffic reaches the machine once the run is back at the
     // recorded end; the stop above is already published and captured, so

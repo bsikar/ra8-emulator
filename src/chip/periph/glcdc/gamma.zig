@@ -11,7 +11,6 @@
 //! sixteen thresholds through this packing, then flips GAMON. dev snoops
 //! none of it: a panel corrected for its own transfer curve came out of that
 //! tree with the uncorrected colours in the witness.
-const std = @import("std");
 
 /// Where the blocks sit and how big they are.
 pub const geometry = struct {

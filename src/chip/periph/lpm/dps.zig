@@ -15,8 +15,8 @@
 //!
 //! PRCR: the HUM puts these behind PRC1. lpm.zig's bytes ask the protect
 //! register first; these do not yet, so a store with PRC1 clear still lands.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const base: u32 = 0x4001_EA08;
 pub const stride: u32 = 4;

@@ -6,9 +6,9 @@
 //! options 0b0000 and 0b0100 and come along with it. A second core sharing
 //! memory steps in turn with this one (RA8EMU-14 proves exclusives across
 //! the two), which keeps that true there as well.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const hw1: u16 = 0xF3BF;

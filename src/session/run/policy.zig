@@ -3,8 +3,8 @@
 //! run early (RA8EMU-186). The session holds it beside the board and hears
 //! the board's boundaries and watchdog resets through `run_hook`.
 const Board = @import("ra8_board").board.Board;
-const run_hook = @import("ra8_board").run_hook;
 const pacing = @import("run.zig").pacing;
+const run_hook = @import("ra8_board").run_hook;
 const soak = @import("run.zig").soak;
 
 pub const RunPolicy = struct {

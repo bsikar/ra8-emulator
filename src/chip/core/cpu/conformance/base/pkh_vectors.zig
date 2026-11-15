@@ -51,8 +51,16 @@ pub const all = [_]V{
     vec("pkhtb asr #31", in(0x70E2, 0x8000_0000), .{ .rd = 0x1111_FFFF }),
     vec("pkhtb #0 is asr #32 of a negative", in(0x0022, 0x8000_0000), .{ .rd = 0x1111_FFFF }),
     vec("pkhtb #0 is asr #32 of a positive", in(0x0022, 0x7FFF_FFFF), .{ .rd = 0x1111_0000 }),
-    vec("pkhbt r12, lr, r4", .{ .hw1 = 0xEACE, .hw2 = 0x0C04, .n = 0xAAAA_BBBB, .m = 0xCCCC_DDDD }, .{ .rd = 0xCCCC_BBBB }),
-    vec("pkhtb r1, r1, r1, asr #16 reads before writing", .{ .hw1 = pkh, .hw2 = 0x4121, .n = 0x1234_5678, .m = 0x1234_5678 }, .{ .rd = 0x1234_1234 }),
+    vec(
+        "pkhbt r12, lr, r4",
+        .{ .hw1 = 0xEACE, .hw2 = 0x0C04, .n = 0xAAAA_BBBB, .m = 0xCCCC_DDDD },
+        .{ .rd = 0xCCCC_BBBB },
+    ),
+    vec(
+        "pkhtb r1, r1, r1, asr #16 reads before writing",
+        .{ .hw1 = pkh, .hw2 = 0x4121, .n = 0x1234_5678, .m = 0x1234_5678 },
+        .{ .rd = 0x1234_1234 },
+    ),
     vec("Rd of sp is unclaimed", in(0x0D02, 0), none),
     vec("Rd of pc is unclaimed", in(0x0F02, 0), none),
     vec("Rn of sp is unclaimed", .{ .hw1 = 0xEACD, .hw2 = 0x0002 }, none),

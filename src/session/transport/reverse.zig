@@ -8,13 +8,14 @@
 //! with no checkpoint behind, the run settles at the history's beginning
 //! with history_start.
 
-const std = @import("std");
+const back = @import("back.zig");
+
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
 const position_mod = @import("../history/position.zig");
+const reverse_watch = @import("../history/reverse_watch.zig");
 const seek_engine = @import("../history/seek_engine.zig");
 const transport_mod = @import("transport.zig");
-const reverse_watch = @import("../history/reverse_watch.zig");
 const watch_search = @import("watch_search.zig");
 
 const Transport = transport_mod.Transport;
@@ -90,7 +91,11 @@ pub fn queue(self: *Transport) !Ticket {
     };
     const base = plan.base;
     const earlier = try earlierCheckpoint(self.session, base, grid.at, facts.checkpoints);
-    const origin_cp = if (base == .window) @import("back.zig").checkpointAtOrBefore(self.session, grid.at, facts.checkpoints) else null;
+    const origin_cp = if (base == .window) back.checkpointAtOrBefore(
+        self.session,
+        grid.at,
+        facts.checkpoints,
+    ) else null;
     self.cancel();
     self.epoch += 1;
     const ticket = self.issue();
@@ -116,7 +121,7 @@ pub fn queue(self: *Transport) !Ticket {
 }
 
 pub fn restoreOrigin(self: *Transport, rc: *const Rc) void {
-    @import("back.zig").restoreOriginPair(self, rc.origin, rc.origin_checkpoint);
+    back.restoreOriginPair(self, rc.origin, rc.origin_checkpoint);
 }
 
 fn earlierCheckpoint(

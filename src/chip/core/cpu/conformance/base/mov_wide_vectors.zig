@@ -41,7 +41,11 @@ pub const all = [_]V{
     vec("movw r2, #0x700 from imm3", .{ .hw1 = 0xF240, .hw2 = 0x7200 }, .{ .rd = 0x0700 }),
     vec("movw r1, #0xff from imm8", .{ .hw1 = 0xF240, .hw2 = 0x01FF }, .{ .rd = 0x00FF }),
     vec("movt r0, #0x1234 keeps the low half", .{ .hw1 = 0xF2C1, .hw2 = 0x2034 }, .{ .rd = 0x1234_BEEF }),
-    vec("movt r5, #0 clears the high half", .{ .hw1 = 0xF2C0, .hw2 = 0x0500, .rd = 0xFFFF_FFFF }, .{ .rd = 0x0000_FFFF }),
+    vec(
+        "movt r5, #0 clears the high half",
+        .{ .hw1 = 0xF2C0, .hw2 = 0x0500, .rd = 0xFFFF_FFFF },
+        .{ .rd = 0x0000_FFFF },
+    ),
     vec("movt r7, #0xffff", .{ .hw1 = 0xF6CF, .hw2 = 0x77FF, .rd = 0x0000_1234 }, .{ .rd = 0xFFFF_1234 }),
     vec("movt r9, #0x8000", .{ .hw1 = 0xF2C8, .hw2 = 0x0900, .rd = 0x5555_AAAA }, .{ .rd = 0x8000_AAAA }),
     vec("movw sp is unclaimed", .{ .hw1 = 0xF240, .hw2 = 0x0D00 }, none),

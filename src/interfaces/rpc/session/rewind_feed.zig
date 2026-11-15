@@ -4,10 +4,10 @@
 //! with no separate path. Only a frame not yet sent goes out, and only
 //! while the engine is playing backward.
 const std = @import("std");
+
 const api = @import("ra8_session").api;
-const proto = @import("rpc.zig");
-const lcd_feed = @import("lcd_feed.zig");
 const Context = @import("handlers.zig").Context;
+const lcd_feed = @import("lcd_feed.zig");
 
 /// Sends the rewind frame the engine shows, if it is new to this connection.
 pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
@@ -22,7 +22,12 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     }
     if (!context.wants(.cpu0, .lcd_dirty)) return;
     const gpa = context.gpa orelse return;
-    const frame: api.Frame = .{ .width = shown.width, .height = shown.height, .pixels = shown.pixels, .virtual_ns = shown.virtual_ns };
+    const frame: api.Frame = .{
+        .width = shown.width,
+        .height = shown.height,
+        .pixels = shown.pixels,
+        .virtual_ns = shown.virtual_ns,
+    };
     const chunk = gpa.alloc(u8, lcd_feed.max_pixels) catch return;
     defer gpa.free(chunk);
     const rect: api.Event.Rect = .{ .x = 0, .y = 0, .width = shown.width, .height = shown.height };

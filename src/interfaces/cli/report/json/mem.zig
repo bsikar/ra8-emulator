@@ -3,14 +3,14 @@
 //! register worklist. The same facts report/memory.zig, dma.zig, dtc1.zig
 //! and unmodelled.zig print; every key is always present, and per-unit
 //! lists carry only the channels or operations that saw anything.
-const Board = @import("ra8_board").board.Board;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const external = @import("ra8_board").external.memory;
 const backing = @import("ra8_board").external.backing;
+const Board = @import("ra8_board").board.Board;
 const cache = @import("ra8_chip").periph.cache;
+const dma = @import("../dma.zig");
 const dmac = @import("ra8_chip").periph.dmac;
 const dtc = @import("ra8_chip").periph.dtc;
-const dma = @import("../dma.zig");
+const external = @import("ra8_board").external.memory;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const unmodelled = @import("../unmodelled.zig");
 
 /// The whole `memory` object, keyed inside the document.
@@ -129,7 +129,13 @@ fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !voi
     try j.open("external_regions", '[');
     inline for (.{ external.Kind.ospi, external.Kind.sdram }) |kind| {
         const config = board.external_memory.region(kind);
-        const counters = if (memory) |guest| if (backing.fabricOf(guest.store)) |fabric| fabric.counters(kind, elapsed) else external.Counters{} else external.Counters{};
+        const counters = if (memory) |guest|
+            if (backing.fabricOf(guest.store)) |fabric|
+                fabric.counters(kind, elapsed)
+            else
+                external.Counters{}
+        else
+            external.Counters{};
         try j.open(null, '{');
         try j.field("name", kind.label());
         try j.field("base", kind.base());
@@ -150,7 +156,15 @@ fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !voi
         try j.open("stall_cycles", '{');
         try j.field("cpu", counters.cpu_stall_cycles);
         try j.field("ethos_u55", counters.ethos_u55_stall_cycles);
-        inline for (.{ external.Initiator.dmac, external.Initiator.dtc0, external.Initiator.dtc1, external.Initiator.glcdc, external.Initiator.drw, external.Initiator.ceu, external.Initiator.eth }) |one| {
+        inline for (.{
+            external.Initiator.dmac,
+            external.Initiator.dtc0,
+            external.Initiator.dtc1,
+            external.Initiator.glcdc,
+            external.Initiator.drw,
+            external.Initiator.ceu,
+            external.Initiator.eth,
+        }) |one| {
             try j.field(@tagName(one), counters.stall_cycles_by_initiator[one.timedIndex().?]);
         }
         try j.close('}');

@@ -32,8 +32,8 @@
 //! either tree, so a read answers zero and a write is counted rather than
 //! stored. Every other offset in the window is reserved padding in FSP's own
 //! struct; it is shadowed so a read-modify-write survives, and never read.
-const periph = @import("../registry.zig");
 pub const control = @import("control.zig");
+const periph = @import("../registry.zig");
 pub const region = @import("region.zig");
 
 /// DOTF geometry. The bus folds the Non-secure alias onto this base.

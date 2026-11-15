@@ -8,10 +8,10 @@
 //! UNDEFINED for it: the core takes a UsageFault with CFSR.UNDEFINSTR and
 //! the IT stacked, the same as a UDF, rather than open a block whose
 //! condition can never be read.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const it_state = @import("../it_state.zig");
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const mask: u16 = 0xFF00;

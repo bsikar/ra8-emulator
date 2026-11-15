@@ -1,7 +1,7 @@
 //! Text for the mov_wide group: MOVW and MOVT with their 16-bit immediate.
 const Instr = @import("../instr.zig").Instr;
-const text = @import("text.zig");
 const mov_wide = @import("../ops/mov_wide.zig");
+const text = @import("text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const top = instr.hw1 & mov_wide.encodings.mask == mov_wide.encodings.movt;

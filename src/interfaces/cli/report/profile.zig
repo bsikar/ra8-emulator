@@ -1,10 +1,11 @@
 //! Sorted per-function instruction and cycle counts.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const profile = @import("ra8_session").profile;
-const symbols = @import("ra8_session").symbols;
-const stack_samples = @import("ra8_session").stack.samples;
 const stack_profile = @import("ra8_session").stack.profile;
+const stack_samples = @import("ra8_session").stack.samples;
+const symbols = @import("ra8_session").symbols;
 const Writer = @import("../report.zig").Writer;
 
 pub fn write(out: Writer, io: std.Io, image: elf.Image, table: profile.Table, path: ?[]const u8, thread: ?u32) !void {
@@ -30,9 +31,15 @@ pub fn print(out: Writer, image: elf.Image, table: profile.Table) !void {
     const shown = @min(ranked.len, profile.limits.listed);
     for (ranked[0..shown]) |site| {
         const found = symbols.inside(image, site.address) orelse continue;
-        try out.print("profile: {s} {d} cycle(s), {d} instruction(s)\n", .{ found.name, site.cycles, site.instructions });
+        try out.print(
+            "profile: {s} {d} cycle(s), {d} instruction(s)\n",
+            .{ found.name, site.cycles, site.instructions },
+        );
     }
-    if (table.missed != 0) try out.print("profile: {d} instruction(s) outside sized functions or beyond table capacity\n", .{table.missed});
+    if (table.missed != 0) try out.print(
+        "profile: {d} instruction(s) outside sized functions or beyond table capacity\n",
+        .{table.missed},
+    );
 }
 
 /// Folded format accepts a single frame when the emulator has no call stack
@@ -41,7 +48,12 @@ pub fn print(out: Writer, image: elf.Image, table: profile.Table) !void {
 /// core (`cpu0;outer;...;inner n`, RA8EMU-971).
 /// `thread` filters sampled rows only: the function counts carry no thread.
 pub fn folded(out: anytype, image: elf.Image, table: profile.Table, thread: ?u32) !void {
-    if (table.samples) |store| if (store.count != 0) return sampled(out, .{ &image, if (table.second) |*found| found else &image }, store, thread);
+    if (table.samples) |store| if (store.count != 0) return sampled(
+        out,
+        .{ &image, if (table.second) |*found| found else &image },
+        store,
+        thread,
+    );
     var rows: [profile.limits.functions]profile.Site = undefined;
     for (table.ranked(&rows)) |site| {
         const found = symbols.inside(image, site.address) orelse continue;
@@ -57,7 +69,13 @@ fn sampled(out: anytype, images: [2]*const elf.Image, store: *const stack_sample
     for (0..2) |core| {
         var rows: std.Io.Writer.Allocating = .init(allocator);
         defer rows.deinit();
-        try stack_samples.fold(store, .{ .core = @intCast(core), .thread = thread }, stack_profile.names(images[core]), &rows.writer, scratch);
+        try stack_samples.fold(
+            store,
+            .{ .core = @intCast(core), .thread = thread },
+            stack_profile.names(images[core]),
+            &rows.writer,
+            scratch,
+        );
         try named(out, allocator, @intCast(core), rows.written());
     }
 }
@@ -79,14 +97,25 @@ fn named(out: anytype, allocator: std.mem.Allocator, core: u8, folded_rows: []co
     var lines = std.mem.splitScalar(u8, folded_rows, '\n');
     while (lines.next()) |line| {
         const gap = std.mem.lastIndexOfScalar(u8, line, ' ') orelse continue;
-        try list.append(allocator, .{ .stack = line[0..gap], .count = try std.fmt.parseInt(u64, line[gap + 1 ..], 10) });
+        try list.append(
+            allocator,
+            .{ .stack = line[0..gap], .count = try std.fmt.parseInt(u64, line[gap + 1 ..], 10) },
+        );
     }
     std.mem.sort(Row, list.items, {}, Row.before);
     var at: usize = 0;
     while (at < list.items.len) {
         var count: u64 = 0;
         var next = at;
-        while (next < list.items.len and std.mem.eql(u8, list.items[next].stack, list.items[at].stack)) : (next += 1) count += list.items[next].count;
+        while (next < list.items.len and
+            std.mem.eql(
+                u8,
+                list.items[next].stack,
+                list.items[at].stack,
+            )) : (next += 1)
+        {
+            count += list.items[next].count;
+        }
         try out.print("cpu{d};{s} {d}\n", .{ core, list.items[at].stack, count });
         at = next;
     }

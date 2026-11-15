@@ -9,6 +9,7 @@
 //! The application opens what a spec names with source_open.zig and hands
 //! it to the camera (RA8EMU-1011).
 const std = @import("std");
+
 const raw = @import("../pipe/frame.zig");
 const webcam = @import("../webcam/open.zig");
 

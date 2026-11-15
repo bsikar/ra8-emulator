@@ -1,9 +1,10 @@
 //! Thin DAP dispatcher. Only wire lifecycle, handles and breakpoint ownership live here.
 const std = @import("std");
-const session = @import("ra8_session");
-const p = @import("protocol.zig");
+
 const inspection = @import("inspection.zig");
+const p = @import("protocol.zig");
 const Points = @import("points.zig").Points;
+const session = @import("ra8_session");
 
 pub const Target = inspection.Target;
 pub const Open = struct {
@@ -33,7 +34,12 @@ pub const Adapter = struct {
     pub fn request(self: *Adapter, bytes: []const u8, out: *std.Io.Writer) !void {
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const parsed = try std.json.parseFromSlice(p.Value, arena.allocator(), bytes, .{ .allocate = .alloc_always, .max_value_len = 64 * 1024 });
+        const parsed = try std.json.parseFromSlice(
+            p.Value,
+            arena.allocator(),
+            bytes,
+            .{ .allocate = .alloc_always, .max_value_len = 64 * 1024 },
+        );
         const req = parsed.value;
         if (!std.mem.eql(u8, try p.text(p.get(req, "type")), "request")) return error.InvalidRequest;
         if (try p.number(p.get(req, "seq")) == 0) return error.InvalidRequest;
@@ -45,10 +51,22 @@ pub const Adapter = struct {
             try p.response(arena.allocator(), out, try self.nextSeq(), req, "{}", @errorName(err));
             return;
         };
-        try p.response(arena.allocator(), out, try self.nextSeq(), req, if (body.written().len == 0) "{}" else body.written(), null);
-        if (equal(command, "launch") or equal(command, "attach")) try self.event(out, "initialized", @as(struct {}, .{}));
+        try p.response(
+            arena.allocator(),
+            out,
+            try self.nextSeq(),
+            req,
+            if (body.written().len == 0) "{}" else body.written(),
+            null,
+        );
+        if (equal(command, "launch") or
+            equal(command, "attach")) try self.event(out, "initialized", @as(struct {}, .{}));
         if (equal(command, "configurationDone")) {
-            if (self.stop_on_entry) try self.stopped(out, self.target.?.session.currentCore(), "entry") else try self.start(self.target.?.session.currentCore(), .cont);
+            if (self.stop_on_entry) try self.stopped(
+                out,
+                self.target.?.session.currentCore(),
+                "entry",
+            ) else try self.start(self.target.?.session.currentCore(), .cont);
         }
         if (equal(command, "pause")) try self.stopped(out, self.target.?.session.currentCore(), "pause");
         if (equal(command, "disconnect")) try self.event(out, "terminated", @as(struct {}, .{}));
@@ -88,17 +106,37 @@ pub const Adapter = struct {
             return out.writeAll("]}");
         }
         if (equal(command, "setBreakpoints") or equal(command, "setInstructionBreakpoints")) {
-            return self.points.replaceMapped(self.allocator, target.session, target.images[@backingInt(target.session.currentCore())], args, equal(command, "setInstructionBreakpoints"), out, self.inspect.lines_start_at_one, target.sources);
+            return self.points.replaceMapped(
+                self.allocator,
+                target.session,
+                target.images[@backingInt(target.session.currentCore())],
+                args,
+                equal(command, "setInstructionBreakpoints"),
+                out,
+                self.inspect.lines_start_at_one,
+                target.sources,
+            );
         }
         if (equal(command, "stackTrace")) return self.inspect.stackTrace(target, args, out);
         if (equal(command, "scopes")) return self.inspect.scopes(target, args, out);
         if (equal(command, "variables")) return self.inspect.variables(target, args, out);
-        const run: session.api.Run = if (equal(command, "continue")) .cont else if (equal(command, "stepIn")) .step else if (equal(command, "next")) .next else if (equal(command, "stepOut")) .finish else return error.UnsupportedRequest;
+        const run: session.api.Run = if (equal(command, "continue"))
+            .cont
+        else if (equal(command, "stepIn"))
+            .step
+        else if (equal(command, "next"))
+            .next
+        else if (equal(command, "stepOut"))
+            .finish
+        else
+            return error.UnsupportedRequest;
         if (!self.configured) return error.NotConfigured;
         const core = try inspection.Inspection.thread(target, args);
         const granularity = p.get(args, "granularity");
         // Omission means statement stepping in DAP, which Session does not provide here.
-        if (run != .cont and (granularity == .null or !equal(try p.text(granularity), "instruction"))) return error.UnsupportedGranularity;
+        if (run != .cont and
+            (granularity == .null or
+                !equal(try p.text(granularity), "instruction"))) return error.UnsupportedGranularity;
         try self.start(core, run);
         if (run == .cont) try out.writeAll("{\"allThreadsContinued\":true}");
     }
@@ -109,7 +147,15 @@ pub const Adapter = struct {
         if (format != .null and !equal(try p.text(format), "path")) return error.UnsupportedPathFormat;
         self.inspect.lines_start_at_one = try boolean(args, "linesStartAt1", true);
         self.inspect.columns_start_at_one = try boolean(args, "columnsStartAt1", true);
-        try p.quote(out, .{ .supportsConfigurationDoneRequest = true, .supportsInstructionBreakpoints = true, .supportsSteppingGranularity = true, .exceptionBreakpointFilters = @as([]const struct {}, &.{}) });
+        try p.quote(
+            out,
+            .{
+                .supportsConfigurationDoneRequest = true,
+                .supportsInstructionBreakpoints = true,
+                .supportsSteppingGranularity = true,
+                .exceptionBreakpointFilters = @as([]const struct {}, &.{}),
+            },
+        );
         self.initialized = true;
     }
 
@@ -165,7 +211,15 @@ pub const Adapter = struct {
     }
 
     fn stopped(self: *Adapter, out: *std.Io.Writer, core: session.api.Core, reason: []const u8) !void {
-        try self.event(out, "stopped", .{ .reason = reason, .threadId = @as(u32, @backingInt(core)) + 1, .allThreadsStopped = true });
+        try self.event(
+            out,
+            "stopped",
+            .{
+                .reason = reason,
+                .threadId = @as(u32, @backingInt(core)) + 1,
+                .allThreadsStopped = true,
+            },
+        );
     }
     fn nextSeq(self: *Adapter) !u32 {
         self.seq = try std.math.add(u32, self.seq, 1);

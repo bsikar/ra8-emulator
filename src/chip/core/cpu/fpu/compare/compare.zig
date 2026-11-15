@@ -4,8 +4,10 @@
 //! NaN always raises IOC; VCMPE raises it for a quiet NaN as well. Zeros
 //! of either sign compare equal, and nothing is rounded.
 const format = @import("../format.zig");
+
 const Format = format.Format;
 const unpack_mod = @import("../unpack.zig");
+
 const Unpacked = unpack_mod.Unpacked;
 const Fpscr = @import("../fpscr.zig").Fpscr;
 pub const vectors = @import("vectors.zig");

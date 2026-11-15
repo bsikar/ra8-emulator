@@ -5,7 +5,7 @@
 //! the field masks are a table that only grows. canfd.zig re-exports every
 //! name here, so a caller that only knows the block still reaches them
 //! through it.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
 /// CANFD geometry. The Non-secure alias is folded onto these by the bus.

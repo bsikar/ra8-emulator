@@ -32,5 +32,8 @@ pub fn printPredicated(instr: Instr, out: *text.Text, suffix: []const u8) void {
     const qd: u3 = @intCast(instr.hw2 >> 13);
     const qn: u3 = @intCast(instr.hw1 >> 1 & 7);
     const rm = text.names[instr.hw2 & 15];
-    out.put("{s}{s}.{s}{s} q{d}, q{d}, {s}", .{ mnemonic, suffix, suffix_type, sizes[(instr.hw1 >> 4) & 3], qd, qn, rm });
+    out.put(
+        "{s}{s}.{s}{s} q{d}, q{d}, {s}",
+        .{ mnemonic, suffix, suffix_type, sizes[(instr.hw1 >> 4) & 3], qd, qn, rm },
+    );
 }

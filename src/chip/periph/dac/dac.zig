@@ -52,7 +52,7 @@
 //! NOT MODELLED, AND NOT GUESSED: DACR0.DAE and DACR2.OFSSEL, for the reasons
 //! that file gives. The rest of the window is shadowed so a read-modify-write
 //! survives, and never read.
-const std = @import("std");
+
 pub const output = @import("output.zig");
 const periph = @import("../registry.zig");
 
@@ -191,9 +191,9 @@ pub const Dac = struct {
         const inner = offset % channel_stride;
         const byte = inner % 4;
         switch (inner & ~@as(u32, 3)) {
-            off_dadr => if (Channel.namesData(byte))
-                unit.latch(merge(unit.dadr, byte, width, value))
-            else {
+            off_dadr => if (Channel.namesData(byte)) {
+                unit.latch(merge(unit.dadr, byte, width, value));
+            } else {
                 unit.above_data +%= 1;
             },
             off_dacr0 => unit.dacr0 = merge(unit.dacr0, byte, width, value),

@@ -4,7 +4,7 @@
 //! the divergence boundary (common prefix) between the current line and the target line,
 //! selects the nearest checkpoint on that common prefix at or before the target,
 //! and plans the replay along the target line.
-const std = @import("std");
+
 const branch_mod = @import("branch.zig");
 const position_mod = @import("position.zig");
 const seek_engine = @import("seek_engine.zig");

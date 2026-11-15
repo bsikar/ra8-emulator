@@ -7,10 +7,10 @@
 //!
 //! The UNPREDICTABLE register choices are left unclaimed, so the core stops
 //! rather than guess. ADD and SUB with Rn of SP are allowed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const flags = @import("../../flags.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 const shift = @import("../../shift.zig");
 
 pub const encodings = struct {

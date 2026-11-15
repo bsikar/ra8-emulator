@@ -28,19 +28,21 @@
 //! A trip that only moves R0..R12 and whole RAM words is handed to
 //! counted_trip.zig instead (RA8EMU-602): a bounded poll that counts its
 //! tries retires the trips its bound allows once two trips moved the same.
-const std = @import("std");
-const bus = @import("bus.zig");
-const memmap = @import("../memmap.zig");
-/// Public so park_test reaches park.zig without a root export.
-pub const park = @import("park.zig");
-const Cpu = @import("cpu.zig").Cpu;
-const Regs = @import("regs.zig").Regs;
-const FpState = @import("fpu/state.zig").State;
 const Banked = @import("../banked.zig").Banked;
+const bus = @import("bus.zig");
+const Cpu = @import("cpu.zig").Cpu;
+const FpState = @import("fpu/state.zig").State;
+const memmap = @import("../memmap.zig");
+
+/// Public so park_test reaches park.zig without a root export.
+const std = @import("std");
+
 const Active = @import("exception/all.zig").active.Active;
-const counted = @import("counted/trip.zig");
-const td = @import("trip_decode.zig");
 const block_cache = @import("block/cache.zig");
+const counted = @import("counted/trip.zig");
+pub const park = @import("park.zig");
+const Regs = @import("regs.zig").Regs;
+const td = @import("trip_decode.zig");
 
 pub const max_trip: u32 = 64;
 pub const backoff: u16 = 256;
@@ -59,7 +61,14 @@ const Snapshot = struct {
     event: bool,
 
     fn take(cpu: *const Cpu) Snapshot {
-        return .{ .regs = cpu.regs, .fp = cpu.fp, .banked = cpu.banked, .active = cpu.active, .exclusive = cpu.exclusive, .event = cpu.event };
+        return .{
+            .regs = cpu.regs,
+            .fp = cpu.fp,
+            .banked = cpu.banked,
+            .active = cpu.active,
+            .exclusive = cpu.exclusive,
+            .event = cpu.event,
+        };
     }
 
     /// Field by field: the padding between fields holds no value.
@@ -142,7 +151,9 @@ pub const Watch = struct {
     /// Counts the trip's repeatable reads once per retired trip.
     fn retire(self: *Watch, trips: u64) u64 {
         if (trips == 0) return 0;
-        for (self.repeated[0..self.repeats]) |one| _ = self.inner.repeat(one.address, one.len, trips);
+        for (self.repeated[0..self.repeats]) |one| {
+            _ = self.inner.repeat(one.address, one.len, trips);
+        }
         return trips;
     }
 
@@ -192,7 +203,15 @@ pub const Watch = struct {
         }
         // The head instruction is the trip's first.
         self.* = .{ .on = true, .head = found.start, .steps = 1, .inner = cpu.bus, .before = Snapshot.take(cpu) };
-        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate, .miss = self.inner.miss, .tally = self.inner.tally, .lines = self.inner.lines, .register_state = self.inner.register_state };
+        cpu.bus = .{
+            .ctx = self,
+            .vtable = &vtable,
+            .gate = self.inner.gate,
+            .miss = self.inner.miss,
+            .tally = self.inner.tally,
+            .lines = self.inner.lines,
+            .register_state = self.inner.register_state,
+        };
         self.rec.start(&cpu.regs);
         self.record(cpu);
     }
@@ -219,7 +238,15 @@ pub const Watch = struct {
         if (taken) self.parked = false;
         if (!lent) return;
         if (taken) return self.miss(cpu);
-        cpu.bus = .{ .ctx = self, .vtable = &vtable, .gate = self.inner.gate, .miss = self.inner.miss, .tally = self.inner.tally, .lines = self.inner.lines, .register_state = self.inner.register_state };
+        cpu.bus = .{
+            .ctx = self,
+            .vtable = &vtable,
+            .gate = self.inner.gate,
+            .miss = self.inner.miss,
+            .tally = self.inner.tally,
+            .lines = self.inner.lines,
+            .register_state = self.inner.register_state,
+        };
     }
 
     /// Put the real bus back. `run` calls this on every way out.

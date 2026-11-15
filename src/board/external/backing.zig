@@ -3,11 +3,12 @@
 //! SDRAM and OSPI access. CPU0's store attaches the port and CPU1's borrows
 //! it, so both cores share one SDRAM and one timing model.
 const std = @import("std");
+
 const external = @import("memory.zig");
 const external_port = @import("ra8_chip").core.cpu.memory.external_port;
+const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 const mapped = @import("ra8_chip").core.cpu.mapped;
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
-const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 
 pub const Error = error{OutOfMemory};
 
@@ -20,7 +21,12 @@ pub const Backing = struct {
     pub fn init(layout: external.Layout, flash: mapped.Mapped) Error!Backing {
         try flash.resize(layout.size(.ospi));
         const sdram_len = layout.size(.sdram);
-        const ptr = std.heap.PageAllocator.map(sdram_len, .fromByteUnits(std.heap.page_size_min)) orelse return Error.OutOfMemory;
+        const ptr = std.heap.PageAllocator.map(
+            sdram_len,
+            .fromByteUnits(
+                std.heap.page_size_min,
+            ),
+        ) orelse return Error.OutOfMemory;
         const sdram = ptr[0..sdram_len];
         errdefer std.heap.PageAllocator.unmap(@alignCast(sdram));
         const fabric = std.heap.page_allocator.create(external.Fabric) catch return Error.OutOfMemory;
@@ -54,7 +60,13 @@ pub fn fabricOf(store: *const Store) ?*external.Fabric {
     return @ptrCast(@alignCast(attached.meter.context));
 }
 
-fn charge(context: *anyopaque, initiator: Initiator, hit: external.Hit, direction: external.Direction, len: usize) void {
+fn charge(
+    context: *anyopaque,
+    initiator: Initiator,
+    hit: external.Hit,
+    direction: external.Direction,
+    len: usize,
+) void {
     const fabric: *external.Fabric = @ptrCast(@alignCast(context));
     fabric.note(initiator, hit, direction, len);
 }

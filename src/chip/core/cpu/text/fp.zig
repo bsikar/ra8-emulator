@@ -121,7 +121,24 @@ pub fn system(i: Instr, o: *text.Text) void {
         const id: u4 = @truncate(i.hw1);
         const rt = i.hw2 >> 12;
         const load = i.hw1 >> 4 & 1 == 1;
-        const names = [_][]const u8{ "", "fpscr", "fpscr_nzcvqc", "", "", "", "", "", "", "", "", "", "vpr", "p0", "fpcxt_ns", "fpcxt_s" };
+        const names = [_][]const u8{
+            "",
+            "fpscr",
+            "fpscr_nzcvqc",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "vpr",
+            "p0",
+            "fpcxt_ns",
+            "fpcxt_s",
+        };
         if (load and rt == 15 and id == 1) {
             o.put("vmrs apsr_nzcv, fpscr", .{});
         } else if (load) {
@@ -264,7 +281,24 @@ pub fn mem(i: Instr, o: *text.Text) void {
     const rd = fpRd(i, d);
     if (i.hw2 & 0x0F80 == 0x0F80) {
         const id: u4 = @intCast((i.hw1 >> 3 & 8) | (i.hw2 >> 12));
-        const names = [_][]const u8{ "", "fpscr", "fpscr_nzcvqc", "", "", "", "", "", "", "", "", "", "vpr", "p0", "fpccr_ns", "fpcxt_s" };
+        const names = [_][]const u8{
+            "",
+            "fpscr",
+            "fpscr_nzcvqc",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "vpr",
+            "p0",
+            "fpccr_ns",
+            "fpcxt_s",
+        };
         o.put("{s} ", .{if (load) "vldr" else "vstr"});
         o.put("{s}, [{s}", .{ names[id], rn });
     } else if (p and !w) {

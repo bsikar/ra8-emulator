@@ -11,8 +11,10 @@
 //!   frame
 //!   u32 crc      CRC-32C over every byte above
 const std = @import("std");
+
 const hold = @import("ra8_components").esp_hosted.hold;
 const record = @import("record.zig");
+
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 
 pub const Error = error{ Truncated, BadValue, BadCrc };
@@ -51,7 +53,13 @@ pub fn decode(body: []const u8) Error!Landing {
     if (body.len < fixed_len + crc_len) return Error.Truncated;
     const len = std.mem.readInt(u16, body[6..8], .little);
     if (body.len != fixed_len + @as(usize, len) + crc_len) return Error.Truncated;
-    if (Crc32c.hash(body[0 .. body.len - crc_len]) != std.mem.readInt(u32, body[body.len - crc_len ..][0..4], .little)) return Error.BadCrc;
+    if (Crc32c.hash(
+        body[0 .. body.len - crc_len],
+    ) != std.mem.readInt(
+        u32,
+        body[body.len - crc_len ..][0..4],
+        .little,
+    )) return Error.BadCrc;
     if (body[0] > 1 or body[1] > 1) return Error.BadValue;
     return .{
         .kind = @fromBackingInt(@intCast(body[0])),

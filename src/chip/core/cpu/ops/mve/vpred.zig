@@ -6,11 +6,11 @@
 //! and VPSEL picks each byte from Qn where P0 is set and from Qm where it
 //! is clear, reading raw P0 rather than the element mask. Both then advance
 //! the VPT block.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
 
 pub const group: op.Group = .{ .name = "mve_vpred", .decode = decode, .oracle = false };
 

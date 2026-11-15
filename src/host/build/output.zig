@@ -1,8 +1,10 @@
 //! Finite compiler logs, live chunks, and complete-line structured diagnostics.
 const std = @import("std");
-const Queue = @import("queue.zig");
+
 const parse = @import("diagnostic.zig").parse;
 const paths = @import("../workspace/path.zig");
+const Queue = @import("queue.zig");
+
 pub const Output = struct {
     io: std.Io,
     queue: *Queue.Queue,
@@ -41,14 +43,28 @@ pub const Output = struct {
         var name = diagnostic.path;
         var external = false;
         if (std.fs.path.isAbsolute(name)) {
-            if (name.len > self.root_path.len and std.mem.startsWith(u8, name, self.root_path) and std.mem.indexOfScalar(u8, "/\\", name[self.root_path.len]) != null) {
+            if (name.len > self.root_path.len and
+                std.mem.startsWith(u8, name, self.root_path) and
+                std.mem.indexOfScalar(u8, "/\\", name[self.root_path.len]) != null)
+            {
                 name = name[self.root_path.len + 1 ..];
             } else external = true;
         }
         const relative = if (external) "" else paths.normalize(name, &normalized) catch "";
         var bytes: [4096]u8 = undefined;
         var writer: std.Io.Writer = .fixed(&bytes);
-        std.json.Stringify.value(.{ .path = relative, .external = external or relative.len == 0, .line = diagnostic.line, .column = diagnostic.column, .message = diagnostic.message }, .{}, &writer) catch return;
+        std.json.Stringify.value(
+            .{
+                .path = relative,
+                .external = external or
+                    relative.len == 0,
+                .line = diagnostic.line,
+                .column = diagnostic.column,
+                .message = diagnostic.message,
+            },
+            .{},
+            &writer,
+        ) catch return;
         self.queue.push(self.io, .diagnostic, writer.buffered());
     }
 };

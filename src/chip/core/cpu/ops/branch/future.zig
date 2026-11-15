@@ -2,9 +2,9 @@
 //! cache, so it takes the DDI0553-permitted NOP implementation. Firmware keeps
 //! ordinary fallback branches at each branch point; those perform the branch
 //! and set LR for BFL/BFLX when they run.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     pub const hw1_mask: u16 = 0xF800;

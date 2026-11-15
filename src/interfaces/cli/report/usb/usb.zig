@@ -1,8 +1,9 @@
 //! What the scripted host on the USBFS jack got out of the device: how far
 //! enumeration went, and the descriptors it was handed on the way.
 const std = @import("std");
-const usbfs_host = @import("ra8_chip").periph.usbfs.host;
+
 pub const cable = @import("cable.zig");
+const usbfs_host = @import("ra8_chip").periph.usbfs.host;
 
 /// Silent until the pull-up put a device on the jack.
 pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
@@ -18,7 +19,11 @@ pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
     try out.writeAll("USBFS host: configuration value ");
     if (host.config_answer == .stall) try out.writeAll("stall") else try out.print("{d}", .{host.config_value[0]});
     try out.writeAll(", status ");
-    if (host.status_answer == .stall) try out.writeAll("stall") else try out.print("{x:0>2} {x:0>2}", .{ host.status[0], host.status[1] });
+    if (host.status_answer == .stall) {
+        try out.writeAll("stall");
+    } else {
+        try out.print("{x:0>2} {x:0>2}", .{ host.status[0], host.status[1] });
+    }
     try out.print(", SET_INTERFACE {s}\n", .{@tagName(host.interface)});
     if (host.halt_set == .none) return;
     try out.print("USBFS host: ENDPOINT_HALT set {s}, clear {s}\n", .{
@@ -30,7 +35,9 @@ pub fn section(host: *const usbfs_host.Host, out: anytype) !void {
 fn descriptor(name: []const u8, bytes: []const u8, out: anytype) !void {
     if (bytes[0] == 0) return;
     try out.print("USBFS host: {s} descriptor", .{name});
-    for (bytes) |byte| try out.print(" {x:0>2}", .{byte});
+    for (bytes) |byte| {
+        try out.print(" {x:0>2}", .{byte});
+    }
     try out.writeAll("\n");
 }
 

@@ -5,11 +5,12 @@
 //! unclaimed. D and M would name Q8 and above, so they must be zero. Both
 //! only touch the sign bit and leave FPSCR alone; the lane semantics are in
 //! src/chip/core/cpu/mve/float/float.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.float.Size;
 const Unary = mve.float.Unary;
 

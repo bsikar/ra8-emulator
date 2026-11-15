@@ -77,36 +77,96 @@ const single = [_]V{
     vec("vldr s0, [r0, #8]", .{ .hw1 = 0xED90, .hw2 = 0x0A02 }, .{ .s_a = memAt(a + 8) }),
     vec("vldr s1, [r0, #-4]", .{ .hw1 = 0xED50, .hw2 = 0x0A01 }, .{ .s_b = memAt(a - 4) }),
     vec("vstr s2, [r0, #4]", .{ .hw1 = 0xED80, .hw2 = 0x1A01 }, .{ .mem_b = bankAt(2) }),
-    vec("vldr d1, [r0] puts the low word in s2", .{ .hw1 = 0xED90, .hw2 = 0x1B00, .watch = 2 }, .{ .s_a = memAt(a), .s_b = memAt(a + 4) }),
-    vec("vstr d0, [r0] stores s0 first", .{ .hw1 = 0xED80, .hw2 = 0x0B00 }, .{ .mem_a = bankAt(0), .mem_b = bankAt(1) }),
-    vec("vldr s0, [pc, #8] aligns pc", .{ .hw1 = 0xED9F, .hw2 = 0x0A02, .address = code + 2 }, .{ .s_a = memAt(code + 0xC) }),
+    vec(
+        "vldr d1, [r0] puts the low word in s2",
+        .{ .hw1 = 0xED90, .hw2 = 0x1B00, .watch = 2 },
+        .{ .s_a = memAt(a), .s_b = memAt(a + 4) },
+    ),
+    vec(
+        "vstr d0, [r0] stores s0 first",
+        .{ .hw1 = 0xED80, .hw2 = 0x0B00 },
+        .{ .mem_a = bankAt(0), .mem_b = bankAt(1) },
+    ),
+    vec(
+        "vldr s0, [pc, #8] aligns pc",
+        .{ .hw1 = 0xED9F, .hw2 = 0x0A02, .address = code + 2 },
+        .{ .s_a = memAt(code + 0xC) },
+    ),
     vec("vldr.16 s0, [r0, #2] zero-extends", .{ .hw1 = 0xED90, .hw2 = 0x0901 }, .{ .s_a = memAt(a) >> 16 }),
-    vec("vstr.16 s1, [r0, #2] writes the low half", .{ .hw1 = 0xEDC0, .hw2 = 0x0901 }, .{ .mem_a = (bankAt(1) << 16) | (memAt(a) & 0xFFFF) }),
+    vec(
+        "vstr.16 s1, [r0, #2] writes the low half",
+        .{ .hw1 = 0xEDC0, .hw2 = 0x0901 },
+        .{ .mem_a = (bankAt(1) << 16) | (memAt(a) & 0xFFFF) },
+    ),
 };
 
 const multiple = [_]V{
     vec("vldm r0, {s0-s3}", .{ .hw1 = 0xEC90, .hw2 = 0x0A04 }, .{ .s_a = memAt(a), .s_b = memAt(a + 4) }),
-    vec("vldmia r0!, {s0-s1}", .{ .hw1 = 0xECB0, .hw2 = 0x0A02 }, .{ .base = a + 8, .s_a = memAt(a), .s_b = memAt(a + 4) }),
-    vec("vstmdb r0!, {s2-s3}", .{ .hw1 = 0xED20, .hw2 = 0x1A02, .at = a - 8 }, .{ .base = a - 8, .mem_a = bankAt(2), .mem_b = bankAt(3) }),
+    vec(
+        "vldmia r0!, {s0-s1}",
+        .{ .hw1 = 0xECB0, .hw2 = 0x0A02 },
+        .{ .base = a + 8, .s_a = memAt(a), .s_b = memAt(a + 4) },
+    ),
+    vec(
+        "vstmdb r0!, {s2-s3}",
+        .{ .hw1 = 0xED20, .hw2 = 0x1A02, .at = a - 8 },
+        .{ .base = a - 8, .mem_a = bankAt(2), .mem_b = bankAt(3) },
+    ),
     vec("vldmdb r0!, {s0}", .{ .hw1 = 0xED30, .hw2 = 0x0A01 }, .{ .base = a - 4, .s_a = memAt(a - 4) }),
-    vec("vldm r0, {d0-d1}", .{ .hw1 = 0xEC90, .hw2 = 0x0B04, .watch = 2 }, .{ .s_a = memAt(a + 8), .s_b = memAt(a + 12) }),
-    vec("vpush {d0-d1}", .{ .hw1 = 0xED2D, .hw2 = 0x0B04, .base_reg = 13, .at = a - 16 }, .{ .base = a - 16, .mem_a = bankAt(0), .mem_b = bankAt(1) }),
-    vec("vpop {s0-s1}", .{ .hw1 = 0xECBD, .hw2 = 0x0A02, .base_reg = 13 }, .{ .base = a + 8, .s_a = memAt(a), .s_b = memAt(a + 4) }),
+    vec(
+        "vldm r0, {d0-d1}",
+        .{ .hw1 = 0xEC90, .hw2 = 0x0B04, .watch = 2 },
+        .{ .s_a = memAt(a + 8), .s_b = memAt(a + 12) },
+    ),
+    vec(
+        "vpush {d0-d1}",
+        .{ .hw1 = 0xED2D, .hw2 = 0x0B04, .base_reg = 13, .at = a - 16 },
+        .{ .base = a - 16, .mem_a = bankAt(0), .mem_b = bankAt(1) },
+    ),
+    vec(
+        "vpop {s0-s1}",
+        .{ .hw1 = 0xECBD, .hw2 = 0x0A02, .base_reg = 13 },
+        .{ .base = a + 8, .s_a = memAt(a), .s_b = memAt(a + 4) },
+    ),
 };
 
 const faults = [_]V{
-    vec("vldr from a misaligned base faults", .{ .hw1 = 0xED90, .hw2 = 0x0A00, .r0 = a + 2 }, .{ .fault = .unaligned, .base = a + 2 }),
-    vec("vldmia past ram faults with no writeback", .{ .hw1 = 0xECB0, .hw2 = 0x0A04, .r0 = base + 0x3F8 }, .{ .fault = .other, .base = base + 0x3F8 }),
+    vec(
+        "vldr from a misaligned base faults",
+        .{ .hw1 = 0xED90, .hw2 = 0x0A00, .r0 = a + 2 },
+        .{ .fault = .unaligned, .base = a + 2 },
+    ),
+    vec(
+        "vldmia past ram faults with no writeback",
+        .{ .hw1 = 0xECB0, .hw2 = 0x0A04, .r0 = base + 0x3F8 },
+        .{ .fault = .other, .base = base + 0x3F8 },
+    ),
 };
 
 const system = [_]V{
-    vec("vstr fpscr, [r0, #4]", .{ .hw1 = 0xED80, .hw2 = 0x1F81, .fpscr = 0x6004_0001 }, .{ .mem_b = 0x6004_0001, .fpscr = 0x6004_0001 }),
+    vec(
+        "vstr fpscr, [r0, #4]",
+        .{ .hw1 = 0xED80, .hw2 = 0x1F81, .fpscr = 0x6004_0001 },
+        .{ .mem_b = 0x6004_0001, .fpscr = 0x6004_0001 },
+    ),
     vec("vldr fpscr, [r0]", .{ .hw1 = 0xED90, .hw2 = 0x1F80 }, .{ .fpscr = memAt(a) & 0xFFCF_009F }),
     vec("vldr fpscr_nzcvqc, [r0]", .{ .hw1 = 0xED90, .hw2 = 0x2F80, .fpscr = 0x0004_0001 }, .{ .fpscr = 0xC004_0001 }),
     vec("vldr vpr, [r0] clears the top byte", .{ .hw1 = 0xEDD0, .hw2 = 0x4F80 }, .{ .vpr = memAt(a) & 0x00FF_FFFF }),
-    vec("vstr p0, [r0]", .{ .hw1 = 0xEDC0, .hw2 = 0x5F80, .vpr = 0x00AB_1234 }, .{ .mem_a = 0x1234, .vpr = 0x00AB_1234 }),
-    vec("vstr fpscr, [r0, #-4]!", .{ .hw1 = 0xED20, .hw2 = 0x1F81, .at = a - 4 }, .{ .base = a - 4, .mem_a = fpscr_reset, .mem_b = memAt(a) }),
-    vec("vldr fpcxt_ns from non-secure is undefined", .{ .hw1 = 0xEDD0, .hw2 = 0x6F80, .secure = false }, .{ .fault = .undefined_instr }),
+    vec(
+        "vstr p0, [r0]",
+        .{ .hw1 = 0xEDC0, .hw2 = 0x5F80, .vpr = 0x00AB_1234 },
+        .{ .mem_a = 0x1234, .vpr = 0x00AB_1234 },
+    ),
+    vec(
+        "vstr fpscr, [r0, #-4]!",
+        .{ .hw1 = 0xED20, .hw2 = 0x1F81, .at = a - 4 },
+        .{ .base = a - 4, .mem_a = fpscr_reset, .mem_b = memAt(a) },
+    ),
+    vec(
+        "vldr fpcxt_ns from non-secure is undefined",
+        .{ .hw1 = 0xEDD0, .hw2 = 0x6F80, .secure = false },
+        .{ .fault = .undefined_instr },
+    ),
 };
 
 const unclaimed = [_]V{

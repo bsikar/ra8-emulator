@@ -19,10 +19,14 @@ pub fn box(before: []const u32, after: []const u32, width: u32) ?Rect {
     if (width == 0 or before.len != after.len) return null;
     const rows = before.len / width;
     var top: usize = 0;
-    while (top < rows and firstDiff(before, after, width, top) == null) top += 1;
+    while (top < rows and firstDiff(before, after, width, top) == null) {
+        top += 1;
+    }
     if (top == rows) return null;
     var bottom = rows - 1;
-    while (firstDiff(before, after, width, bottom) == null) bottom -= 1;
+    while (firstDiff(before, after, width, bottom) == null) {
+        bottom -= 1;
+    }
     var left: usize = width;
     var right: usize = 0;
     for (top..bottom + 1) |row| {
@@ -30,7 +34,12 @@ pub fn box(before: []const u32, after: []const u32, width: u32) ?Rect {
         left = @min(left, first);
         right = @max(right, lastDiff(before, after, width, row));
     }
-    return .{ .x = narrow(left), .y = narrow(top), .width = narrow(right - left + 1), .height = narrow(bottom - top + 1) };
+    return .{
+        .x = narrow(left),
+        .y = narrow(top),
+        .width = narrow(right - left + 1),
+        .height = narrow(bottom - top + 1),
+    };
 }
 
 fn differs(a: u32, b: u32) bool {
@@ -50,7 +59,9 @@ fn firstDiff(before: []const u32, after: []const u32, width: u32, row: usize) ?u
 fn lastDiff(before: []const u32, after: []const u32, width: u32, row: usize) usize {
     const from = row * width;
     var column: usize = width - 1;
-    while (!differs(before[from + column], after[from + column])) column -= 1;
+    while (!differs(before[from + column], after[from + column])) {
+        column -= 1;
+    }
     return column;
 }
 

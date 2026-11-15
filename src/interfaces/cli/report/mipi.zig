@@ -4,6 +4,8 @@
 //! PHY sits under both links: the DSI panel on one side and the CSI camera on
 //! the other, and which one it was configured for is the first thing the line
 //! says.
+const chip = @import("ra8_chip");
+
 const std = @import("std");
 
 const Board = @import("ra8_board").board.Board;
@@ -21,7 +23,7 @@ pub fn sections(board: *Board, out: Writer) !void {
         "MIPI-PHY: {s}, {s}, refclk {d} MHz, {d} power-up(s), {d} PLL lock(s)\n",
         .{
             phy.mode().name(),
-            @import("ra8_chip").periph.mipi.phy.status.describe(phy.sfr()),
+            chip.periph.mipi.phy.status.describe(phy.sfr()),
             phy.referenceMhz(),
             phy.powerups,
             phy.locks,
@@ -35,13 +37,15 @@ pub fn sections(board: *Board, out: Writer) !void {
     }
     if (phy.early_enables != 0) {
         try out.print(
-            "MIPI-PHY: {d} of {d} lane enable(s) taken with DPHYSFR not ready, the link was started before the PHY said it was stable\n",
+            "MIPI-PHY: {d} of {d} lane enable(s) taken with DPHYSFR not ready, the link was " ++
+                "started before the PHY said it was stable\n",
             .{ phy.early_enables, phy.enables },
         );
     }
     if (phy.pll.ignored != 0) {
         try out.print(
-            "MIPI-PHY: IGNORED {d} DPHYPLFCR/DPHYESCCR store(s) made with the PLL running, the coefficients only latch while PLLSTP is set\n",
+            "MIPI-PHY: IGNORED {d} DPHYPLFCR/DPHYESCCR store(s) made with the PLL running, " ++
+                "the coefficients only latch while PLLSTP is set\n",
             .{phy.pll.ignored},
         );
     }

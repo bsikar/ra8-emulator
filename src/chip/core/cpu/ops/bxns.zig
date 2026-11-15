@@ -10,9 +10,9 @@
 //!
 //! Left unclaimed: Rm of SP or PC. FNC_RETURN targets arrive with
 //! RA8EMU-32; until then they take the BX path.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const mask: u16 = 0xFF87;

@@ -67,11 +67,31 @@ const doubles = [_]V{
 };
 
 const context = [_]V{
-    vec("no secure fp context is a nop", .{ .hw2 = 0x0A04, .control = 0 }, .{ .cleared = 0, .vpr = vpr_reset, .control = 0 }),
-    vec("sfpa without fpca creates the context then clears", .{ .hw2 = 0x0A04, .control = sfpa }, .{ .cleared = 0x0000_000F }),
-    vec("non-secure is undefined", .{ .hw2 = 0x0A04, .secure = false }, .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset }),
-    vec("non-secure with no fp context is still undefined", .{ .hw2 = 0x0A04, .secure = false, .control = 0 }, .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset, .control = 0 }),
-    vec("aspen clear always clears", .{ .hw2 = 0x0A04, .aspen = 0, .control = 0 }, .{ .cleared = 0x0000_000F, .control = 0 }),
+    vec(
+        "no secure fp context is a nop",
+        .{ .hw2 = 0x0A04, .control = 0 },
+        .{ .cleared = 0, .vpr = vpr_reset, .control = 0 },
+    ),
+    vec(
+        "sfpa without fpca creates the context then clears",
+        .{ .hw2 = 0x0A04, .control = sfpa },
+        .{ .cleared = 0x0000_000F },
+    ),
+    vec(
+        "non-secure is undefined",
+        .{ .hw2 = 0x0A04, .secure = false },
+        .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset },
+    ),
+    vec(
+        "non-secure with no fp context is still undefined",
+        .{ .hw2 = 0x0A04, .secure = false, .control = 0 },
+        .{ .fault = .undefined_instr, .cleared = 0, .vpr = vpr_reset, .control = 0 },
+    ),
+    vec(
+        "aspen clear always clears",
+        .{ .hw2 = 0x0A04, .aspen = 0, .control = 0 },
+        .{ .cleared = 0x0000_000F, .control = 0 },
+    ),
 };
 
 const unclaimed = [_]V{

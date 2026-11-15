@@ -10,8 +10,8 @@
 //! The list is re-read only when `_tx_thread_created_count` moves. Canaries
 //! are rebuilt from the list then, so a deleted thread's reused stack is
 //! never reported as an overrun.
-const Watch = @import("watch.zig").Watch;
 const max_words = @import("watch.zig").max_words;
+const Watch = @import("watch.zig").Watch;
 
 pub const created_ptr_symbol = "_tx_thread_created_ptr";
 pub const created_count_symbol = "_tx_thread_created_count";

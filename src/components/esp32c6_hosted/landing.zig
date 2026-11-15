@@ -2,8 +2,8 @@
 //! (hold.zig `Landing`): telling it the frames a call put on the queue, and,
 //! while traffic is held, landing the frames it has recorded for the call.
 const frame = @import("frame.zig");
-const Queue = @import("queue.zig").Queue;
 const hold = @import("hold.zig");
+const Queue = @import("queue.zig").Queue;
 
 /// A call of `site` began. Counts it for the record. Returns whether host
 /// traffic is held; held, the recorded frames due for the call land on

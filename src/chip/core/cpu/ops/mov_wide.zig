@@ -2,9 +2,9 @@
 //! or into the high half keeping the low one. imm16 is imm4:i:imm3:imm8.
 //! Neither touches the flags. Rd of SP or PC is UNPREDICTABLE and left
 //! unclaimed, so the core stops rather than guess.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with i ([10]) and imm4 ([3:0]) masked out.

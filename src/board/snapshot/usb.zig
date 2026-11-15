@@ -8,8 +8,9 @@
 //! load keeps the target's. The MSC target saves its own half
 //! (components/usb/stick/snapshot.zig, RA8EMU-1104), after the rest.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 const stick_half = @import("ra8_components").usb.stick.snapshot;
 
 pub const Error = file.Error || fields.Error || error{Missing};

@@ -39,25 +39,157 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 pub const all = forms ++ predicated ++ unclaimed;
 
 const forms = [_]V{
-    vec("vabs.f32 negatives, nans and -0", .{ .hw1 = 0xFFB9, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x80000000_FF800001_7FC00001_BF800000 }, .{ .qd = 0x00000000_7F800001_7FC00001_3F800000, .fpscr = 0x00040000 }),
-    vec("vabs.f32 denormals and infinities, no flush", .{ .hw1 = 0xFFB9, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3F800000_7F800000_807FFFFF_00000001 }, .{ .qd = 0x3F800000_7F800000_007FFFFF_00000001, .fpscr = 0x00040000 }),
-    vec("vabs.f16 every lane kind", .{ .hw1 = 0xFFB5, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00 }, .{ .qd = 0x3C007C00_03FF0001_00007C01_7E013C00, .fpscr = 0x00040000 }),
-    vec("vabs.f32 qd = qm", .{ .hw1 = 0xFFB9, .hw2 = 0xA74A, .qm = 0x80000000_FF800001_7FC00001_BF800000 }, .{ .qd = 0x00000000_7F800001_7FC00001_3F800000, .fpscr = 0x00040000 }),
-    vec("vabs.f16 leaves fpscr flags and modes alone", .{ .hw1 = 0xFFB5, .hw2 = 0xE742, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .fpscr = 0x0304009F }, .{ .qd = 0x3C007C00_03FF0001_00007C01_7E013C00, .fpscr = 0x0304009F }),
-    vec("vneg.f32 negatives, nans and -0", .{ .hw1 = 0xFFB9, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x80000000_FF800001_7FC00001_BF800000 }, .{ .qd = 0x00000000_7F800001_FFC00001_3F800000, .fpscr = 0x00040000 }),
-    vec("vneg.f32 denormals and infinities, no flush", .{ .hw1 = 0xFFB9, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3F800000_7F800000_807FFFFF_00000001 }, .{ .qd = 0xBF800000_FF800000_007FFFFF_80000001, .fpscr = 0x00040000 }),
-    vec("vneg.f16 every lane kind", .{ .hw1 = 0xFFB5, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00 }, .{ .qd = 0xBC00FC00_03FF8001_00007C01_FE013C00, .fpscr = 0x00040000 }),
-    vec("vneg.f32 qd = qm", .{ .hw1 = 0xFFB9, .hw2 = 0xA7CA, .qm = 0x80000000_FF800001_7FC00001_BF800000 }, .{ .qd = 0x00000000_7F800001_FFC00001_3F800000, .fpscr = 0x00040000 }),
-    vec("vneg.f16 leaves fpscr flags and modes alone", .{ .hw1 = 0xFFB5, .hw2 = 0xE7C2, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .fpscr = 0x0304009F }, .{ .qd = 0xBC00FC00_03FF8001_00007C01_FE013C00, .fpscr = 0x0304009F }),
+    vec(
+        "vabs.f32 negatives, nans and -0",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x80000000_FF800001_7FC00001_BF800000,
+        },
+        .{ .qd = 0x00000000_7F800001_7FC00001_3F800000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vabs.f32 denormals and infinities, no flush",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3F800000_7F800000_807FFFFF_00000001,
+        },
+        .{ .qd = 0x3F800000_7F800000_007FFFFF_00000001, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vabs.f16 every lane kind",
+        .{
+            .hw1 = 0xFFB5,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00,
+        },
+        .{ .qd = 0x3C007C00_03FF0001_00007C01_7E013C00, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vabs.f32 qd = qm",
+        .{ .hw1 = 0xFFB9, .hw2 = 0xA74A, .qm = 0x80000000_FF800001_7FC00001_BF800000 },
+        .{ .qd = 0x00000000_7F800001_7FC00001_3F800000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vabs.f16 leaves fpscr flags and modes alone",
+        .{ .hw1 = 0xFFB5, .hw2 = 0xE742, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .fpscr = 0x0304009F },
+        .{ .qd = 0x3C007C00_03FF0001_00007C01_7E013C00, .fpscr = 0x0304009F },
+    ),
+    vec(
+        "vneg.f32 negatives, nans and -0",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x80000000_FF800001_7FC00001_BF800000,
+        },
+        .{ .qd = 0x00000000_7F800001_FFC00001_3F800000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vneg.f32 denormals and infinities, no flush",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3F800000_7F800000_807FFFFF_00000001,
+        },
+        .{ .qd = 0xBF800000_FF800000_007FFFFF_80000001, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vneg.f16 every lane kind",
+        .{
+            .hw1 = 0xFFB5,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00,
+        },
+        .{ .qd = 0xBC00FC00_03FF8001_00007C01_FE013C00, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vneg.f32 qd = qm",
+        .{ .hw1 = 0xFFB9, .hw2 = 0xA7CA, .qm = 0x80000000_FF800001_7FC00001_BF800000 },
+        .{ .qd = 0x00000000_7F800001_FFC00001_3F800000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vneg.f16 leaves fpscr flags and modes alone",
+        .{ .hw1 = 0xFFB5, .hw2 = 0xE7C2, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .fpscr = 0x0304009F },
+        .{ .qd = 0xBC00FC00_03FF8001_00007C01_FE013C00, .fpscr = 0x0304009F },
+    ),
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0x0f0e merges bytes, not lanes", .{ .hw1 = 0xFFB9, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x80000000_FF800001_7FC00001_BF800000, .vpr = 0x00880F0E }, .{ .qd = 0x11111111_7F800001_33333333_3F800044, .fpscr = 0x00040000, .vpr = 0x00000F0E }),
-    vec("vpt f16 p0 0x3c03", .{ .hw1 = 0xFFB5, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .vpr = 0x00883C03 }, .{ .qd = 0x11117C00_03FF2222_33333333_44443C00, .fpscr = 0x00040000, .vpr = 0x00003C03 }),
-    vec("the loop tail keeps lanes 2 and 3", .{ .hw1 = 0xFFB9, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x80000000_FF800001_7FC00001_BF800000, .lr = 2, .fpscr = 0x00020000 }, .{ .qd = 0x11111111_22222222_7FC00001_3F800000, .fpscr = 0x00020000 }),
-    vec("the f16 loop tail at ltpsize 1", .{ .hw1 = 0xFFB5, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .lr = 5, .fpscr = 0x00010000 }, .{ .qd = 0x11111111_22228001_00007C01_FE013C00, .fpscr = 0x00010000 }),
-    vec("eci a0 keeps beat 0", .{ .hw1 = 0xFFB9, .hw2 = 0x07C4, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x80000000_FF800001_7FC00001_BF800000, .it = 0x10 }, .{ .qd = 0x00000000_7F800001_FFC00001_44444444, .fpscr = 0x00040000 }),
-    vec("eci a0a1a2 keeps beats 0 to 2", .{ .hw1 = 0xFFB5, .hw2 = 0x0744, .qd = 0x11111111_22222222_33333333_44444444, .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00, .it = 0x40 }, .{ .qd = 0x3C007C00_22222222_33333333_44444444, .fpscr = 0x00040000 }),
+    vec(
+        "vpt p0 0x0f0e merges bytes, not lanes",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x80000000_FF800001_7FC00001_BF800000,
+            .vpr = 0x00880F0E,
+        },
+        .{ .qd = 0x11111111_7F800001_33333333_3F800044, .fpscr = 0x00040000, .vpr = 0x00000F0E },
+    ),
+    vec(
+        "vpt f16 p0 0x3c03",
+        .{
+            .hw1 = 0xFFB5,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00,
+            .vpr = 0x00883C03,
+        },
+        .{ .qd = 0x11117C00_03FF2222_33333333_44443C00, .fpscr = 0x00040000, .vpr = 0x00003C03 },
+    ),
+    vec(
+        "the loop tail keeps lanes 2 and 3",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x80000000_FF800001_7FC00001_BF800000,
+            .lr = 2,
+            .fpscr = 0x00020000,
+        },
+        .{ .qd = 0x11111111_22222222_7FC00001_3F800000, .fpscr = 0x00020000 },
+    ),
+    vec(
+        "the f16 loop tail at ltpsize 1",
+        .{
+            .hw1 = 0xFFB5,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00,
+            .lr = 5,
+            .fpscr = 0x00010000,
+        },
+        .{ .qd = 0x11111111_22228001_00007C01_FE013C00, .fpscr = 0x00010000 },
+    ),
+    vec(
+        "eci a0 keeps beat 0",
+        .{
+            .hw1 = 0xFFB9,
+            .hw2 = 0x07C4,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x80000000_FF800001_7FC00001_BF800000,
+            .it = 0x10,
+        },
+        .{ .qd = 0x00000000_7F800001_FFC00001_44444444, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "eci a0a1a2 keeps beats 0 to 2",
+        .{
+            .hw1 = 0xFFB5,
+            .hw2 = 0x0744,
+            .qd = 0x11111111_22222222_33333333_44444444,
+            .qm = 0x3C007C00_83FF0001_8000FC01_7E01BC00,
+            .it = 0x40,
+        },
+        .{ .qd = 0x3C007C00_22222222_33333333_44444444, .fpscr = 0x00040000 },
+    ),
 };
 
 const unclaimed = [_]V{

@@ -1,5 +1,4 @@
 //! Wire types for navigation and playback RPC methods (Slice 22.4).
-const std = @import("std");
 
 pub const Direction = enum(u8) { fwd = 0, back = 1 };
 

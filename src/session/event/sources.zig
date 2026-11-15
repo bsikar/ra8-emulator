@@ -1,17 +1,18 @@
 //! Engine-thread source adapters for session events (RA8EMU-192).
 const std = @import("std");
-const stream_mod = @import("stream.zig");
-const chunk_clock = @import("../chunk_clock.zig");
-const sci = @import("ra8_chip").periph.sci;
-const gpio = @import("ra8_chip").periph.gpio;
-const registry = @import("ra8_chip").periph.registry;
-const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
-const reset = @import("ra8_chip").periph.reset;
+
 const board_events = @import("ra8_board").event_sink;
+const chunk_clock = @import("../chunk_clock.zig");
 const eink = @import("ra8_components").eink;
 const glcdc = @import("ra8_chip").periph.glcdc;
-const wdt = @import("ra8_chip").periph.wdt;
+const gpio = @import("ra8_chip").periph.gpio;
 const iwdt = @import("ra8_chip").periph.iwdt;
+const registry = @import("ra8_chip").periph.registry;
+const reset = @import("ra8_chip").periph.reset;
+const sci = @import("ra8_chip").periph.sci;
+const stream_mod = @import("stream.zig");
+const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
+const wdt = @import("ra8_chip").periph.wdt;
 
 pub const Core = stream_mod.Core;
 pub const Event = stream_mod.Event;
@@ -46,7 +47,14 @@ pub const Sources = struct {
         self.time_base = time_base;
     }
 
-    pub fn bindBoard(self: *Sources, issuer: *const registry.Issuer, pins: *const gpio.Gpio, initial: board_events.Observation, board_panel: *const eink.Panel, attached_eink: *const ?*eink.Panel) void {
+    pub fn bindBoard(
+        self: *Sources,
+        issuer: *const registry.Issuer,
+        pins: *const gpio.Gpio,
+        initial: board_events.Observation,
+        board_panel: *const eink.Panel,
+        attached_eink: *const ?*eink.Panel,
+    ) void {
         self.issuer = issuer;
         self.observation = initial;
         self.board_panel = board_panel;
@@ -66,7 +74,9 @@ pub const Sources = struct {
     /// stands now, so only a later change is published.
     pub fn gpioTap(self: *Sources, pins: *const gpio.Gpio, core: ?Core) gpio.Gpio.EventTap {
         self.pins = pins;
-        for (&self.led_on, 0..) |*on, index| on.* = pins.ledLevel(index) == 1;
+        for (&self.led_on, 0..) |*on, index| {
+            on.* = pins.ledLevel(index) == 1;
+        }
         self.gpio_context = .{ .sources = self, .core = core };
         return .{ .context = &self.gpio_context, .changedFn = gpioChanged };
     }
@@ -112,14 +122,26 @@ pub const Sources = struct {
     fn uartSent(context: *anyopaque, channel: usize, byte: u8) void {
         const source: *Context = @ptrCast(@alignCast(context));
         if (source.sources.mute) |mute| if (mute.mutedFn(mute.context)) return;
-        source.sources.publish(.{ .core = source.sources.currentCore(source.core), .kind = .uart_byte, .payload = .{ .uart = .{ .channel = @intCast(channel), .byte = byte } } });
+        source.sources.publish(
+            .{
+                .core = source.sources.currentCore(source.core),
+                .kind = .uart_byte,
+                .payload = .{ .uart = .{ .channel = @intCast(channel), .byte = byte } },
+            },
+        );
     }
 
     fn gpioChanged(context: *anyopaque, port: u8, levels: u16, changed: u16, origin: gpio.Gpio.EventOrigin) void {
         const source: *Context = @ptrCast(@alignCast(context));
         const core = if (origin == .external) source.sources.active_core else source.sources.currentCore(source.core);
         source.sources.gpio_levels[port] = levels;
-        if (changed != 0) source.sources.publish(.{ .core = core, .kind = .gpio_changed, .payload = .{ .gpio = .{ .port = port, .changed = changed, .levels = levels } } });
+        if (changed != 0) source.sources.publish(
+            .{
+                .core = core,
+                .kind = .gpio_changed,
+                .payload = .{ .gpio = .{ .port = port, .changed = changed, .levels = levels } },
+            },
+        );
         source.sources.ledsOn(port, core);
     }
 
@@ -135,7 +157,13 @@ pub const Sources = struct {
             const high = pins.ledLevel(index) == 1;
             if (high == self.led_on[index]) continue;
             self.led_on[index] = high;
-            self.publish(.{ .core = core, .kind = .led_changed, .payload = .{ .led = .{ .index = @intCast(index), .level = high } } });
+            self.publish(
+                .{
+                    .core = core,
+                    .kind = .led_changed,
+                    .payload = .{ .led = .{ .index = @intCast(index), .level = high } },
+                },
+            );
         }
     }
 
@@ -164,7 +192,15 @@ pub const Sources = struct {
     /// changed in it (panel_watch.zig).
     pub fn panelChanged(self: *Sources, width: u32, height: u32, generation: u64, dirty: Event.Rect) void {
         if (self.eink_active) return;
-        self.publish(.{ .core = self.active_core, .kind = .lcd_frame, .payload = .{ .frame = .{ .width = width, .height = height, .generation = generation, .dirty = dirty } } });
+        self.publish(
+            .{
+                .core = self.active_core,
+                .kind = .lcd_frame,
+                .payload = .{
+                    .frame = .{ .width = width, .height = height, .generation = generation, .dirty = dirty },
+                },
+            },
+        );
     }
 
     fn glcdcFrame(context: *anyopaque, display: *glcdc.Glcdc) void {
@@ -208,6 +244,13 @@ pub const Sources = struct {
             .watchdog => .watchdog,
             .iwdt => .iwdt,
         };
-        self.publishAt(.{ .core = @fromBackingInt(@intCast(@backingInt(issuer))), .kind = .reset, .payload = .{ .reset = reset_kind } }, at_ns);
+        self.publishAt(
+            .{
+                .core = @fromBackingInt(@intCast(@backingInt(issuer))),
+                .kind = .reset,
+                .payload = .{ .reset = reset_kind },
+            },
+            at_ns,
+        );
     }
 };

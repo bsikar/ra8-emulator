@@ -1,6 +1,7 @@
 //! Fresh host measurements for application-owned budget decisions.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const budget = @import("budget.zig");
 
 const MemoryStatus = extern struct {
@@ -16,7 +17,12 @@ const MemoryStatus = extern struct {
 };
 
 extern "kernel32" fn GlobalMemoryStatusEx(status: *MemoryStatus) callconv(.winapi) std.os.windows.BOOL;
-extern "kernel32" fn GetDiskFreeSpaceExW(path: [*:0]const u16, available: *u64, total: *u64, free: *u64) callconv(.winapi) std.os.windows.BOOL;
+extern "kernel32" fn GetDiskFreeSpaceExW(
+    path: [*:0]const u16,
+    available: *u64,
+    total: *u64,
+    free: *u64,
+) callconv(.winapi) std.os.windows.BOOL;
 
 // Linux LP64 libc statvfs ABI. Only selected for a 64-bit Linux host.
 // sysdeps/unix/sysv/linux/bits/statvfs.h: the final 24 bytes are reserved.
@@ -68,7 +74,9 @@ pub fn physicalRam() error{MeasurementUnavailable}!u64 {
     if (builtin.os.tag == .macos) {
         var result: u64 = 0;
         var len: usize = @sizeOf(u64);
-        if (std.c.sysctlbyname("hw.memsize", &result, &len, null, 0) != 0 or len != @sizeOf(u64) or result == 0) return error.MeasurementUnavailable;
+        if (std.c.sysctlbyname("hw.memsize", &result, &len, null, 0) != 0 or
+            len != @sizeOf(u64) or
+            result == 0) return error.MeasurementUnavailable;
         return result;
     }
     if (builtin.os.tag == .linux) {
@@ -113,7 +121,10 @@ pub fn volume(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir) !Volume
     }
     if (builtin.os.tag == .macos) {
         var result: DarwinVolume = undefined;
-        const status = if (builtin.cpu.arch == .aarch64) fstatfs(dir.handle, &result) else @"fstatfs$INODE64"(dir.handle, &result);
+        const status = if (builtin.cpu.arch == .aarch64)
+            fstatfs(dir.handle, &result)
+        else
+            @"fstatfs$INODE64"(dir.handle, &result);
         if (status != 0) return error.MeasurementUnavailable;
         return .{
             .total = try std.math.mul(u64, result.blocks, result.block_size),

@@ -69,7 +69,11 @@ const unconditional = [_]V{
     call("bl to the far end", 0xF3FF, 0xD7FF, 0x1001002),
     call("bl to the near end", 0xF400, 0xD000, 0xFF001004),
     call("bl with I1 alone", 0xF000, 0xD800, 0x801004),
-    vec("bl from RAM sets LR there", .{ .hw1 = 0xF7FF, .hw2 = 0xFFFF, .address = 0x2000_0000 }, .{ .pc = 0x2000_0002, .lr = 0x2000_0005 }),
+    vec(
+        "bl from RAM sets LR there",
+        .{ .hw1 = 0xF7FF, .hw2 = 0xFFFF, .address = 0x2000_0000 },
+        .{ .pc = 0x2000_0002, .lr = 0x2000_0005 },
+    ),
 };
 
 const conditional = [_]V{

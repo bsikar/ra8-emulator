@@ -66,9 +66,21 @@ const loads = [_]V{
     ld("ldah r1, [r0] zero-extends", 0x1F9F, base, 0xC3A9),
     ld("ldah r1, [r0] reads the high half", 0x1F9F, base + 2, 0x8765),
     vec("lda r0, [r0] overwrites the base", .{ .hw1 = 0xE8D0, .hw2 = 0x0FAF }, .{ .rn = literal }),
-    vec("lda at a halfword address faults", .{ .hw1 = 0xE8D0, .hw2 = 0x1FAF, .rn = base + 2 }, .{ .fault = .unaligned, .rn = base + 2 }),
-    vec("ldah at an odd address faults", .{ .hw1 = 0xE8D0, .hw2 = 0x1F9F, .rn = base + 1 }, .{ .fault = .unaligned, .rn = base + 1 }),
-    vec("lda past RAM faults and keeps rt", .{ .hw1 = 0xE8D0, .hw2 = 0x1FAF, .rn = 0x2000_0400 }, .{ .fault = .unmapped, .rn = 0x2000_0400 }),
+    vec(
+        "lda at a halfword address faults",
+        .{ .hw1 = 0xE8D0, .hw2 = 0x1FAF, .rn = base + 2 },
+        .{ .fault = .unaligned, .rn = base + 2 },
+    ),
+    vec(
+        "ldah at an odd address faults",
+        .{ .hw1 = 0xE8D0, .hw2 = 0x1F9F, .rn = base + 1 },
+        .{ .fault = .unaligned, .rn = base + 1 },
+    ),
+    vec(
+        "lda past RAM faults and keeps rt",
+        .{ .hw1 = 0xE8D0, .hw2 = 0x1FAF, .rn = 0x2000_0400 },
+        .{ .fault = .unmapped, .rn = 0x2000_0400 },
+    ),
 };
 
 const stores = [_]V{
@@ -77,9 +89,21 @@ const stores = [_]V{
     st("stlb r1, [r0] at byte 3", 0x1F8F, base + 3, 0x4465_C3A9),
     st("stlh r1, [r0] writes one half", 0x1F9F, base, 0x8765_3344),
     st("stlh r1, [r0] at the high half", 0x1F9F, base + 2, 0x3344_C3A9),
-    vec("stl at a halfword address faults and writes nothing", .{ .hw1 = 0xE8C0, .hw2 = 0x1FAF, .rn = base + 2 }, .{ .fault = .unaligned, .rn = base + 2 }),
-    vec("stlh at an odd address faults", .{ .hw1 = 0xE8C0, .hw2 = 0x1F9F, .rn = base + 1 }, .{ .fault = .unaligned, .rn = base + 1 }),
-    vec("stl past RAM faults", .{ .hw1 = 0xE8C0, .hw2 = 0x1FAF, .rn = 0x2000_0400 }, .{ .fault = .unmapped, .rn = 0x2000_0400 }),
+    vec(
+        "stl at a halfword address faults and writes nothing",
+        .{ .hw1 = 0xE8C0, .hw2 = 0x1FAF, .rn = base + 2 },
+        .{ .fault = .unaligned, .rn = base + 2 },
+    ),
+    vec(
+        "stlh at an odd address faults",
+        .{ .hw1 = 0xE8C0, .hw2 = 0x1F9F, .rn = base + 1 },
+        .{ .fault = .unaligned, .rn = base + 1 },
+    ),
+    vec(
+        "stl past RAM faults",
+        .{ .hw1 = 0xE8C0, .hw2 = 0x1FAF, .rn = 0x2000_0400 },
+        .{ .fault = .unmapped, .rn = 0x2000_0400 },
+    ),
 };
 
 const unclaimed = [_]V{

@@ -5,9 +5,9 @@
 //! LE, LETP and BKPT leave it, and anything else takes INVSTATE before it
 //! runs. A reserved ECI value faults a beat-wise instruction too
 //! (RA8EMU-452).
-const op = @import("op.zig");
-const Itstate = @import("it_state.zig").Itstate;
 const eci = @import("mve/eci.zig");
+const Itstate = @import("it_state.zig").Itstate;
+const op = @import("op.zig");
 
 pub const Action = enum { run, fault, restart };
 

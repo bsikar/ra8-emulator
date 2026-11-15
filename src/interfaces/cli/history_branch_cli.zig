@@ -1,9 +1,12 @@
 //! Offline command line branch operations for persistent histories (Slice 20.4).
 const std = @import("std");
+
 const ra8_host = @import("ra8_host");
+
 const history = ra8_host.history;
 const branches_file = history.branches_file;
 const ra8_session = @import("ra8_session");
+
 const lifecycle = ra8_session.history_lifecycle;
 const branches_recover = ra8_session.history_branches_recover;
 const codec = ra8_session.history_branches_codec;
@@ -25,7 +28,12 @@ fn printBranchItems(out: *std.Io.Writer, items: []const lifecycle.BranchInfo) !v
     }
 }
 
-fn listOneSession(allocator: std.mem.Allocator, base: *const history.base.Base, name: []const u8, out: *std.Io.Writer) !void {
+fn listOneSession(
+    allocator: std.mem.Allocator,
+    base: *const history.base.Base,
+    name: []const u8,
+    out: *std.Io.Writer,
+) !void {
     var dir = try base.dir.openDir(base.io, name, .{ .iterate = true, .follow_symlinks = false });
     defer dir.close(base.io);
 
@@ -41,7 +49,12 @@ fn listOneSession(allocator: std.mem.Allocator, base: *const history.base.Base, 
     try printBranchItems(out, items);
 }
 
-pub fn listBranches(allocator: std.mem.Allocator, base: *const history.base.Base, session_name: ?[]const u8, out: *std.Io.Writer) !u8 {
+pub fn listBranches(
+    allocator: std.mem.Allocator,
+    base: *const history.base.Base,
+    session_name: ?[]const u8,
+    out: *std.Io.Writer,
+) !u8 {
     if (session_name) |name| {
         try listOneSession(allocator, base, name, out);
         return 0;
@@ -87,8 +100,9 @@ pub fn removeBranch(
     // A branches.bin that is there but decodes to nothing is not an empty
     // history: writing the base-only graph back would drop every branch
     // while reporting a removal, so the removal refuses and the file stays.
-    if (rec.action == .use_base and (candidates.current != null or candidates.temp != null))
+    if (rec.action == .use_base and (candidates.current != null or candidates.temp != null)) {
         return error.BranchesUnreadable;
+    }
     switch (rec.action) {
         .use_temp => try branches_file.settle(base.io, dir),
         .use_current, .use_base => branches_file.cleanupTemp(base.io, dir),

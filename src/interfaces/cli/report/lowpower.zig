@@ -1,5 +1,6 @@
 //! The end-of-run lines for the low-power control bytes.
-const std = @import("std");
+const chip = @import("ra8_chip");
+
 const Board = @import("ra8_board").board.Board;
 
 pub fn sections(board: *const Board, out: anytype) !void {
@@ -16,7 +17,7 @@ pub fn sections(board: *const Board, out: anytype) !void {
             });
         } else {
             try out.print("low power: LPSCR.LPMD = 0x{X}, which the HUM does not define\n", .{
-                unit.lpscr & @import("ra8_chip").periph.lpm.field.lpmd,
+                unit.lpscr & chip.periph.lpm.field.lpmd,
             });
         }
     }
@@ -30,6 +31,9 @@ pub fn sections(board: *const Board, out: anytype) !void {
         try out.print("low power: {d} store(s) selected an LPMD the HUM does not define\n", .{unit.undefined_modes});
     }
     if (unit.prohibited_softstart != 0) {
-        try out.print("low power: {d} store(s) asked for DCSSMODE 0, which the HUM prohibits\n", .{unit.prohibited_softstart});
+        try out.print(
+            "low power: {d} store(s) asked for DCSSMODE 0, which the HUM prohibits\n",
+            .{unit.prohibited_softstart},
+        );
     }
 }

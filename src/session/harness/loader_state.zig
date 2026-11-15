@@ -1,12 +1,13 @@
 //! The session's per-core load hook: maps a freshly loaded image onto a
 //! core's memory and reboots it at the new image's vector table.
 const std = @import("std");
+
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const elf = @import("ra8_board").image.elf;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const read_image = @import("ra8_board").image.load;
-const memory_load = @import("ra8_chip").core.cpu.memory.load;
 const memmap = @import("ra8_chip").core.memmap;
+const memory_load = @import("ra8_chip").core.cpu.memory.load;
+const read_image = @import("ra8_board").image.load;
 const Reboot = @import("ra8_chip").core.reboot.Reboot;
 const run_file = @import("ra8_board").snapshot.run;
 const session_api = @import("../api.zig");

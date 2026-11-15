@@ -2,20 +2,21 @@
 //! `--debug-script` or `--debug`. The public harness owns CPU0 and its board;
 //! this front adds the requested debugger mode and optional CPU1.
 const std = @import("std");
+
 const board_speed = @import("ra8_session").board.speed;
-const pacer = @import("ra8_session").run.pacer;
-const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
-const script = @import("ra8_session").script;
-const zig_script = @import("ra8_session").zig.script;
-const session_api = @import("ra8_session").api;
+const cpu1_bringup = @import("ra8_session").cpu1.bringup;
 const debug_front = @import("../debug_front.zig");
+const file_ops = @import("ra8_session").file_ops;
+const harness = @import("ra8_session").harness;
+const pacer = @import("ra8_session").run.pacer;
 const rsp_dispatch = @import("ra8_gdb").rsp.dispatch;
 const rsp_poll = @import("ra8_gdb").rsp.poll;
-const harness = @import("ra8_session").harness;
-const file_ops = @import("ra8_session").file_ops;
+const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
+const script = @import("ra8_session").script;
+const session_api = @import("ra8_session").api;
 const session_files = @import("ra8_host").session_files;
 const transport_mod = @import("ra8_session").transport;
-const cpu1_bringup = @import("ra8_session").cpu1.bringup;
+const zig_script = @import("ra8_session").zig.script;
 
 /// Why a request cannot run on the Zig core's debugger yet, or null when it can.
 pub fn refusal(request: debug_front.Request) ?[]const u8 {
@@ -29,7 +30,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
         std.debug.print("{s}\n", .{why});
         return 2;
     }
-    var opened = harness.open(allocator, io, .{ .elf_path = request.image, .device = .ra8d2, .files = session_files.cwd(file_ops.Ops) }) catch |err| {
+    var opened = harness.open(
+        allocator,
+        io,
+        .{ .elf_path = request.image, .device = .ra8d2, .files = session_files.cwd(file_ops.Ops) },
+    ) catch |err| {
         std.debug.print("cannot open {s}: {s}\n", .{ request.image, @errorName(err) });
         return 1;
     };
@@ -39,7 +44,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
     asked.attach(opened.board());
     // The debug run owns its host clock; the pacer it starts anchors on it.
     var host_clock = pacer.HostClock.init(io);
-    var speed: board_speed.BoardSpeed = .{ .time = &opened.board().time, .paced = &asked.pacing, .clock = host_clock.clock() };
+    var speed: board_speed.BoardSpeed = .{
+        .time = &opened.board().time,
+        .paced = &asked.pacing,
+        .clock = host_clock.clock(),
+    };
     target.session.speed = speed.hook();
     var other: cpu1_bringup.Cpu1 = .{};
     const named = request.cpu1 orelse return serve(allocator, io, &target, opened.transport(), request.mode, out);
@@ -53,16 +62,34 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, request: debug_front.Reques
 }
 
 /// gdb on the port, or the script or terminal.
-fn serve(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, plane: *transport_mod.Transport, mode: debug_front.Mode, out: anytype) !u8 {
+fn serve(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    target: *zig_script.ZigScript,
+    plane: *transport_mod.Transport,
+    mode: debug_front.Mode,
+    out: anytype,
+) !u8 {
     if (mode == .gdb) return listen(io, target.session, plane, mode.gdb);
     return drive(allocator, io, target, mode, out);
 }
 
 /// Play the script or talk to the terminal.
-fn drive(allocator: std.mem.Allocator, io: std.Io, target: *zig_script.ZigScript, mode: debug_front.Mode, out: anytype) !u8 {
+fn drive(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    target: *zig_script.ZigScript,
+    mode: debug_front.Mode,
+    out: anytype,
+) !u8 {
     switch (mode) {
         .script => |path| {
-            const text = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(debug_front.limits.max_file)) catch |err| {
+            const text = std.Io.Dir.cwd().readFileAlloc(
+                io,
+                path,
+                allocator,
+                .limited(debug_front.limits.max_file),
+            ) catch |err| {
                 std.debug.print("cannot read {s}: {s}\n", .{ path, @errorName(err) });
                 return 1;
             };
@@ -92,7 +119,12 @@ fn listen(io: std.Io, live: *session_api.Session, plane: *transport_mod.Transpor
     defer stream.close(io);
     var socket = rsp_poll.Socket{ .handle = stream.socket.handle, .io = io };
     try live.setRunBudget(live.currentCore(), rsp_poll.chunk);
-    var target: rsp_dispatch.zig_run.Target = .{ .session = live, .poll = socket.poll(), .transport = plane, .wall = wall_clock.wall() };
+    var target: rsp_dispatch.zig_run.Target = .{
+        .session = live,
+        .poll = socket.poll(),
+        .transport = plane,
+        .wall = wall_clock.wall(),
+    };
     const stub = rsp_dispatch.Dispatch{ .zig = &target };
     var in: [rsp_dispatch.server.limits.chunk]u8 = undefined;
     var out: [rsp_dispatch.server.limits.framed]u8 = undefined;

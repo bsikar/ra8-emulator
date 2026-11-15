@@ -56,7 +56,9 @@ pub const Table = struct {
     pub fn remove(self: *Table, id: Id) Error!void {
         const index = self.indexOf(id) orelse return Error.NoSuchBreak;
         var at = index;
-        while (at + 1 < self.len) : (at += 1) self.slots[at] = self.slots[at + 1];
+        while (at + 1 < self.len) : (at += 1) {
+            self.slots[at] = self.slots[at + 1];
+        }
         self.len -= 1;
     }
 

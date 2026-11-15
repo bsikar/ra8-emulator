@@ -7,7 +7,9 @@
 //! block) or `off_widths` (per register); a model that declares neither
 //! gives 0, which prints as "?", never a guess from the offset spacing.
 const std = @import("std");
+
 const chip = @import("ra8_chip").periph;
+
 const periph = chip.registry;
 const rtc = chip.rtc;
 const agt = chip.agt;
@@ -112,7 +114,10 @@ pub fn blocksJson(bus: *const periph.Bus, out: []u8) error{NoSpaceLeft}![]const 
     writer.writeByte('[') catch return error.NoSpaceLeft;
     for (blocks(bus), 0..) |block, index| {
         if (index != 0) writer.writeByte(',') catch return error.NoSpaceLeft;
-        writer.print("{{\"name\":\"{s}\",\"base\":{d},\"size\":{d}}}", .{ block.name, block.base, block.size }) catch return error.NoSpaceLeft;
+        writer.print(
+            "{{\"name\":\"{s}\",\"base\":{d},\"size\":{d}}}",
+            .{ block.name, block.base, block.size },
+        ) catch return error.NoSpaceLeft;
     }
     writer.writeByte(']') catch return error.NoSpaceLeft;
     return writer.buffered();

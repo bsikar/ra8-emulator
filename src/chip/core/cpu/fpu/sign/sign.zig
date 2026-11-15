@@ -4,6 +4,7 @@
 //! is not read or written. VNEG and VABS in every precision are these.
 
 pub const vectors = @import("vectors.zig");
+
 pub fn neg32(op: u32) u32 {
     return op ^ sign.single;
 }

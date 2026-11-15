@@ -18,12 +18,12 @@
 //! Every register in the three windows is 32 bits, so an access narrower than
 //! a word takes the `lanes.zig` rule: a read is cut to the lanes it names, a
 //! store keeps the lanes it does not.
-const std = @import("std");
+
+const eth_dma = @import("dma.zig");
+const eth_mode = @import("mode.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const regs = @import("regs.zig");
-const eth_mode = @import("mode.zig");
-const eth_dma = @import("dma.zig");
 
 pub const Queues = struct {
     base: u32 = regs.cluster.gwca0,

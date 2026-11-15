@@ -5,8 +5,9 @@
 //! address) the way the bench AP does: ARP requests for it get the BSSID,
 //! and ICMP echo requests to it get an echo reply with the same payload.
 const std = @import("std");
-const eth = @import("eth.zig");
+
 const dhcp = @import("dhcp.zig");
+const eth = @import("eth.zig");
 const frame = @import("frame.zig");
 const station = @import("station.zig");
 

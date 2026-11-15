@@ -44,8 +44,8 @@
 //! edge-detects DPHYSFR in software off whatever vector called it, and no ELC
 //! number for the PHY is in either tree, so nothing is raised here.
 const periph = @import("../../registry.zig");
-pub const status = @import("status.zig");
 pub const pll_lock = @import("pll_lock.zig");
+pub const status = @import("status.zig");
 
 /// D-PHY geometry. The bus folds the Non-secure alias onto this base.
 pub const win_base: u32 = 0x4034_6C00;

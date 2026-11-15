@@ -7,6 +7,7 @@
 //! file decodes them. Counters that are not valid BCD, or that name a date
 //! no calendar has, decode to null rather than to a guess.
 const std = @import("std");
+
 pub const start = @import("start.zig");
 
 /// The calendar counters exactly as the guest reads them, in BCD.
@@ -68,7 +69,14 @@ pub fn decode(raw: Counters) ?Calendar {
     if (second > 59 or minute > 59 or hour > 23) return null;
     if (month < 1 or month > 12) return null;
     if (day < 1 or day > daysIn(month, year)) return null;
-    return .{ .year = 2000 + @as(u16, year), .month = month, .day = day, .hour = hour, .minute = minute, .second = second };
+    return .{
+        .year = 2000 + @as(u16, year),
+        .month = month,
+        .day = day,
+        .hour = hour,
+        .minute = minute,
+        .second = second,
+    };
 }
 
 /// Days in `month` of the 2000-based `year`; every fourth year is a leap

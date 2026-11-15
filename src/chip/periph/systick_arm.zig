@@ -11,8 +11,8 @@
 //! A pure function over four words, so it is tested without an engine or a
 //! clock: `src/chip/core/cpu/systick_cut.zig` is the only caller and it supplies
 //! them straight from the bus.
-const memmap = @import("../core/memmap.zig");
 const clocks = @import("clocks.zig");
+const memmap = @import("../core/memmap.zig");
 
 /// What a store into the SysTick window means for the stretch in flight.
 pub const Observed = enum { none, rearm };

@@ -1,6 +1,8 @@
 //! Darwin task ledgers and process task counters; no task_threads allocation.
 const std = @import("std");
+
 const Raw = @import("metrics.zig").Raw;
+
 extern "c" var mach_task_self_: u32;
 const Timebase = extern struct { numer: u32, denom: u32 };
 extern "c" fn mach_timebase_info(*Timebase) c_int;
@@ -67,7 +69,15 @@ pub fn read() !Raw {
     _ = sysctlbyname("hw.logicalcpu", &cores, &size, null, 0);
     var timebase: Timebase = undefined;
     if (mach_timebase_info(&timebase) != 0) return error.Unavailable;
-    return .{ .cpu_ns = try ticksToNs(task.total_user +| task.total_system, timebase.numer, timebase.denom), .cores = cores, .footprint = vm.footprint, .peak_footprint = if (count >= 44) vm.footprint_peak else vm.footprint, .rss = vm.resident, .vsz = vm.virtual_size, .threads = @intCast(@max(task.threads, 0)) };
+    return .{
+        .cpu_ns = try ticksToNs(task.total_user +| task.total_system, timebase.numer, timebase.denom),
+        .cores = cores,
+        .footprint = vm.footprint,
+        .peak_footprint = if (count >= 44) vm.footprint_peak else vm.footprint,
+        .rss = vm.resident,
+        .vsz = vm.virtual_size,
+        .threads = @intCast(@max(task.threads, 0)),
+    };
 }
 
 /// PROC_PIDTASKINFO CPU counters use Mach absolute ticks, including on Apple Silicon.

@@ -20,8 +20,8 @@
 //!     PRIGROUP    [10:8]  retained, read/write
 //!     SYSRESETREQ [2]     write-only, asks the system for a reset
 //!     VECTCLRACTIVE [1]   write-only, and not modelled beyond being dropped
-const memmap = @import("../../core/memmap.zig");
 pub const bank = @import("bank.zig");
+const memmap = @import("../../core/memmap.zig");
 
 /// The two halves of the key: what a write must carry, and what a read gives
 /// back. They are byte-swapped versions of each other on purpose, so a driver

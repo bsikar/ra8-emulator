@@ -11,8 +11,8 @@
 //! enabling the clocks; the model counts each rising edge and holds the word
 //! as written. Nothing else in the cluster is reset by it. RIC and RCEC read
 //! back what was written.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 const regs = @import("regs.zig");
 
 pub const off = struct {

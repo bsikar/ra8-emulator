@@ -6,10 +6,10 @@
 //! checkpoints every 100 ms on the way, so the next decode of the same
 //! stretch starts from the nearest one instead of the pinned checkpoint.
 const std = @import("std");
-const frame_decoder = @import("history/frame_decoder.zig");
-const temp_checkpoints = @import("history/temp_checkpoints.zig");
-const smooth = @import("smooth_rewind.zig");
+
 const line = @import("line.zig");
+const smooth = @import("smooth_rewind.zig");
+const temp_checkpoints = @import("history/temp_checkpoints.zig");
 
 /// Decodes [start, end_ns] into the decoder's buckets. Returns the number
 /// of windows that got a frame; nothing when no restore point or no scan
@@ -33,12 +33,16 @@ pub fn decode(engine: *smooth.SmoothRewindEngine, end_ns: u64) !usize {
     while (line.inPast(session)) {
         const ended = try session.run(core, .cont);
         const now = try session.now();
-        while (next_bucket < decoder.buckets.items.len and decoder.buckets.items[next_bucket].end_ns <= now) : (next_bucket += 1) {
+        while (next_bucket < decoder.buckets.items.len and
+            decoder.buckets.items[next_bucket].end_ns <= now) : (next_bucket += 1)
+        {
             if (try scanInto(engine, scan, next_bucket)) filled += 1;
         }
         if (next_plan < plan.len and plan[next_plan] <= now) {
             try layTemp(engine, now);
-            while (next_plan < plan.len and plan[next_plan] <= now) next_plan += 1;
+            while (next_plan < plan.len and plan[next_plan] <= now) {
+                next_plan += 1;
+            }
         }
         if (now >= end_ns or ended != .count) break;
     }
@@ -55,7 +59,11 @@ fn restoreStart(engine: *smooth.SmoothRewindEngine, end_ns: u64) !void {
         return;
     }
     const graph = if (engine.session.fork_router) |router| router.graph else null;
-    var picture = (try engine.decoder.lookupRestorePicture(end_ns, line.currentPosition(engine.session).branch, graph)) orelse return error.NoRestorePoint;
+    var picture = (try engine.decoder.lookupRestorePicture(
+        end_ns,
+        line.currentPosition(engine.session).branch,
+        graph,
+    )) orelse return error.NoRestorePoint;
     defer picture.deinit(engine.allocator);
     const hook = engine.restore_hook orelse return error.NoRestorePoint;
     try hook.restore(picture.position);

@@ -4,9 +4,9 @@
 //! it as a NOP. FAULTMASK is not raised from NMI or HardFault, whose
 //! priority is already -2 or -1. An encoding with neither I nor F, or with
 //! the should-be-zero bit 3 set, is left unclaimed.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const regs = @import("../regs.zig");
 
 pub const encodings = struct {

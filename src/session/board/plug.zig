@@ -12,16 +12,17 @@
 //! then each plug the session made and each unplug, so a client can list
 //! the parts without reaching into a bus.
 const std = @import("std");
-const endpoint = @import("ra8_components").endpoint;
-const catalog = @import("ra8_components").catalog;
-const parts = @import("ra8_components").parts;
-const fault_lines = @import("ra8_components").fault.lines;
-const riic_bus = @import("ra8_chip").periph.riic.bus;
-const spi = @import("ra8_chip").periph.spi;
-const session_api = @import("../api.zig");
-const plug = @import("ra8_board").plug;
+
 const Board = @import("ra8_board").board.Board;
+const catalog = @import("ra8_components").catalog;
 const eink = @import("ra8_components").eink;
+const endpoint = @import("ra8_components").endpoint;
+const fault_lines = @import("ra8_components").fault.lines;
+const parts = @import("ra8_components").parts;
+const plug = @import("ra8_board").plug;
+const riic_bus = @import("ra8_chip").periph.riic.bus;
+const session_api = @import("../api.zig");
+const spi = @import("ra8_chip").periph.spi;
 
 pub const Error = error{NothingFitted};
 
@@ -153,7 +154,11 @@ pub const Plugs = struct {
     fn forget(self: *Plugs, at: endpoint.Endpoint) void {
         for (self.fitted[0..self.fitted_count], 0..) |part, index| {
             if (!std.meta.eql(part.at, at)) continue;
-            std.mem.copyForwards(Fitted, self.fitted[index .. self.fitted_count - 1], self.fitted[index + 1 .. self.fitted_count]);
+            std.mem.copyForwards(
+                Fitted,
+                self.fitted[index .. self.fitted_count - 1],
+                self.fitted[index + 1 .. self.fitted_count],
+            );
             self.fitted_count -= 1;
             return;
         }

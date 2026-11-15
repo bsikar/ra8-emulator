@@ -5,10 +5,11 @@
 //! cleared per checkpoint so clean pages can reuse their previous manifest identity
 //! without rehashing.
 const std = @import("std");
-const SpaceId = @import("manifest.zig").SpaceId;
-const observer_mod = @import("ra8_chip").core.cpu.memory.observer;
+
 const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 const memmap = @import("ra8_chip").core.memmap;
+const observer_mod = @import("ra8_chip").core.cpu.memory.observer;
+const SpaceId = @import("manifest.zig").SpaceId;
 
 pub const page_size: usize = 0x1000; // 4096 bytes
 pub const space_count: usize = 12;
@@ -51,7 +52,9 @@ pub const DirtyPages = struct {
             .masks = undefined,
         };
         var allocated: usize = 0;
-        errdefer for (self.masks[0..allocated]) |m| allocator.free(m);
+        errdefer for (self.masks[0..allocated]) |m| {
+            allocator.free(m);
+        };
         for (0..space_count) |i| {
             const pages: usize = switch (SpaceMap.tracked[i]) {
                 .cpu0_mram, .cpu1_mram => 512,

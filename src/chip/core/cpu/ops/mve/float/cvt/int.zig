@@ -8,12 +8,13 @@
 //! -inf. Both layouts follow QEMU's mve.decode and LLVM's assembler. D and
 //! M would name Q8 and above, so they must be zero. The lane semantics are
 //! in src/chip/core/cpu/mve/float/int/int.zig.
-const op = @import("../../../../op.zig");
 const Cpu = @import("../../../../cpu.zig").Cpu;
+const fpu = @import("../../../../fpu/all.zig");
 const Instr = @import("../../../../instr.zig").Instr;
 const mve = @import("../../../../mve/all.zig");
-const fpu = @import("../../../../fpu/all.zig");
 const mve_beats = @import("../../beats.zig");
+const op = @import("../../../../op.zig");
+
 const Rounding = fpu.rounding.Rounding;
 
 pub const group: op.Group = .{ .name = "mve_float_cvt_int", .decode = decode, .oracle = false };

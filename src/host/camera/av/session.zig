@@ -4,9 +4,9 @@
 //! cropped to fill, that drops late frames and hands each sample to Ra8CaptureDelegate on
 //! its own dispatch queue. The delegate feeds the sink attached here. Any
 //! step that fails releases what was made and detaches the sink.
-const objc = @import("objc.zig");
 const delegate = @import("delegate.zig");
 const frame = @import("frame.zig");
+const objc = @import("objc.zig");
 
 const Id = objc.Id;
 
@@ -55,8 +55,9 @@ pub fn open(rt: objc.Runtime, syms: Symbols, index: usize, sink: *delegate.Sink)
     errdefer self.close();
     self.input = try input(rt, syms, index);
     self.session = objc.new(rt, "AVCaptureSession") orelse return error.NoSession;
-    if (objc.send1(rt, u8, self.session, "canSetSessionPreset:", syms.preset) != 0)
+    if (objc.send1(rt, u8, self.session, "canSetSessionPreset:", syms.preset) != 0) {
         objc.send1(rt, void, self.session, "setSessionPreset:", syms.preset);
+    }
     if (objc.send1(rt, u8, self.session, "canAddInput:", self.input) == 0) return error.NoInput;
     objc.send1(rt, void, self.session, "addInput:", self.input);
     try output(&self, syms, sink);
@@ -67,10 +68,23 @@ pub fn open(rt: objc.Runtime, syms: Symbols, index: usize, sink: *delegate.Sink)
 
 /// An owned (retained) input for device `index`.
 fn input(rt: objc.Runtime, syms: Symbols, index: usize) OpenError!Id {
-    const devices = objc.send1(rt, Id, rt.class("AVCaptureDevice"), "devicesWithMediaType:", syms.video) orelse return error.NoDevice;
+    const devices = objc.send1(
+        rt,
+        Id,
+        rt.class("AVCaptureDevice"),
+        "devicesWithMediaType:",
+        syms.video,
+    ) orelse return error.NoDevice;
     if (index >= objc.send0(rt, usize, devices, "count")) return error.NoDevice;
     const device = objc.send1(rt, Id, devices, "objectAtIndex:", index) orelse return error.NoDevice;
-    const made = objc.send2(rt, Id, rt.class("AVCaptureDeviceInput"), "deviceInputWithDevice:error:", device, @as(Id, null)) orelse return error.NoInput;
+    const made = objc.send2(
+        rt,
+        Id,
+        rt.class("AVCaptureDeviceInput"),
+        "deviceInputWithDevice:error:",
+        device,
+        @as(Id, null),
+    ) orelse return error.NoInput;
     return objc.send0(rt, Id, made, "retain");
 }
 
@@ -81,9 +95,30 @@ fn output(self: *Session, syms: Symbols, sink: *delegate.Sink) OpenError!void {
     // sends 640x480, cropped to 4:3 as a VGA sensor sees it: the output
     // scales to the size it is asked for, and the Mailbox takes no other
     // (RA8EMU-727).
-    const settings = objc.send1(rt, Id, rt.class("NSMutableDictionary"), "dictionaryWithCapacity:", @as(usize, 4)) orelse return error.NoOutput;
-    for ([_]struct { Id, u32 }{ .{ syms.format_key, frame.cv_2vuy }, .{ syms.width_key, width }, .{ syms.height_key, height } }) |entry| {
-        const number = objc.send1(rt, Id, rt.class("NSNumber"), "numberWithUnsignedInt:", entry[1]) orelse return error.NoOutput;
+    const settings = objc.send1(
+        rt,
+        Id,
+        rt.class("NSMutableDictionary"),
+        "dictionaryWithCapacity:",
+        @as(usize, 4),
+    ) orelse return error.NoOutput;
+    for ([_]struct {
+        Id,
+        u32,
+    }{
+        .{ syms.format_key, frame.cv_2vuy },
+        .{ syms.width_key, width },
+        .{ syms.height_key, height },
+    }) |entry| {
+        const number = objc.send1(
+            rt,
+            Id,
+            rt.class(
+                "NSNumber",
+            ),
+            "numberWithUnsignedInt:",
+            entry[1],
+        ) orelse return error.NoOutput;
         objc.send2(rt, void, settings, "setObject:forKey:", number, entry[0]);
     }
     objc.send2(rt, void, settings, "setObject:forKey:", syms.aspect_fill, syms.scaling_key);

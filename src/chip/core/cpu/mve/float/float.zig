@@ -10,10 +10,9 @@
 //! is merged under the mask, so an unpredicated byte keeps the
 //! destination's old value.
 const fpu = @import("../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
-const qreg = @import("../qreg.zig");
-const predicate = @import("../predicate.zig");
 pub const abs_vectors = @import("abs_vectors.zig");
 pub const cmp = @import("cmp/cmp.zig");
 pub const complex = @import("complex/complex.zig");
@@ -22,6 +21,8 @@ pub const fma_vectors = @import("fma_vectors.zig");
 pub const int = @import("int/int.zig");
 pub const minmax = @import("minmax/minmax.zig");
 pub const minmaxv_vectors = @import("minmaxv_vectors.zig");
+const predicate = @import("../predicate.zig");
+const qreg = @import("../qreg.zig");
 pub const rint = @import("rint/rint.zig");
 pub const scalar = @import("scalar/scalar.zig");
 pub const vectors = @import("vectors.zig");
@@ -135,7 +136,14 @@ pub fn fused(d: u128, n: u128, m: u128, size: Size, op: Fused, mask: u16, fpscr:
     return predicate.merge(d, out, mask);
 }
 
-fn fusedLane(comptime fmt: format.Format, op: Fused, d: fmt.Bits(), n: fmt.Bits(), m: fmt.Bits(), work: *Fpscr) fmt.Bits() {
+fn fusedLane(
+    comptime fmt: format.Format,
+    op: Fused,
+    d: fmt.Bits(),
+    n: fmt.Bits(),
+    m: fmt.Bits(),
+    work: *Fpscr,
+) fmt.Bits() {
     return switch (op) {
         .fma => fpu.fma.vfma(fmt, d, n, m, work),
         .fms => fpu.fma.vfms(fmt, d, n, m, work),

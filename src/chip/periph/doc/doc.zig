@@ -43,10 +43,11 @@
 //! refused and counted, and DODSR0 keeps what it had. The rule and what it
 //! deliberately does not claim about silicon live in
 //! src/chip/periph/doc/operand.zig.
-const std = @import("std");
-const periph = @import("../registry.zig");
+
 const doc_compare = @import("compare.zig");
 const dodir = @import("operand.zig");
+const periph = @import("../registry.zig");
+
 pub const operand = dodir;
 
 /// The detection condition DOCR.DCSEL selects, in its own file.

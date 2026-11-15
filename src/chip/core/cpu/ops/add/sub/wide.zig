@@ -4,9 +4,9 @@
 //!
 //! Rd of PC is UNPREDICTABLE, and Rd of SP is only legal when Rn is SP;
 //! both are left unclaimed.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with i ([10]) and Rn ([3:0]) masked out.

@@ -1,10 +1,11 @@
 //! Session API entry points for reverse-watch queries and background prefetching.
 const std = @import("std");
+
 const api = @import("api.zig");
-const reverse_watch = @import("history/reverse_watch.zig");
-const prefetch_mod = @import("history/prefetch.zig");
-const position_mod = @import("history/position.zig");
 const memory_observer = @import("ra8_chip").core.cpu.memory.observer;
+const position_mod = @import("history/position.zig");
+const prefetch_mod = @import("history/prefetch.zig");
+const reverse_watch = @import("history/reverse_watch.zig");
 const trail = @import("history/trail.zig");
 
 const Session = api.Session;
@@ -35,7 +36,8 @@ pub const ReplayObserver = struct {
         const phase: position_mod.Phase = grid.at.phase;
         const o: u32 = switch (phase) {
             .cpu0 => if (cpu0.slots >= grid.base[0]) @intCast(cpu0.slots - grid.base[0] + 1) else 1,
-            .cpu1 => if (cpu1 != null and cpu1.?.slots >= grid.base[1]) @intCast(cpu1.?.slots - grid.base[1] + 1) else 1,
+            .cpu1 => if (cpu1 != null and
+                cpu1.?.slots >= grid.base[1]) @intCast(cpu1.?.slots - grid.base[1] + 1) else 1,
             .board => 0,
         };
         const src: trail.Source = switch (write.initiator) {
@@ -83,7 +85,11 @@ pub fn prefetchCancel(self: *Session) void {
     }
 }
 
-fn sessionComparePositions(context: *anyopaque, a: position_mod.Position, b: position_mod.Position) anyerror!std.math.Order {
+fn sessionComparePositions(
+    context: *anyopaque,
+    a: position_mod.Position,
+    b: position_mod.Position,
+) anyerror!std.math.Order {
     const self: *Session = @ptrCast(@alignCast(context));
     return self.comparePositions(a, b);
 }

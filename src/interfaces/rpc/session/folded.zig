@@ -4,9 +4,10 @@
 //! window, or a window and thread that take no sample are refused; rows
 //! longer than one reply are `too_long`.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const Outcome = rpc.Outcome(proto.FoldedText);
 
@@ -16,7 +17,14 @@ pub fn folded(context: *handlers.Context, args: proto.FoldedAsk) Outcome {
     const room = @min(context.scratch.len, proto.FoldedText.max_len.text);
     const thread: ?u32 = if (args.thread == proto.all_threads) null else args.thread;
     const core = @backingInt(args.core);
-    const text = folding.foldFn(folding.context, core, thread, args.from_ns, args.to_ns, context.scratch[0..room]) catch |err| {
+    const text = folding.foldFn(
+        folding.context,
+        core,
+        thread,
+        args.from_ns,
+        args.to_ns,
+        context.scratch[0..room],
+    ) catch |err| {
         if (err == error.NoSpaceLeft or err == error.WriteFailed) return refuse(handlers.app_codes.too_long);
         if (err != error.NothingSampled) std.debug.print("serve: folded: {s}\n", .{@errorName(err)});
         return refuse(handlers.app_codes.refused);

@@ -4,8 +4,8 @@
 //! AGENTS.md gives: report.zig had grown past the gate's 400 lines, and the
 //! watchdog's account of itself is one thing a reader looks for on its own.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
 const clocks = @import("ra8_chip").periph.clocks;
+const Writer = @import("../report.zig").Writer;
 
 /// The refused refresh is the loud case: on silicon an early reload is a
 /// refresh error that resets the part, and the C tree accepts it silently.
@@ -13,16 +13,28 @@ pub fn section(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     const unit = &board.watchdog;
     if (unit.quiet()) return;
     if (unit.early != 0) {
-        try out.print("WDT0: refreshes={d} REFUSED={d} (refresh outside the RPSS/RPES window, REFEF latched)\n", .{ unit.refreshes, unit.early });
+        try out.print(
+            "WDT0: refreshes={d} REFUSED={d} (refresh outside the RPSS/RPES window, REFEF latched)\n",
+            .{ unit.refreshes, unit.early },
+        );
     } else {
-        try out.print("WDT0: refreshes={d}, counter {d}/{d}, underflows={d}\n", .{ unit.refreshes, unit.counter, unit.reload(), unit.underflows });
+        try out.print(
+            "WDT0: refreshes={d}, counter {d}/{d}, underflows={d}\n",
+            .{ unit.refreshes, unit.counter, unit.reload(), unit.underflows },
+        );
     }
     try cadence(unit.refreshes, timebase, out);
     if (unit.bad_acks != 0) {
-        try out.print("WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
+        try out.print(
+            "WDT0: {d} ack(s) wrote a one at a flag and cleared nothing (WDTSR is write-zero-to-clear)\n",
+            .{unit.bad_acks},
+        );
     }
     if (unit.locked_writes == 0) return;
-    try out.print("WDT0: DROPPED {d} control store(s), WDTCR/WDTRCR/WDTCSTPR take one write each after reset\n", .{unit.locked_writes});
+    try out.print(
+        "WDT0: DROPPED {d} control store(s), WDTCR/WDTRCR/WDTCSTPR take one write each after reset\n",
+        .{unit.locked_writes},
+    );
 }
 
 /// How often the firmware refreshed the watchdog, in the unit the model

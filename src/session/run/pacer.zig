@@ -11,6 +11,8 @@
 //! `report` gives the requested speed, the achieved speed and the total.
 //!
 //! The clock is passed in, so host tests drive a fake one.
+const command = @import("../transport/command.zig");
+
 const std = @import("std");
 
 /// One times real time, in thousandths.
@@ -148,7 +150,7 @@ pub const HostClock = struct {
 
     /// The transport's wall view of this clock: host nanoseconds since init,
     /// read-only, so a front end paces a job without sleeping against it.
-    pub fn wall(self: *HostClock) @import("../transport/command.zig").Wall {
+    pub fn wall(self: *HostClock) command.Wall {
         return .{ .context = self, .nowFn = nowHost };
     }
 

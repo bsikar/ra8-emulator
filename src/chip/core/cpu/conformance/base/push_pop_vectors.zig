@@ -40,7 +40,16 @@ pub const Out = struct {
     thumb: bool = true,
 };
 
-pub const initial_low: [8]u32 = .{ reg_base, reg_base + 1, reg_base + 2, reg_base + 3, reg_base + 4, reg_base + 5, reg_base + 6, reg_base + 7 };
+pub const initial_low: [8]u32 = .{
+    reg_base,
+    reg_base + 1,
+    reg_base + 2,
+    reg_base + 3,
+    reg_base + 4,
+    reg_base + 5,
+    reg_base + 6,
+    reg_base + 7,
+};
 
 const V = vector.Vector(In, Out);
 const group = "push_pop";
@@ -56,25 +65,65 @@ fn r(n: u32) u32 {
 
 fn low(changes: []const struct { u3, u32 }) [8]u32 {
     var out = initial_low;
-    for (changes) |c| out[c[0]] = c[1];
+    for (changes) |c| {
+        out[c[0]] = c[1];
+    }
     return out;
 }
 
 pub const all = [_]V{
     vec("push {r0}", .{ .hw1 = 0xB401 }, .{ .sp = stack_top - 4, .below = .{ 0, 0, 0, r(0) } }),
     vec("push {r0-r3}", .{ .hw1 = 0xB40F }, .{ .sp = stack_top - 16, .below = .{ r(0), r(1), r(2), r(3) } }),
-    vec("push {r1, r3, r7} packs in register order", .{ .hw1 = 0xB48A }, .{ .sp = stack_top - 12, .below = .{ 0, r(1), r(3), r(7) } }),
+    vec(
+        "push {r1, r3, r7} packs in register order",
+        .{ .hw1 = 0xB48A },
+        .{ .sp = stack_top - 12, .below = .{ 0, r(1), r(3), r(7) } },
+    ),
     vec("push {r4, lr}", .{ .hw1 = 0xB510 }, .{ .sp = stack_top - 8, .below = .{ 0, 0, r(4), lr } }),
     vec("push {lr} alone", .{ .hw1 = 0xB500 }, .{ .sp = stack_top - 4, .below = .{ 0, 0, 0, lr } }),
-    vec("push {r0-r7, lr} puts LR highest", .{ .hw1 = 0xB5FF }, .{ .sp = stack_top - 36, .below = .{ r(5), r(6), r(7), lr } }),
-    vec("push landing exactly on MSPLIM", .{ .hw1 = 0xB401, .msplim = stack_top - 4 }, .{ .sp = stack_top - 4, .below = .{ 0, 0, 0, r(0) } }),
+    vec(
+        "push {r0-r7, lr} puts LR highest",
+        .{ .hw1 = 0xB5FF },
+        .{ .sp = stack_top - 36, .below = .{ r(5), r(6), r(7), lr } },
+    ),
+    vec(
+        "push landing exactly on MSPLIM",
+        .{ .hw1 = 0xB401, .msplim = stack_top - 4 },
+        .{ .sp = stack_top - 4, .below = .{ 0, 0, 0, r(0) } },
+    ),
     vec("push under MSPLIM writes nothing", .{ .hw1 = 0xB403, .msplim = stack_top - 4 }, .{ .fault = .stack_overflow }),
     vec("pop {r0}", .{ .hw1 = 0xBC01 }, .{ .sp = stack_top + 4, .low = low(&.{.{ 0, 0xC000_0000 }}) }),
-    vec("pop {r0-r3}", .{ .hw1 = 0xBC0F }, .{ .sp = stack_top + 16, .low = .{ 0xC000_0000, 0xC000_0001, 0xC000_0002, 0xC000_0003, r(4), r(5), r(6), r(7) } }),
-    vec("pop {r2, r5} fills in register order", .{ .hw1 = 0xBC24 }, .{ .sp = stack_top + 8, .low = low(&.{ .{ 2, 0xC000_0000 }, .{ 5, 0xC000_0001 } }) }),
-    vec("pop {pc} interworks to Thumb", .{ .hw1 = 0xBD00, .stack = .{ 0x0000_4001, 0, 0, 0 } }, .{ .sp = stack_top + 4, .pc = 0x0000_4000 }),
-    vec("pop {r4, pc} loads PC last", .{ .hw1 = 0xBD10, .stack = .{ 0x1111_1111, 0x0000_5003, 0, 0 } }, .{ .sp = stack_top + 8, .low = low(&.{.{ 4, 0x1111_1111 }}), .pc = 0x0000_5002 }),
-    vec("pop {pc} with bit 0 clear clears EPSR.T", .{ .hw1 = 0xBD00, .stack = .{ 0x0000_4000, 0, 0, 0 } }, .{ .sp = stack_top + 4, .pc = 0x0000_4000, .thumb = false }),
+    vec(
+        "pop {r0-r3}",
+        .{ .hw1 = 0xBC0F },
+        .{
+            .sp = stack_top + 16,
+            .low = .{
+                0xC000_0000, 0xC000_0001, 0xC000_0002, 0xC000_0003,
+                r(4),        r(5),        r(6),        r(7),
+            },
+        },
+    ),
+    vec(
+        "pop {r2, r5} fills in register order",
+        .{ .hw1 = 0xBC24 },
+        .{ .sp = stack_top + 8, .low = low(&.{ .{ 2, 0xC000_0000 }, .{ 5, 0xC000_0001 } }) },
+    ),
+    vec(
+        "pop {pc} interworks to Thumb",
+        .{ .hw1 = 0xBD00, .stack = .{ 0x0000_4001, 0, 0, 0 } },
+        .{ .sp = stack_top + 4, .pc = 0x0000_4000 },
+    ),
+    vec(
+        "pop {r4, pc} loads PC last",
+        .{ .hw1 = 0xBD10, .stack = .{ 0x1111_1111, 0x0000_5003, 0, 0 } },
+        .{ .sp = stack_top + 8, .low = low(&.{.{ 4, 0x1111_1111 }}), .pc = 0x0000_5002 },
+    ),
+    vec(
+        "pop {pc} with bit 0 clear clears EPSR.T",
+        .{ .hw1 = 0xBD00, .stack = .{ 0x0000_4000, 0, 0, 0 } },
+        .{ .sp = stack_top + 4, .pc = 0x0000_4000, .thumb = false },
+    ),
     vec("an empty push list is unclaimed", .{ .hw1 = 0xB400 }, none),
     vec("an empty pop list is unclaimed", .{ .hw1 = 0xBC00 }, none),
     vec("the 32-bit space is unclaimed", .{ .hw1 = 0xB401, .size = 4 }, none),

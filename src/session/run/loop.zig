@@ -4,33 +4,34 @@
 //! for the application to report. The CLI's adapter is
 //! src/interfaces/cli/zig.run.zig.
 const std = @import("std");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const boot = @import("ra8_chip").core.cpu.boot;
-const choice = @import("ra8_chip").core.cpu.choice;
-const systick_cut = @import("ra8_chip").core.cpu.cpu.systick_cut;
-const second_core = @import("ra8_chip").core.second.core;
-const Until = @import("ra8_chip").core.until.Until;
-const Stop = @import("ra8_chip").core.stop.Stop;
-const Deadline = @import("ra8_chip").core.deadline.Deadline;
-const clocks = @import("ra8_chip").periph.clocks;
-const elf = @import("ra8_board").image.elf;
+
 const Board = @import("ra8_board").board.Board;
+const boot = @import("ra8_chip").core.cpu.boot;
+const break_sym = @import("../zig/break_sym.zig");
+const choice = @import("ra8_chip").core.cpu.choice;
+const clocks = @import("ra8_chip").periph.clocks;
+const Deadline = @import("ra8_chip").core.deadline.Deadline;
+const elf = @import("ra8_board").image.elf;
 const fault_file = @import("../fault_file.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const itm_console = @import("../itm_console.zig");
+const pc_hits = @import("../pc_hits.zig");
+const profile = @import("../profile.zig");
 const rtos_hook = @import("../rtos/hook.zig");
 const rtos_load = @import("../rtos/load.zig");
-const profile = @import("../profile.zig");
-const stack_profile = @import("../stack/profile.zig");
-const zig_watch = @import("../zig/watch.zig");
-const soak_symbols = @import("../soak_symbols.zig");
-const itm_console = @import("../itm_console.zig");
-const break_sym = @import("../zig/break_sym.zig");
-const pc_hits = @import("../pc_hits.zig");
-const undefined_sites = @import("../zig/undefined_sites.zig");
-const zig_snapshot = @import("../zig/snapshot.zig");
-const state_options = @import("../state_options.zig");
 const run_clock = @import("clock.zig");
-const wall = @import("../zig/wall.zig");
 const RunPolicy = @import("policy.zig").RunPolicy;
+const second_core = @import("ra8_chip").core.second.core;
+const soak_symbols = @import("../soak_symbols.zig");
+const stack_profile = @import("../stack/profile.zig");
+const state_options = @import("../state_options.zig");
+const Stop = @import("ra8_chip").core.stop.Stop;
+const systick_cut = @import("ra8_chip").core.cpu.cpu.systick_cut;
+const undefined_sites = @import("../zig/undefined_sites.zig");
+const Until = @import("ra8_chip").core.until.Until;
+const wall = @import("../zig/wall.zig");
+const zig_snapshot = @import("../zig/snapshot.zig");
+const zig_watch = @import("../zig/watch.zig");
 
 pub const Clock = run_clock.Clock;
 
@@ -77,8 +78,24 @@ pub const Loop = struct {
     /// Run `image` from `vector_base` until its budget or one of `ends`.
     /// `said` takes the boot lines and `out` the ITM console. `cpu1` is the
     /// second core the application brought up, or null.
-    pub fn run(self: *Loop, said: anytype, out: *std.Io.Writer, io: std.Io, memory: Guest, board: *Board, timebase: *clocks.Clocks, image: elf.Image, options: Options, vector_base: u32, profile_table: ?*profile.Table, until: ?*Until, cpu1: ?*second_core.zig.run.Driver, cpu1_identity: ?[16]u8, ends: Ends) !void {
-        self.clock = .{ .io = io, .memory = memory, .board = board, .timebase = timebase, .policy = ends.policy, .stop = ends.stop, .point = ends.point, .timed = ends.timed, .undefined_sites = ends.undefined_sites, .idle_skip = options.idle_skip, .state = options.state, .cpu1 = cpu1, .image_identity = zig_snapshot.imageIdentity(image.bytes), .cpu1_image_identity = cpu1_identity };
+    pub fn run(
+        self: *Loop,
+        said: anytype,
+        out: *std.Io.Writer,
+        io: std.Io,
+        memory: Guest,
+        board: *Board,
+        timebase: *clocks.Clocks,
+        image: elf.Image,
+        options: Options,
+        vector_base: u32,
+        profile_table: ?*profile.Table,
+        until: ?*Until,
+        cpu1: ?*second_core.zig.run.Driver,
+        cpu1_identity: ?[16]u8,
+        ends: Ends,
+    ) !void {
+        self.clock = makeClock(io, memory, board, timebase, image, options, cpu1, cpu1_identity, ends);
         const clock = &self.clock;
         if (options.state.wanted()) _ = clock.snapshotBinding();
         var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
@@ -90,14 +107,27 @@ pub const Loop = struct {
             found.now = &timebase.ticks;
             listener = .{ .tracer = found };
         }
-        const wrap = self.watcher.arm(image, options.watch_place, if (self.tracer != null) listener.wrap() else null, &timebase.ticks);
+        const wrap = self.watcher.arm(
+            image,
+            options.watch_place,
+            if (self.tracer != null) listener.wrap() else null,
+            &timebase.ticks,
+        );
         self.retire = .{ .table = profile_table, .point = ends.point, .hits = ends.hits };
-        var stacks = stack_profile.Run.of(profile_table, image, options.budget, &clock.wall_cycles, if (self.tracer) |*found| &found.trace else null);
+        var stacks = stack_profile.Run.of(
+            profile_table,
+            image,
+            options.budget,
+            &clock.wall_cycles,
+            if (self.tracer) |*found| &found.trace else null,
+        );
         var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
         if (options.console) try itm_console.prime(clock.memory, &itm_port);
         var edge = try fault_file.boundary(ends.schedule, clock.boundary());
         edge.saved = &clock.saved;
-        self.status = try boot.start(said, options.cpu, clock.memory.asInitiator(.cpu0), &board.bus, vector_base, options.budget, &self.ran, .{
+        self.status = try boot.start(said, options.cpu, clock.memory.asInitiator(
+            .cpu0,
+        ), &board.bus, vector_base, options.budget, &self.ran, .{
             .boundary = edge,
             .partitions = &board.partitions,
             .idau = &board.idau,
@@ -122,3 +152,32 @@ pub const Loop = struct {
         if (options.console) try itm_port.flush(out, true);
     }
 };
+
+fn makeClock(
+    io: std.Io,
+    memory: Guest,
+    board: *Board,
+    timebase: *clocks.Clocks,
+    image: elf.Image,
+    options: Options,
+    cpu1: ?*second_core.zig.run.Driver,
+    cpu1_identity: ?[16]u8,
+    ends: Ends,
+) Clock {
+    return .{
+        .io = io,
+        .memory = memory,
+        .board = board,
+        .timebase = timebase,
+        .policy = ends.policy,
+        .stop = ends.stop,
+        .point = ends.point,
+        .timed = ends.timed,
+        .undefined_sites = ends.undefined_sites,
+        .idle_skip = options.idle_skip,
+        .state = options.state,
+        .cpu1 = cpu1,
+        .image_identity = zig_snapshot.imageIdentity(image.bytes),
+        .cpu1_image_identity = cpu1_identity,
+    };
+}

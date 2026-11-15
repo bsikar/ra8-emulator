@@ -2,10 +2,10 @@
 //! design section 11). Both go through the Session's intervention choke
 //! point, so in the recorded past they fork like a write does: the first
 //! fork of a session refuses until branch_confirm_fork confirms it.
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
 const api = @import("ra8_session").api;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const AckOutcome = rpc.Outcome(proto.Ack);
 

@@ -30,6 +30,7 @@ const memmap = @import("../../core/memmap.zig");
 
 /// What the programmed map says about an address. src/chip/periph/sau/attribution.zig.
 pub const attribution = @import("attribution.zig");
+
 /// The RA8 IDAU map that feeds the attribution. src/chip/periph/idau.zig.
 pub const idau = @import("../idau.zig");
 
