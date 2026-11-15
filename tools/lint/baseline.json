@@ -130,7 +130,6 @@
     {"count": 1, "fingerprint": "f0e11a851454b26a752c5df1f5622c3ff5abf6aa2aa865eef2e86fcf7f7a245c", "path": "src/host/session_files.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "503b9d2e8a39267540cfbacee3e1e4f0bd879104f2ab73bcf0c8336d6cd6f09c", "path": "src/host/sock/unix.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "56ec877001c8a05aeeda398e8d4f629408ffa11483b0367db22bab3572b80651", "path": "src/host/sock/unix.zig", "rule": "no_swallow_error"},
-    {"count": 1, "fingerprint": "830ced6bb13e2a0a173ea00bf2bdbd07e1fd9507e488a81cc4d1819f35b48ce3", "path": "src/host/sock/unix.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "064bab905c44d75577edd61f0141cd2a270820c7c9337dc41a81fd77cf478420", "path": "src/host/workspace/path.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "16b825c5674aac2c0de7c835513b7ab8296a61b71ec37d6147fcdf3b48a6c2d7", "path": "src/interfaces/cli/cli.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "b00c1f78f279a6cef0f76b3c78779d687f7139789936233aa6eb1ebc4df9f5c0", "path": "src/interfaces/cli/cli.zig", "rule": "complexity"},
