@@ -42,6 +42,8 @@ const session_seek = @import("seek.zig");
 const session_set_var = @import("set_var.zig");
 const session_source_line = @import("source_line.zig");
 const session_stack = @import("stack.zig");
+const targets = @import("../targets.zig");
+const targets_wire = @import("../targets_wire.zig");
 const trace_feed = @import("trace_feed.zig");
 const transport_mod = @import("ra8_session").transport;
 const uart_feed = @import("uart_feed.zig");
@@ -124,7 +126,8 @@ const session_routes = .{
     .{ @backingInt(M.set_var), session_set_var.setVar },
 };
 
-pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++ artifact_handlers.routes;
+pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++
+    artifact_handlers.routes ++ targets.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -150,6 +153,7 @@ pub const Host = struct {
         if (context.build_runner != null) caps |= build_wire.capability;
         if (context.project != null) caps |= project_wire.capability;
         if (context.artifacts != null) caps |= artifact_wire.capability;
+        if (context.targets != null) caps |= targets_wire.capability;
 
         return .{ .server = Server.init(wire, rx, context, caps) };
     }

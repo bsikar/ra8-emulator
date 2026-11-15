@@ -16,6 +16,7 @@ const loop = @import("loop.zig");
 const served_camera = @import("ra8_rpc").served_camera;
 const served_setup = @import("ra8_rpc").served_setup;
 const source_spec = @import("ra8_host").camera.source_spec;
+const targets = @import("targets.zig");
 const usbip_run = @import("ra8_usbip").exported.run;
 const Workbench = @import("workbench.zig").Workbench;
 
@@ -30,6 +31,7 @@ pub const usage =
     "SDHI card, as for a run\n" ++
     "       --allow-state-files lets snapshot and restore run on a non-loopback " ++
     "listener\n" ++
+    "       --targets FILE enables operator-owned target bindings (incompatible with artifact replacement)\n" ++
     "       --artifacts-root DIR enables bounded bundle export/import over RPC and WebSocket\n" ++
     "       --workspace DIR enables rooted workbench file operations for connected " ++
     "clients\n" ++
@@ -51,6 +53,7 @@ pub const usage =
 
 const Where = union(enum) { stdio, listen: listen.Spec };
 const Asked = struct {
+    targets: ?[]const u8 = null,
     artifacts_root: ?[]const u8 = null,
     build_zig: ?[]const u8 = null,
     where: Where,
@@ -90,6 +93,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
         }
     }
     var asked = parseTail(argv, at) orelse return null;
+    asked.targets = flags.targets;
     asked.folded = flags.folded;
     asked.workspace = flags.workspace;
     asked.build_zig = flags.build_zig;
@@ -129,6 +133,7 @@ fn parseTail(argv: []const []const u8, at: usize) ?Asked {
 
 /// Whether the history options make sense together.
 fn consistent(asked: Asked) bool {
+    if (asked.targets != null and asked.artifacts_root != null) return false;
     if (asked.build_zig != null and asked.workspace == null) return false;
     // A cap means nothing without a persistent history to cap.
     if (asked.history_budget != null and asked.history == null) return false;
@@ -169,6 +174,13 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         .{ .card = asked.sdhi },
     ) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
+        return 1;
+    };
+    var inventory: targets.Inventory = .{};
+    defer inventory.close();
+    inventory.bind(allocator, io, asked.targets, &setup.context) catch |err| {
+        setup.deinit();
+        std.debug.print("serve: target bindings: {s}\n", .{@errorName(err)});
         return 1;
     };
     var service: ?*artifact_service.Service = null;
