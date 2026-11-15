@@ -100,6 +100,76 @@ fn faultCpu(memory: *FaultBus) Cpu {
     return cpu;
 }
 
+const CreatePac = struct {
+    // DDI0553B.y ID09082024 E2.1.79 CreatePAC / E2.1.54 ComputePAC, independently
+    // evaluated in RA8EMU-A-67; derived M-profile vector, not a published KAT.
+    // Key[127:64] = 84BE85CE9804E94B, key[63:0] = EC2802D4E0A488E9.
+    const key: qarma.Key = .{ 0xE0A4_88E9, 0xEC28_02D4, 0x9804_E94B, 0x84BE_85CE };
+    const pointer: u32 = 0x0800_1235;
+    const modifier: u32 = 0x2000_7FF8;
+    const code: u32 = 0x1F29_99E8;
+};
+
+fn vectorCpu(memory: *FaultBus) Cpu {
+    var cpu = faultCpu(memory);
+    cpu.regs.pac_key_p = CreatePac.key;
+    cpu.regs.lr = CreatePac.pointer;
+    cpu.regs.msp = CreatePac.modifier;
+    cpu.regs.low[0] = CreatePac.code;
+    cpu.regs.low[1] = CreatePac.pointer;
+    cpu.regs.low[2] = CreatePac.modifier;
+    cpu.regs.low[12] = CreatePac.code;
+    return cpu;
+}
+
+test "PAC and PACG execute the independent M-profile CreatePAC vector" {
+    const forms = [_]struct { hw1: u16, hw2: u16, dst: u4 }{
+        .{ .hw1 = 0xF3AF, .hw2 = 0x801D, .dst = 12 }, // pac r12, lr, sp
+        .{ .hw1 = 0xFB61, .hw2 = 0xF002, .dst = 0 }, // pacg r0, r1, r2
+    };
+    for (forms) |form| {
+        var memory = FaultBus.withCode(form.hw1, form.hw2);
+        var cpu = vectorCpu(&memory);
+        cpu.regs.set(form.dst, 0);
+        try std.testing.expect(cpu.step() == null);
+        try std.testing.expectEqual(CreatePac.code, cpu.regs.get(form.dst));
+        try std.testing.expectEqual(@as(u32, 0x104), cpu.regs.pc);
+        try std.testing.expectEqual(@as(u32, 0), memory.cfsr);
+    }
+}
+
+test "AUT, AUTG and BXAUT validate the fixed CreatePAC code and reject corrupted inputs" {
+    const forms = [_]struct { hw1: u16, hw2: u16, implicit: bool, branch: bool }{
+        .{ .hw1 = 0xF3AF, .hw2 = 0x802D, .implicit = true, .branch = false }, // aut r12, lr, sp
+        .{ .hw1 = 0xFB51, .hw2 = 0x0F02, .implicit = false, .branch = false }, // autg r0, r1, r2
+        .{ .hw1 = 0xFB51, .hw2 = 0x0F12, .implicit = false, .branch = true }, // bxaut r0, r1, r2
+    };
+    const Corruption = enum { none, pointer, modifier, code };
+    for (forms) |form| {
+        for (std.enums.values(Corruption)) |corruption| {
+            var memory = FaultBus.withCode(form.hw1, form.hw2);
+            var cpu = vectorCpu(&memory);
+            const changed: u4 = switch (corruption) {
+                .none, .code => if (form.implicit) 12 else 0,
+                .pointer => if (form.implicit) 14 else 1,
+                .modifier => if (form.implicit) 13 else 2,
+            };
+            if (corruption != .none) cpu.regs.set(changed, cpu.regs.get(changed) ^ 4);
+            const stopped = cpu.step();
+            if (corruption == .none) {
+                try std.testing.expect(stopped == null);
+                const pc: u32 = if (form.branch) CreatePac.pointer & ~@as(u32, 1) else 0x104;
+                try std.testing.expectEqual(pc, cpu.regs.pc);
+                try std.testing.expectEqual(@as(u32, 0), memory.cfsr);
+            } else {
+                try std.testing.expectEqual(@as(u32, 0x100), stopped.?.invalid_state);
+                try std.testing.expectEqual(@as(u32, 0x100), cpu.regs.pc);
+                try std.testing.expectEqual(@as(u32, 1 << 17), memory.cfsr);
+            }
+        }
+    }
+}
+
 test "a failed AUT reaches the UsageFault INVSTATE latch" {
     var memory: FaultBus = .{};
     var cpu = faultCpu(&memory);
