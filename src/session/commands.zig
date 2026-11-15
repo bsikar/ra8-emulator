@@ -69,6 +69,11 @@ pub const Examine = struct {
     words: u32 = limits.default_words,
 };
 
+pub const SetVar = struct {
+    name: []const u8,
+    value: []const u8,
+};
+
 pub const Disassemble = struct {
     /// Null means from the program counter.
     place: ?[]const u8 = null,
@@ -115,6 +120,8 @@ pub const Command = union(enum) {
     /// `speed FACTOR`: the session checks the range (RA8EMU-184). Null is
     /// `speed max`, an unpaced run as with `--speed max` (RA8EMU-714).
     speed: ?f64,
+    /// `set [var|variable] NAME=VALUE`: assign a global or local variable.
+    set_var: SetVar,
     quit,
 };
 
@@ -146,6 +153,7 @@ const Verb = enum {
     plug,
     unplug,
     speed,
+    set_var,
     quit,
 };
 
@@ -174,6 +182,7 @@ const verbs = std.StaticStringMap(Verb).initComptime(.{
     .{ "quit", .quit },               .{ "q", .quit },
     .{ "halting", .halting },         .{ "plug", .plug },
     .{ "unplug", .unplug },           .{ "speed", .speed },
+    .{ "set", .set_var },
 });
 
 /// The names `info` lists breaks and watches under.
@@ -226,6 +235,7 @@ fn build(verb: Verb, words: *Words) Error!Command {
         .plug => .{ .plug = try required(words) },
         .unplug => .{ .unplug = try required(words) },
         .speed => .{ .speed = try speedFactor(try required(words)) },
+        .set_var => .{ .set_var = try parseSetVar(words) },
         .quit => .quit,
     };
     if (words.next() != null) return Error.ExtraArgument;
@@ -284,6 +294,25 @@ fn speedFactor(text: []const u8) Error!?f64 {
 /// A count or an id, decimal or `0x` hex.
 fn number(text: []const u8) Error!u32 {
     return std.fmt.parseInt(u32, text, 0) catch Error.BadNumber;
+}
+
+fn parseSetVar(words: *Words) Error!SetVar {
+    const first = try required(words);
+    const lhs = if (std.mem.eql(u8, first, "var") or std.mem.eql(u8, first, "variable"))
+        try required(words)
+    else
+        first;
+    if (std.mem.indexOfScalar(u8, lhs, '=')) |eq| {
+        const name = lhs[0..eq];
+        if (name.len == 0) return Error.BadNumber;
+        const rhs = lhs[eq + 1 ..];
+        const value = if (rhs.len > 0) rhs else try required(words);
+        return .{ .name = name, .value = value };
+    }
+    const mid = try required(words);
+    if (std.mem.eql(u8, mid, "=")) return .{ .name = lhs, .value = try required(words) };
+    if (mid[0] == '=' and mid.len > 1) return .{ .name = lhs, .value = mid[1..] };
+    return Error.BadNumber;
 }
 
 /// The line without its comment, its line ending or its outer spaces.

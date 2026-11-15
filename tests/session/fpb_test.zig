@@ -54,6 +54,8 @@ test {
     _ = @import("dwarf/line/find_test.zig");
     _ = @import("dwarf/frame_test.zig");
     _ = @import("dwarf/locals_test.zig");
+    _ = @import("dwarf/var_loc_test.zig");
+    _ = @import("dwarf/vars_test.zig");
     _ = @import("unwind/unwind_test.zig");
     _ = @import("unwind/exception_test.zig");
 }
