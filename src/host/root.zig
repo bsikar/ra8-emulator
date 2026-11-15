@@ -59,3 +59,5 @@ pub const camera = struct {
 };
 
 pub const metrics = @import("metrics/metrics.zig");
+
+pub const targets = @import("targets.zig");

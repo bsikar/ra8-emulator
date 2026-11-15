@@ -79,6 +79,7 @@ const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,
+    targets: ?*host.targets.Registry = null,
     artifacts: ?*artifact_service.Service = null,
     artifact_transfer: artifact_transfer.Transfer = .{},
     project: ?*host.project.Project = null,

@@ -12,6 +12,7 @@ const chunk_load = @import("ra8_rpc").session.load_chunks;
 const ctl_client = @import("ctl/client.zig");
 const proto = @import("ra8_rpc").session.rpc;
 const Spec = @import("serve/listen.zig").Spec;
+const targets = @import("ctl/targets.zig");
 
 const Client = ctl_client.Client;
 const ctl_branch = @import("ctl/branch.zig");
@@ -42,7 +43,8 @@ pub const usage =
     "            fork confirm | fork cancel | fork status | write-reg NAME VALUE | " ++
     "set NAME=VALUE | console " ++
     "TEXT\n" ++
-    "            undo | reset-image";
+    "            undo | reset-image\n" ++
+    "            targets list | targets use HOST_ID PROBE_ID BOARD_ID GENERATION DISAMBIGUATION|- ACTION...\n";
 
 const command_parse = @import("ctl/parse.zig");
 const command_types = @import("ctl/command.zig");
@@ -142,6 +144,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
     const w = &stdout.interface;
     const json = request.json;
     switch (request.command) {
+        .targets => |cmd| try targets.run(client, w, cmd),
         .events => |options| return events.watch(client, w, json, options),
         .load => |path| try loadFile(allocator, io, client, w, json, path),
         .run => |budget| try runTo(client, w, json, budget),

@@ -1,11 +1,13 @@
 //! Control command syntax; transport options are parsed by session_ctl.
+const std = @import("std");
+
 const command_types = @import("command.zig");
 const ctl_branch = @import("branch.zig");
 const ctl_nav = @import("nav.zig");
 const ctl_write = @import("write.zig");
 const events = @import("events.zig");
 const proto = @import("ra8_rpc").session.rpc;
-const std = @import("std");
+const targets = @import("targets.zig");
 
 const Command = command_types.Command;
 const Folded = command_types.Folded;
@@ -68,6 +70,7 @@ const Word = enum {
 };
 
 pub fn command(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
+    if (std.mem.eql(u8, name, "targets")) return .{ .targets = try targets.parse(args) };
     if (try ctl_write.parseWord(allocator, name, args)) |cmd| return .{ .write_cmd = cmd };
     const word = std.meta.stringToEnum(Word, name) orelse return error.UnknownCommand;
     return switch (word) {
