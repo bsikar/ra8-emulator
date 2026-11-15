@@ -11,8 +11,8 @@
 //! and a host packet for an OUT pipe still holding one is refused.
 //! The byte handling is the USBHS port's, as on the DCP.
 const fifo = @import("../usbhs/fifo.zig");
-const regs = @import("../usbhs/regs.zig");
 const pipe = @import("pipe.zig");
+const regs = @import("../usbhs/regs.zig");
 
 const count = pipe.count;
 

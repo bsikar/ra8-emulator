@@ -12,13 +12,14 @@
 //! it then loses to a number), the A forms take the lane's absolute value
 //! but not the scalar's, and an F16 result is zero-extended into Rda.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const Which = fpu.minmax.Which;
 const format = fpu.format;
 const Format = format.Format;
-const qreg = @import("../../qreg.zig");
-const predicate = @import("../../predicate.zig");
 const float = @import("../float.zig");
+const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 /// FPMaxNum or FPMinNum lane by lane; `abs` gives the A forms.

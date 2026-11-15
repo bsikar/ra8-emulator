@@ -4,12 +4,13 @@
 //! `--report json`. `--elf PATH` runs a guest image across the same matrix
 //! instead (sweep_elf.zig).
 const std = @import("std");
-const workload = @import("ra8_board").sizing.workload;
+
 const matrix = @import("ra8_board").sizing.matrix;
 const sweep = @import("ra8_board").sizing.sweep;
+const sweep_elf = @import("elf.zig");
 const sweep_report = @import("report.zig");
 const sweep_table = @import("table.zig");
-const sweep_elf = @import("elf.zig");
+const workload = @import("ra8_board").sizing.workload;
 
 pub const usage =
     \\usage: ra8_emulator sweep [--weights-mib N] [--activations-kib N] [--passes N]
@@ -38,7 +39,12 @@ pub fn parse(args: anytype) !Options {
         const value: []const u8 = args[index + 1];
         index += 2;
         if (std.mem.eql(u8, flag, "--report")) {
-            options.json = if (std.mem.eql(u8, value, "json")) true else if (std.mem.eql(u8, value, "table")) false else return error.BadArguments;
+            options.json = if (std.mem.eql(u8, value, "json"))
+                true
+            else if (std.mem.eql(u8, value, "table"))
+                false
+            else
+                return error.BadArguments;
         } else if (std.mem.eql(u8, flag, "--elf")) {
             guest.path = value;
         } else if (std.mem.eql(u8, flag, "--part")) {
@@ -62,7 +68,10 @@ pub fn parse(args: anytype) !Options {
         }
     }
     options.job.validate() catch return error.BadArguments;
-    const asked_guest = guest.path.len != 0 or guest.stop_sym != null or guest.ms != null or !std.mem.eql(u8, guest.part, "ra8d2");
+    const asked_guest = guest.path.len != 0 or
+        guest.stop_sym != null or
+        guest.ms != null or
+        !std.mem.eql(u8, guest.part, "ra8d2");
     if (!asked_guest) return options;
     const one_end = (guest.stop_sym != null) != (guest.ms != null);
     if (synthetic or guest.path.len == 0 or !one_end) return error.BadArguments;
@@ -105,7 +114,10 @@ pub fn run(io: std.Io, env: *const std.process.Environ.Map, argv: anytype) !u8 {
 
 /// The report the options asked for, over `out`.
 pub fn emit(out: anytype, options: Options, rows: []const sweep.Row) !void {
-    const source: sweep_report.Source = if (options.elf) |guest| .{ .elf = guest.path } else .{ .synthetic = options.job };
+    const source: sweep_report.Source = if (options.elf) |guest|
+        .{ .elf = guest.path }
+    else
+        .{ .synthetic = options.job };
     if (options.json) return sweep_report.document(out, source, options.target_ns, rows);
     try sweep_table.write(out, source, options.target_ns, rows);
 }

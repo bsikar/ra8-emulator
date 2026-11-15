@@ -6,8 +6,8 @@
 //! response on endpoint RPCRsp that echoes the uid. Field numbers follow
 //! esp-hosted-mcu v2.12.12 common/proto/esp_hosted_rpc.proto; the
 //! version reported is the co-processor firmware the bench runs, 2.12.11.
-const frame = @import("frame.zig");
 const event = @import("event.zig");
+const frame = @import("frame.zig");
 const station = @import("station.zig");
 
 pub const Error = error{ Truncated, NotRequest } || event.Error;

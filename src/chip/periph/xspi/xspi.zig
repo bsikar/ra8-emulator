@@ -59,13 +59,14 @@
 //! shadowed so a read-modify-write survives, and never interpreted. WIP
 //! reads clear because a command completes inside the store that kicked it:
 //! there is no time in this model for the part to still be busy.
-const std = @import("std");
+
 const octaclk = @import("../octaclk.zig");
 const periph = @import("../registry.zig");
 const xspi_nor = @import("nor.zig");
+
 pub const nor = xspi_nor;
-pub const reset = @import("reset.zig");
 const lanes = @import("../lanes.zig");
+pub const reset = @import("reset.zig");
 
 /// XSPI0 geometry.
 pub const win_base: u32 = 0x4026_8000;

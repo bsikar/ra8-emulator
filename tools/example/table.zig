@@ -1,81 +1,24 @@
-//! example_table runs every ELF in a directory through the emulator and prints
-//! one row per image (RA8EMU-66): the verdict, how the run ended, the last SCI
-//! console line, the LEDs left on and the unmodelled register count.
+//! Runs each example ELF and prints verdict, stop, console, LED, and unmodelled counts (RA8EMU-66).
+//! Usage: zig build examples -- EMULATOR DIR [INSTRUCTIONS]
 //!
-//!   zig build examples -- EMULATOR DIR [INSTRUCTIONS]
+//! HIL_EXPECT/HIL_EXPECT_NEGATIVE in a sibling .hil.conf take precedence (RA8EMU-400).
+//! Otherwise expect.zig uses README pass/fail lines. Faults or FAIL fail;
+//! OK/PASS pass. An LED-only demo needs two edges (RA8EMU-398). Other results are unknown.
+//! budgets.zig supplies extended instruction budgets; options.zig fits required hardware.
 //!
-//! An image passes when its console's last line says OK or PASS. It fails when
-//! the run stopped on a fault or the console says FAIL. An LED-only demo, with
-//! no console and no probe, passes when one of its LEDs toggled at least
-//! twice: it blinks rather than sticking (RA8EMU-398). Anything else is
-//! unknown until a reader checks it against its README.
-//! An image with its bench conf beside it (foo.hil.conf) runs with --console
-//! and is judged first by that conf's HIL_EXPECT and HIL_EXPECT_NEGATIVE over
-//! every console line, as the bench judges it (RA8EMU-400). An image with no
-//! conf whose README names its pass and fail lines is judged on its last line
-//! by example_expect.zig.
-//! A few images need more than one budget fits; example_budgets.zig lists
-//! them and the floor each runs at. A few need hardware the default board
-//! does not fit; example_options.zig lists the flags that fit it.
-//!
-//! A dual-core example is two ELFs side by side, foo.elf for CPU0 and
-//! foo_cpu1.elf for CPU1 (RA8EMU-37). The pair runs as one row, foo.elf with
-//! --cpu1 foo_cpu1.elf, and the CPU1 half never gets a row of its own: run
-//! alone it boots from a vector table CPU0 was supposed to release.
-//!
-//! A TrustZone example is two ELFs the same way, foo.elf for the Secure boot
-//! and foo_ns.elf for the Non-Secure image it hands off to (RA8EMU-217). The
-//! pair runs as one row, foo.elf with --ns foo_ns.elf, and the Non-Secure
-//! half gets no row of its own: run alone it has no Secure world to enter it.
+//! CPU0 foo.elf pairs with foo_cpu1.elf via --cpu1 (RA8EMU-37), and Secure foo.elf
+//! pairs with foo_ns.elf via --ns (RA8EMU-217). Secondary ELFs get no separate row.
+const row_mod = @import("row.zig");
 const std = @import("std");
+
 pub const budgets = @import("budgets.zig");
-pub const probes = @import("probes.zig");
-pub const options = @import("options.zig");
 pub const expect = @import("expect.zig");
 pub const hil_conf = @import("hil_conf");
+pub const options = @import("options.zig");
+pub const probes = @import("probes.zig");
 
-pub const Verdict = enum { pass, fail, unknown };
-
-pub const Row = struct {
-    pub const max_leds = 8;
-    /// On then off: the fewest edges that tell a blink from a stuck LED.
-    pub const blink_edges = 2;
-
-    console: ?[]const u8 = null,
-    leds_on: [max_leds][]const u8 = undefined,
-    led_count: usize = 0,
-    unmodelled: ?u32 = null,
-    stopped: ?[]const u8 = null,
-    /// Some user LED toggled at least `blink_edges` times.
-    blinking: bool = false,
-    /// The memory-probe verdict for an image example_probes.zig lists, or
-    /// whose hil.conf names a probe.
-    probe: ?probes.Judgement = null,
-    /// The verdict the example's own hil.conf gives, when it has one.
-    hil: ?hil_conf.Judgement = null,
-
-    pub fn leds(row: *const Row) []const []const u8 {
-        return row.leds_on[0..row.led_count];
-    }
-
-    pub fn verdict(row: Row) Verdict {
-        if (row.stopped != null) return .fail;
-        if (row.probe) |judged| return switch (judged) {
-            .pass => .pass,
-            .fail => .fail,
-            .unknown => .unknown,
-        };
-        if (row.hil) |judged| return switch (judged) {
-            .pass => .pass,
-            .fail => .fail,
-        };
-        const line = row.console orelse return if (row.blinking) .pass else .unknown;
-        if (std.mem.indexOf(u8, line, "FAIL") != null) return .fail;
-        if (std.mem.indexOf(u8, line, "OK") != null) return .pass;
-        if (std.mem.indexOf(u8, line, "PASS") != null) return .pass;
-        return .unknown;
-    }
-};
+pub const Verdict = row_mod.Verdict;
+pub const Row = row_mod.Row;
 
 /// Reads one emulator report. Lines it does not know are ignored, so the report
 /// can grow without breaking the table.
@@ -176,7 +119,14 @@ pub fn main(init: std.process.Init) !void {
         };
         const conf = try readConf(allocator, io, path);
         const probe = probes.find(image) orelse confProbe(image, conf);
-        var job = Job{ .emulator = args[1], .path = path, .image = image, .halves = halves, .conf = conf, .budget = budget };
+        var job = Job{
+            .emulator = args[1],
+            .path = path,
+            .image = image,
+            .halves = halves,
+            .conf = conf,
+            .budget = budget,
+        };
         job.run = .{ .probe = probe, .console = conf != null, .extra = if (conf) |found| found.emu_args else null };
         job.run.until = untilFor(conf, probe);
         job.run.reply = if (conf) |found| found.consoleReply() else null;
@@ -292,11 +242,22 @@ pub fn untilFor(conf: ?hil_conf.Conf, probe: ?probes.Probe) ?[]const u8 {
 
 fn confProbe(image: []const u8, conf: ?hil_conf.Conf) ?probes.Probe {
     const found = conf orelse return null;
-    return probes.fromConf(image, found.probe_symbol, found.probe_min_advance, found.probe_failure_symbol, found.probe_max_failure);
+    return probes.fromConf(
+        image,
+        found.probe_symbol,
+        found.probe_min_advance,
+        found.probe_failure_symbol,
+        found.probe_max_failure,
+    );
 }
 
 fn readConf(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !?hil_conf.Conf {
-    const text = std.Io.Dir.cwd().readFileAlloc(io, try confName(allocator, path), allocator, .limited(64 * 1024)) catch |err| switch (err) {
+    const text = std.Io.Dir.cwd().readFileAlloc(
+        io,
+        try confName(allocator, path),
+        allocator,
+        .limited(64 * 1024),
+    ) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,
     };
@@ -356,7 +317,16 @@ fn confMs(image: []const u8, conf: ?hil_conf.Conf, budget: ?[]const u8) ?u32 {
     return (conf orelse return null).floorMs();
 }
 
-fn runImage(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, emulator: []const u8, path: []const u8, halves: Halves, run: Run, budget: ?[]const u8) ![]const u8 {
+fn runImage(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    emulator: []const u8,
+    path: []const u8,
+    halves: Halves,
+    run: Run,
+    budget: ?[]const u8,
+) ![]const u8 {
     var argv: std.ArrayList([]const u8) = .empty;
     try argv.appendSlice(allocator, &.{ emulator, path });
     const image = std.fs.path.basename(path);
@@ -377,12 +347,18 @@ fn runImage(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.En
     if (run.reply) |spec| try argv.appendSlice(allocator, &.{ "--console-reply", spec });
     if (run.extra) |extra| {
         var words = std.mem.tokenizeScalar(u8, extra, ' ');
-        while (words.next()) |word| try argv.append(allocator, word);
+        while (words.next()) |word| {
+            try argv.append(allocator, word);
+        }
     }
     if (run.ms) |ms| try argv.appendSlice(allocator, &.{ "--ms", try std.fmt.allocPrint(allocator, "{d}", .{ms}) });
     if (budget) |count| try argv.appendSlice(allocator, &.{ "--instructions", count });
     const limit: std.Io.Limit = .limited(16 * 1024 * 1024);
-    const result = try std.process.run(allocator, io, .{ .argv = argv.items, .stdout_limit = limit, .stderr_limit = limit });
+    const result = try std.process.run(
+        allocator,
+        io,
+        .{ .argv = argv.items, .stdout_limit = limit, .stderr_limit = limit },
+    );
     return std.mem.concat(allocator, u8, &.{ result.stdout, "\n", result.stderr });
 }
 

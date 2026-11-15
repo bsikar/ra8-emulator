@@ -3,9 +3,10 @@
 //! without a map hook, or a core with no image, refuses it; a map longer
 //! than one reply is `too_long`.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const refused = handlers.app_codes.refused;
 

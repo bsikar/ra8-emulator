@@ -10,8 +10,9 @@
 //! it is closed, or give a second name of a file a lock of its own.
 
 const std = @import("std");
-const name = @import("name.zig");
+
 const metadata = @import("metadata.zig");
+const name = @import("name.zig");
 const provenance = @import("lease.zig");
 
 pub const State = enum { free, held, missing };

@@ -68,8 +68,16 @@ pub const all = [_]V{
     sh("asrl #8 crosses the halves", asrl, 8, 0xFF00_0000, 0x1234_5678, 0xFFFF_0000, 0x0012_3456),
     sh("asrl #31 of a positive value", asrl, 31, 0x4000_0000, 0, 0, 0x8000_0000),
     sh("asrl #32 from an encoded 0", asrl, 32, 0x8000_0001, 0, 0xFFFF_FFFF, 0x8000_0001),
-    vec("lsll on r10:r11", .{ .hw1 = 0xEA5A, .hw2 = enc(lsll, 4, 11), .lo = 0x1000_0001, .hi = 2 }, .{ .lo = 0x0000_0010, .hi = 0x21 }),
-    vec("lsrl on a non-adjacent pair r4:r1", .{ .hw1 = 0xEA54, .hw2 = enc(lsrl, 8, 1), .lo = 0xFF, .hi = 0xAB }, .{ .lo = 0xAB00_0000, .hi = 0 }),
+    vec(
+        "lsll on r10:r11",
+        .{ .hw1 = 0xEA5A, .hw2 = enc(lsll, 4, 11), .lo = 0x1000_0001, .hi = 2 },
+        .{ .lo = 0x0000_0010, .hi = 0x21 },
+    ),
+    vec(
+        "lsrl on a non-adjacent pair r4:r1",
+        .{ .hw1 = 0xEA54, .hw2 = enc(lsrl, 8, 1), .lo = 0xFF, .hi = 0xAB },
+        .{ .lo = 0xAB00_0000, .hi = 0 },
+    ),
     bad("lsll by 0 is unclaimed", lo0, enc(lsll, 0, 1)),
     bad("type 11 is unclaimed", lo0, enc(3, 4, 1)),
     bad("RdaHi of 1111 belongs to the saturating shifts", lo0, enc(lsll, 4, 0xF)),

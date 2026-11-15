@@ -1,10 +1,10 @@
 //! The board's side of a session speed change when the session and the
 //! engine share one thread, as in the debugger (RA8EMU-184): the change
 //! lands on the board's pacing at once, between commands.
-const session_api = @import("../api.zig");
 const clocks = @import("ra8_chip").periph.clocks;
 const pacer = @import("../run/run.zig").pacer;
 const pacing = @import("../run/run.zig").pacing;
+const session_api = @import("../api.zig");
 
 pub const BoardSpeed = struct {
     time: *clocks.Time,

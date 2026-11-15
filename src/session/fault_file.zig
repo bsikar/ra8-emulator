@@ -6,14 +6,15 @@
 //! plug and fault hooks (src/session/board/schedule.zig), and the run's
 //! boundary is wrapped so each event lands on its exact virtual time.
 const std = @import("std");
-const boot = @import("ra8_chip").core.cpu.boot;
+
 const api = @import("api.zig");
-const file_ops = @import("file_ops.zig");
 const Board = @import("ra8_board").board.Board;
-const session_plug = @import("board/plug.zig");
-const session_faults = @import("board/faults/faults.zig");
-const session_schedule = @import("board/schedule.zig");
+const boot = @import("ra8_chip").core.cpu.boot;
 const fault_schedule = @import("ra8_components").fault.schedule;
+const file_ops = @import("file_ops.zig");
+const session_faults = @import("board/faults/faults.zig");
+const session_plug = @import("board/plug.zig");
+const session_schedule = @import("board/schedule.zig");
 
 pub const Applier = session_schedule.Applier;
 
@@ -61,7 +62,12 @@ pub const Run = struct {
         self.session.attachPlugs(self.plugs.hook());
         self.session.attachFaults(&self.faults);
         // The run's own boundary is only known once it starts: `boundary`.
-        self.applier = .{ .events = self.plan.events, .session = &self.session, .clock = &board.time.base, .inner = undefined };
+        self.applier = .{
+            .events = self.plan.events,
+            .session = &self.session,
+            .clock = &board.time.base,
+            .inner = undefined,
+        };
     }
 
     pub fn deinit(self: *Run) void {

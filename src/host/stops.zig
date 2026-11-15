@@ -8,11 +8,22 @@
 //! to `close_wait_ms` while the application finishes and calls `finished`.
 //! Best effort: a cleanup slower than that is cut off, and the next start's
 //! sweep clears what it left.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const win32 = @import("win32.zig");
 
-pub const Reason = enum(u8) { none, interrupt, terminate, hangup, quit, console_break, console_close, logoff, shutdown };
+pub const Reason = enum(u8) {
+    none,
+    interrupt,
+    terminate,
+    hangup,
+    quit,
+    console_break,
+    console_close,
+    logoff,
+    shutdown,
+};
 
 /// How long a console close, logoff or shutdown is held for `finished`.
 pub const close_wait_ms: u32 = 4000;
@@ -41,7 +52,9 @@ pub fn install() error{InstallFailed}!void {
         .mask = std.posix.sigemptyset(),
         .flags = 0,
     };
-    for ([_]std.posix.SIG{ .INT, .TERM, .HUP, .QUIT }) |signal| std.posix.sigaction(signal, &action, null);
+    for ([_]std.posix.SIG{ .INT, .TERM, .HUP, .QUIT }) |signal| {
+        std.posix.sigaction(signal, &action, null);
+    }
 }
 
 /// Release the installed handlers on Windows. POSIX callers should

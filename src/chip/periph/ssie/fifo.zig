@@ -34,7 +34,6 @@
 //! NOT MODELLED EITHER: RDC. There is no receive source in this model, so the
 //! count is always zero; the field is named here so the read path packs it in
 //! the right place when one arrives, not because a value is being invented.
-const std = @import("std");
 
 /// Stages per direction (ra8_ssie_regs.h k_ra8_ssie_fifo_depth).
 pub const depth = struct {

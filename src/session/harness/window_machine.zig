@@ -6,16 +6,20 @@
 //! session's run, unmuted, so checkpoints, landings and interventions
 //! record as they do for any live run; the window driver (window.zig)
 //! feeds it the command and reads back how the slot ended.
+const board_api = @import("ra8_board");
+
 const std = @import("std");
+
 const api = @import("../api.zig");
-const line = @import("../line.zig");
-const state = @import("../board/state.zig");
-const port_mod = @import("../history/window_port.zig");
 const core_stream = @import("../board/core_stream.zig");
-const round = @import("../zig/round.zig");
 const external_backing = @import("ra8_board").external.backing;
+const line = @import("../line.zig");
+const port_mod = @import("../history/window_port.zig");
+const round = @import("../zig/round.zig");
+const state = @import("../board/state.zig");
 
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
+
 const ppb_base: u32 = 0xE000_0000;
 const ppb_span: u32 = 0x10_0000;
 const Position = port_mod.Position;
@@ -38,7 +42,7 @@ pub const Machine = struct {
     first: bool = true,
     /// The images' identity as the last side save saw it; the images change
     /// only with a load, which saves the side again.
-    identity: ?@import("ra8_board").snapshot.run.Identity = null,
+    identity: ?board_api.snapshot.run.Identity = null,
     /// Peripheral and system-control accesses so far (the bus's touched hook).
     touched: u64 = 0,
     /// How the last live slot ended, and whether it ran at all.
@@ -200,8 +204,12 @@ pub const Machine = struct {
         const self = of(context);
         var sum = self.touched;
         if (external_backing.fabricOf(self.files.store)) |fabric| {
-            for (fabric.regions) |r| sum +%= r.reads +% r.writes;
-            for (fabric.pending) |p| sum +%= p;
+            for (fabric.regions) |r| {
+                sum +%= r.reads +% r.writes;
+            }
+            for (fabric.pending) |p| {
+                sum +%= p;
+            }
         }
         return sum;
     }

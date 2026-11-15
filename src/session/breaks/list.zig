@@ -4,12 +4,13 @@
 //! Breaks and watches keep their own numbers (src/session/breaks/table.zig,
 //! src/session/watch/table.zig), so the list interleaves them by number.
 const std = @import("std");
+
 const break_table = @import("table.zig");
-const watch_table = @import("../watch/table.zig");
-const elf = @import("ra8_board").image.elf;
-const symbols = @import("../symbols.zig");
-const session_source = @import("../source.zig");
 const dwarf_line = @import("../dwarf/line/line.zig");
+const elf = @import("ra8_board").image.elf;
+const session_source = @import("../source.zig");
+const symbols = @import("../symbols.zig");
+const watch_table = @import("../watch/table.zig");
 
 pub const header = "Num     Type            Disp Enb Address    What\n";
 pub const empty = "No breakpoints or watchpoints.\n";
@@ -45,7 +46,10 @@ pub fn write(out: anytype, view: View) !void {
 
 fn breakRow(out: anytype, view: View, slot: anytype) !void {
     const disposition = if (temporary(view.temporary, slot.id)) "del" else "keep";
-    try out.print("{d:<8}{s:<16}{s:<5}{s:<4}0x{x:0>8} ", .{ slot.id, "breakpoint", disposition, enabled(slot.enabled), slot.point.address });
+    try out.print(
+        "{d:<8}{s:<16}{s:<5}{s:<4}0x{x:0>8} ",
+        .{ slot.id, "breakpoint", disposition, enabled(slot.enabled), slot.point.address },
+    );
     try where(out, view.image, slot.point.address);
     try out.writeAll("\n");
     try hits(out, slot.point.seen);

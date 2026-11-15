@@ -5,11 +5,12 @@
 //! the same either way. An image without line information, or a table this reader
 //! refuses, answers the way gdb does for an address it has no line for.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const file_ops = @import("file_ops.zig");
+
+const dwarf_info = @import("dwarf/info.zig");
 const dwarf_line = @import("dwarf/line/line.zig");
 const dwarf_line_find = @import("dwarf/line/find.zig");
-const dwarf_info = @import("dwarf/info.zig");
+const elf = @import("ra8_board").image.elf;
+const file_ops = @import("file_ops.zig");
 
 pub const limits = struct {
     /// Lines `list` shows before the one it centres on.
@@ -107,7 +108,12 @@ pub fn list(out: anytype, sections: dwarf_line.Sections, io: std.Io, reader: fil
     var name: [limits.max_path_bytes]u8 = undefined;
     var spelled: std.Io.Writer = .fixed(&name);
     path(&spelled, place.file) catch return missing(out, place);
-    const bytes = reader.readAlloc(io, spelled.buffered(), std.heap.page_allocator, limits.max_source_bytes) catch return missing(out, place);
+    const bytes = reader.readAlloc(
+        io,
+        spelled.buffered(),
+        std.heap.page_allocator,
+        limits.max_source_bytes,
+    ) catch return missing(out, place);
     defer std.heap.page_allocator.free(bytes);
     var source_reader: std.Io.Reader = .fixed(bytes);
     const first = if (place.line > limits.before) place.line - limits.before else 1;

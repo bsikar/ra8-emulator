@@ -6,7 +6,8 @@
 //! json_riic.zig, RA8EMU-360), then network (src/interfaces/cli/report/json/net.zig and
 //! json_i2c.zig, RA8EMU-362), ethernet and usb (src/interfaces/cli/report/json/ether.zig,
 //! json_usb.zig and json_usbfs.zig, RA8EMU-364), graphics
-//! (src/interfaces/cli/report/json/glcdc/glcdc.zig and src/interfaces/cli/report/json/glcdc/out.zig, RA8EMU-366; json_drw.zig, RA8EMU-371),
+//! (src/interfaces/cli/report/json/glcdc/glcdc.zig and src/interfaces/cli/report/json/glcdc/out.zig, RA8EMU-366;
+//! json_drw.zig, RA8EMU-371),
 //! audio, mipi_phy, capture (src/interfaces/cli/report/json/media.zig, RA8EMU-371), icu, pinfunc,
 //! options, part, backup (src/interfaces/cli/report/json/system.zig, json_options.zig) and
 //! analog (src/interfaces/cli/report/json/analog.zig, RA8EMU-373), compute
@@ -22,34 +23,34 @@
 //! units that saw traffic, each with its index. The other report sections
 //! join this document under RA8EMU-198's later subtasks.
 const Board = @import("ra8_board").board.Board;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const bus_fault = @import("ra8_chip").periph.bus_fault;
 const cpu_ctrl = @import("ra8_chip").periph.cpu_ctrl;
-const ipc = @import("ra8_chip").periph.ipc;
-const sync = @import("ra8_chip").periph.ipc.sync;
-const json = @import("json.zig");
-const json_protect = @import("protect.zig");
-const json_mem = @import("mem.zig");
-const json_clock = @import("clock.zig");
-const json_timers = @import("timers.zig");
-const json_serial = @import("serial.zig");
-const json_storage = @import("storage.zig");
-const json_riic = @import("riic.zig");
-const json_net = @import("net.zig");
-const json_ether = @import("ether.zig");
-const json_usb = @import("usb.zig");
-const json_glcdc = @import("glcdc/glcdc.zig");
-const json_media = @import("media.zig");
-const json_system = @import("system.zig");
-const json_analog = @import("analog.zig");
-const json_compute = @import("compute.zig");
-pub const json_where = @import("where.zig");
-pub const json_timing = @import("timing.zig");
-pub const json_sites = @import("sites.zig");
-pub const json_dumps = @import("dumps.zig");
-pub const json_load = @import("load.zig");
 const eink_log = @import("../../eink_log.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const ipc = @import("ra8_chip").periph.ipc;
+const json = @import("json.zig");
+const json_analog = @import("analog.zig");
+const json_clock = @import("clock.zig");
+const json_compute = @import("compute.zig");
+pub const json_dumps = @import("dumps.zig");
+const json_ether = @import("ether.zig");
+const json_glcdc = @import("glcdc/glcdc.zig");
+pub const json_load = @import("load.zig");
+const json_media = @import("media.zig");
+const json_mem = @import("mem.zig");
+const json_net = @import("net.zig");
+const json_protect = @import("protect.zig");
+const json_riic = @import("riic.zig");
+const json_serial = @import("serial.zig");
+pub const json_sites = @import("sites.zig");
+const json_storage = @import("storage.zig");
+const json_system = @import("system.zig");
+const json_timers = @import("timers.zig");
+pub const json_timing = @import("timing.zig");
 pub const json_txm = @import("txm.zig");
+const json_usb = @import("usb.zig");
+pub const json_where = @import("where.zig");
+const sync = @import("ra8_chip").periph.ipc.sync;
 const txm_report = @import("ra8_session").txm.report;
 
 pub const schema = "ra8-report/1";

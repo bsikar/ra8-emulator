@@ -5,17 +5,18 @@
 //! zero; size 0b11 is another instruction. The result is written only to
 //! the bytes the VPT block enables, and the block advances as each one
 //! retires. The lane semantics are in src/chip/core/cpu/mve/int/int.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+pub const mulh = @import("mulh.zig");
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
-pub const mulh = @import("mulh.zig");
+const op = @import("../../../op.zig");
 pub const pair = @import("pair.zig");
 pub const scalar = @import("scalar.zig");
 pub const shift = @import("shift.zig");
 pub const vmla = @import("vmla.zig");
 pub const vqdmlah = @import("vqdmlah.zig");
+
 const Size = mve.qreg.Size;
 const Op = mve.int.Op;
 

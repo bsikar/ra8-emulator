@@ -1,5 +1,6 @@
 //! The explicitly enabled host workspace and compiler outlive each connection.
 const std = @import("std");
+
 const host = @import("ra8_host");
 const rpc = @import("ra8_rpc");
 
@@ -16,7 +17,11 @@ pub const Workbench = struct {
         self.workspace = try host.workspace.Workspace.open(io, path);
         errdefer self.close();
         if (compiler) |tool| self.runner = try host.build.Runner.init(io, self.workspace.?.dir, tool);
-        self.project = .{ .allocator = std.heap.page_allocator, .base = &self.workspace.?, .backend_compiler = compiler orelse "" };
+        self.project = .{
+            .allocator = std.heap.page_allocator,
+            .base = &self.workspace.?,
+            .backend_compiler = compiler orelse "",
+        };
     }
 
     pub fn bind(self: *Workbench, context: anytype) void {

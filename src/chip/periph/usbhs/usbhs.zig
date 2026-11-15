@@ -13,15 +13,18 @@
 //! at 0x006 and 0x03E, and LPSTS past it at 0x102. All three are reachable
 //! with SYSCFG.USBE still clear, because the driver brings the PHY up before
 //! it sets USBE.
+pub const dfifo = @import("dfifo.zig");
 const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
-pub const dfifo = @import("dfifo.zig");
 const usbhs_phy = @import("phy.zig");
+
 pub const phy = usbhs_phy;
 pub const pipe = @import("pipe.zig");
 const usbhs_pll = @import("pll.zig");
+
 pub const pll = usbhs_pll;
 const usbhs_xfer = @import("xfer/xfer.zig");
+
 pub const xfer = usbhs_xfer;
 pub const far = @import("far.zig");
 pub const fifo = @import("fifo.zig");

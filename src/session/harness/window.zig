@@ -11,15 +11,18 @@
 //! finish, a seek's replay, a restore, a load, a write made outside a
 //! run) leaves it stale, and it starts over at the next live slot with a
 //! hot checkpoint planted at the machine's state then.
+const round = @import("../zig/round.zig");
+
 const std = @import("std");
+
 const api = @import("../api.zig");
-const state = @import("../board/state.zig");
-const trail = @import("../history/trail.zig");
-const engine = @import("../history/window_engine.zig");
-const record = @import("../history/window_record.zig");
-const machine_mod = @import("window_machine.zig");
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
+const engine = @import("../history/window_engine.zig");
+const machine_mod = @import("window_machine.zig");
+const record = @import("../history/window_record.zig");
+const state = @import("../board/state.zig");
 const Store = @import("ra8_chip").core.cpu.memory.store.Store;
+const trail = @import("../history/trail.zig");
 
 const Machine = machine_mod.Machine;
 
@@ -38,7 +41,15 @@ pub const Window = struct {
     /// Builds the window of `budget` bytes, plants it at the loaded
     /// machine and attaches it, with its driver, to `session`. The result
     /// points into itself, so it is heap-stable until `destroy`.
-    pub fn create(gpa: std.mem.Allocator, session: *api.Session, files: *state.Files, store: *Store, bus: *BoardBus, slots: *const u64, budget: usize) !*Window {
+    pub fn create(
+        gpa: std.mem.Allocator,
+        session: *api.Session,
+        files: *state.Files,
+        store: *Store,
+        bus: *BoardBus,
+        slots: *const u64,
+        budget: usize,
+    ) !*Window {
         const self = try gpa.create(Window);
         errdefer gpa.destroy(self);
         self.gpa = gpa;
@@ -53,7 +64,9 @@ pub const Window = struct {
         try self.window.plant();
         if (files.pair) |pair| self.attachSecond(&pair.core.cpu.slots);
         session.attachWindow(&self.window);
-        session.attachWindowDriver(.{ .context = self, .enterFn = enter, .goFn = go, .settleFn = settle, .resetFn = reset });
+        session.attachWindowDriver(
+            .{ .context = self, .enterFn = enter, .goFn = go, .settleFn = settle, .resetFn = reset },
+        );
         return self;
     }
 
@@ -149,7 +162,10 @@ pub const Window = struct {
     fn go(context: *anyopaque, session: *api.Session, command: api.Run) anyerror!api.Ended {
         const self = of(context);
         const live = &session.live;
-        const recorded = command == .step or (!session.advancing and command == .cont and live.budget <= live_slots_max);
+        const recorded = command == .step or
+            (!session.advancing and
+                command == .cont and
+                live.budget <= live_slots_max);
         if (self.machine.muted) {
             if (!self.machine.slot_mode) return live.go(command);
             if (live.started) live.machine.proceed() else live.machine.begin();
@@ -181,7 +197,7 @@ pub const Window = struct {
     fn goStep(self: *Window, live: anytype) !api.Ended {
         const budget = live.budget;
         defer live.budget = budget;
-        const target = @import("../zig/round.zig").Target{
+        const target = round.Target{
             .core = @intCast(live.index),
             .slots = live.core.cpu.slots + 1,
         };

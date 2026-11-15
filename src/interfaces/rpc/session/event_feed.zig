@@ -4,9 +4,10 @@
 //! change (RA8EMU-811); this drains its own queue and sends each kind the wire names as a `session`
 //! event. Kinds with their own topic (uart, lcd, trace) or no wire name are skipped.
 const std = @import("std");
-const proto = @import("rpc.zig");
+
 const api = @import("ra8_session").api;
 const Context = @import("handlers.zig").Context;
+const proto = @import("rpc.zig");
 
 /// Events read from the stream per pass.
 const batch = 64;
@@ -24,7 +25,9 @@ fn onTrace(name: []const u8) bool {
 /// have wire names but go out on Topic.trace (RA8EMU-832), so they map null.
 const wire_kinds = table: {
     for (@typeInfo(proto.EventKind).@"enum".field_names) |name| {
-        if (!onTrace(name) and !@hasField(api.Event.Kind, name)) @compileError("no stream event for wire kind " ++ name);
+        if (!onTrace(name) and
+            !@hasField(api.Event.Kind, name)) @compileError("no stream event for wire kind " ++
+            name);
     }
     const names = @typeInfo(api.Event.Kind).@"enum".field_names;
     var kinds: [names.len]?proto.EventKind = undefined;
@@ -54,7 +57,10 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var events: [batch]api.Event = undefined;
     while (true) {
         const read = context.session.pollEvents(id, &events) orelse return;
-        if (read.dropped != 0) std.debug.print("serve: {d} session events dropped before a client read them\n", .{read.dropped});
+        if (read.dropped != 0) std.debug.print(
+            "serve: {d} session events dropped before a client read them\n",
+            .{read.dropped},
+        );
         for (events[0..read.count]) |event| {
             if (event.payload == .rtos) continue; // its own trace topic (RA8EMU-832)
             const kind = wireKind(event.kind) orelse continue;

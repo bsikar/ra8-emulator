@@ -5,12 +5,13 @@
 //! Q8 and above, so they must be zero. hw2 bit 7 clear is VCVTB/VCVTT
 //! (mve_float_cvt_half.zig). The lane semantics are in
 //! src/chip/core/cpu/mve/float/minmax/minmax.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
+const fpu = @import("../../../fpu/all.zig");
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
-const fpu = @import("../../../fpu/all.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.float.Size;
 const Which = fpu.minmax.Which;
 

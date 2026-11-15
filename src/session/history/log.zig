@@ -12,6 +12,7 @@
 //! their meanings.
 
 const std = @import("std");
+
 const format = @import("format.zig");
 
 pub const Clock = struct {
@@ -44,7 +45,9 @@ pub const Log = struct {
     /// What a commit right now would be answering for.
     pub fn shouldCommit(self: *const Log, now_ns: u64) Decision {
         if (self.pending_bytes >= self.policy.max_bytes) return .bytes;
-        if (self.have_time and now_ns >= self.last_commit_ns and now_ns - self.last_commit_ns >= self.policy.max_delay_ns) return .time;
+        if (self.have_time and
+            now_ns >= self.last_commit_ns and
+            now_ns - self.last_commit_ns >= self.policy.max_delay_ns) return .time;
         return .no;
     }
 
@@ -101,7 +104,14 @@ pub const Recovery = struct {
 /// Walks the segment's frames in order, handing each to `visit`, and
 /// stops at the first torn tail. A whole frame that fails is a hard
 /// error; a torn tail is the only recoverable stop.
-pub fn scan(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Boundary) void) format.Error!Recovery {
+pub fn scan(
+    bytes: []const u8,
+    context: anytype,
+    comptime visit: fn (
+        @TypeOf(context),
+        Boundary,
+    ) void,
+) format.Error!Recovery {
     var cursor: usize = 0;
     var frames: usize = 0;
     while (cursor < bytes.len) {

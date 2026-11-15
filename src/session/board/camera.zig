@@ -4,10 +4,11 @@
 //! camera's frame source, which reads the sensor's FORMAT CONTROL byte at
 //! each capture, and installs it where the CEU reads.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const camera_install = @import("ra8_board").camera_install;
-const hosted = @import("ra8_components").camera.hosted;
 const FrameSource = @import("ra8_chip").periph.frame_source.FrameSource;
+const hosted = @import("ra8_components").camera.hosted;
 pub const Preview = @import("ra8_chip").periph.frame_source.Preview;
 
 /// Install `input` as `board`'s camera source: a host input the caller

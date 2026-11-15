@@ -7,6 +7,7 @@
 //! pauses on, and a comparison across two branches, which is OtherLine
 //! rather than some arbitrary order between branch numbers.
 const std = @import("std");
+
 const scheduler = @import("ra8_chip").core.scheduler;
 
 pub const Position = scheduler.Position;

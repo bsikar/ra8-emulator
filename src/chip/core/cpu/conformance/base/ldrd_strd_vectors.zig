@@ -72,8 +72,16 @@ const loads = [_]V{
     ld("ldrd r2, r3, [r0, #-508]! writes back", 0xE970, 0x237F, 0x2000_0004, 0x2000_0004),
     ld("ldrd r2, r3, [r0], #4 reads at rn", 0xE8F0, 0x2301, 0x2000_0200, 0x2000_0204),
     ld("ldrd r2, r3, [r0], #-8", 0xE870, 0x2302, 0x2000_0200, 0x2000_01F8),
-    vec("ldrd r3, r2 puts rt at the lower address", .{ .hw1 = 0xE9D0, .hw2 = 0x3202, .at = 0x2000_0208 }, .{ .r2 = hi, .r3 = lo }),
-    vec("ldrd at a halfword address is an alignment fault", .{ .hw1 = 0xE9F0, .hw2 = 0x2300, .rn = 0x2000_0202, .at = 0x2000_0200 }, .{ .fault = .unaligned, .rn = 0x2000_0202 }),
+    vec(
+        "ldrd r3, r2 puts rt at the lower address",
+        .{ .hw1 = 0xE9D0, .hw2 = 0x3202, .at = 0x2000_0208 },
+        .{ .r2 = hi, .r3 = lo },
+    ),
+    vec(
+        "ldrd at a halfword address is an alignment fault",
+        .{ .hw1 = 0xE9F0, .hw2 = 0x2300, .rn = 0x2000_0202, .at = 0x2000_0200 },
+        .{ .fault = .unaligned, .rn = 0x2000_0202 },
+    ),
     vec("ldrd past RAM faults and keeps the registers", .{ .hw1 = 0xE9F0, .hw2 = 0x23FF }, .{ .fault = .unmapped }),
 };
 
@@ -84,10 +92,26 @@ const stores = [_]V{
     st("strd r2, r3, [r0, #-8]! writes back", 0xE960, 0x2302, 0x2000_01F8, 0x2000_01F8),
     st("strd r2, r3, [r0], #16 writes at rn", 0xE8E0, 0x2304, 0x2000_0200, 0x2000_0210),
     st("strd r2, r3, [r0], #-4", 0xE860, 0x2301, 0x2000_0200, 0x2000_01FC),
-    vec("strd r3, r2 puts rt at the lower address", .{ .hw1 = 0xE9C0, .hw2 = 0x3202, .probe = 0x2000_0208 }, .{ .mem_lo = src_hi, .mem_hi = src_lo }),
-    vec("strd r2, r2 stores rt twice", .{ .hw1 = 0xE9C0, .hw2 = 0x2202, .probe = 0x2000_0208 }, .{ .mem_lo = src_lo, .mem_hi = src_lo }),
-    vec("strd r0, r3, [r0, #8] stores the base", .{ .hw1 = 0xE9C0, .hw2 = 0x0302, .probe = 0x2000_0208 }, .{ .mem_lo = base, .mem_hi = src_hi }),
-    vec("strd at a halfword address is an alignment fault", .{ .hw1 = 0xE9E0, .hw2 = 0x2300, .rn = 0x2000_0202, .probe = 0x2000_0200 }, .{ .fault = .unaligned, .rn = 0x2000_0202 }),
+    vec(
+        "strd r3, r2 puts rt at the lower address",
+        .{ .hw1 = 0xE9C0, .hw2 = 0x3202, .probe = 0x2000_0208 },
+        .{ .mem_lo = src_hi, .mem_hi = src_lo },
+    ),
+    vec(
+        "strd r2, r2 stores rt twice",
+        .{ .hw1 = 0xE9C0, .hw2 = 0x2202, .probe = 0x2000_0208 },
+        .{ .mem_lo = src_lo, .mem_hi = src_lo },
+    ),
+    vec(
+        "strd r0, r3, [r0, #8] stores the base",
+        .{ .hw1 = 0xE9C0, .hw2 = 0x0302, .probe = 0x2000_0208 },
+        .{ .mem_lo = base, .mem_hi = src_hi },
+    ),
+    vec(
+        "strd at a halfword address is an alignment fault",
+        .{ .hw1 = 0xE9E0, .hw2 = 0x2300, .rn = 0x2000_0202, .probe = 0x2000_0200 },
+        .{ .fault = .unaligned, .rn = 0x2000_0202 },
+    ),
     vec("strd past RAM faults and keeps rn", .{ .hw1 = 0xE9E0, .hw2 = 0x23FF }, .{ .fault = .unmapped }),
 };
 

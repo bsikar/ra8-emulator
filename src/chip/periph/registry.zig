@@ -13,6 +13,8 @@
 //! forever, so an address read repeatedly with nothing written to it alternates
 //! between zero and all-ones: a poll for either polarity of a single bit falls
 //! through instead of hanging.
+const snapshot = @import("ra8_snapshot");
+
 const std = @import("std");
 
 /// The Secure peripheral window. These are silicon facts, not options.
@@ -154,12 +156,14 @@ pub const Bus = struct {
 
     /// Sparse cells are ordered by address, independently of hash-map layout.
     pub fn saveSnapshot(self: *const Bus, writer: *std.Io.Writer) !void {
-        const fields = @import("ra8_snapshot").fields;
+        const fields = snapshot.fields;
         const keys = try self.cells.allocator.alloc(u32, self.cells.count());
         defer self.cells.allocator.free(keys);
         var iter = self.cells.keyIterator();
         var index: usize = 0;
-        while (iter.next()) |key| : (index += 1) keys[index] = key.*;
+        while (iter.next()) |key| : (index += 1) {
+            keys[index] = key.*;
+        }
         std.mem.sort(u32, keys, {}, std.sort.asc(u32));
         try fields.write(writer, self.counters);
         try fields.write(writer, self.nonsecure);
@@ -173,7 +177,7 @@ pub const Bus = struct {
 
     /// Allocates the replacement map before replacing any guest state.
     pub fn loadSnapshot(self: *Bus, payload: []const u8) !void {
-        const fields = @import("ra8_snapshot").fields;
+        const fields = snapshot.fields;
         var cursor: fields.Cursor = .{ .bytes = payload };
         const counters = try fields.read(Counters, &cursor);
         const nonsecure = try fields.read(bool, &cursor);

@@ -5,8 +5,8 @@
 //! control file), the same facts report/icu.zig, pinfunc.zig, options.zig,
 //! part.zig and backup.zig print. Every key is always present.
 const Board = @import("ra8_board").board.Board;
-const part = @import("ra8_chip").core.part;
 const json_options = @import("options.zig");
+const part = @import("ra8_chip").core.part;
 
 /// The five objects, keyed inside the document after `capture`.
 pub fn section(j: anytype, board: *Board) !void {

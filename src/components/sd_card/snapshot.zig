@@ -7,10 +7,10 @@
 //! block map. A load is two steps, so the board's section can read every
 //! half before it changes anything: `read` gives a `Staged` card, and
 //! `install` puts it in place once its block map is built.
-const fields = @import("ra8_snapshot").fields;
 const blocks = @import("ra8_snapshot").blocks;
-const SpiCard = @import("card/card.zig").Card;
 const BusCard = @import("bus/card.zig").Card;
+const fields = @import("ra8_snapshot").fields;
+const SpiCard = @import("card/card.zig").Card;
 
 const image_wiring = .{ "allocator", "blocks", "obs" };
 

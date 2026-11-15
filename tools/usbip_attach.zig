@@ -8,7 +8,9 @@
 //! SET_CONTROL_LINE_STATE with DTR and RTS. Exits 1 on the first step that
 //! does not hold.
 const std = @import("std");
+
 const client = @import("usbip_client");
+
 const attach = client.attach;
 
 const max_len = 64;
@@ -30,13 +32,16 @@ pub fn main(init: std.process.Init) !void {
     const text = argv[1];
     const port = std.fmt.parseInt(u16, text, 10) catch return fail("bad port {s}", .{text});
     var want = Want{};
-    for (argv[2..]) |arg| try parse(&want, arg);
+    for (argv[2..]) |arg| {
+        try parse(&want, arg);
+    }
     const address: std.Io.net.IpAddress = .{ .ip4 = .loopback(port) };
 
     var record: [312]u8 = undefined;
     const listed = try list(io, address, &record);
     std.debug.print("usbip_attach: listed {s} {x:0>4}:{x:0>4}\n", .{ listed.busid, listed.vendor, listed.product });
-    if (listed.vendor != want.vendor or listed.product != want.product) return fail("not {x:0>4}:{x:0>4}", .{ want.vendor, want.product });
+    if (listed.vendor != want.vendor or
+        listed.product != want.product) return fail("not {x:0>4}:{x:0>4}", .{ want.vendor, want.product });
 
     var busid: [32]u8 = undefined;
     const name = busid[0..listed.busid.len];
@@ -82,9 +87,20 @@ fn list(io: std.Io, address: std.Io.net.IpAddress, record: *[312]u8) !client.Lis
 /// GET_DESCRIPTOR(device) on ep0: idVendor and idProduct must match the list.
 fn descriptor(reader: anytype, writer: anytype, devid: u32, want: Want) !void {
     var in: [18]u8 = undefined;
-    const urb = client.Urb{ .seqnum = 1, .devid = devid, .direction = .in, .ep = 0, .length = 18, .setup = client.getDescriptor(1, 0, 18) };
+    const urb = client.Urb{
+        .seqnum = 1,
+        .devid = devid,
+        .direction = .in,
+        .ep = 0,
+        .length = 18,
+        .setup = client.getDescriptor(1, 0, 18),
+    };
     const back = try attach.transfer(reader, writer, urb, &.{}, &in);
-    if (back.status != 0 or back.actual != 18) return fail("device descriptor: status {d}, {d} bytes", .{ back.status, back.actual });
+    if (back.status != 0 or
+        back.actual != 18) return fail(
+        "device descriptor: status {d}, {d} bytes",
+        .{ back.status, back.actual },
+    );
     const id_vendor = std.mem.readInt(u16, in[8..10], .little);
     const id_product = std.mem.readInt(u16, in[10..12], .little);
     std.debug.print("usbip_attach: device descriptor {x:0>4}:{x:0>4}\n", .{ id_vendor, id_product });
@@ -101,7 +117,14 @@ fn openTty(reader: anytype, writer: anytype, devid: u32) !void {
 }
 
 fn control(reader: anytype, writer: anytype, devid: u32, seqnum: u32, setup: [8]u8, data: []const u8) !void {
-    const urb = client.Urb{ .seqnum = seqnum, .devid = devid, .direction = .out, .ep = 0, .length = @intCast(data.len), .setup = setup };
+    const urb = client.Urb{
+        .seqnum = seqnum,
+        .devid = devid,
+        .direction = .out,
+        .ep = 0,
+        .length = @intCast(data.len),
+        .setup = setup,
+    };
     const back = try attach.transfer(reader, writer, urb, data, &.{});
     if (back.status != 0) return fail("class request {x:0>2}: status {d}", .{ setup[1], back.status });
 }
@@ -110,12 +133,28 @@ fn control(reader: anytype, writer: anytype, devid: u32, seqnum: u32, setup: [8]
 fn loopback(reader: anytype, writer: anytype, devid: u32, len: u16) !void {
     var buffer: [max_len]u8 = undefined;
     const out = buffer[0..len];
-    for (out, 0..) |*byte, i| byte.* = @truncate(i * 7 + 3);
-    const sent = try attach.transfer(reader, writer, .{ .seqnum = 2, .devid = devid, .direction = .out, .ep = 2, .length = len }, out, &.{});
-    if (sent.status != 0 or sent.actual != len) return fail("bulk OUT: status {d}, {d} bytes", .{ sent.status, sent.actual });
+    for (out, 0..) |*byte, i| {
+        byte.* = @truncate(i * 7 + 3);
+    }
+    const sent = try attach.transfer(
+        reader,
+        writer,
+        .{ .seqnum = 2, .devid = devid, .direction = .out, .ep = 2, .length = len },
+        out,
+        &.{},
+    );
+    if (sent.status != 0 or
+        sent.actual != len) return fail("bulk OUT: status {d}, {d} bytes", .{ sent.status, sent.actual });
     var in: [max_len]u8 = undefined;
-    const back = try attach.transfer(reader, writer, .{ .seqnum = 3, .devid = devid, .direction = .in, .ep = 1, .length = max_len }, &.{}, &in);
-    if (back.status != 0 or back.actual != len) return fail("bulk IN: status {d}, {d} bytes", .{ back.status, back.actual });
+    const back = try attach.transfer(
+        reader,
+        writer,
+        .{ .seqnum = 3, .devid = devid, .direction = .in, .ep = 1, .length = max_len },
+        &.{},
+        &in,
+    );
+    if (back.status != 0 or
+        back.actual != len) return fail("bulk IN: status {d}, {d} bytes", .{ back.status, back.actual });
     if (!std.mem.eql(u8, out, in[0..len])) return fail("bulk IN does not echo bulk OUT", .{});
     std.debug.print("usbip_attach: loopback {d} bytes echoed\n", .{len});
 }

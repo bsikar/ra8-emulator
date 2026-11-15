@@ -24,8 +24,8 @@
 //! would buy nothing worth the state it would have to keep correct.
 const elf = @import("ra8_board").image.elf;
 const hotspots = @import("hotspots.zig");
-const symbols = @import("symbols.zig");
 pub const profile = @import("profile.zig");
+const symbols = @import("symbols.zig");
 
 /// The sampled functions of one run.
 pub const Table = struct {

@@ -9,10 +9,11 @@
 //! memory: the widening loads (VLDRB.S16/U16/S32/U32, VLDRH.S32/U32) and
 //! narrowing stores (VSTRB.16/32, VSTRH.32) step by it and scale imm7 by
 //! it, and `element` converts between the memory and register widths.
-const qreg = @import("../qreg.zig");
 const predicate = @import("../predicate.zig");
+const qreg = @import("../qreg.zig");
 pub const vectors = @import("vectors.zig");
 pub const wide_vectors = @import("wide_vectors.zig");
+
 const Size = qreg.Size;
 
 pub const Form = struct { base: u32, imm7: u7, size: Size, add: bool, pre: bool, wback: bool };

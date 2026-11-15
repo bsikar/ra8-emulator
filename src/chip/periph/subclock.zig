@@ -31,9 +31,10 @@
 const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
 
+const lanes = @import("lanes.zig");
+
 /// LOCOCR, the low-speed oscillator's stop bit: lococr.zig.
 pub const loco = @import("lococr.zig");
-const lanes = @import("lanes.zig");
 
 /// Window geometry: SYSC base 0x4001_E000, SOSCCR (+0xC00) and SOMCR (+0xC01).
 pub const win_base: u32 = 0x4001_EC00;

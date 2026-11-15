@@ -4,8 +4,8 @@
 //! assembler for cortex-m85. Results merge byte by byte under the VPT
 //! mask, the loop tail and the beats EPSR.ECI marks done. cmode 1111 with
 //! op set, D set, fixed bits flipped and the 16-bit space stay unclaimed.
-const vector = @import("../../vector.zig");
 const mve_int = @import("int/vectors.zig");
+const vector = @import("../../vector.zig");
 
 pub const In = mve_int.In;
 pub const Out = mve_int.Out;
@@ -45,9 +45,21 @@ const ops = [_]V{
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0xff00 writes the high half and ends the block", .{ .hw1 = 0xFF82, .hw2 = 0x005B, .qd = qd, .vpr = 0x0088FF00 }, .{ .qd = 0x000000AB_000000AB_01234567_89ABCDEF, .vpr = 0x0000FF00 }),
-    vec("the loop tail writes the first bytes", .{ .hw1 = 0xEF85, .hw2 = 0x0E5A, .qd = qd, .ltpsize = 0, .lr = 5 }, .{ .qd = 0xDEADBEEF_CAFEF00D_0123455A_5A5A5A5A }),
-    vec("eci a0a1a2b0 hands beat 0 of the next instruction on", .{ .hw1 = 0xFF82, .hw2 = 0x005B, .qd = qd, .it = 0x50 }, .{ .qd = 0x000000AB_CAFEF00D_01234567_89ABCDEF, .it = 0x10 }),
+    vec(
+        "vpt p0 0xff00 writes the high half and ends the block",
+        .{ .hw1 = 0xFF82, .hw2 = 0x005B, .qd = qd, .vpr = 0x0088FF00 },
+        .{ .qd = 0x000000AB_000000AB_01234567_89ABCDEF, .vpr = 0x0000FF00 },
+    ),
+    vec(
+        "the loop tail writes the first bytes",
+        .{ .hw1 = 0xEF85, .hw2 = 0x0E5A, .qd = qd, .ltpsize = 0, .lr = 5 },
+        .{ .qd = 0xDEADBEEF_CAFEF00D_0123455A_5A5A5A5A },
+    ),
+    vec(
+        "eci a0a1a2b0 hands beat 0 of the next instruction on",
+        .{ .hw1 = 0xFF82, .hw2 = 0x005B, .qd = qd, .it = 0x50 },
+        .{ .qd = 0x000000AB_CAFEF00D_01234567_89ABCDEF, .it = 0x10 },
+    ),
 };
 
 const unclaimed = [_]V{

@@ -1,8 +1,10 @@
 //! Node identities and guest payloads for the supported attachment graph.
 const std = @import("std");
-const components = @import("ra8_components");
+
 const chip = @import("ra8_chip");
+const components = @import("ra8_components");
 const fields = @import("ra8_board").snapshot.run.fields;
+
 const catalog = components.catalog;
 const codec = components.catalog_snapshot;
 const fault = components.fault;
@@ -37,7 +39,8 @@ pub fn builtin(board: *Board, which: Builtin) catalog.Device {
 pub fn classify(board: *Board, device: catalog.Device, at: Endpoint) !Kind {
     inline for (std.meta.tags(Builtin)) |tag| {
         const bound = builtin(board, tag);
-        if (codec.context(device) == codec.context(bound) and codec.sameCallbacks(device, bound)) return .{ .builtin = tag };
+        if (codec.context(device) == codec.context(bound) and
+            codec.sameCallbacks(device, bound)) return .{ .builtin = tag };
     }
     switch (device) {
         .i2c => {
@@ -49,7 +52,8 @@ pub fn classify(board: *Board, device: catalog.Device, at: Endpoint) !Kind {
             }
         },
         .spi => {
-            if (floating.holds(device.spi) and codec.sameCallbacks(device, .{ .spi = floating.device })) return .floating;
+            if (floating.holds(device.spi) and
+                codec.sameCallbacks(device, .{ .spi = floating.device })) return .floating;
             var probe = fault.lines.Spi.wrap(device.spi);
             if (codec.sameCallbacks(device, .{ .spi = probe.device() })) return .spi_fault;
         },
@@ -86,7 +90,14 @@ pub fn writePayload(node: Node, writer: *std.Io.Writer) !void {
     }
 }
 
-pub fn readNode(allocator: std.mem.Allocator, board: *Board, kind: Kind, at: Endpoint, inner: ?catalog.Device, cursor: *fields.Cursor) !Node {
+pub fn readNode(
+    allocator: std.mem.Allocator,
+    board: *Board,
+    kind: Kind,
+    at: Endpoint,
+    inner: ?catalog.Device,
+    cursor: *fields.Cursor,
+) !Node {
     const device: catalog.Device = switch (kind) {
         .builtin => |which| builtin(board, which),
         .floating => .{ .spi = floating.device },

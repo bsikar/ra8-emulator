@@ -9,12 +9,13 @@
 //! either is. Nothing is rounded except that a chosen finite value is
 //! repacked through FPRound, which leaves it exact.
 const format = @import("../format.zig");
+
 const Format = format.Format;
-const unpack_mod = @import("../unpack.zig");
-const nan = @import("../nan.zig");
-const round = @import("../round.zig");
 const compare = @import("../compare/compare.zig");
 const Fpscr = @import("../fpscr.zig").Fpscr;
+const nan = @import("../nan.zig");
+const round = @import("../round.zig");
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
 
 pub const Which = enum { max, min };

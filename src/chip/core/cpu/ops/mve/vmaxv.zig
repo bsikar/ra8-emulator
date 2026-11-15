@@ -5,11 +5,12 @@
 //! family and stays unclaimed, as do M set and Rda of 13 or 15
 //! (UNPREDICTABLE). The fold reads the VPT element mask and the instruction
 //! advances the block.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
+
 const Size = mve.qreg.Size;
 const Form = mve.reduce.minmax.Form;
 

@@ -11,13 +11,16 @@
 //! A structural barrier in a slot means the byte list no longer describes
 //! the storage, so the window cannot reach back across it: every slot
 //! before it is dropped and the hot checkpoint is planted again after it.
+const window_trail = @import("window_trail.zig");
+
 const std = @import("std");
-const trail_mod = @import("trail.zig");
-const slot_mod = @import("window_slot.zig");
+
 const delta_mod = @import("window_delta.zig");
 const digest_mod = @import("window_digest.zig");
 const engine = @import("window_engine.zig");
 const port_mod = @import("window_port.zig");
+const slot_mod = @import("window_slot.zig");
+const trail_mod = @import("trail.zig");
 
 const ReverseWindow = engine.ReverseWindow;
 const Core = engine.Core;
@@ -53,7 +56,13 @@ const Side = struct {
 /// Whether the slot only ran inside one core's stretch and touched no
 /// peripheral, system control or part: its board state is as it was, so
 /// only the core sections need saving.
-fn quiet(w: *ReverseWindow, pre: engine.Position, post: engine.Position, touches: ?u64, records: []const trail_mod.Record) bool {
+fn quiet(
+    w: *ReverseWindow,
+    pre: engine.Position,
+    post: engine.Position,
+    touches: ?u64,
+    records: []const trail_mod.Record,
+) bool {
     const before = touches orelse return false;
     if ((w.port.touchCount() orelse return false) != before) return false;
     if (pre.r != post.r or pre.phase != post.phase) return false;
@@ -96,7 +105,10 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     const touches = w.port.touchCount();
     if (live) try w.port.stepLive(core) else try w.port.step(core);
     const post_pos = w.port.position();
-    if ((engine.Position.order(post_pos, pre_pos) orelse return engine.Error.OtherLine) != .gt) return engine.Error.NoProgress;
+    if ((engine.Position.order(
+        post_pos,
+        pre_pos,
+    ) orelse return engine.Error.OtherLine) != .gt) return engine.Error.NoProgress;
     const post_slots0 = if (w.port.cpu(.cpu0)) |c| c.slots else 0;
     const post_slots1 = if (w.port.cpu(.cpu1)) |c| c.slots else 0;
     const retired = post_slots0 != pre_slots0 or post_slots1 != pre_slots1;
@@ -113,16 +125,34 @@ fn recordSlotWith(w: *ReverseWindow, core: engine.Core, live: bool) !void {
     if (w.trail.slotAt(w.trail.count - 1).slot.kind == .barrier) {
         side.delta.deinit(w.allocator);
         side.delta = .{};
-        while (w.count() > 0) w.evictOldest();
+        while (w.count() > 0) {
+            w.evictOldest();
+        }
         // The barrier's own trail slot has no window slot beside it.
-        while (w.trail.count > 0) w.trail.evictOldest();
+        while (w.trail.count > 0) {
+            w.trail.evictOldest();
+        }
         // A failed replant leaves no slot to describe the machine.
         errdefer w.drop();
         try w.plant();
         return;
     }
-    if (side.whole) std.mem.swap(std.ArrayList(u8), &w.image, &side.post) else try side.delta.flip(w.allocator, &w.image, true);
-    w.slots.appendAssumeCapacity(.{ .pre = pre_pos, .post = post_pos, .core = core, .kind = kind, .retired = retired, .delta = side.delta, .digest = digest });
+    if (side.whole) {
+        std.mem.swap(std.ArrayList(u8), &w.image, &side.post);
+    } else {
+        try side.delta.flip(w.allocator, &w.image, true);
+    }
+    w.slots.appendAssumeCapacity(
+        .{
+            .pre = pre_pos,
+            .post = post_pos,
+            .core = core,
+            .kind = kind,
+            .retired = retired,
+            .delta = side.delta,
+            .digest = digest,
+        },
+    );
     w.slot_bytes += w.slotAt(w.count() - 1).bytes();
     w.enforceBudget();
 }
@@ -143,7 +173,12 @@ pub fn reexecute(w: *ReverseWindow, slot: *engine.Slot) !void {
     const fresh = w.recording.records[mark..w.recording.record_count];
     const actual = try slotDigest(w, post_image.items, fresh);
     if (!std.mem.eql(u8, &actual, &slot.digest) or !sameShape(payload.byte_records, fresh)) {
-        w.refusal = .{ .position = slot.pre, .expected_digest = slot.digest, .actual_digest = actual, .core = slot.core };
+        w.refusal = .{
+            .position = slot.pre,
+            .expected_digest = slot.digest,
+            .actual_digest = actual,
+            .core = slot.core,
+        };
         return digest_mod.RedoError.HistoryDivergence;
     }
     for (payload.byte_records, fresh) |*kept, one| {
@@ -158,51 +193,61 @@ pub fn reexecute(w: *ReverseWindow, slot: *engine.Slot) !void {
 /// The post digest of one slot: the side image, then every write's place
 /// and, for a store write, the bytes it left.
 pub fn slotDigest(w: *ReverseWindow, image: []const u8, records: []const trail_mod.Record) !Digest {
-    const wtrail_mod = @import("window_trail.zig");
+    const wtrail_mod = window_trail;
     var hasher = std.crypto.hash.Blake3.init(.{});
     hasher.update(image);
     var buffer: [256]u8 = undefined;
-    for (records) |one| switch (one) {
-        .barrier => hasher.update("barrier"),
-        .bytes => |b| {
-            var head: [17]u8 = undefined;
-            std.mem.writeInt(u32, head[0..4], b.base, .little);
-            std.mem.writeInt(u64, head[4..12], b.offset, .little);
-            std.mem.writeInt(u16, head[12..14], b.part orelse std.math.maxInt(u16), .little);
-            std.mem.writeInt(u16, head[14..16], @intCast(@min(b.pre.len, std.math.maxInt(u16))), .little);
-            head[16] = @backingInt(b.initiator);
-            hasher.update(&head);
-            if (b.part != null) continue;
-            const s = w.trail.storeFor(b.initiator);
-            const address: u32 = @intCast(b.base + b.offset);
-            var done: usize = 0;
-            while (done < b.pre.len) {
-                const n = @min(buffer.len, b.pre.len - done);
-                try wtrail_mod.WindowTrail.pureReadFrom(s, address + @as(u32, @intCast(done)), buffer[0..n]);
-                hasher.update(buffer[0..n]);
-                done += n;
-            }
-        },
-    };
+    for (records) |one| {
+        switch (one) {
+            .barrier => hasher.update("barrier"),
+            .bytes => |b| {
+                var head: [17]u8 = undefined;
+                std.mem.writeInt(u32, head[0..4], b.base, .little);
+                std.mem.writeInt(u64, head[4..12], b.offset, .little);
+                std.mem.writeInt(u16, head[12..14], b.part orelse std.math.maxInt(u16), .little);
+                std.mem.writeInt(u16, head[14..16], @intCast(@min(b.pre.len, std.math.maxInt(u16))), .little);
+                head[16] = @backingInt(b.initiator);
+                hasher.update(&head);
+                if (b.part != null) continue;
+                const s = w.trail.storeFor(b.initiator);
+                const address: u32 = @intCast(b.base + b.offset);
+                var done: usize = 0;
+                while (done < b.pre.len) {
+                    const n = @min(buffer.len, b.pre.len - done);
+                    try wtrail_mod.WindowTrail.pureReadFrom(s, address + @as(u32, @intCast(done)), buffer[0..n]);
+                    hasher.update(buffer[0..n]);
+                    done += n;
+                }
+            },
+        }
+    }
     var full: [32]u8 = undefined;
     hasher.final(&full);
     return full[0..16].*;
 }
 
 fn touchesPart(records: []const trail_mod.Record) bool {
-    for (records) |one| switch (one) {
-        .barrier => return true,
-        .bytes => |b| if (b.part != null) return true,
-    };
+    for (records) |one| {
+        switch (one) {
+            .barrier => return true,
+            .bytes => |b| if (b.part != null) return true,
+        }
+    }
     return false;
 }
 
-fn sameShape(kept: []const @import("window_trail.zig").ByteSwapRecord, fresh: []const trail_mod.Record) bool {
+fn sameShape(kept: []const window_trail.ByteSwapRecord, fresh: []const trail_mod.Record) bool {
     if (kept.len != fresh.len) return false;
-    for (kept, fresh) |a, one| switch (one) {
-        .barrier => return false,
-        .bytes => |b| if (a.base != b.base or a.offset != b.offset or a.part != b.part or a.initiator != b.initiator or a.data.len != b.pre.len) return false,
-    };
+    for (kept, fresh) |a, one| {
+        switch (one) {
+            .barrier => return false,
+            .bytes => |b| if (a.base != b.base or
+                a.offset != b.offset or
+                a.part != b.part or
+                a.initiator != b.initiator or
+                a.data.len != b.pre.len) return false,
+        }
+    }
     return true;
 }
 
@@ -233,9 +278,11 @@ fn rollback(w: *ReverseWindow, mark: usize) !void {
 
 /// Frees the records from `mark` on: they belong to no slot.
 pub fn discardFrom(recording: *trail_mod.Recording, mark: usize) void {
-    for (recording.records[mark..recording.record_count]) |*one| switch (one.*) {
-        .bytes => |*b| b.deinit(recording.allocator),
-        .barrier => {},
-    };
+    for (recording.records[mark..recording.record_count]) |*one| {
+        switch (one.*) {
+            .bytes => |*b| b.deinit(recording.allocator),
+            .barrier => {},
+        }
+    }
     recording.record_count = mark;
 }

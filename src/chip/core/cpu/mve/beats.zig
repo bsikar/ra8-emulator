@@ -4,8 +4,8 @@
 //! that ran and ECI moves on (B0 done becomes A0). In an IT block the IT
 //! byte is IT state and every beat runs.
 const eci = @import("eci.zig");
-const vpt = @import("vpt.zig");
 const Vpr = @import("predicate.zig").Vpr;
+const vpt = @import("vpt.zig");
 
 /// The byte lanes of the beats still to run.
 pub fn pending(it: u8) u16 {

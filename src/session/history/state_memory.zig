@@ -1,19 +1,12 @@
-//! A save stream's memory section as the bytes the two runs hold.
-//!
-//! The loader writes an image's code and constants into guest memory, so a
-//! rebuilt image differs from the recorded one in those bytes before a
-//! single instruction has run. At addresses where either image loaded
-//! read-only or load-copy bytes (and neither placed an in-place writable
-//! variable), each stream compares against its own loaded initial byte (or
-//! the backing region's reset byte where only the peer image loaded bytes):
-//! an unmutated initial byte normalises to clean, while any post-load guest
-//! write—whether to RAM-resident code, constants, load-copy data or an
-//! erased page—marks the cell mutated with the byte held there. Everywhere
-//! else, bytes compare raw as held.
+//! Compares saved memory against each image's own loaded bytes.
+//! At read-only/load-copy addresses without an in-place writable variable,
+//! unchanged initial bytes normalize to clean; writes retain their mutated value.
+//! An absent image byte uses the backing region's reset byte. Other bytes compare raw.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
-const memmap = @import("ra8_chip").core.memmap;
 const external_port = @import("ra8_chip").core.cpu.memory.external_port;
+const memmap = @import("ra8_chip").core.memmap;
 const option_window = @import("ra8_chip").periph.mram.option_window;
 
 pub const page: u32 = 0x1000;
@@ -80,7 +73,9 @@ const pf_w: u32 = 2;
 pub fn canonical(address: u32) u32 {
     if (address >= memmap.ns_mram_base and address < memmap.ns_mram_end) return address - memmap.ns_offset;
     if (address >= memmap.ns_sram_base and address < memmap.ns_sram_end) return address - memmap.ns_offset;
-    if (address >= external_port.sdram_alias_base and address < external_port.sdram_alias_base + external_port.sdram_max) {
+    if (address >= external_port.sdram_alias_base and
+        address < external_port.sdram_alias_base + external_port.sdram_max)
+    {
         return address - memmap.ns_offset;
     }
     return address;
@@ -106,7 +101,10 @@ fn programHeader(image: elf.Image, index: u16) ?*align(1) const elf.ProgramHeade
     if (index >= head.e_phnum or head.e_phentsize < @sizeOf(elf.ProgramHeader)) return null;
     const start = @as(usize, head.e_phoff) + @as(usize, index) * @as(usize, head.e_phentsize);
     if (start + @sizeOf(elf.ProgramHeader) > image.bytes.len) return null;
-    const ph: *align(1) const elf.ProgramHeader = std.mem.bytesAsValue(elf.ProgramHeader, image.bytes[start..][0..@sizeOf(elf.ProgramHeader)]);
+    const ph: *align(1) const elf.ProgramHeader = std.mem.bytesAsValue(
+        elf.ProgramHeader,
+        image.bytes[start..][0..@sizeOf(elf.ProgramHeader)],
+    );
     return if (ph.p_type == elf.pt_load) ph else null;
 }
 
@@ -250,7 +248,8 @@ pub const Mask = struct {
     /// for an image's read-only or load-copy segment.
     fn isOwnExtraWindow(self: Mask, base: u32, len: u32) bool {
         if (memmap.coversRam(base, len) or option_window.covers(base, len)) return false;
-        if (base >= memmap.sdram_base and @as(u64, base) + len <= memmap.sdram_base + external_port.sdram_max) return false;
+        if (base >= memmap.sdram_base and
+            @as(u64, base) + len <= memmap.sdram_base + external_port.sdram_max) return false;
         const canon = canonical(base);
         if (self.a) |img| if (overlapsWritable(img, canon, len)) return false;
         if (self.b) |img| if (overlapsWritable(img, canon, len)) return false;
@@ -311,7 +310,10 @@ fn diffRegions(a: ?Region, b: ?Region, mask: Mask) ?Spot {
         const in_a = if (a) |ra| (if (offset < ra.len) saved(ra, offset) else null) else null;
         const in_b = if (b) |rb| (if (offset < rb.len) saved(rb, offset) else null) else null;
         const page_base = base +% offset;
-        if (in_a == null and in_b == null and mask.zeroPageClean(page_base, size) and peer.zeroPageClean(page_base, size)) continue;
+        if (in_a == null and
+            in_b == null and
+            mask.zeroPageClean(page_base, size) and
+            peer.zeroPageClean(page_base, size)) continue;
         for (0..size) |i| {
             const addr = page_base +% @as(u32, @intCast(i));
             const raw_a: u8 = if (in_a) |bytes| bytes[i] else 0;

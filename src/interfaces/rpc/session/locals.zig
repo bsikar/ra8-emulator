@@ -3,16 +3,16 @@
 //! `info locals` answers (session/dwarf/locals.zig); each row names the
 //! local, its type's name and byte size, and where its bytes live.
 //! Without an image the answer carries no rows.
-const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
+const api = @import("ra8_session").api;
+const backtrace_mod = @import("backtrace.zig");
+const dwarf_locals = @import("ra8_session").dwarf.locals;
 const handlers = @import("handlers.zig");
 const locals_wire = @import("../locals_wire.zig");
-const api = @import("ra8_session").api;
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const symbols = @import("ra8_session").symbols;
-const dwarf_locals = @import("ra8_session").dwarf.locals;
 const unwind = @import("ra8_session").unwind;
-const backtrace_mod = @import("backtrace.zig");
 
 const Image = symbols.Image;
 const Outcome = rpc.Outcome(proto.Locals);
@@ -60,7 +60,14 @@ fn rowsAt(context: *handlers.Context, which: api.Core, shown: proto.Core, pc: u3
 }
 
 fn describe(found: dwarf_locals.Local) proto.LocalRow {
-    var row: proto.LocalRow = .{ .name = "", .type_name = "", .size = 0, .where_kind = proto.where_kinds.none, .where_a = 0, .where_b = 0 };
+    var row: proto.LocalRow = .{
+        .name = "",
+        .type_name = "",
+        .size = 0,
+        .where_kind = proto.where_kinds.none,
+        .where_a = 0,
+        .where_b = 0,
+    };
     row.name = found.name[0..@min(found.name.len, proto.local_name_cap)];
     row.type_name = found.type_name[0..@min(found.type_name.len, proto.local_type_cap)];
     row.size = found.size;

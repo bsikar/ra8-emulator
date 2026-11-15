@@ -21,10 +21,10 @@
 //!
 //! A multi-byte access is checked at its first byte.
 
-const mpu = @import("../../periph/mpu/mpu.zig");
-const mpu_fault = @import("../../periph/mpu/fault.zig");
 const background = @import("../../periph/mpu/background.zig");
 const banked = @import("../banked.zig");
+const mpu = @import("../../periph/mpu/mpu.zig");
+const mpu_fault = @import("../../periph/mpu/fault.zig");
 
 /// The Private Peripheral Bus, which the MPU never checks.
 pub const ppb = struct {

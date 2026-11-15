@@ -26,8 +26,9 @@
 //! scale off and the table 4-124 kernel and pad limits. Anything else is
 //! error.OperatorNotModelled.
 const std = @import("std");
-const dma = @import("dma.zig");
+
 const addr = @import("addr.zig");
+const dma = @import("dma.zig");
 const minmax = @import("minmax.zig");
 const pool = @import("pool.zig");
 const round = @import("round.zig");
@@ -74,13 +75,23 @@ fn supportedPadded(inputs: pool.Inputs) Error!void {
     const k = inputs.kernel;
     try common(inputs);
     if (maps.ofm.precision & global_scale != 0 or maps.ifm.zero_point != 0) return error.OperatorNotModelled;
-    if (@as(u32, k.height_m1) + 1 > padded_kernel_max or @as(u32, k.width_m1) + 1 > padded_kernel_max) return error.OperatorNotModelled;
+    if (@as(u32, k.height_m1) + 1 > padded_kernel_max or
+        @as(u32, k.width_m1) + 1 > padded_kernel_max) return error.OperatorNotModelled;
     if (pad.top > padded_pad_before_max or pad.left > padded_pad_before_max) return error.OperatorNotModelled;
     if (pad.bottom > padded_pad_after_max or pad.right > padded_pad_after_max) return error.OperatorNotModelled;
 }
 
 /// The sum of (ifm - zero point) over the window whose output is (y, x, c).
-fn windowSum(memory: anytype, regions: *const dma.Regions, inputs: pool.Inputs, f: addr.Format, zero_point: i32, y: u32, x: u32, c: u32) Error!i64 {
+fn windowSum(
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: pool.Inputs,
+    f: addr.Format,
+    zero_point: i32,
+    y: u32,
+    x: u32,
+    c: u32,
+) Error!i64 {
     const maps = inputs.maps;
     const k = inputs.kernel;
     const s = pool.step(k.stride);
@@ -104,7 +115,15 @@ pub fn average(sum: i64, scale: u32, shift: u6, rounding: round.Rounding, zero_p
 /// is (y, x, c), and how many there are.
 const Taps = struct { sum: i64 = 0, count: u32 = 0 };
 
-fn paddedWindow(memory: anytype, regions: *const dma.Regions, inputs: pool.Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!Taps {
+fn paddedWindow(
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: pool.Inputs,
+    f: addr.Format,
+    y: u32,
+    x: u32,
+    c: u32,
+) Error!Taps {
     const maps = inputs.maps;
     const k = inputs.kernel;
     const s = pool.step(k.stride);
@@ -146,7 +165,12 @@ fn runPadded(memory: anytype, regions: *const dma.Regions, inputs: pool.Inputs) 
         const taps = try paddedWindow(memory, regions, inputs, f, yy, xx, cc);
         if (taps.count == 0) return error.OperatorNotModelled;
         const o_at = addr.address(inputs.bases.ofm, maps.ofm, q.ofm_stride, f, yy, xx, cc);
-        try minmax.store(memory, try minmax.location(regions, maps.ofm.region, o_at, 1), divide(taps.sum, taps.count, low, high), f);
+        try minmax.store(
+            memory,
+            try minmax.location(regions, maps.ofm.region, o_at, 1),
+            divide(taps.sum, taps.count, low, high),
+            f,
+        );
         written += 1;
     };
     return written;

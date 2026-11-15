@@ -51,13 +51,13 @@
 //! no header here gives the event numbers), the SD_INFO2 error bits beyond
 //! the buffer flags, SD_DMAEN transfers, the clock and timeout fields, and
 //! CMD6. They are shadowed so a read-modify-write survives, never read.
-const std = @import("std");
-const periph = @import("../registry.zig");
-pub const line = @import("line.zig");
-pub const fifo = @import("fifo.zig");
+
 const bus_lanes = @import("../lanes.zig");
-pub const xfer = @import("xfer.zig");
+pub const fifo = @import("fifo.zig");
+pub const line = @import("line.zig");
+const periph = @import("../registry.zig");
 pub const snapshot = @import("snapshot.zig");
+pub const xfer = @import("xfer.zig");
 
 pub const win_base: u32 = 0x4025_2000;
 pub const win_span: u32 = 0x200;

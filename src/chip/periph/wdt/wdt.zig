@@ -1,60 +1,18 @@
-//! WDT0: the window watchdog, so a missed refresh actually times out.
+//! WDT0 window watchdog at 0x4020_2600 (HUM Ch 27).
+//! WDTRR accepts 0x00 then 0xFF; WDTCR sets timeout/divider/window edges.
+//! Refresh outside RPSS/RPES latches REFEF and does not reload. Underflow
+//! latches UNDFF; WDTRCR.RSTIRQS selects reset instead of NMI/IRQ.
+//! Both status flags clear only on a write of zero (Ch 27.2.3, p 1076).
 //!
-//! The Window Watchdog Timer at 0x4020_2600 (HUM Ch 27) is a down-counter the
-//! firmware has to keep reloading. Two things end a run on silicon: letting it
-//! reach zero, and refreshing it *too early*. The second is the one that gets
-//! missed. The counter has a permitted refresh window, and a reload issued
-//! before the window opens is a refresh error, which with WDTRCR.RSTIRQS set
-//! resets the part exactly as an underflow does. A watchdog service routine
-//! called from a fast loop trips it, and the failure looks like a spontaneous
-//! reboot rather than a watchdog fault.
-//!
-//!   WDTRR  (+0x00, 8b)   refresh register: 0x00 then 0xFF reloads the counter
-//!   WDTCR  (+0x02, 16b)  TOPS timeout, CKS divider, RPSS/RPES window edges
-//!   WDTSR  (+0x04, 16b)  CNTVAL[13:0] live counter, UNDFF[14], REFEF[15]
-//!   WDTRCR (+0x06, 8b)   RSTIRQS: 1 = reset on underflow, 0 = NMI/IRQ
-//!
-//! Ported from board_periph_wdt.c on dev, with three departures from it, all
-//! of them places where firmware that fails on the bench passes there.
-//!
-//! One: dev models no refresh window at all, so a refresh is always accepted
-//! ("the model does not synthesise the refresh-error path"). Here the counter
-//! position is checked against RPSS/RPES and an early reload latches REFEF and
-//! refuses to reload, which is what the hardware does.
-//!
-//! Two: dev clears UNDFF on the next refresh, so a driver that never reads the
-//! flag still sees a clean status register. HUM Ch 27.2.3 p 1076 gives both
-//! flags one way down, a write of ZERO to the bit, so they are sticky here and
-//! only a write-zero takes them off. Write-one clears nothing, the same
-//! opposite polarity that bit the ICU (IR) and the voltage monitors (DET).
-//!
-//! Three: dev maps every timeout to one constant number of chunks, so a
-//! firmware that shortens its timeout period sees no change and a firmware
-//! that lengthens it sees no change either. Here the counter holds watchdog
-//! counts, TOPS cycles less one after a reload the way CNTVAL reads on
-//! silicon, so a driver comparing CNTVAL against its own window bounds
-//! (wdt_window_demo checks 256..768 of 1024) reads the units it expects.
-//! How many ticks one count takes comes from src/chip/periph/wdt/clock.zig,
-//! which carries the bench's measured rate.
-//!
-//! Four: the three control registers take one write each after reset and are
-//! deaf afterwards (HUM Ch 27.3.2, and see src/chip/periph/wdt/write_once.zig).
-//! dev took every write, so a firmware reconfiguring its watchdog mid-run got
-//! the new settings here and keeps the old ones on the bench. WDTCSTPR is the
-//! register that makes it bite: ra8_wdt_init programmes it, and then
-//! ra8_wdt_deinit, ra8_wdt_enter_stop and ra8_wdt_exit_stop each write it
-//! again expecting the Sleep-stop posture to follow them. On silicon none of
-//! those three land. The register did not exist in this model at all before,
-//! so it reads its programmed value now rather than zero.
-//!
-//! Deliberately untouched: WDTRCR keeps returning every bit it was given even
-//! though only RSTIRQS is implemented, and the odd byte above each 8-bit
-//! control register still reaches it the way it always has here. Both are the
-//! narrow-access vein, not this rule.
+//! CNTVAL counts TOPS cycles minus one after reload; clock.zig supplies the
+//! measured count rate. Control registers accept one write after reset
+//! (Ch 27.3.2; write_once.zig), including WDTCSTPR's sleep-stop policy.
+//! WDTRCR retains unimplemented bits, and odd-byte accesses above the 8-bit
+//! controls retain the model's existing narrow-access behavior.
 pub const clock = @import("clock.zig");
+const event_queue = @import("../time/event_queue.zig");
 const periph = @import("../registry.zig");
 pub const write_once = @import("write_once.zig");
-const event_queue = @import("../time/event_queue.zig");
 
 /// WDT0 geometry (ra8_wdt_regs.h, r_wdt_regs_t; HUM Ch 27.2 p 1070).
 pub const win_base: u32 = 0x4020_2600;
@@ -197,7 +155,8 @@ pub const Wdt = struct {
         if (!self.armed) return .{};
         const edges = self.windowCounts();
         const opens_at = if (self.counter > edges.opens) self.reachesAt(edges.opens, now_ns) else null;
-        const closes_at = if (edges.closes > 0 and self.counter >= edges.closes) self.reachesAt(edges.closes - 1, now_ns) else null;
+        const closes_at = if (edges.closes > 0 and
+            self.counter >= edges.closes) self.reachesAt(edges.closes - 1, now_ns) else null;
         return .{ .opens_at = opens_at, .closes_at = closes_at };
     }
 
@@ -211,7 +170,9 @@ pub const Wdt = struct {
     /// follows the time base rather than the number of boundaries.
     pub fn tickFor(self: *Wdt, elapsed_ns: u64) void {
         var n = clock.ticksIn(&self.carry_ns, elapsed_ns);
-        while (n > 0) : (n -= 1) self.tick();
+        while (n > 0) : (n -= 1) {
+            self.tick();
+        }
     }
 
     /// One run-loop chunk. The counter moves once every
@@ -325,12 +286,24 @@ pub const Wdt = struct {
             off.wdtcr => if (!self.locked(.control)) {
                 self.wdtcr = self.merge(self.wdtcr, offset, width, value);
             },
-            off.wdtsr => self.ackWrite(self.merge(self.flags | @as(u16, @intCast(self.counter & status.cntval)), offset, width, value)),
+            off.wdtsr => self.ackWrite(
+                self.merge(
+                    self.flags | @as(u16, @intCast(self.counter & status.cntval)),
+                    offset,
+                    width,
+                    value,
+                ),
+            ),
             off.wdtrcr => if (!self.locked(.reset_control)) {
                 self.wdtrcr = @truncate(self.merge(self.wdtrcr, offset, width, value));
             },
             off.wdtcstpr => if (!self.locked(.count_stop)) {
-                self.wdtcstpr = @truncate(self.merge(self.wdtcstpr, offset, width, value) & @as(u16, count_stop.slcstp));
+                self.wdtcstpr = @truncate(self.merge(
+                    self.wdtcstpr,
+                    offset,
+                    width,
+                    value,
+                ) & @as(u16, count_stop.slcstp));
             },
             else => {},
         }

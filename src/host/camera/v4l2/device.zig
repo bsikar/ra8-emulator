@@ -4,8 +4,9 @@
 //! Only Linux has V4L2. On other hosts `open` refuses with Unsupported and
 //! nothing touches the system; the macOS and Windows webcams have their
 //! own tickets (RA8EMU-502, RA8EMU-501).
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const negotiate = @import("negotiate.zig");
 const stream = @import("stream.zig");
 

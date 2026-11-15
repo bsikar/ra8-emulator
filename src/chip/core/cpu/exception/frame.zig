@@ -5,6 +5,7 @@
 //! pointer was only 4-byte aligned, the frame starts one word lower and bit 9
 //! of the stacked xPSR records it, so the return can put the pointer back.
 const std = @import("std");
+
 const bus = @import("../bus.zig");
 
 pub const size: u32 = 0x20;
@@ -46,7 +47,9 @@ pub const Popped = struct {
 
 pub fn pop(from: bus.Bus, at: u32) bus.Error!Popped {
     var frame: Frame = undefined;
-    for (&frame, 0..) |*word, i| word.* = try from.readWord(at +% @as(u32, @intCast(i * 4)));
+    for (&frame, 0..) |*word, i| {
+        word.* = try from.readWord(at +% @as(u32, @intCast(i * 4)));
+    }
     const pad: u32 = if (frame[slot.xpsr] & realigned != 0) 4 else 0;
     return .{ .frame = frame, .sp = (at +% size) | pad };
 }

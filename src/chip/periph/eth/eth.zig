@@ -26,17 +26,19 @@
 //! A port with no domain attached is ungated, which is what a test about the
 //! mode machine or the MDIO bus wants; src/board/net.zig wires the real one in
 //! when it puts the cluster on the bus.
-const std = @import("std");
+
+const eth_mode = @import("mode.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
-const eth_mode = @import("mode.zig");
+
 pub const mode = eth_mode;
 const eth_line = @import("line.zig");
 const eth_mac = @import("mac.zig");
+
 pub const mac = eth_mac;
-const eth_tas = @import("tas.zig");
 const eth_cbs = @import("cbs.zig");
+const eth_tas = @import("tas.zig");
 const pdctr = @import("../pdctr.zig");
 
 /// The perfect-match address, reached as `eth.mac_address` by a caller that
@@ -44,16 +46,20 @@ const pdctr = @import("../pdctr.zig");
 pub const mac_address = eth_mac;
 /// EATDQDC and the error-interrupt groups: agent.zig.
 pub const agent = @import("agent.zig");
-/// MFWD control and per-port forwarding words: forward.zig.
-pub const forward = @import("forward.zig");
-/// Ancillary Ethernet setup words touched by GWCA open.
-pub const open_regs = @import("open_regs.zig");
+
 /// COMA RIC, RRC and RCEC: coma.zig.
 pub const coma = @import("coma.zig");
 pub const desc = @import("desc.zig");
 pub const dma = @import("dma.zig");
+
+/// MFWD control and per-port forwarding words: forward.zig.
+pub const forward = @import("forward.zig");
 pub const gateway = @import("gateway.zig");
+
+/// Ancillary Ethernet setup words touched by GWCA open.
+pub const open_regs = @import("open_regs.zig");
 pub const queue = @import("queue.zig");
+
 /// The MDIO bus and the wire the board connects: line.zig.
 pub const line = eth_line;
 /// TAS gate-list RAM and indirect access registers.

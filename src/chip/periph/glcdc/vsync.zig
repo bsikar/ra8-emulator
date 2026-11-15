@@ -88,11 +88,22 @@ pub const Saved = struct {
     swallowed: u64,
 
     pub fn of(live: Vsync) Saved {
-        return .{ .period_ns = live.period_ns, .next_ns = live.next_ns, .boundaries = live.boundaries, .swallowed = live.swallowed };
+        return .{
+            .period_ns = live.period_ns,
+            .next_ns = live.next_ns,
+            .boundaries = live.boundaries,
+            .swallowed = live.swallowed,
+        };
     }
 
     pub fn install(self: Saved, live: *Vsync) error{BadValue}!void {
-        if (self.period_ns == 0 or self.period_ns != live.period_ns or self.next_ns > std.math.maxInt(u64) - self.period_ns or self.boundaries > self.next_ns / self.period_ns or self.swallowed > self.boundaries or (self.boundaries != 0 and self.swallowed == self.boundaries)) return error.BadValue;
+        if (self.period_ns == 0 or
+            self.period_ns != live.period_ns or
+            self.next_ns > std.math.maxInt(u64) - self.period_ns or
+            self.boundaries > self.next_ns / self.period_ns or
+            self.swallowed > self.boundaries or
+            (self.boundaries != 0 and
+                self.swallowed == self.boundaries)) return error.BadValue;
         live.next_ns = self.next_ns;
         live.boundaries = self.boundaries;
         live.swallowed = self.swallowed;

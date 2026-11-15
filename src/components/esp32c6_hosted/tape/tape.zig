@@ -2,6 +2,7 @@
 //! One file per host connection or DNS question. Each file is a run of
 //! records: a direction byte, a u32 little-endian length, then the bytes.
 const std = @import("std");
+
 const store_file = @import("store.zig");
 
 pub const Store = store_file.Store;
@@ -102,7 +103,11 @@ pub const Tape = struct {
     fn nextName(self: *Tape, buf: []u8, key: Key) ![]const u8 {
         const n = try self.bump(key);
         const ip = key.ip;
-        return std.fmt.bufPrint(buf, "{s}-{d}.{d}.{d}.{d}-{d}-{d}.tape", .{ @tagName(key.proto), ip[0], ip[1], ip[2], ip[3], key.port, n });
+        return std.fmt.bufPrint(
+            buf,
+            "{s}-{d}.{d}.{d}.{d}-{d}-{d}.tape",
+            .{ @tagName(key.proto), ip[0], ip[1], ip[2], ip[3], key.port, n },
+        );
     }
 
     fn bump(self: *Tape, key: Key) !u32 {

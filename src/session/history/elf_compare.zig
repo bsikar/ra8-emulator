@@ -2,7 +2,10 @@
 //! the load segments and the symbol table. A regression replay reports this
 //! before it runs anything, so a divergence can be read against what the
 //! rebuild actually changed.
+const history = @import("root.zig");
+
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const symbols = @import("../symbols.zig");
 
@@ -43,14 +46,17 @@ pub const Report = struct {
     pub fn sameShape(self: Report) bool {
         return self.original.entry == self.rebuilt.entry and self.original.flags == self.rebuilt.flags and
             self.original.segments == self.rebuilt.segments and self.segments_moved == 0 and
-            self.symbols_added == 0 and self.symbols_removed == 0 and self.symbols_moved == 0 and self.symbols_resized == 0;
+            self.symbols_added == 0 and
+            self.symbols_removed == 0 and
+            self.symbols_moved == 0 and
+            self.symbols_resized == 0;
     }
 };
 
 fn sideOf(bytes: []const u8, image: elf.Image) Side {
     const head = image.header();
     return .{
-        .identity = @import("root.zig").identity(bytes),
+        .identity = history.identity(bytes),
         .entry = head.e_entry,
         .flags = head.e_flags,
         .segments = head.e_phnum,
@@ -80,14 +86,20 @@ fn compareSegments(report: *Report, original: elf.Image, rebuilt: elf.Image) voi
         }
         const x = a.?;
         const y = b.?;
-        if (x.vaddr != y.vaddr or x.paddr != y.paddr or x.memsz != y.memsz or x.flags != y.flags or x.bytes.len != y.bytes.len) {
+        if (x.vaddr != y.vaddr or
+            x.paddr != y.paddr or
+            x.memsz != y.memsz or
+            x.flags != y.flags or
+            x.bytes.len != y.bytes.len)
+        {
             report.segments_moved += 1;
             continue;
         }
         const at = std.mem.indexOfDiff(u8, x.bytes, y.bytes) orelse continue;
         report.segments_changed += 1;
         const address = x.paddr + @as(u32, @intCast(at));
-        if (report.first_changed_address == null or address < report.first_changed_address.?) report.first_changed_address = address;
+        if (report.first_changed_address == null or
+            address < report.first_changed_address.?) report.first_changed_address = address;
     }
 }
 
@@ -95,7 +107,9 @@ fn table(allocator: std.mem.Allocator, image: elf.Image) Error!std.StringHashMap
     var map = std.StringHashMap(symbols.Named).init(allocator);
     errdefer map.deinit();
     var walk = symbols.Walk.init(image);
-    while (walk.next()) |symbol| try map.put(symbol.name, symbol);
+    while (walk.next()) |symbol| {
+        try map.put(symbol.name, symbol);
+    }
     return map;
 }
 
@@ -116,7 +130,9 @@ fn compareSymbols(allocator: std.mem.Allocator, report: *Report, original: elf.I
         report.symbols_resized += @intFromBool(!moved and old.size != entry.value_ptr.size);
     }
     var gone = before.keyIterator();
-    while (gone.next()) |name| report.symbols_removed += @intFromBool(!after.contains(name.*));
+    while (gone.next()) |name| {
+        report.symbols_removed += @intFromBool(!after.contains(name.*));
+    }
     var walk = symbols.Walk.init(rebuilt);
     while (walk.next()) |symbol| {
         const old = before.get(symbol.name);

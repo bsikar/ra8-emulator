@@ -21,8 +21,8 @@
 //! WRITABLE BITS ARE NOT READ FROM THE HUM. Every store lands at the width the
 //! firmware used and reads back as written, so a bit the hardware keeps at 0
 //! would read back 1 here. Recorded, not enforced.
-const periph = @import("registry.zig");
 const lanes = @import("lanes.zig");
+const periph = @import("registry.zig");
 
 pub const base: u32 = 0x4000_3C00;
 pub const span: u32 = 0x54;

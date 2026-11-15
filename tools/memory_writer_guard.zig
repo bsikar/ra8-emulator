@@ -50,7 +50,9 @@ pub const backing_tokens = [_][]const u8{
 /// Canonicalize `path` to forward-slash `src/...` form when under `src/`.
 pub fn canonicalSrcPath(path: []const u8, buf: *[512]u8) ?[]const u8 {
     if (path.len > buf.len) return null;
-    for (path, 0..) |ch, i| buf[i] = if (ch == '\\') '/' else ch;
+    for (path, 0..) |ch, i| {
+        buf[i] = if (ch == '\\') '/' else ch;
+    }
     const norm = buf[0..path.len];
     if (std.mem.startsWith(u8, norm, "src/")) return norm;
     var at: usize = 0;

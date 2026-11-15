@@ -2,10 +2,10 @@
 //! LSL/LSR/ASR/ROR by register, ADC, SBC, TST, RSB #0, CMP, CMN, ORR, MUL,
 //! BIC and MVN, all T1 with Rdn in [2:0] and Rm in [5:3]. TST, CMP and CMN
 //! always set the flags; the rest set them only outside an IT block.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const flags = @import("../../flags.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 const shift = @import("../../shift.zig");
 
 pub const encodings = struct {

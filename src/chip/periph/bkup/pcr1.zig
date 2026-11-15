@@ -15,8 +15,8 @@
 //! RESET STATE: the tree does not state one. This model starts at 0, the
 //! switch enabled, which is the value ra8_bkup_init writes on its default
 //! path; nothing in the corpus reads the register before writing it.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
 
 pub const address: u32 = 0x4001_EA88;

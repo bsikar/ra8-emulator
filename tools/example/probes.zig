@@ -27,8 +27,18 @@ pub const Probe = struct {
 };
 
 pub const probes = [_]Probe{
-    .{ .image = "cpu1_pingpong.elf", .symbol = "g_cpu1_pingpong_match", .min = 5, .failure = "g_cpu1_pingpong_mismatch" },
-    .{ .image = "cpu1_pingpong_ipc.elf", .symbol = "g_ns_pingpong_match", .min = 5, .failure = "g_ns_pingpong_mismatch" },
+    .{
+        .image = "cpu1_pingpong.elf",
+        .symbol = "g_cpu1_pingpong_match",
+        .min = 5,
+        .failure = "g_cpu1_pingpong_mismatch",
+    },
+    .{
+        .image = "cpu1_pingpong_ipc.elf",
+        .symbol = "g_ns_pingpong_match",
+        .min = 5,
+        .failure = "g_ns_pingpong_mismatch",
+    },
     // The README's bench verdict: the Non-Secure heartbeat advances and the
     // secure side never records a denied handover. The heartbeat lives in
     // the _ns image; --dump-sym looks there when the secure image lacks it.
@@ -60,8 +70,18 @@ pub const probes = [_]Probe{
     // hil.conf's probe: the NS USB host's verified bulk-echo rounds, and the
     // NSC CGC veneers never returning non-OK (RA8EMU-289). Both words live
     // in the _ns image.
-    .{ .image = "tz_nsc_cgc_usb.elf", .symbol = "g_tz_usb_host_rounds_ok", .min = 50, .failure = "g_tz_nsc_cgc_usb_mismatch" },
-    .{ .image = "tz_threadx_demo.elf", .symbol = "_tx_timer_system_clock", .min = 5, .failure = "g_tz_threadx_demo_fallback_count" },
+    .{
+        .image = "tz_nsc_cgc_usb.elf",
+        .symbol = "g_tz_usb_host_rounds_ok",
+        .min = 50,
+        .failure = "g_tz_nsc_cgc_usb_mismatch",
+    },
+    .{
+        .image = "tz_threadx_demo.elf",
+        .symbol = "_tx_timer_system_clock",
+        .min = 5,
+        .failure = "g_tz_threadx_demo_fallback_count",
+    },
 };
 
 pub const Judgement = enum { pass, fail, unknown };

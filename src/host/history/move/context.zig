@@ -1,8 +1,16 @@
 //! Borrowed authorities held by a lifecycle caller throughout relocation.
+const lease_api = @import("../lease.zig");
+const machine_api = @import("../machine.zig");
+const metadata = @import("../metadata.zig");
+const name = @import("../name.zig");
+const owner_api = @import("../owner.zig");
+
 const std = @import("std");
+
 const Base = @import("../base.zig").Base;
 const file = @import("file.zig");
 const layout = @import("../layout.zig");
+
 pub const Context = struct {
     source: *const Base,
     target: *const Base,
@@ -17,23 +25,25 @@ pub const Context = struct {
 
     pub fn authorized(self: Context, from: []const u8) !void {
         if (self.authorities.len < 2 or self.authorities.len > 4) return error.MissingAuthority;
-        for (self.authorities) |held| try @import("../metadata.zig").ordinary(try held.stat(self.source.io));
+        for (self.authorities) |held| {
+            try metadata.ordinary(try held.stat(self.source.io));
+        }
         try self.named(self.source, layout.root.gate, false, from);
         try self.named(self.target, layout.root.gate, false, from);
-        var buffer: @import("../name.zig").Buffer = undefined;
-        const lease = @import("../name.zig").lease(&buffer, @import("../name.zig").classify(from).id);
+        var buffer: name.Buffer = undefined;
+        const lease = name.lease(&buffer, name.classify(from).id);
         try self.named(self.source, lease, true, from);
         if (!std.mem.eql(u8, self.source.path, self.target.path)) try self.named(self.target, lease, true, from);
     }
 
     fn named(self: Context, base: *const Base, leaf: []const u8, lease: bool, from: []const u8) !void {
-        const opened = try @import("../metadata.zig").open(base.io, base.dir, leaf, .read_only);
+        const opened = try metadata.open(base.io, base.dir, leaf, .read_only);
         defer opened.close(base.io);
         const expected = try file.opened(opened);
         for (self.authorities) |held| {
             if (!expected.same(try file.opened(held))) continue;
             if (!try held.tryLock(base.io, .exclusive)) return error.Locked;
-            if (lease) try @import("../lease.zig").validate(base.io, base.dir, held, @import("../name.zig").classify(from).id);
+            if (lease) try lease_api.validate(base.io, base.dir, held, name.classify(from).id);
             return;
         }
         return error.MissingAuthority;
@@ -42,8 +52,8 @@ pub const Context = struct {
     pub fn owned(base: *const Base, entry: []const u8) !void {
         var dir = try base.dir.openDir(base.io, entry, .{ .follow_symlinks = false });
         defer dir.close(base.io);
-        const owner = @import("../owner.zig");
-        const machine = @import("../machine.zig");
+        const machine = machine_api;
+        const owner = owner_api;
         var bytes: [owner.max_bytes]u8 = undefined;
         const record = try owner.read(base.io, dir, &bytes);
         var host: [machine.limits.host]u8 = undefined;
@@ -51,14 +61,22 @@ pub const Context = struct {
         if (std.mem.eql(u8, local, machine.unknown) or !std.mem.eql(u8, local, record.host)) return error.OtherHost;
     }
 
-    pub fn recheck(self: Context, from: []const u8, source_id: file.State, source_root: file.State, target_root: file.State) !void {
+    pub fn recheck(
+        self: Context,
+        from: []const u8,
+        source_id: file.State,
+        source_root: file.State,
+        target_root: file.State,
+    ) !void {
         try self.authorized(from);
         const io = self.source.io;
         var source = try std.Io.Dir.cwd().openDir(io, self.source.path, .{ .follow_symlinks = false });
         defer source.close(io);
         var target = try std.Io.Dir.cwd().openDir(io, self.target.path, .{ .follow_symlinks = false });
         defer target.close(io);
-        if (!source_root.same(try file.here(source)) or !target_root.same(try file.here(target)) or !source_id.same(try file.state(source, from))) return error.IdentityConflict;
+        if (!source_root.same(try file.here(source)) or
+            !target_root.same(try file.here(target)) or
+            !source_id.same(try file.state(source, from))) return error.IdentityConflict;
     }
 
     pub fn marker(root: *const Base) ![]const u8 {

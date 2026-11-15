@@ -13,9 +13,11 @@
 //! (exception/sleep.zig) when it has an exception source to wake it. With
 //! none, as in a lockstep step, they complete at once, which the
 //! architecture allows.
-const op = @import("../op.zig");
+const regs = @import("../regs.zig");
+
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const nop_t1: u16 = 0xBF00;
@@ -73,7 +75,7 @@ fn clearBti(cpu: *Cpu, instr: Instr) op.Error!void {
     _ = instr;
     // In the hint space, BTI is a NOP on a core without PACBTI (the M33).
     if (!cpu.profile.v8_1m) return;
-    cpu.regs.xpsr &= ~@import("../regs.zig").xpsr_bits.bti;
+    cpu.regs.xpsr &= ~regs.xpsr_bits.bti;
 }
 
 fn complete(cpu: *Cpu, instr: Instr) op.Error!void {

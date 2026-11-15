@@ -1,28 +1,32 @@
 //! Walk the reachable graph, including retained displaced and cleared parts.
-const std = @import("std");
+const chip = @import("ra8_chip");
+const faults_api = @import("faults/faults.zig");
+
 const components = @import("ra8_components");
+
 const catalog = components.catalog;
 const codec = components.catalog_snapshot;
 const Endpoint = components.endpoint.Endpoint;
 const Board = @import("ra8_board").board.Board;
-const nodes = @import("attachment_nodes.zig");
-const plug = @import("plug.zig");
 const Faults = @import("faults/faults.zig").Faults;
+const nodes = @import("attachment_nodes.zig");
 const ownership = @import("attachment_ownership.zig");
+const plug = @import("plug.zig");
 
 pub const Graph = struct {
     nodes: [nodes.limit]nodes.Node = undefined,
     count: usize = 0,
     runtime: [256]?u16 = @splat(null),
     runtime_count: usize = 0,
-    wrapped: [@import("faults/faults.zig").max_wrapped]?u16 = @splat(null),
+    wrapped: [faults_api.max_wrapped]?u16 = @splat(null),
     spi_held: [2]?u16 = @splat(null),
     uart_held: [10]?u16 = @splat(null),
 
     pub fn add(self: *Graph, board: *Board, device: catalog.Device, at: Endpoint, depth: usize) anyerror!u16 {
         if (!nodes.validEndpoint(at) or depth > 64) return error.UnsupportedAttachment;
         for (self.nodes[0..self.count], 0..) |node, id| {
-            if (codec.context(node.device) == codec.context(device) and codec.sameCallbacks(node.device, device)) return @intCast(id);
+            if (codec.context(node.device) == codec.context(device) and
+                codec.sameCallbacks(node.device, device)) return @intCast(id);
         }
         var node: nodes.Node = .{ .kind = try nodes.classify(board, device, at), .at = at, .device = device };
         if (nodes.innerOf(node)) |inner| node.inner = try self.add(board, inner, at, depth + 1);
@@ -59,7 +63,12 @@ pub const Graph = struct {
             };
             for (held.spi_parts.held, 0..) |entry, index| if (entry) |wrapper| {
                 const device: catalog.Device = .{ .spi = wrapper.device() };
-                const at = try ownership.endpoint(board, plugs, device, spiEndpoint(board, plugs, wrapper.device(), index));
+                const at = try ownership.endpoint(
+                    board,
+                    plugs,
+                    device,
+                    spiEndpoint(board, plugs, wrapper.device(), index),
+                );
                 self.spi_held[index] = try self.add(board, device, at, 0);
             };
             for (held.uart_parts.held, 0..) |entry, index| if (entry) |wrapper| {
@@ -72,18 +81,20 @@ pub const Graph = struct {
 };
 
 /// A registered wrapper carries its real line; an orphan has no live slot.
-fn i2cEndpoint(board: *Board, device: @import("ra8_chip").periph.riic.bus.Device) Endpoint {
+fn i2cEndpoint(board: *Board, device: chip.periph.riic.bus.Device) Endpoint {
     const registries = .{ &board.wire.controller.devices, &board.wire.touchline.devices };
     inline for (registries, 0..) |registry, line| {
         for (registry.devices) |entry| if (entry) |part| {
-            if (part.context == device.context) return .{ .i2c = .{ .line = @fromBackingInt(line), .address = device.address } };
+            if (part.context == device.context) return .{
+                .i2c = .{ .line = @fromBackingInt(line), .address = device.address },
+            };
         };
     }
     return endpointOf(.{ .i2c = device });
 }
 
 /// Only an active wrapper uses fitted metadata as its owned select.
-fn spiEndpoint(board: *Board, plugs: ?*const plug.Plugs, device: @import("ra8_chip").periph.spi.Device, index: usize) Endpoint {
+fn spiEndpoint(board: *Board, plugs: ?*const plug.Plugs, device: chip.periph.spi.Device, index: usize) Endpoint {
     const fallback: Endpoint = .{ .spi = .{ .channel = @intCast(index), .select = 0 } };
     const active = board.spi.channels[index].device orelse return fallback;
     if (active.context != device.context) return fallback;

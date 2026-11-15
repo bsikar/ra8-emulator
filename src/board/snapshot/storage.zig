@@ -7,10 +7,11 @@
 //! components/nor_flash/snapshot.zig, RA8EMU-1104). The controller is
 //! plain state apart from its wiring to the part and the OCTACLK watch.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
-const options_half = @import("ra8_chip").periph.mram.snapshot;
+const file = @import("ra8_snapshot").file;
 const nor_half = @import("ra8_components").nor_flash.snapshot;
+const options_half = @import("ra8_chip").periph.mram.snapshot;
 
 pub const Error = file.Error || fields.Error || error{ Missing, OutOfMemory };
 const controller_wiring = .{ "part", "octa" };

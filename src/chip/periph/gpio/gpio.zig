@@ -24,9 +24,9 @@
 //! at the end of a run). Pins the board pulls high (the user switches,
 //! src/board/switches.zig) are the board's to name through pullUp(); a pulled
 //! pin reads high with nothing driving it.
-const std = @import("std");
-const periph = @import("../registry.zig");
+
 const capabilities = @import("../pfs/capabilities.zig");
+const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
 
 /// Pin models (RA8EMU-497), reached through here because root.zig is full.

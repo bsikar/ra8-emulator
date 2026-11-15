@@ -1,6 +1,7 @@
 //! Monotonic bounds on a Linux caller's pipe reads and child reaping.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const linux = std.os.linux;
 
 pub const Deadline = struct {

@@ -31,7 +31,7 @@
 //! 0 and the mask stays empty. The window is still modelled rather than
 //! stubbed at zero, because a store has to be able to move it: an image that
 //! delegates a peripheral must see the delegation take effect next door.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 
 /// CMSAMON/SFSAMON, the memory split monitors in this block (RA8EMU-420).

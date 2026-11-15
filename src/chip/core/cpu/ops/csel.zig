@@ -7,10 +7,10 @@
 //!
 //! Left unclaimed (decode in csel.zig refuses them): SP in any register
 //! field, Rd = 0b1111, and AL or the unconditional condition.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
-const Instr = @import("../instr.zig").Instr;
 const csel = @import("../../csel.zig");
+const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const group: op.Group = .{ .name = "csel", .decode = decode };
 

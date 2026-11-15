@@ -1,8 +1,8 @@
 //! Text for the dsp_dual group: SMLAD, SMLSD (Rd, Rn, Rm, Ra) and SMUAD, SMUSD
 //! (Rd, Rn, Rm when Ra is 1111), each with an x suffix when Rm's halves swap.
+const dsp_dual = @import("../../ops/dsp/dual.zig");
 const Instr = @import("../../instr.zig").Instr;
 const text = @import("../text.zig");
-const dsp_dual = @import("../../ops/dsp/dual.zig");
 
 /// Mnemonic by [subtract][swap][multiply only].
 const mnemonics = [2][2][2][]const u8{

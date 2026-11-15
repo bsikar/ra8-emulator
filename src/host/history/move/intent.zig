@@ -1,10 +1,12 @@
 //! Root-anchored native intent moves with its source, never with a lease.
 const std = @import("std");
-const h = @import("../root.zig");
-const file = @import("file.zig");
+
 const Context = @import("context.zig").Context;
-const wire = @import("wire.zig");
 const deadline = @import("deadline.zig");
+const file = @import("file.zig");
+const h = @import("../root.zig");
+const wire = @import("wire.zig");
+
 pub const note = "native-moving";
 pub const suffix = ".native-move";
 const commit_flag = "\nCOMMIT\n";
@@ -37,7 +39,13 @@ pub fn pending(io: std.Io, root: std.Io.Dir, id: []const u8) bool {
     return present(io, root, leaf(&buffer, id) catch return true);
 }
 
-pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, path: []const u8, anchor: bool) !std.json.Parsed(Record) {
+pub fn read(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    dir: std.Io.Dir,
+    path: []const u8,
+    anchor: bool,
+) !std.json.Parsed(Record) {
     const held = try h.metadata.open(io, dir, path, .read_only);
     defer held.close(io);
     var bytes: [32768 + commit_flag.len + cancel_flag.len]u8 = undefined;
@@ -47,9 +55,18 @@ pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, path: []c
     const text = bytes[0..@intCast(size)];
     const end = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
     if (end == 0 or end > 32768) return error.BadReceipt;
-    var parsed = std.json.parseFromSlice(Record, allocator, text[0..end], .{ .allocate = .alloc_always }) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
+    var parsed = std.json.parseFromSlice(
+        Record,
+        allocator,
+        text[0..end],
+        .{ .allocate = .alloc_always },
+    ) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
     errdefer parsed.deinit();
-    if ((parsed.value.version == 1 or parsed.value.version == 2) and !parsed.value.committed and !parsed.value.cancelled) {
+    if ((parsed.value.version == 1 or
+        parsed.value.version == 2) and
+        !parsed.value.committed and
+        !parsed.value.cancelled)
+    {
         const tail = text[end..];
         if (tail.len != 0 and !anchor) return error.BadReceipt;
         if (std.mem.eql(u8, tail, commit_flag ++ cancel_flag)) {
@@ -60,7 +77,9 @@ pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, path: []c
         } else if (tail.len != 0) return error.BadReceipt;
     } else return error.BadReceipt;
     const record = parsed.value;
-    if (!h.name.isId(&record.nonce) or !std.fs.path.isAbsolute(record.from_path) or !std.fs.path.isAbsolute(record.to_path)) return error.BadReceipt;
+    if (!h.name.isId(&record.nonce) or
+        !std.fs.path.isAbsolute(record.from_path) or
+        !std.fs.path.isAbsolute(record.to_path)) return error.BadReceipt;
     _ = try h.name.component(record.from);
     _ = try h.name.component(record.to);
     try names(record);
@@ -82,7 +101,13 @@ pub const BoundProof = struct {
 /// JSON line; only the anchor may carry the COMMIT journal flag, and a
 /// cancelled intent proves nothing. Both sides of a native move compute
 /// this, and the digests bind every frame to these exact bytes.
-pub fn boundProof(allocator: std.mem.Allocator, io: std.Io, root: std.Io.Dir, source: std.Io.Dir, from: []const u8) !BoundProof {
+pub fn boundProof(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    root: std.Io.Dir,
+    source: std.Io.Dir,
+    from: []const u8,
+) !BoundProof {
     var leaf_buffer: h.name.Buffer = undefined;
     const anchor_name = try leaf(&leaf_buffer, h.name.classify(from).id);
     var anchor_bytes: [32768 + commit_flag.len + cancel_flag.len]u8 = undefined;
@@ -94,14 +119,35 @@ pub fn boundProof(allocator: std.mem.Allocator, io: std.Io, root: std.Io.Dir, so
     const tail = anchor_text[end..];
     if (std.mem.eql(u8, tail, commit_flag ++ cancel_flag)) return error.NativeMoveCancelled;
     if (tail.len != 0 and !std.mem.eql(u8, tail, commit_flag)) return error.BadReceipt;
-    var parsed = std.json.parseFromSlice(Record, allocator, note_text, .{ .allocate = .alloc_always }) catch |err| return if (err == error.OutOfMemory) err else error.BadReceipt;
+    var parsed = std.json.parseFromSlice(
+        Record,
+        allocator,
+        note_text,
+        .{
+            .allocate = .alloc_always,
+        },
+    ) catch |err| return if (err == error.OutOfMemory)
+        err
+    else
+        error.BadReceipt;
     errdefer parsed.deinit();
-    if ((parsed.value.version != 1 and parsed.value.version != 2) or parsed.value.committed or parsed.value.cancelled or !h.name.isId(&parsed.value.nonce) or !std.mem.eql(u8, parsed.value.from, from)) return error.BadReceipt;
+    if ((parsed.value.version != 1 and
+        parsed.value.version != 2) or
+        parsed.value.committed or
+        parsed.value.cancelled or
+        !h.name.isId(&parsed.value.nonce) or
+        !std.mem.eql(u8, parsed.value.from, from)) return error.BadReceipt;
     try names(parsed.value);
     return .{ .record = parsed, .digest = .{ .anchor = wire.digest(anchor_text), .note = wire.digest(note_text) } };
 }
 
-pub fn start(allocator: std.mem.Allocator, context: Context, from: []const u8, to: []const u8, purpose: []const u8) !std.json.Parsed(Record) {
+pub fn start(
+    allocator: std.mem.Allocator,
+    context: Context,
+    from: []const u8,
+    to: []const u8,
+    purpose: []const u8,
+) !std.json.Parsed(Record) {
     const base = context.source;
     const io = base.io;
     try checkNames(base.path, context.target.path, from, to, purpose);
@@ -115,7 +161,19 @@ pub fn start(allocator: std.mem.Allocator, context: Context, from: []const u8, t
     defer anchor.close(io);
     const marker = try source.createFile(io, note, .{ .read = true, .exclusive = true });
     defer marker.close(io);
-    const record: Record = .{ .nonce = try h.lease.nonce(io, base.dir, id), .from_path = base.path, .to_path = context.target.path, .from = from, .to = to, .purpose = purpose, .source = try file.state(base.dir, from), .source_root = try file.here(base.dir), .target_root = try file.here(context.target.dir), .anchor = try file.opened(anchor), .marker = try file.opened(marker) };
+    const record: Record = .{
+        .nonce = try h.lease.nonce(io, base.dir, id),
+        .from_path = base.path,
+        .to_path = context.target.path,
+        .from = from,
+        .to = to,
+        .purpose = purpose,
+        .source = try file.state(base.dir, from),
+        .source_root = try file.here(base.dir),
+        .target_root = try file.here(context.target.dir),
+        .anchor = try file.opened(anchor),
+        .marker = try file.opened(marker),
+    };
     try names(record);
     const bytes = try std.json.Stringify.valueAlloc(allocator, record, .{});
     defer allocator.free(bytes);
@@ -132,8 +190,12 @@ pub fn start(allocator: std.mem.Allocator, context: Context, from: []const u8, t
 pub fn scope(context: Context, record: Record, from: []const u8, to: []const u8) !void {
     try names(record);
     const base = context.source;
-    if (!std.mem.eql(u8, base.path, record.from_path) or !std.mem.eql(u8, context.target.path, record.to_path) or !std.mem.eql(u8, from, record.from) or !std.mem.eql(u8, to, record.to)) return error.IdentityConflict;
-    if (!record.source_root.same(try file.here(base.dir)) or !record.target_root.same(try file.here(context.target.dir))) return error.IdentityConflict;
+    if (!std.mem.eql(u8, base.path, record.from_path) or
+        !std.mem.eql(u8, context.target.path, record.to_path) or
+        !std.mem.eql(u8, from, record.from) or
+        !std.mem.eql(u8, to, record.to)) return error.IdentityConflict;
+    if (!record.source_root.same(try file.here(base.dir)) or
+        !record.target_root.same(try file.here(context.target.dir))) return error.IdentityConflict;
     const nonce = try h.lease.nonce(base.io, base.dir, h.name.classify(from).id);
     if (!std.mem.eql(u8, &nonce, &record.nonce)) return error.IdentityConflict;
 }
@@ -167,7 +229,10 @@ fn journal(context: Context, record: Record, flag: []const u8, settle: ?deadline
     const current = try read(base.allocator, base.io, base.dir, path, true);
     defer current.deinit();
     try scope(context, current.value, record.from, record.to);
-    if (!record.source.same(current.value.source) or !record.anchor.same(current.value.anchor) or !record.marker.same(current.value.marker) or !std.mem.eql(u8, &record.nonce, &current.value.nonce)) return error.IdentityConflict;
+    if (!record.source.same(current.value.source) or
+        !record.anchor.same(current.value.anchor) or
+        !record.marker.same(current.value.marker) or
+        !std.mem.eql(u8, &record.nonce, &current.value.nonce)) return error.IdentityConflict;
     if (std.mem.eql(u8, flag, commit_flag) and current.value.cancelled) return error.NativeMoveCancelled;
     if (std.mem.eql(u8, flag, commit_flag) == current.value.committed) return;
     try bound(settle, base.io);
@@ -239,7 +304,13 @@ fn names(record: Record) !void {
     return checkNames(record.from_path, record.to_path, record.from, record.to, record.purpose);
 }
 
-fn checkNames(from_path: []const u8, to_path: []const u8, from_name: []const u8, to: []const u8, purpose: []const u8) !void {
+fn checkNames(
+    from_path: []const u8,
+    to_path: []const u8,
+    from_name: []const u8,
+    to: []const u8,
+    purpose: []const u8,
+) !void {
     const from = h.name.classify(from_name);
     if (!h.name.isId(from.id)) return error.BadReceipt;
     const same_root = std.mem.eql(u8, from_path, to_path);
@@ -247,9 +318,16 @@ fn checkNames(from_path: []const u8, to_path: []const u8, from_name: []const u8,
         if (!same_root or from.kind != .creating or !std.mem.eql(u8, to, from.id)) return error.BadReceipt;
     } else if (std.mem.eql(u8, purpose, h.layout.moves.trash)) {
         var buffer: h.name.Buffer = undefined;
-        if (!same_root or (from.kind != .creating and from.kind != .session) or !std.mem.eql(u8, to, h.name.trash(&buffer, from.id))) return error.BadReceipt;
+        if (!same_root or
+            (from.kind != .creating and
+                from.kind != .session) or
+            !std.mem.eql(u8, to, h.name.trash(&buffer, from.id))) return error.BadReceipt;
     } else if (std.mem.startsWith(u8, purpose, h.layout.moves.keep)) {
         const tail = purpose[h.layout.moves.keep.len..];
-        if (from.kind != .session or !std.mem.eql(u8, to, from.id) or tail.len != to_path.len + 1 or !std.mem.startsWith(u8, tail, to_path) or tail[tail.len - 1] != '\n') return error.BadReceipt;
+        if (from.kind != .session or
+            !std.mem.eql(u8, to, from.id) or
+            tail.len != to_path.len + 1 or
+            !std.mem.startsWith(u8, tail, to_path) or
+            tail[tail.len - 1] != '\n') return error.BadReceipt;
     } else return error.BadReceipt;
 }

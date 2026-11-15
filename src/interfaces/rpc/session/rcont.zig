@@ -3,9 +3,9 @@
 //! no target: the transport drives the session's focused core. The plane's
 //! own refusals are the live errors: a host without a bridge, a pending
 //! base plan, an armed watchpoint, a broken history read.
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const Outcome = rpc.Outcome(proto.Ack);
 

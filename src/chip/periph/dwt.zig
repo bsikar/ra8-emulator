@@ -159,7 +159,8 @@ pub const Dwt = struct {
         return switch (slot.register) {
             .comp => self.comps[slot.index],
             .function => self.functions[slot.index] | id.of(slot.index) << function_bits.id_shift,
-            .vmask => if (id.takesValues(slot.index) and isDataValue(self.code(slot.index))) self.vmasks[slot.index] else 0,
+            .vmask => if (id.takesValues(slot.index) and
+                isDataValue(self.code(slot.index))) self.vmasks[slot.index] else 0,
         };
     }
 
@@ -248,7 +249,8 @@ pub const Dwt = struct {
             const owner = self.reporter(index, address, width, kind, value) orelse continue;
             self.functions[owner] |= function_bits.matched;
             self.changed = true;
-            if ((self.functions[owner] >> function_bits.action_shift) & function_bits.action_mask != function_bits.action_debug) continue;
+            const action = self.functions[owner] >> function_bits.action_shift & function_bits.action_mask;
+            if (action != function_bits.action_debug) continue;
             if (found < into.len) {
                 into[found] = owner;
                 found += 1;

@@ -19,10 +19,11 @@
 //! before its interval's end. With no hit anywhere the search ends at the
 //! start of the line: the oldest checkpoint on the line is its base.
 const std = @import("std");
-const position_mod = @import("position.zig");
-const trail = @import("trail.zig");
+
 const bisect = @import("value_bisect.zig");
 const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
+const position_mod = @import("position.zig");
+const trail = @import("trail.zig");
 
 pub const Position = position_mod.Position;
 pub const PageKey = bisect.PageKey;

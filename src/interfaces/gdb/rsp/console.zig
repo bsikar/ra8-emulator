@@ -6,8 +6,9 @@
 //! `s` or `vCont` and its stop reply. The text is then forgotten, so the
 //! session's own `itm:` lines do not repeat it when the connection ends.
 const std = @import("std");
-const packet = @import("packet.zig");
+
 const itm = @import("ra8_chip").periph.itm;
+const packet = @import("packet.zig");
 
 pub const limits = struct {
     /// Text bytes per packet; its hex plus the `O` stays well inside the

@@ -8,12 +8,13 @@
 //! Load is counted in instructions retired on the core, in the
 //! timebase's elapsed count, which moves a chunk at a time.
 const std = @import("std");
+
 const file_ops = @import("../file_ops.zig");
+const isr = @import("isr.zig");
+const names = @import("names.zig");
+const rtos_file = @import("file.zig");
 const rtos_hook = @import("hook.zig");
 const rtos_load = @import("load.zig");
-const names = @import("names.zig");
-const isr = @import("isr.zig");
-const rtos_file = @import("file.zig");
 
 pub const limits = struct {
     /// A whole core's run, in the tenths of a percent shares are counted in.
@@ -38,7 +39,14 @@ pub fn sideOf(tracer: ?*const rtos_hook.Tracer, memory: rtos_hook.Memory) ?Side 
 /// The trace when `--trace-rtos` asked, then the load when `--cpu-load` did.
 /// Under `--report json` the load is in the document, so its table is not
 /// printed again.
-pub fn all(out: anytype, io: std.Io, writer: ?file_ops.Writer, options: anytype, tracer: ?*const rtos_hook.Tracer, memory: anytype) !void {
+pub fn all(
+    out: anytype,
+    io: std.Io,
+    writer: ?file_ops.Writer,
+    options: anytype,
+    tracer: ?*const rtos_hook.Tracer,
+    memory: anytype,
+) !void {
     if (options.trace_rtos) try rtos_hook.print(out, tracer, memory);
     if (options.cpu_load and !asJson(options)) try load(out, tracer, memory);
     const one = tracer orelse return;
@@ -87,11 +95,18 @@ pub fn table(one: *const rtos_hook.Tracer) Table {
     var copy = one.trace.load;
     copy.finish(one.loadClock());
     const slots = copy.rows(one.core);
-    var made = Table{ .core = one.core, .total = copy.total(one.core), .other = copy.cores[one.core].other, .len = slots.len };
+    var made = Table{
+        .core = one.core,
+        .total = copy.total(one.core),
+        .other = copy.cores[one.core].other,
+        .len = slots.len,
+    };
     @memcpy(made.slots[0..slots.len], slots);
     if (made.total == 0) return made;
     var ticks: [limits.rows]u64 = undefined;
-    for (slots, 0..) |slot, index| ticks[index] = slot.ticks;
+    for (slots, 0..) |slot, index| {
+        ticks[index] = slot.ticks;
+    }
     ticks[slots.len] = made.other;
     split(ticks[0 .. slots.len + 1], made.total, &made.shares);
     return made;

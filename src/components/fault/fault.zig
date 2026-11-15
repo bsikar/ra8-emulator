@@ -7,11 +7,11 @@
 //! a read hands back. Everything else goes straight through.
 //!
 //! Garbage is seeded, so a run with a fault on it repeats exactly.
-const riic_bus = @import("ra8_chip").periph.riic.bus;
-const timebase = @import("ra8_chip").periph.timebase;
 pub const lines = @import("lines.zig");
+const riic_bus = @import("ra8_chip").periph.riic.bus;
 pub const schedule = @import("schedule.zig");
 pub const spec = @import("spec.zig");
+const timebase = @import("ra8_chip").periph.timebase;
 
 pub const Mode = union(enum) {
     /// Behave like the part.

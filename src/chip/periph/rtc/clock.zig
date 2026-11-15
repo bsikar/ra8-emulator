@@ -13,7 +13,6 @@
 //! carries, so it spans 2000 to 2099, where every fourth year is a leap
 //! year without exception: 2000 is one (divisible by 400) and 2100, the
 //! first century year that is not, is past the counter's reach.
-const std = @import("std");
 
 /// Calendar moduli. The day and month ones are the model's own rule above.
 pub const limit = struct {

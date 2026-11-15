@@ -8,8 +8,8 @@
 //! blocks either. A read that ends in Closed returns 0, which pipe_input
 //! treats as the writer hanging up.
 const std = @import("std");
+
 const windows = std.os.windows;
-const kernel32 = windows.kernel32;
 
 pub const prefix = "\\\\.\\pipe\\";
 

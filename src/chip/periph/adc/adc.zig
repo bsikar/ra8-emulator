@@ -63,11 +63,11 @@
 //! the A/D error and overflow status bits, ADSR for units other than 0, and
 //! the sampling-time and gain registers. They are shadowed so a read-modify-
 //! write survives, and never read.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
+pub const intr = @import("intr.zig");
 const periph = @import("../registry.zig");
 pub const scan = @import("scan.zig");
-pub const intr = @import("intr.zig");
 
 /// The scan-end interrupt enable, reached as `adc.interrupt` the way the
 /// other split blocks in this tree re-export their halves.

@@ -1,9 +1,9 @@
 //! Text for integer VCMP and VPT, per DDI0553 B5.5.
+pub const fp = @import("fp.zig");
 const Instr = @import("../../../instr.zig").Instr;
 const ops = @import("../../../ops/mve/vcmp/vcmp.zig");
-const vpst = @import("../vpst.zig");
 const text = @import("../../text.zig");
-pub const fp = @import("fp.zig");
+const vpst = @import("../vpst.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     printPredicated(instr, out, "");

@@ -8,11 +8,14 @@
 //! read-only and load-copy image bytes while catching post-load guest writes
 //! (state_memory.zig, state_storage.zig). Everything else, every core's
 //! registers and every board section, is hashed as written.
+const chip = @import("ra8_chip");
+
 const std = @import("std");
-const file = @import("ra8_board").snapshot.run.file;
+
 const fields = @import("ra8_board").snapshot.run.fields;
-const regs_mod = @import("ra8_chip").core.cpu.regs;
+const file = @import("ra8_board").snapshot.run.file;
 const memory = @import("state_memory.zig");
+const regs_mod = @import("ra8_chip").core.cpu.regs;
 const storage = @import("state_storage.zig");
 
 pub const Digest = [16]u8;
@@ -53,7 +56,11 @@ pub fn digest(stream: []const u8, mask: memory.Mask) Error!Digest {
         if (section.kind == .image) continue;
         hasher.update(std.mem.asBytes(&std.mem.nativeToLittle(u32, @backingInt(section.kind))));
         if (isMemory(section.kind)) {
-            memory.hash(&hasher, try memory.parse(section.payload), mask.forCore(if (section.kind == .second_memory) 1 else 0));
+            memory.hash(
+                &hasher,
+                try memory.parse(section.payload),
+                mask.forCore(if (section.kind == .second_memory) 1 else 0),
+            );
         } else if (section.kind == .storage) {
             storage.hash(&hasher, try storage.parse(section.payload), mask.forCore(0));
         } else if (section.kind == .debug_units) {
@@ -92,7 +99,7 @@ pub const Difference = struct {
 };
 
 fn registersOf(section: file.Section) Error!struct { core: u8, regs: regs_mod.Regs } {
-    comptime std.debug.assert(std.mem.eql(u8, @import("ra8_chip").core.cpu.snapshot.saved[0], "regs"));
+    comptime std.debug.assert(std.mem.eql(u8, chip.core.cpu.snapshot.saved[0], "regs"));
     var cursor: fields.Cursor = .{ .bytes = section.payload };
     const core = try fields.read(u8, &cursor);
     return .{ .core = core, .regs = try fields.read(regs_mod.Regs, &cursor) };
@@ -108,7 +115,10 @@ fn firstRegister(a: regs_mod.Regs, b: regs_mod.Regs) ?Place {
             .array => |array| if (array.child == u32) {
                 inline for (0..array.len) |i| {
                     if (x[i] != y[i]) return .{ .register = .{
-                        .name = if (comptime std.mem.eql(u8, name, "low")) std.fmt.comptimePrint("r{d}", .{i}) else std.fmt.comptimePrint("{s}[{d}]", .{ name, i }),
+                        .name = if (comptime std.mem.eql(u8, name, "low"))
+                            std.fmt.comptimePrint("r{d}", .{i})
+                        else
+                            std.fmt.comptimePrint("{s}[{d}]", .{ name, i }),
                         .expected = x[i],
                         .actual = y[i],
                     } };
@@ -138,12 +148,35 @@ pub fn first(expected: []const u8, actual: []const u8, mask: memory.Mask) Error!
         if (one.kind == .cpu) {
             const ra = try registersOf(one);
             core = ra.core;
-            if (firstRegister(ra.regs, (try registersOf(two)).regs)) |place| return try finish(expected, actual, core, place);
+            if (firstRegister(
+                ra.regs,
+                (try registersOf(
+                    two,
+                )).regs,
+            )) |place| return try finish(
+                expected,
+                actual,
+                core,
+                place,
+            );
         }
         if (isMemory(one.kind)) {
             const pa = try memory.parse(one.payload);
             const pb = try memory.parse(two.payload);
-            if (memory.firstDifference(pa, pb, mask.forCore(core))) |spot| return try finish(expected, actual, core, .{ .memory = spot });
+            if (memory.firstDifference(
+                pa,
+                pb,
+                mask.forCore(
+                    core,
+                ),
+            )) |spot| return try finish(
+                expected,
+                actual,
+                core,
+                .{
+                    .memory = spot,
+                },
+            );
             if (!std.mem.eql(u8, pa.tail, pb.tail)) return try finish(expected, actual, core, .{ .section = one.kind });
         } else if (one.kind == .storage) {
             switch (storage.compare(try storage.parse(one.payload), try storage.parse(two.payload), mask.forCore(0))) {
@@ -155,7 +188,12 @@ pub fn first(expected: []const u8, actual: []const u8, mask: memory.Mask) Error!
             var scratch: [2][debug_scratch]u8 = undefined;
             const left = try withoutRunBookkeeping(one.payload, &scratch[0]);
             const right = try withoutRunBookkeeping(two.payload, &scratch[1]);
-            if (!std.mem.eql(u8, left, right)) return try finish(expected, actual, try debugCore(left, right), .{ .section = one.kind });
+            if (!std.mem.eql(u8, left, right)) return try finish(
+                expected,
+                actual,
+                try debugCore(left, right),
+                .{ .section = one.kind },
+            );
         } else if (!std.mem.eql(u8, one.payload, two.payload)) {
             return try finish(expected, actual, core, .{ .section = one.kind });
         }
@@ -197,5 +235,10 @@ pub fn pcOf(stream: []const u8, core: u8) Error!u32 {
 }
 
 fn finish(expected: []const u8, actual: []const u8, core: u8, place: Place) Error!Difference {
-    return .{ .core = core, .pc_expected = try pcOf(expected, core), .pc_actual = try pcOf(actual, core), .place = place };
+    return .{
+        .core = core,
+        .pc_expected = try pcOf(expected, core),
+        .pc_actual = try pcOf(actual, core),
+        .place = place,
+    };
 }

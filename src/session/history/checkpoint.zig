@@ -3,11 +3,12 @@
 //! names it (RA8EMU-1196). The session arms the controller on its
 //! boundary; the run loop only offers the closed round.
 const std = @import("std");
-const recorder_mod = @import("recorder.zig");
-const record = @import("record.zig");
+
 const picture_mod = @import("checkpoint_picture.zig");
-const touched_pages = @import("touched_pages.zig");
+const record = @import("record.zig");
+const recorder_mod = @import("recorder.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
+const touched_pages = @import("touched_pages.zig");
 
 /// One session's checkpoint policy and sink. The application binds the
 /// serializer (the run's own save stream, the bytes a state file carries)
@@ -96,10 +97,11 @@ pub const Checkpoint = struct {
         self.last_size = bytes.len + extra;
         // CP0 is durable before open returns. Later complete pairs share
         // a batch on the caller clock; clockless embedders stay conservative.
-        if (self.next_id == 1 or self.recorder.clock == null)
-            try self.recorder.force()
-        else
+        if (self.next_id == 1 or self.recorder.clock == null) {
+            try self.recorder.force();
+        } else {
             try self.recorder.maybeCommit(self.recorder.now());
+        }
     }
 
     /// Stages the picture (when bound) and then the checkpoint's record;

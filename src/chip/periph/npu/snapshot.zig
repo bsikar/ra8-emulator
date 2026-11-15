@@ -5,8 +5,9 @@
 //! Not saved, because it is wiring: `memory` (the guest memory handle the
 //! board attaches). A load keeps the target board's own.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 

@@ -2,22 +2,24 @@
 //! std.Io.net connects and reads blocking, and the bridge is polled on every
 //! emulator tick, so these calls go to the OS through std.posix.system.
 //! Windows goes through ws2_32 in sock/windows.zig (RA8EMU-829).
-const std = @import("std");
+const win32 = @import("../win32.zig");
+
 const builtin = @import("builtin");
+const std = @import("std");
 
 const posix = std.posix;
 const system = posix.system;
 const darwin = builtin.os.tag.isDarwin();
 const on_windows = builtin.os.tag == .windows;
-pub const windows = @import("windows.zig");
-const socket_flags = @import("../socket_flags.zig");
-pub const ready = @import("ready.zig");
 pub const afd = @import("afd.zig");
 pub const path = @import("path.zig");
+pub const ready = @import("ready.zig");
+const socket_flags = @import("../socket_flags.zig");
 pub const unix = @import("unix.zig");
+pub const windows = @import("windows.zig");
 
 pub const Fd = posix.socket_t;
-pub const invalid: Fd = if (on_windows) @import("../win32.zig").invalid_handle else -1;
+pub const invalid: Fd = if (on_windows) win32.invalid_handle else -1;
 pub const Address = std.Io.net.Ip4Address;
 pub const Kind = enum { stream, datagram };
 pub const Connect = enum { done, pending };
@@ -50,7 +52,14 @@ pub fn open(kind: Kind) Error!Fd {
     if (darwin) try darwinFlags(fd);
     if (comptime @hasDecl(posix.SO, "NOSIGPIPE")) {
         const enabled: c_int = 1;
-        posix.setsockopt(fd, posix.SOL.SOCKET, posix.SO.NOSIGPIPE, std.mem.asBytes(&enabled)) catch return error.Unexpected;
+        posix.setsockopt(
+            fd,
+            posix.SOL.SOCKET,
+            posix.SO.NOSIGPIPE,
+            std.mem.asBytes(
+                &enabled,
+            ),
+        ) catch return error.Unexpected;
     }
     return fd;
 }

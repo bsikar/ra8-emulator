@@ -1,82 +1,27 @@
-//! AGT: the interval timer, with a stop that stops and a compare that matches.
+//! Ten 16-bit reloading AGT down-counters at 0x4022_1000 (ra8_agt_regs.h).
 //!
-//! Ten channels of a 16-bit reloading down-counter at 0x4022_1000
-//! (ra8_agt_regs.h, 16-bit view). Firmware writes a period into AGT, sets
-//! AGTCR.TSTART, and from there either polls AGTCR or waits on the AGT0
-//! combined interrupt. The counter has to really move for any of that to
-//! finish, so this block keeps a live count rather than a register shadow.
+//! AGT/+0x00 seeds the count and reload; AGTCMA/+0x02 and AGTCMB/+0x04
+//! select compare values. AGTCR/+0x08 controls TSTART, TCSTF, TSTOP and
+//! underflow/compare flags. TSTOP takes precedence over TSTART, clears TCSTF
+//! and holds the count (HUM 24.2.6 p1175; ULPT 25.2.1 p1190).
+//! Counter writes require a stopped channel; rejected writes are counted.
+//! Uninterpreted registers retain narrow writes in each channel's shadow.
 //!
-//!   AGT    (+0x00, 16b)  counter; a write seeds the count and the reload
-//!   AGTCMA (+0x02, 16b)  compare match A
-//!   AGTCMB (+0x04, 16b)  compare match B
-//!   AGTCR  (+0x08, 8b)   TSTART b0, TCSTF b1 (RO), TSTOP b2 (W),
-//!                        TUNDF b5, TCMAF b6, TCMBF b7
-//!   AGTMR1 (+0x09, 8b)   mode 1
+//! compare.zig gates compare flags with AGTCMSR.TCMEA/TCMEB, including a
+//! valid zero compare. clock.zig selects AGTMR1.TCK and divided/cascade clocks.
+//! AGT1 cascade must start before AGT0; missed underflows are counted
+//! (ra8_agt.h; HUM 24.2.4 p1167).
 //!
-//! Ported from board_periph_timer.c on dev, which models the AGT and GPT
-//! families together. Four things that model does not do.
-//!
-//! TSTOP STOPS THE COUNT. dev's AGTCR write keeps the TSTART bit and nothing
-//! else, so the forced stop a driver issues as TSTART|TSTOP (0x05) leaves the
-//! channel running there and stops it on silicon: the emulator keeps
-//! underflowing a timer the firmware believes it parked. TSTOP wins over
-//! TSTART in the same write here, clears TCSTF, and holds the count. This is
-//! the same bit ulpt.zig already takes, on the register layout ULPTCR shares
-//! with AGTCR (HUM Ch 25.2.1 p 1190, mirroring Ch 24.2.6 p 1175).
-//!
-//! A COMPARE MATCH MATCHES. dev names TCMAF and TCMBF in its own bit
-//! enumeration, its underflow comment promises to raise TCMAF, and the code
-//! raises neither, so an image that waits on compare match A waits forever.
-//! A count that passes a compare value sets its flag here and is counted.
-//!
-//! A COUNTER WRITE NEEDS THE COUNT STOPPED. dev seeds the counter and the
-//! reload whenever asked, so an image that re-periods a running channel works
-//! there and loses the write on the bench. Refused and counted here, the way
-//! the calendar refuses a counter write with RCR2.START set.
-//!
-//! THE WINDOW KEEPS WHAT WAS WRITTEN. dev answers 0 to every offset outside
-//! the five it interprets and drops the stores, so AGTMR2, AGTIOC and the
-//! rest read back zero and a driver that verifies its own mode setup fails on
-//! its first readback. Everything uninterpreted is shadowed per channel with
-//! narrow-write merge.
-//!
-//! A COMPARE MATCHES ONLY WHEN AGTCMSR ARMED IT. This model used to stand a
-//! rule of its own in for the register it could not read: a compare value of
-//! zero counted as unarmed, everything else as armed. compare.zig now
-//! reads TCMEA and TCMEB out of AGTCMSR at +0x0E, so a side the driver never
-//! enabled raises nothing and a side it parked at 0xFFFF is not mistaken for
-//! an armed one. A count that passes a compare value with the function
-//! disabled is counted, so the run says what the flag would have been.
-//!
-//! THE COUNT SOURCE IS THE ONE AGTMR1 SELECTS. That field used to be a
-//! shadow byte on both trees, so every channel stepped at one rate whatever
-//! a driver asked for. clock.zig now reads TCK out of it: a divided
-//! source counts proportionally slower, and AGT1 set to cascade steps on
-//! AGT0's underflow instead of on a clock of its own.
-//!
-//! THE CASCADE'S START ORDER IS VISIBLE. ra8_agt_start_cascade's contract
-//! cites the part: "AGT1's TSTART must be set before AGT0's so AGT1 is ready
-//! to sample the AGT0 underflow on the very first cycle" (ra8_agt.h, HUM
-//! Ch 24.2.4 "AGTCR" p 1167, the count starts in sync with its source).
-//! Started the other way round, every AGT0 underflow landing before AGT1's
-//! TSTART is gone and the 32-bit value the pair stands for is short by that
-//! many for the rest of the run. The arithmetic was already right, since a
-//! stopped channel does not advance, and that is the problem: the loss was
-//! silent, so a backwards start order read a plausible 32-bit count that was
-//! wrong. Counted now, and neither refused nor flagged, as on silicon.
-//!
-//! NOT MODELLED, AND NOT GUESSED: AGTMR2's own CKS divider, which has an
-//! offset in the header and no field table; AGTCMSR's output-enable and
-//! polarity bits, which select and invert a pin a headless run has nothing
-//! to show on; and the compare-match interrupts, which have event numbers
-//! this tree does not carry. Only the AGT0 combined event is raised, on underflow, which is
-//! what dev raises too.
-const std = @import("std");
+//! AGTMR2.CKS, output-enable/polarity pins and separate compare interrupts
+//! are not modelled. Only AGT0's combined underflow event is raised.
+const bounded = @import("../../core/bounded.zig");
 
-const periph = @import("../registry.zig");
 const clk = @import("clock.zig");
+const periph = @import("../registry.zig");
+
 pub const clock = clk;
 const cmp = @import("compare.zig");
+
 pub const compare = cmp;
 
 /// AGT geometry (ra8_agt_regs.h).
@@ -117,7 +62,7 @@ pub const event = struct {
 pub const step_per_tick: u16 = 0x0800;
 
 /// At most one event per boundary, from channel 0.
-pub const Due = @import("../../core/bounded.zig").Bounded(u16, 1);
+pub const Due = bounded.Bounded(u16, 1);
 pub const sched = @import("sched.zig");
 
 /// One channel: the live count, the two compare values, the control byte,

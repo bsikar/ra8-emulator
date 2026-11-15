@@ -3,13 +3,16 @@
 //! same contents always write the same bytes. The option MRAM's OTP cells
 //! (one byte each) and the xSPI flash's sectors (4 KiB each) go this way.
 const std = @import("std");
+
 const fields = @import("fields.zig");
 
 /// The numbers of a map's entries, ascending. Caller frees.
 pub fn sortedKeys(allocator: std.mem.Allocator, map: anytype) ![]u32 {
     const keys = try allocator.alloc(u32, map.count());
     var it = map.keyIterator();
-    for (keys) |*key| key.* = it.next().?.*;
+    for (keys) |*key| {
+        key.* = it.next().?.*;
+    }
     std.mem.sort(u32, keys, {}, std.sort.asc(u32));
     return keys;
 }

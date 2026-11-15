@@ -8,6 +8,7 @@
 //! and `saveSide`/`loadSide` move the state beside guest memory, the save
 //! stream with its memory sections left out (window_delta.zig).
 const std = @import("std");
+
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const position_mod = @import("position.zig");
 const trail_mod = @import("trail.zig");

@@ -14,11 +14,12 @@
 //! A mode that does not fit the device's bus is refused here, before the
 //! run starts, rather than quietly doing nothing.
 const std = @import("std");
+
 const catalog = @import("../catalog.zig");
-const request = @import("../request.zig");
 const endpoint = @import("../endpoint.zig");
 const fault = @import("fault.zig");
 const fault_lines = @import("lines.zig");
+const request = @import("../request.zig");
 const timebase = @import("ra8_chip").periph.timebase;
 
 pub const Mode = union(enum) {

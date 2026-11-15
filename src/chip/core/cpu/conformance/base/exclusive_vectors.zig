@@ -75,26 +75,58 @@ const loads = [_]V{
     ld("ldaexb r1, [r0]", 0xE8D0, 0x1FCF, 0xA9, base),
     ld("ldaexh r1, [r0]", 0xE8D0, 0x1FDF, 0xC3A9, base),
     ld("ldaex r1, [r0]", 0xE8D0, 0x1FEF, literal, base),
-    vec("ldrex moves a tag held elsewhere", .{ .hw1 = 0xE850, .hw2 = 0x1F00, .tag = 0x2000_0300 }, .{ .rt = literal, .tag = base }),
-    vec("ldrexb at an odd address is aligned", .{ .hw1 = 0xE8D0, .hw2 = 0x1F4F, .rn = base + 1 }, .{ .rt = 0xC3, .tag = base + 1 }),
-    vec("ldrex at a halfword address faults and tags nothing", .{ .hw1 = 0xE850, .hw2 = 0x1F00, .rn = base + 2 }, .{ .fault = .unaligned }),
+    vec(
+        "ldrex moves a tag held elsewhere",
+        .{ .hw1 = 0xE850, .hw2 = 0x1F00, .tag = 0x2000_0300 },
+        .{ .rt = literal, .tag = base },
+    ),
+    vec(
+        "ldrexb at an odd address is aligned",
+        .{ .hw1 = 0xE8D0, .hw2 = 0x1F4F, .rn = base + 1 },
+        .{ .rt = 0xC3, .tag = base + 1 },
+    ),
+    vec(
+        "ldrex at a halfword address faults and tags nothing",
+        .{ .hw1 = 0xE850, .hw2 = 0x1F00, .rn = base + 2 },
+        .{ .fault = .unaligned },
+    ),
     vec("ldrexh at an odd address faults", .{ .hw1 = 0xE8D0, .hw2 = 0x1F5F, .rn = base + 1 }, .{ .fault = .unaligned }),
-    vec("ldrex past RAM faults and tags nothing", .{ .hw1 = 0xE850, .hw2 = 0x1F00, .rn = 0x2000_0400 }, .{ .fault = .unmapped }),
+    vec(
+        "ldrex past RAM faults and tags nothing",
+        .{ .hw1 = 0xE850, .hw2 = 0x1F00, .rn = 0x2000_0400 },
+        .{ .fault = .unmapped },
+    ),
 };
 
 const stores = [_]V{
     stored("strex r2, r1, [r0] with the tag stores and reports 0", 0xE840, 0x1200, src),
     vec("strex r2, r1, [r0] with no tag reports 1", .{ .hw1 = 0xE840, .hw2 = 0x1200 }, .{ .rd = 1 }),
-    vec("strex with the tag elsewhere reports 1 and clears it", .{ .hw1 = 0xE840, .hw2 = 0x1200, .tag = base + 4 }, .{ .rd = 1 }),
-    vec("strex r2, r1, [r0, #4] with its tag", .{ .hw1 = 0xE840, .hw2 = 0x1201, .tag = base + 4, .probe = base + 4 }, .{ .rd = 0, .mem = src }),
+    vec(
+        "strex with the tag elsewhere reports 1 and clears it",
+        .{ .hw1 = 0xE840, .hw2 = 0x1200, .tag = base + 4 },
+        .{ .rd = 1 },
+    ),
+    vec(
+        "strex r2, r1, [r0, #4] with its tag",
+        .{ .hw1 = 0xE840, .hw2 = 0x1201, .tag = base + 4, .probe = base + 4 },
+        .{ .rd = 0, .mem = src },
+    ),
     stored("strexb writes one byte", 0xE8C0, 0x1F42, 0x8765_C344),
     stored("strexh writes one half", 0xE8C0, 0x1F52, 0x8765_3344),
     stored("stlexb writes one byte", 0xE8C0, 0x1FC2, 0x8765_C344),
     stored("stlexh writes one half", 0xE8C0, 0x1FD2, 0x8765_3344),
     stored("stlex writes the word", 0xE8C0, 0x1FE2, src),
     vec("stlex with no tag reports 1", .{ .hw1 = 0xE8C0, .hw2 = 0x1FE2 }, .{ .rd = 1 }),
-    vec("strex at a halfword address faults and keeps the tag", .{ .hw1 = 0xE840, .hw2 = 0x1200, .rn = base + 2, .tag = base + 2 }, .{ .fault = .unaligned, .tag = base + 2 }),
-    vec("strex past RAM with no tag reports 1 and touches nothing", .{ .hw1 = 0xE840, .hw2 = 0x1200, .rn = 0x2000_0400 }, .{ .rd = 1 }),
+    vec(
+        "strex at a halfword address faults and keeps the tag",
+        .{ .hw1 = 0xE840, .hw2 = 0x1200, .rn = base + 2, .tag = base + 2 },
+        .{ .fault = .unaligned, .tag = base + 2 },
+    ),
+    vec(
+        "strex past RAM with no tag reports 1 and touches nothing",
+        .{ .hw1 = 0xE840, .hw2 = 0x1200, .rn = 0x2000_0400 },
+        .{ .rd = 1 },
+    ),
     vec("clrex clears the tag", .{ .hw1 = 0xF3BF, .hw2 = 0x8F2F, .tag = base }, .{}),
     vec("clrex with no tag leaves it open", .{ .hw1 = 0xF3BF, .hw2 = 0x8F2F }, .{}),
 };

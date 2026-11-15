@@ -1,7 +1,9 @@
 //! Proven recovery under root gates and the never-moved OS lease. Unknown
 //! reservations and unmarked directories are retained with diagnostics.
 const std = @import("std");
+
 const h = @import("root.zig");
+
 const Base = h.base.Base;
 const proof = h.move.receipt;
 pub const Status = enum { completed, held, unmarked, unknown_reservation, conflict, other_host, failed };
@@ -83,12 +85,7 @@ pub fn session(base: *const Base, id: []const u8) anyerror!Status {
     for ([_][]const u8{ draft, id }) |entry| {
         base.owns(entry) catch continue;
         if (!try h.move.tree.moving(base.io, base.dir, entry)) continue;
-        var source = try base.dir.openDir(base.io, entry, .{ .follow_symlinks = false });
-        const parsed = proof.read(base.allocator, base.io, source, h.layout.files.moving) catch |err| {
-            source.close(base.io);
-            return err;
-        };
-        source.close(base.io);
+        const parsed = try movingReceipt(base, entry);
         defer parsed.deinit();
         try claim(base, id, parsed.value);
         if (std.mem.startsWith(u8, parsed.value.purpose, h.layout.moves.keep)) {
@@ -100,19 +97,26 @@ pub fn session(base: *const Base, id: []const u8) anyerror!Status {
             gate_open = false;
             return kept(base, id, path, false);
         }
-        const target = if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.publish)) id else if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.trash)) bin else return error.BadReceipt;
+        const target = if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.publish))
+            id
+        else if (std.mem.eql(u8, parsed.value.purpose, h.layout.moves.trash))
+            bin
+        else
+            return error.BadReceipt;
         if (!try proof.localOwner(base.allocator, base.io, base.dir, entry, base.dir, target)) return error.OtherHost;
-        try h.move.dispatch.directory(.{ .source = base, .target = base, .authorities = &.{ gate.file, held } }, entry, target, parsed.value.purpose, null);
+        try h.move.dispatch.directory(
+            .{ .source = base, .target = base, .authorities = &.{ gate.file, held } },
+            entry,
+            target,
+            parsed.value.purpose,
+            null,
+        );
     }
     for ([_][]const u8{ id, draft, bin }) |entry| if (present(base, entry)) {
         base.owns(entry) catch return .unmarked;
         var dir = try base.dir.openDir(base.io, entry, .{ .iterate = true, .follow_symlinks = false });
         defer dir.close(base.io);
-        var bytes: [h.owner.max_bytes]u8 = undefined;
-        const record = h.owner.read(base.io, dir, &bytes) catch return .unmarked;
-        var host: [h.machine.limits.host]u8 = undefined;
-        const local = h.machine.hostName(&host);
-        if (std.mem.eql(u8, local, h.machine.unknown) or !std.mem.eql(u8, local, record.host)) return .other_host;
+        if (try ownerStatus(base, dir)) |status| return status;
         try h.rename.settle(base.io, dir);
         return .completed;
     };
@@ -124,15 +128,24 @@ pub fn session(base: *const Base, id: []const u8) anyerror!Status {
 fn claim(base: *const Base, id: []const u8, record: proof.Record) !void {
     if (!std.mem.eql(u8, &record.nonce, &try h.lease.nonce(base.io, base.dir, id))) return error.IdentityConflict;
     const found = h.name.classify(record.from);
-    if (!std.mem.eql(u8, found.id, id) or !record.from_parent.same(try h.move.file.here(base.dir))) return error.IdentityConflict;
+    if (!std.mem.eql(u8, found.id, id) or
+        !record.from_parent.same(try h.move.file.here(base.dir))) return error.IdentityConflict;
     var host: [h.machine.limits.host]u8 = undefined;
     const local = h.machine.hostName(&host);
-    if (std.mem.eql(u8, local, h.machine.unknown) or !std.mem.eql(u8, record.host, local) or !std.mem.eql(u8, record.owner_host, local)) return error.OtherHost;
+    if (std.mem.eql(u8, local, h.machine.unknown) or
+        !std.mem.eql(u8, record.host, local) or
+        !std.mem.eql(u8, record.owner_host, local)) return error.OtherHost;
 }
 
 fn kept(base: *const Base, id: []const u8, path: []const u8, anchored: bool) anyerror!Status {
     if (base.role != .cache) return error.BadReceipt;
-    var target = try Base.existingConfigured(base.allocator, base.io, path, .kept, .{ .native_provider = base.native_provider });
+    var target = try Base.existingConfigured(
+        base.allocator,
+        base.io,
+        path,
+        .kept,
+        .{ .native_provider = base.native_provider },
+    );
     defer target.close();
     var gates = try h.gates.Pair.acquire(base, &target);
     defer gates.release();
@@ -156,8 +169,19 @@ fn kept(base: *const Base, id: []const u8, path: []const u8, anchored: bool) any
         if (!try proof.localOwner(base.allocator, base.io, base.dir, id, target.dir, id)) return error.OtherHost;
         var bytes: [h.move.tree.limits.receipt]u8 = undefined;
         const receipt = try h.move.tree.receiptOf(base.io, base.dir, id, &bytes);
-        const authorities: []const std.Io.File = if (gates.second) |second| &[_]std.Io.File{ gates.first.file, second.file, held, arrived } else &[_]std.Io.File{ gates.first.file, held, arrived };
-        try h.move.dispatch.directory(.{ .source = base, .target = &target, .authorities = authorities }, id, id, receipt, null);
+        const authorities: []const std.Io.File = if (gates.second) |second| &[_]std.Io.File{
+            gates.first.file,
+            second.file,
+            held,
+            arrived,
+        } else &[_]std.Io.File{ gates.first.file, held, arrived };
+        try h.move.dispatch.directory(
+            .{ .source = base, .target = &target, .authorities = authorities },
+            id,
+            id,
+            receipt,
+            null,
+        );
     }
     held_open = false;
     try h.lock.retire(base.io, base.dir, id, held);
@@ -173,4 +197,19 @@ fn removeAnchor(base: *const Base, leaf: []const u8, record: proof.Record) !void
 fn present(base: *const Base, leaf: []const u8) bool {
     _ = base.dir.statFile(base.io, leaf, .{ .follow_symlinks = false }) catch return false;
     return true;
+}
+
+fn ownerStatus(base: *const Base, dir: std.Io.Dir) !?Status {
+    var bytes: [h.owner.max_bytes]u8 = undefined;
+    const record = h.owner.read(base.io, dir, &bytes) catch return Status.unmarked;
+    var host: [h.machine.limits.host]u8 = undefined;
+    const local = h.machine.hostName(&host);
+    if (std.mem.eql(u8, local, h.machine.unknown) or !std.mem.eql(u8, local, record.host)) return Status.other_host;
+    return null;
+}
+
+fn movingReceipt(base: *const Base, entry: []const u8) !std.json.Parsed(proof.Record) {
+    var source = try base.dir.openDir(base.io, entry, .{ .follow_symlinks = false });
+    defer source.close(base.io);
+    return proof.read(base.allocator, base.io, source, h.layout.files.moving);
 }

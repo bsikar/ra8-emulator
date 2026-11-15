@@ -9,9 +9,9 @@
 //! part, is in src/chip/core/part/map.zig.
 const std = @import("std");
 
-const profile = @import("../cpu/profile.zig");
-pub const map = @import("map.zig");
 pub const clock = @import("clock.zig");
+pub const map = @import("map.zig");
+const profile = @import("../cpu/profile.zig");
 
 /// SysTick timers on CPU0, the Cortex-M85 both parts carry: two, one Secure
 /// and one Non-secure. Arm's Cortex-M85 Devices Generic User Guide (101928,

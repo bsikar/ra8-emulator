@@ -22,12 +22,12 @@
 //! wholly in the padding is refused rather than given a value.
 //! AVERAGE, REDUCE_SUM and mixed zero points are
 //! error.OperatorNotModelled rather than a guess.
-const regs = @import("regs.zig");
+const addr = @import("addr.zig");
 const dma = @import("dma.zig");
 const fm = @import("fm.zig");
-const quant = @import("quant.zig");
-const addr = @import("addr.zig");
 const minmax = @import("minmax.zig");
+const quant = @import("quant.zig");
+const regs = @import("regs.zig");
 
 pub const mode_max: u16 = 0;
 
@@ -113,7 +113,15 @@ pub fn ifmExtent(inputs: Inputs) Step {
 
 /// The largest IFM element in the window whose output is (y, x, c),
 /// leaving out positions that fall in the padding.
-fn window(memory: anytype, regions: *const dma.Regions, inputs: Inputs, f: addr.Format, y: u32, x: u32, c: u32) Error!i32 {
+fn window(
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: Inputs,
+    f: addr.Format,
+    y: u32,
+    x: u32,
+    c: u32,
+) Error!i32 {
     const maps = inputs.maps;
     const k = inputs.kernel;
     const s = step(k.stride);
@@ -146,7 +154,12 @@ pub fn run(memory: anytype, regions: *const dma.Regions, mode: u16, inputs: Inpu
         const cc: u32 = @intCast(c);
         const top = try window(memory, regions, inputs, f, yy, xx, cc);
         const o_at = addr.address(inputs.bases.ofm, maps.ofm, q.ofm_stride, f, yy, xx, cc);
-        try minmax.store(memory, try minmax.location(regions, maps.ofm.region, o_at, f.size), @min(@max(top, low), high), f);
+        try minmax.store(
+            memory,
+            try minmax.location(regions, maps.ofm.region, o_at, f.size),
+            @min(@max(top, low), high),
+            f,
+        );
         written += 1;
     };
     return written;

@@ -5,11 +5,12 @@
 //! boundary after the wanted one, and the verdict names that arrival's own
 //! address.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
+
 const breakpoint = @import("../breakpoint.zig");
+const cpu = @import("ra8_chip").core.cpu.cpu;
+const elf = @import("ra8_board").image.elf;
 const pc_hits = @import("../pc_hits.zig");
 const profile = @import("../profile.zig");
-const cpu = @import("ra8_chip").core.cpu.cpu;
 
 pub const Break = breakpoint.Break;
 
@@ -60,5 +61,8 @@ fn instructionThunk(context: *anyopaque, address: u32) void {
 /// The verdict line, worded as src/interfaces/cli/main.zig words it.
 pub fn verdict(out: anytype, place: []const u8, point: Break, at: u32, pc: u32, budget: usize) !void {
     if (point.reached) return out.print("reached {s} arrival {d}, pc 0x{X:0>8}\n", .{ place, point.seen, at });
-    try out.print("ran {d} instructions, reached {s} {d} time(s) of {d}, pc 0x{X:0>8}\n", .{ budget, place, point.seen, point.arrival, pc });
+    try out.print(
+        "ran {d} instructions, reached {s} {d} time(s) of {d}, pc 0x{X:0>8}\n",
+        .{ budget, place, point.seen, point.arrival, pc },
+    );
 }

@@ -4,6 +4,7 @@
 //! prints. Every key is always present; `ports` holds only the ports the
 //! firmware touched.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
 const net = @import("ra8_board").net;
 
@@ -32,7 +33,10 @@ pub fn section(j: anytype, board: *Board) !void {
 
 fn steps(j: anytype, machine: anytype) !void {
     try j.field("refused_steps", machine.refused);
-    try j.field("last_refused", if (machine.refused != 0) if (machine.last_refused) |m| @tagName(m) else null else null);
+    try j.field(
+        "last_refused",
+        if (machine.refused != 0) if (machine.last_refused) |m| @tagName(m) else null else null,
+    );
 }
 
 fn ports(j: anytype, cluster: *const net.Rswitch) !void {
@@ -49,7 +53,11 @@ fn ports(j: anytype, cluster: *const net.Rswitch) !void {
         try j.field("dark_reads", port.dark_reads);
         const octets = port.mac.octets();
         var text: [17]u8 = undefined;
-        _ = try std.fmt.bufPrint(&text, "{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}", .{ octets[0], octets[1], octets[2], octets[3], octets[4], octets[5] });
+        _ = try std.fmt.bufPrint(
+            &text,
+            "{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}:{x:0>2}",
+            .{ octets[0], octets[1], octets[2], octets[3], octets[4], octets[5] },
+        );
         try j.open("mac", '{');
         try j.field("address", if (port.mac.quiet()) null else @as([]const u8, &text));
         try j.field("stores", port.mac.stores);

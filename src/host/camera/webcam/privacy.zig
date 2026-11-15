@@ -5,8 +5,8 @@
 //! after the user's own consent and says how to fix it, instead of failing
 //! later on an opaque access error. Other hosts have no such setting and
 //! the check passes.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 /// What a consent value says. Windows writes "Allow" or "Deny"; a missing
 /// key or any other value is unset, which Windows treats as allowed.
@@ -15,7 +15,9 @@ pub const Verdict = enum { allowed, denied, unset };
 /// The consent key, under both HKEY_LOCAL_MACHINE and HKEY_CURRENT_USER.
 pub const key = "Software\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\webcam";
 
-pub const blocked_message = "webcam blocked by Windows privacy settings: turn on Settings > Privacy & security > Camera > Camera access and Let desktop apps access your camera";
+pub const blocked_message = "webcam blocked by Windows privacy settings: turn on Settings > Privacy & " ++
+    "security > Camera > Camera access and Let desktop apps access your " ++
+    "camera";
 
 pub const Error = error{PrivacyBlocked};
 

@@ -1,58 +1,29 @@
-//! SCI_B: the serial channels, so a console print ends instead of spinning.
+//! Ten SCI_B channels at 0x4035_8000, stride 0x100 (HUM Ch29;
+//! ra8_sci_regs.h). The EK-RA8D2 console uses SCI8 on PD02/PD03.
 //!
-//! The RA8D2 puts ten SCI_B channels at 0x4035_8000, 0x100 apart (HUM Ch 29,
-//! ra8_sci_regs.h, the 32-bit-register variant). The EK-RA8D2 console is SCI8
-//! on PD02/PD03, and it is the block every non-display example reaches first:
-//! `ra8_sci_putc_polling` writes a byte and then waits on CSR.TDRE, and
-//! `ra8_sci_getc_polling` waits on CSR.RDRF. Until now the window fell through
-//! to the sparse register file, where a status poll gets alternating stand-in
-//! values rather than a transmitter that drains, so console output was a race
-//! against the instruction budget instead of a result. Ported from
-//! board_periph_sci.c on dev.
+//! RDR/+0x00 and TDR/+0x04 use byte 0. Accesses missing that lane are
+//! rejected and counted; refused reads do not consume queued input.
+//! CCR0/+0x08 controls RE/TE and interrupt enables; CSR/+0x48 reports
+//! TDRE/TEND/RDRF/RXDMON. FIFO status is at +0x50/+0x54 and flag clears
+//! at +0x68/+0x70 are write-one-to-clear.
 //!
-//!   RDR   (+0x00) receive data, RDAT[7:0]
-//!   TDR   (+0x04) transmit data, TDAT[7:0]
-//!   CCR0  (+0x08) RE, TE and the three interrupt enables
-//!   CSR   (+0x48) TDRE, TEND, RDRF, RXDMON
-//!   FRSR  (+0x50) receive-FIFO status
-//!   FTSR  (+0x54) transmit-FIFO status
-//!   CFCLR (+0x68) common flag clear, write-1-to-clear
-//!   FFCLR (+0x70) FIFO flag clear, write-1-to-clear
-//!
-//! The transmitter is always drained here: there is no baud-rate clock in an
-//! instruction-stepped emulator, so a byte written to TDR is captured and gone,
-//! and TDRE/TEND read as set. The receiver is a host-fed ring per channel, so
-//! RDRF is a fact about queued bytes rather than a value a driver wrote.
-//!
-//! THE SIMPLE LIN HALF OF THE WINDOW ANSWERS TOO. XCR0/XCR1/XCR2, XSR0/XSR1
-//! and XFCLR sit in the same channel window and used to fall through the
-//! `else` arms below: every store dropped, every read zero. XCR1.TCST is a
-//! self-clearing strobe that starts a break field, so reading it back clear
-//! is exactly what ra8_sci_lin_send_break polls for, and the call returned
-//! success for a break that never happened. The rule and its evidence live
-//! in src/chip/periph/sci/lin.zig.
-//!
-//! RDR AND TDR ARE A DATA PORT, AND THE PORT IS THE BYTE RDAT/TDAT SITS IN.
-//! An access that does not name byte 0 of the word carries no character in
-//! either direction. The store side always said so. The read side did not:
-//! it popped the receive ring for any access landing anywhere in RDR, so a
-//! driver loading one of the bytes above RDAT ate a received character, was
-//! handed zero for it, and the run counted the byte as delivered while the
-//! next read of RDAT starved. Both directions are refused and counted now,
-//! and a refused read leaves the ring holding what it had, so the driver can
-//! come back with a load that names the data.
-const std = @import("std");
+//! TDR captures output immediately, with TDRE/TEND set; there is no baud clock.
+//! Host-fed receive rings determine RDRF. lin.zig owns the LIN registers and
+//! the self-clearing XCR1.TCST break strobe.
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 const periph = @import("../registry.zig");
 const sci_status = @import("status.zig");
+
 pub const status = sci_status;
+const sci_device = @import("device.zig");
 const sci_lin = @import("lin.zig");
 pub const spi = @import("spi.zig");
-const sci_device = @import("device.zig");
+
 pub const device = sci_device;
-pub const ring = @import("ring.zig");
 pub const error_latches = @import("error_latches.zig");
 const lanes = @import("../lanes.zig");
+pub const ring = @import("ring.zig");
 
 /// SCI_B geometry. The Non-secure alias is folded onto this base by the bus
 /// before anything here sees it.
@@ -172,13 +143,14 @@ pub const Channel = struct {
 /// live in src/chip/periph/sci/line.zig.
 pub const Line = @import("line.zig").Line;
 
+pub const input = @import("input.zig");
+pub const line = @import("line.zig");
+pub const peek = @import("peek.zig");
+pub const reply = @import("reply.zig");
+pub const snapshot = @import("snapshot.zig");
+
 /// What a watcher outside the run sees of every sent byte (RA8EMU-206).
 pub const Tap = @import("tap.zig").Tap;
-pub const line = @import("line.zig");
-pub const reply = @import("reply.zig");
-pub const peek = @import("peek.zig");
-pub const input = @import("input.zig");
-pub const snapshot = @import("snapshot.zig");
 pub const tap = @import("tap.zig");
 
 /// The block: ten channels and the console line capture.
@@ -297,9 +269,9 @@ pub const Sci = struct {
             // TDAT is TDR[7:0]. A narrow store that does not name that byte
             // carries no character, and the bits above it are the parity and
             // multiprocessor fields nothing here interprets.
-            off_tdr => if (lane == 0)
-                self.writeData(index, @truncate(value & data_mask))
-            else {
+            off_tdr => if (lane == 0) {
+                self.writeData(index, @truncate(value & data_mask));
+            } else {
                 channel.unnamed_stores +%= 1;
             },
             // A narrow store leaves the bytes it does not name where they
@@ -375,7 +347,7 @@ pub const Sci = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
-            .peekFn = @import("peek.zig").thunk,
+            .peekFn = peek.thunk,
         };
     }
 };

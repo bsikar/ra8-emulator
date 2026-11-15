@@ -8,15 +8,28 @@
 //! outside guest memory is RA8EMU-564's. A successful restore invalidates
 //! decode and block caches before execution resumes.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
-const fields = @import("ra8_snapshot").fields;
+
 const Cpu = @import("cpu.zig").Cpu;
 const Entry = @import("exception/active.zig").Entry;
+const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
 /// The Cpu fields saved whole, in format order. Appending is a format change.
-pub const saved = .{ "regs", "fp", "retired", "vtor", "raised", "exclusive", "banked", "entering_non_secure", "secure_faults", "event", "waiting" };
+pub const saved = .{
+    "regs",
+    "fp",
+    "retired",
+    "vtor",
+    "raised",
+    "exclusive",
+    "banked",
+    "entering_non_secure",
+    "secure_faults",
+    "event",
+    "waiting",
+};
 pub const lifecycle = .{ "slots", "sync_entries", "booted" };
 
 /// A cpu section for `core` (0 for CPU0, 1 for CPU1).
@@ -52,12 +65,18 @@ pub fn complete() bool {
 
 fn body(cpu: *const Cpu, core: u8, writer: anytype) !void {
     try fields.write(writer, core);
-    inline for (saved) |name| try fields.write(writer, @field(cpu, name));
-    inline for (lifecycle) |name| try fields.write(writer, @field(cpu, name));
+    inline for (saved) |name| {
+        try fields.write(writer, @field(cpu, name));
+    }
+    inline for (lifecycle) |name| {
+        try fields.write(writer, @field(cpu, name));
+    }
     // Only the live entries: the rest of the stack is undefined.
     const live = cpu.active.stack[0..cpu.active.depth];
     try fields.write(writer, @as(u8, @intCast(live.len)));
-    for (live) |entry| try fields.write(writer, entry);
+    for (live) |entry| {
+        try fields.write(writer, entry);
+    }
 }
 
 /// Restores `core`'s state from a whole snapshot file. On any error the
@@ -85,12 +104,18 @@ pub fn prepare(cpu: *const Cpu, core: u8, bytes: []const u8) Error!Cpu {
 
 fn apply(cpu: *Cpu, cursor: *fields.Cursor) Error!void {
     var next = cpu.*;
-    inline for (saved) |name| @field(next, name) = try fields.read(@TypeOf(@field(next, name)), cursor);
-    inline for (lifecycle) |name| @field(next, name) = try fields.read(@TypeOf(@field(next, name)), cursor);
+    inline for (saved) |name| {
+        @field(next, name) = try fields.read(@TypeOf(@field(next, name)), cursor);
+    }
+    inline for (lifecycle) |name| {
+        @field(next, name) = try fields.read(@TypeOf(@field(next, name)), cursor);
+    }
     if (next.sync_entries > next.slots) return Error.BadValue;
     const depth = try fields.read(u8, cursor);
     if (depth > next.active.stack.len) return Error.BadValue;
-    for (next.active.stack[0..depth]) |*entry| entry.* = try fields.read(Entry, cursor);
+    for (next.active.stack[0..depth]) |*entry| {
+        entry.* = try fields.read(Entry, cursor);
+    }
     next.active.depth = depth;
     if (!cursor.done()) return Error.BadValue;
     cpu.* = next;

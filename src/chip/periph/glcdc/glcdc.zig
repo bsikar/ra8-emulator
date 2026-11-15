@@ -1,36 +1,29 @@
-//! GLCDC: the display controller, and where the panel is being scanned from.
+//! RA8D2 graphics LCD controller at 0x4034_2000 (HUM Ch63;
+//! ra8_glcdc_regs.h). Layers select a framebuffer, stride, height and format;
+//! FLMRD.RENB enables fetch and BG_EN.EN enables output.
 //!
-//! The RA8D2 graphics LCD controller sits at 0x4034_2000 (HUM Ch 63,
-//! ra8_glcdc_regs.h). The display and e-reader examples program a graphics
-//! layer's framebuffer address, line stride, line count and pixel format,
-//! then set FLMRD.RENB to fetch and BG_EN.EN to turn the output stage on.
-//! Ported from board_periph_glcdc.c on dev.
-//!
-//! The register map and field masks live in window.zig. A VEN BIT IS A
-//! COMMAND, NOT A SETTING. BG_EN, GR1_EN and GR2_EN each carry one and the
-//! driver polls BG_EN.VEN for the vblank window; dev stored the bit, so
-//! that poll burned its budget and the background colour was never written.
-//! The bit is spent on the write here; the rule and its evidence live in
-//! latch.zig.
-//!
-//! The block sits in the switchable graphics power domain (HUM Ch 11.5.1
-//! Table 11.7 p 480), dark at reset, so it asks pdctr.zig before answering:
-//! programming a dark display controller is the shape of the C tree's
-//! issue #247.
-const periph = @import("../registry.zig");
-const pdctr = @import("../pdctr.zig");
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
-pub const clut = @import("clut.zig");
-const lanes = @import("../lanes.zig");
-pub const pixel = @import("pixel.zig");
-pub const scan = @import("scan.zig");
+//! window.zig defines registers and masks. latch.zig handles VEN command
+//! strobes in BG_EN/GR1_EN/GR2_EN; these bits do not remain set on readback.
+//! The controller checks pdctr.zig before answering while its switchable
+//! graphics power domain is off at reset (HUM 11.5.1, Table11.7 p480).
+const peek = @import("peek.zig");
+
 pub const blend = @import("blend.zig");
+pub const clut = @import("clut.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
+const lanes = @import("../lanes.zig");
 pub const mix = @import("mix.zig");
 pub const out = @import("out.zig");
+const pdctr = @import("../pdctr.zig");
+const periph = @import("../registry.zig");
+pub const pixel = @import("pixel.zig");
+pub const scan = @import("scan.zig");
+
 pub const vsync = out.vsync;
-pub const frame = @import("frame.zig");
 pub const backdrop = @import("backdrop.zig");
+pub const frame = @import("frame.zig");
 pub const pure = @import("pure.zig");
+
 pub const Framebuffer = window.Framebuffer;
 pub const Window = window.Window;
 pub const ram_windows = window.ram_windows;
@@ -39,14 +32,16 @@ pub const shapeOf = window.shapeOf;
 pub const windowEnd = window.windowEnd;
 pub const addressIsRam = window.addressIsRam;
 
-pub const tcon = @import("tcon.zig");
-pub const sys = @import("sys.zig");
-pub const latch = @import("latch.zig");
 pub const gamma = @import("gamma.zig");
+pub const latch = @import("latch.zig");
 pub const snapshot = @import("snapshot.zig");
+pub const sys = @import("sys.zig");
+pub const tcon = @import("tcon.zig");
+
 /// GLCDC geometry. The span reaches past the graphics layers to the panel
 /// clock control at +0x1450, which is the last register in the block.
 pub const window = @import("window.zig");
+
 pub const win_base = window.win_base;
 pub const win_span = window.win_span;
 pub const off = window.off;
@@ -266,7 +261,9 @@ pub const Glcdc = struct {
     /// underflow on the layer that was fetching, not a silent blank frame.
     fn frameLost(self: *Glcdc, why: scan.Refusal, fetching: []const u8) ?scan.Picture {
         if (why == .off_ram or why == .fault or why == .too_big) {
-            for (fetching) |layer| self.system.underflow(layer);
+            for (fetching) |layer| {
+                self.system.underflow(layer);
+            }
         }
         return self.scanner.refuseWith(why);
     }
@@ -385,7 +382,7 @@ pub const Glcdc = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
-            .peekFn = @import("peek.zig").thunk,
+            .peekFn = peek.thunk,
         };
     }
 };

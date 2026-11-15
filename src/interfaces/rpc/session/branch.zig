@@ -1,10 +1,11 @@
 //! Branch RPC handlers (Slice 20.4): list, switch, delete, confirm and cancel fork.
-const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
+
 const branch_wire = @import("branch_wire.zig");
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
 const ra8_session = @import("ra8_session");
+const rpc = @import("ra8_rpc_wire");
+
 const lifecycle = ra8_session.history_lifecycle;
 
 const AckOutcome = rpc.Outcome(proto.Ack);
@@ -18,9 +19,17 @@ fn refuse() AckOutcome {
 pub fn branchList(context: *handlers.Context, args: proto.CoreOnly) ListOutcome {
     _ = args;
     const gpa = context.gpa orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
-    const router = context.session.fork_router orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) };
+    const router = context.session.fork_router orelse return .{
+        .err = @fromBackingInt(@intCast(handlers.app_codes.history)),
+    };
     const graph = router.graph orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) };
-    const info = lifecycle.list(gpa, graph, router.active_line) catch return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
+    const info = lifecycle.list(
+        gpa,
+        graph,
+        router.active_line,
+    ) catch return .{
+        .err = @fromBackingInt(@intCast(handlers.app_codes.refused)),
+    };
     defer gpa.free(info);
 
     const room = @min(context.scratch.len / branch_wire.item_bytes, branch_wire.max_items);

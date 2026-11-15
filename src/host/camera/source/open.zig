@@ -3,13 +3,14 @@
 //! input as the camera's frame source, so the camera never opens a host file
 //! or device itself. The gradient needs no host input.
 const std = @import("std");
+
 const decoded = @import("../decoded_image.zig");
 const image_file = @import("../image_file.zig");
-const video_file = @import("../video_file.zig");
-const pipe_input = @import("../pipe/input.zig");
 const opener = @import("../webcam/open.zig");
-const webcam_capture = @import("../webcam/input.zig");
+const pipe_input = @import("../pipe/input.zig");
 const source_spec = @import("spec.zig");
+const video_file = @import("../video_file.zig");
+const webcam_capture = @import("../webcam/input.zig");
 
 /// One opened host input. `picture(when)` returns packed RGB888 for a
 /// capture armed at `when` emulated ns.
@@ -65,7 +66,9 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, spec: source_spec.Spec) !?
         .image => .{ .still = image_file.Still.load(allocator, io, spec.arg) catch |err| return refuse(spec, err) },
         .video => .{ .clip = video_file.Clip.load(allocator, io, spec.arg) catch |err| return refuse(spec, err) },
         .pipe => .{ .pipe = pipe_input.Pipe.load(allocator, io, spec.arg) catch |err| return refuse(spec, err) },
-        .webcam => .{ .webcam = opener.open(allocator, io, spec.arg, spec.allow_webcam) catch |err| return refuse(spec, err) },
+        .webcam => .{
+            .webcam = opener.open(allocator, io, spec.arg, spec.allow_webcam) catch |err| return refuse(spec, err),
+        },
     };
     errdefer closeHost(host);
     const self = try allocator.create(Input);

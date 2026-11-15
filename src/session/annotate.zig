@@ -13,10 +13,11 @@
 //! per line, and nothing here needs an allocator. Every name is a slice into
 //! the image's own bytes, valid as long as the image is.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
-const text = @import("ra8_chip").core.cpu.text.text;
-const symbols = @import("symbols.zig");
+
 const dwarf = @import("dwarf/dwarf.zig");
+const elf = @import("ra8_board").image.elf;
+const symbols = @import("symbols.zig");
+const text = @import("ra8_chip").core.cpu.text.text;
 
 /// The name the image puts on `address`, or null when none matches. An
 /// exact symbol wins whichever kind it is: a branch target needs a

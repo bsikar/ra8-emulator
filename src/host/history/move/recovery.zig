@@ -1,10 +1,14 @@
 //! Reacquire both roots before settling a root-anchored native operation.
+const bridge = @import("bridge.zig");
+
 const std = @import("std");
+
+const Context = @import("context.zig").Context;
+const deadline = @import("deadline.zig");
 const h = @import("../root.zig");
 const intent = @import("intent.zig");
-const deadline = @import("deadline.zig");
 const wire = @import("wire.zig");
-const Context = @import("context.zig").Context;
+
 const Base = h.base.Base;
 
 pub fn root(base: *const Base, id: []const u8) anyerror!void {
@@ -21,8 +25,15 @@ pub fn root(base: *const Base, id: []const u8) anyerror!void {
     const record = saved.value;
     var other: ?Base = null;
     if (!std.mem.eql(u8, base.path, record.to_path)) {
-        if (base.role != .cache or !std.mem.startsWith(u8, record.purpose, h.layout.moves.keep)) return error.BadReceipt;
-        other = try Base.existingConfigured(base.allocator, base.io, record.to_path, .kept, .{ .native_provider = base.native_provider, .recover = false });
+        if (base.role != .cache or
+            !std.mem.startsWith(u8, record.purpose, h.layout.moves.keep)) return error.BadReceipt;
+        other = try Base.existingConfigured(
+            base.allocator,
+            base.io,
+            record.to_path,
+            .kept,
+            .{ .native_provider = base.native_provider, .recover = false },
+        );
     }
     defer if (other) |*target| target.close();
     const target: *const Base = if (other) |*value| value else base;
@@ -67,7 +78,7 @@ pub fn root(base: *const Base, id: []const u8) anyerror!void {
         };
         return;
     }
-    try @import("bridge.zig").settle(context, base.native_provider, current.value);
+    try bridge.settle(context, base.native_provider, current.value);
     if (other != null) {
         source_open = false;
         try h.lock.retire(base.io, base.dir, id, lease);

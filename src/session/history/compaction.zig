@@ -6,10 +6,11 @@
 //! computed specifying which live objects to copy into a new consolidated pack
 //! and which packs become obsolete.
 const std = @import("std");
-const ObjectId = @import("object_id.zig").ObjectId;
-const pack_mod = @import("pack.zig");
-const pack_index = @import("pack_index.zig");
+
 const manifest_mod = @import("manifest.zig");
+const ObjectId = @import("object_id.zig").ObjectId;
+const pack_index = @import("pack_index.zig");
+const pack_mod = @import("pack.zig");
 
 pub const trigger_percent: u32 = 30;
 

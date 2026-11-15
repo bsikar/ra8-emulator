@@ -5,15 +5,16 @@
 //! when it holds a code address, lr; without an image the frames carry
 //! only their pcs.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
-const backtrace_wire = @import("../backtrace_wire.zig");
+
 const api = @import("ra8_session").api;
-const symbols = @import("ra8_session").symbols;
+const backtrace_wire = @import("../backtrace_wire.zig");
 const dwarf_line = @import("ra8_session").dwarf.line;
-const unwind = @import("ra8_session").unwind;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
+const symbols = @import("ra8_session").symbols;
 const txm_debug = @import("ra8_session").txm.debug;
+const unwind = @import("ra8_session").unwind;
 
 const Image = symbols.Image;
 const Outcome = rpc.Outcome(proto.Backtrace);
@@ -52,7 +53,15 @@ pub fn walk(view: anytype, image: ?Image, into: *[unwind.limits.frames]unwind.Fr
 /// Frame `index` of the walk. A return address is the instruction after
 /// the call, so a caller's frame is named and placed from the byte before.
 fn describe(image: ?Image, modules: ?*const txm_debug.Table, found: unwind.Frame, index: usize) proto.StackFrame {
-    var frame: proto.StackFrame = .{ .pc = found.pc, .interrupted = @intFromBool(index > 0 and found.exact), .offset = 0, .line = 0, .name = "", .file = "" };
+    var frame: proto.StackFrame = .{
+        .pc = found.pc,
+        .interrupted = @intFromBool(index > 0 and
+            found.exact),
+        .offset = 0,
+        .line = 0,
+        .name = "",
+        .file = "",
+    };
     const at = if (index == 0 or found.exact) found.pc else found.pc -% 1;
     if (modules) |table| if (table.inside(at)) |named| return withName(frame, named, found.pc -% at);
     const loaded = image orelse return frame;

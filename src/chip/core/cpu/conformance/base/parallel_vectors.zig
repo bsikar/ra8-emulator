@@ -68,7 +68,16 @@ fn bad(name: []const u8, hw1: u16, hw2: u16) V {
 }
 
 pub const all = [_]V{
-    mod("sadd16 wraps a lane and sets GE on non-negative sums", add16, s, 0x7FFF_0001, 0x0001_0001, 0x8000_0002, 0, 0xF),
+    mod(
+        "sadd16 wraps a lane and sets GE on non-negative sums",
+        add16,
+        s,
+        0x7FFF_0001,
+        0x0001_0001,
+        0x8000_0002,
+        0,
+        0xF,
+    ),
     mod("sadd16 negative sums clear every GE bit", add16, s, 0xFFFF_8000, 0xFFFF_FFFF, 0xFFFE_7FFF, 0xF, 0),
     mod("uadd16 sets GE on a lane carry", add16, u, 0xFFFF_0001, 0x0001_0001, 0x0000_0002, 0, 0xC),
     mod("ssub16 sets GE on non-negative differences", sub16, s, 0x0005_0003, 0x0003_0005, 0x0002_FFFE, 0, 0xC),
@@ -90,8 +99,16 @@ pub const all = [_]V{
     keep("uhadd16 keeps the carry bit", add16, uh, 0xFFFF_0003, 0xFFFF_0000, 0xFFFF_0001),
     keep("uhsub16 of a borrow", sub16, uh, 0x0000_0010, 0x0002_0004, 0xFFFF_0006),
     keep("uhsax crossed halving", sax, uh, 0x0010_FFFF, 0xFFFF_0020, 0xFFF8_FFFF),
-    vec("sadd8 r12, lr, r4", .{ .hw1 = 0xFA8E, .hw2 = 0xFC04, .n = 0x0101_0101, .m = 0x0202_0202 }, .{ .rd = 0x0303_0303, .ge = 0xF }),
-    vec("uadd8 r1, r1, r1 reads before writing", .{ .hw1 = add8, .hw2 = 0xF141, .n = 0x8040_01FF, .m = 0x8040_01FF }, .{ .rd = 0x0080_02FE, .ge = 0x9 }),
+    vec(
+        "sadd8 r12, lr, r4",
+        .{ .hw1 = 0xFA8E, .hw2 = 0xFC04, .n = 0x0101_0101, .m = 0x0202_0202 },
+        .{ .rd = 0x0303_0303, .ge = 0xF },
+    ),
+    vec(
+        "uadd8 r1, r1, r1 reads before writing",
+        .{ .hw1 = add8, .hw2 = 0xF141, .n = 0x8040_01FF, .m = 0x8040_01FF },
+        .{ .rd = 0x0080_02FE, .ge = 0x9 },
+    ),
     bad("op1 011 is unclaimed", 0xFAB1, s),
     bad("op1 111 is unclaimed", 0xFAF1, s),
     bad("op2 11 is unclaimed", add16, 0xF032),

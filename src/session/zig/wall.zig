@@ -4,10 +4,11 @@
 //! each initiator. The longest of them is what the board, both SysTick banks
 //! and the window pacer see.
 const std = @import("std");
+
 const backing = @import("ra8_board").external.backing;
-const clocks = @import("ra8_chip").periph.clocks;
-const Clock = @import("../run/clock.zig").Clock;
 const board_boundary = @import("../board/boundary.zig");
+const Clock = @import("../run/clock.zig").Clock;
+const clocks = @import("ra8_chip").periph.clocks;
 
 /// Charge `instructions` retired by CPU0 to both cores and the board.
 pub fn close(clock: *Clock, instructions: u32) !void {
@@ -21,10 +22,11 @@ pub fn close(clock: *Clock, instructions: u32) !void {
     const cpu0_stall = if (fabric) |unit| unit.takePending(.cpu0) else 0;
     if (clock.cpu1) |second| if (!clock.saved.cut) {
         const before = second.core.cpu.slots;
-        if (rate_scaled)
-            second.roundAt(instructions, clock.boundary_hz.?)
-        else
+        if (rate_scaled) {
+            second.roundAt(instructions, clock.boundary_hz.?);
+        } else {
             second.round(instructions);
+        }
         clock.saved.lengths[1] += @intCast(second.core.cpu.slots - before);
     };
     const cpu1_stall = if (fabric) |unit| unit.takePending(.cpu1) else 0;
@@ -38,7 +40,14 @@ pub fn close(clock: *Clock, instructions: u32) !void {
     var pending_cut = clock.saved.cut_pending;
     while (left != 0) {
         const piece: u32 = @intCast(@min(left, std.math.maxInt(u32)));
-        try board_boundary.charge(clock.timebase, &clock.ns_timebase, clock.memory, piece, clock.saved.cut, &pending_cut);
+        try board_boundary.charge(
+            clock.timebase,
+            &clock.ns_timebase,
+            clock.memory,
+            piece,
+            clock.saved.cut,
+            &pending_cut,
+        );
         try clock.board.tick(clock.memory, piece);
         left -= piece;
     }

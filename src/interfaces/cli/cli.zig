@@ -1,23 +1,31 @@
 //! The command line: the flags the emulator takes and nothing else.
+const args_api = @import("frames/args.zig");
+const audio_out = @import("audio_out.zig");
+const chip = @import("ra8_chip");
+const components = @import("ra8_components");
+const host_api = @import("ra8_host");
+const state_args = @import("state_args.zig");
+
 const std = @import("std");
-const part = @import("ra8_chip").core.part;
-const place = @import("ra8_session").place;
-const pc_hits = @import("ra8_session").pc_hits;
-const mem_dump = @import("ra8_session").mem_dump;
-const gt911 = @import("ra8_components").gt911;
-const world_flags = @import("world_flags.zig");
-const max17048 = @import("ra8_components").max17048;
-const sd_format = @import("ra8_components").sd_card.format;
-const cpu_choice = @import("ra8_chip").core.cpu.choice;
-const rtos_load = @import("ra8_session").rtos.load;
-const request = @import("ra8_components").request;
-pub const ctl = @import("ctl/ctl.zig");
-const rtc_start = @import("ra8_session").rtc.start;
-const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
-pub const usage = @import("usage.zig").text;
+
 pub const card = @import("card/card.zig");
 pub const console_output = @import("console_output.zig");
+const cpu_choice = @import("ra8_chip").core.cpu.choice;
+pub const ctl = @import("ctl/ctl.zig");
+const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
+const gt911 = @import("ra8_components").gt911;
 pub const host = @import("host/host.zig");
+const max17048 = @import("ra8_components").max17048;
+const mem_dump = @import("ra8_session").mem_dump;
+const part = @import("ra8_chip").core.part;
+const pc_hits = @import("ra8_session").pc_hits;
+const request = @import("ra8_components").request;
+const rtc_start = @import("ra8_session").rtc.start;
+const rtos_load = @import("ra8_session").rtos.load;
+const sd_format = @import("ra8_components").sd_card.format;
+pub const usage = @import("usage.zig").text;
+const world_flags = @import("world_flags.zig");
+
 /// How many `--dump-sym` names one run will carry: the suite asks for at most
 /// two (progress and failure counters), so this is a little room above that.
 pub const dump_limit: usize = 8;
@@ -78,9 +86,9 @@ pub const Options = struct {
     /// `--frame-out PATH`: the panel as a PNG at the end of the run (RA8EMU-73).
     frame_out: ?[]const u8 = null,
     panel_only: bool = false, // `--panel-only`: only the glass, at its own size
-    frames: @import("frames/args.zig").Options = .{},
-    audio: @import("audio_out.zig").Options = .{}, // `--audio-out`, `--audio-rate`
-    rtc_start: ?@import("ra8_session").rtc.start.Start = null,
+    frames: args_api.Options = .{},
+    audio: audio_out.Options = .{}, // `--audio-out`, `--audio-rate`
+    rtc_start: ?rtc_start.Start = null,
     /// The panel's frame clock, `--panel-vsync off|phase_ns,period_ns`
     /// (RA8EMU R9): root config, applied identically to a plain run, a
     /// session and a restored session. Null is off, the default.
@@ -90,9 +98,9 @@ pub const Options = struct {
     idle_skip: bool = true, // a sleeping core runs to its next edge; `--no-idle-skip` steps it
     usb_loop: bool = false, // cable the HS host jack to the board's own FS device jack
     trace_sd: bool = false, // write one line per SD command to stderr
-    state: @import("state_args.zig").Options = .{}, // `--save-state`, `--load-state` (RA8EMU-696)
+    state: state_args.Options = .{}, // `--save-state`, `--load-state` (RA8EMU-696)
     console: bool = false, // `--console`: stream finished SCI console lines to stdout
-    console_reply: @import("ra8_chip").periph.sci.reply.Reply = .{}, // RA8EMU-626
+    console_reply: chip.periph.sci.reply.Reply = .{}, // RA8EMU-626
     dump_sd: ?u32 = null, // print this card block back as hex once the run is over
     faults: ?[]const u8 = null, // `--faults FILE`: hardware changes at virtual times (RA8EMU-207)
     /// Contacts queued on the touch panel, one drained per frame read.
@@ -107,7 +115,7 @@ pub const Options = struct {
     board_profile: ?[]const u8 = null,
     detach_c6: bool = false,
     /// `--net-record DIR` / `--net-replay DIR`: the C6's host traffic (RA8EMU-560).
-    net_tape: ?@import("ra8_components").esp_tape.Spec = null,
+    net_tape: ?components.esp_tape.Spec = null,
     /// `--attach NAME@ENDPOINT`: extra catalog models, in the order asked.
     attaches: [request.max]request.Request = undefined,
     attach_count: usize = 0,
@@ -189,7 +197,7 @@ pub const Options = struct {
     /// periods. Null is untimed and the run goes to its instruction budget.
     ms: ?u64 = null,
     /// `--camera-source KIND[:ARG]`: where the CEU's pixels come from (RA8EMU-525).
-    camera: @import("ra8_host").camera.source_spec.Spec = .{},
+    camera: host_api.camera.source_spec.Spec = .{},
 
     /// The names asked for, as a slice rather than the fixed array.
     pub fn dumps(self: *const Options) []const []const u8 {
@@ -201,24 +209,14 @@ pub const Options = struct {
         return self.dump_mem[0..self.dump_mem_count];
     }
 
-    /// How many instructions this run gets. An explicit `--instructions`
-    /// always wins; otherwise a run with a counter to watch gets the
-    /// watched budget and every other run gets the default.
-    ///
-    /// `watching` is whether a counter was actually resolved, not whether
-    /// the flag was spelled: a `--stop-sym` naming a symbol the image does
-    /// not carry watches nothing, and spending the larger budget on it
-    /// would cost seconds per app to reach the same verdict.
-    ///
-    /// A timed run sizes its own ceiling from the deadline it was given, so
-    /// asking for more milliseconds buys more instructions to spend them in
-    /// rather than running into a number set for some other app.
-    /// The load window when a flag asked for the RTOS trace, else null.
+    /// Return the requested RTOS window, or null when tracing is disabled.
     pub fn rtosWanted(self: *const Options) ?rtos_load.Window {
         if (!self.trace_rtos and !self.cpu_load) return null;
         return self.cpu_load_window;
     }
 
+    /// Explicit instructions take precedence, then a timed ceiling.
+    /// A larger watched budget applies only when a counter was resolved.
     pub fn budgetFor(self: *const Options, watching: bool) usize {
         if (self.instructions) |asked| return asked;
         if (self.ms) |milliseconds| return ceilingFor(milliseconds);
@@ -329,8 +327,8 @@ fn parseCtl(argv: []const []const u8) !Options {
 /// `parse` to keep each chain inside the length gate. True when the flag was
 /// one of these and `index` has been walked past any value it took.
 fn parseDebug(options: *Options, argv: []const []const u8, index: *usize) !bool {
-    if (try @import("frames/args.zig").parse(&options.frames, argv, index)) return true;
-    if (try @import("state_args.zig").parse(&options.state, argv, index)) return true;
+    if (try args_api.parse(&options.frames, argv, index)) return true;
+    if (try state_args.parse(&options.state, argv, index)) return true;
     const flag = argv[index.*];
     if (std.mem.eql(u8, flag, "--cpu1")) {
         options.cpu1_path = try world_flags.next(argv, index);

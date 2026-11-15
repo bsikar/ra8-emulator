@@ -5,9 +5,9 @@
 //! debugger does before the firmware runs. Without a debugger the PPB reads zero and those
 //! images print nothing, so a `--console` run opens the ITM the way a probe
 //! leaves it and shows port 0's lines as `itm: <line>`, the debugger's form.
+const clocks = @import("ra8_chip").periph.clocks;
 const itm = @import("ra8_chip").periph.itm;
 const memmap = @import("ra8_chip").core.memmap;
-const clocks = @import("ra8_chip").periph.clocks;
 
 /// The ITM as a probe leaves it: enabled, with port 0 on.
 pub fn opened() itm.Itm {
@@ -20,7 +20,9 @@ pub fn prime(memory: anytype, port: *const itm.Itm) !void {
     const demcr = try memory.readWord(memmap.scb.demcr);
     try memory.writeWord(memmap.scb.demcr, demcr | clocks.demcr_trcena);
     var stim: u32 = 0;
-    while (stim < itm.limits.ports) : (stim += 1) try memory.writeWord(itm.base + stim * 4, itm.fifo_ready);
+    while (stim < itm.limits.ports) : (stim += 1) {
+        try memory.writeWord(itm.base + stim * 4, itm.fifo_ready);
+    }
     try memory.writeWord(itm.base + itm.offsets.ter, port.ter);
     try memory.writeWord(itm.base + itm.offsets.tcr, port.tcr);
 }

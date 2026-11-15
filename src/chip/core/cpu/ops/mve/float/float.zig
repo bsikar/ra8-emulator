@@ -4,23 +4,24 @@
 //! VMUL is U=1 op=0 x=1 and VABD is U=1 op=1 x=0. sz=1 is F16. D, N and M
 //! would name Q8 and above, so they must be zero. The lane semantics,
 //! flags and predication rule are in src/chip/core/cpu/mve/float/float.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
-const Instr = @import("../../../instr.zig").Instr;
-const mve = @import("../../../mve/all.zig");
-const mve_beats = @import("../beats.zig");
-const mve_int = @import("../int/int.zig");
 pub const cvt = @import("cvt/cvt.zig");
 pub const fma = @import("fma.zig");
+const Instr = @import("../../../instr.zig").Instr;
 pub const maxnm = @import("maxnm.zig");
 pub const maxnma = @import("maxnma.zig");
 pub const maxnmv = @import("maxnmv.zig");
+const mve = @import("../../../mve/all.zig");
+const mve_beats = @import("../beats.zig");
+const mve_int = @import("../int/int.zig");
+const op = @import("../../../op.zig");
 pub const rint = @import("rint.zig");
 pub const scalar = @import("scalar.zig");
 pub const unary = @import("unary.zig");
 pub const vcadd = @import("vcadd.zig");
 pub const vcmla = @import("vcmla.zig");
 pub const vcmul = @import("vcmul.zig");
+
 const Size = mve.float.Size;
 const Op = mve.float.Op;
 

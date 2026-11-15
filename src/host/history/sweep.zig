@@ -2,9 +2,10 @@
 //! deletion repeats authorization under the root gate, independent of the
 //! earlier listing. There is no PID/heartbeat-based liveness shortcut.
 const std = @import("std");
+
 const Base = @import("base.zig").Base;
-const name = @import("name.zig");
 const catalog = @import("catalog.zig");
+const name = @import("name.zig");
 const remove = @import("remove.zig");
 
 pub const Report = struct {

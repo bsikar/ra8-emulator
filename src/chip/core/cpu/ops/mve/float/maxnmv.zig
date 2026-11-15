@@ -6,12 +6,13 @@
 //! integer VMAXV encoding, which mve_vmaxv.zig leaves alone. M set and Rda
 //! of 13 or 15 (UNPREDICTABLE) stay unclaimed. The fold is in
 //! src/chip/core/cpu/mve/float/minmax/minmax.zig; an F16 result is zero-extended.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
+const fpu = @import("../../../fpu/all.zig");
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
-const fpu = @import("../../../fpu/all.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.float.Size;
 const Which = fpu.minmax.Which;
 

@@ -3,9 +3,10 @@
 //! peripherals hook, or a block no model is paired with, refuses it; a
 //! listing longer than one reply is `too_long`.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const refused = handlers.app_codes.refused;
 
@@ -13,7 +14,13 @@ pub fn periph(context: *handlers.Context, args: proto.PeriphAsk) rpc.Outcome(pro
     const peripherals = context.peripherals orelse return .{ .err = @fromBackingInt(@intCast(refused)) };
     const room = @min(context.scratch.len, proto.PeriphText.max_len.text);
     const core = @backingInt(args.core);
-    const text = peripherals.listFn(peripherals.context, core, args.block, args.json != 0, context.scratch[0..room]) catch |err| {
+    const text = peripherals.listFn(
+        peripherals.context,
+        core,
+        args.block,
+        args.json != 0,
+        context.scratch[0..room],
+    ) catch |err| {
         if (err == error.NoSpaceLeft) return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.too_long)) };
         if (err != error.UnknownBlock) std.debug.print("serve: periph: {s}\n", .{@errorName(err)});
         return .{ .err = @fromBackingInt(@intCast(refused)) };

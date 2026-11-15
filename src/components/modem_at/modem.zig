@@ -25,7 +25,7 @@
 //! ATE1 and the script's own ATE0 turns it off, but nothing in this tree says
 //! how the driver treats an echoed line, so dev's echo-free wire is kept),
 //! the DTR and RI pins, and any timing between the command and its answer.
-const std = @import("std");
+
 const sci = @import("ra8_chip").periph.sci;
 pub const script = @import("script.zig");
 

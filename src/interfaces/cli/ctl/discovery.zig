@@ -74,7 +74,12 @@ fn parseSession(allocator: std.mem.Allocator, line: []const u8, sessions: []Sess
 
 /// `ctl sessions` and `ctl gdb-address [SESSION] [--json]`. Both exit 1
 /// with "start ra8_gui first" when the discovery file is missing.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
+pub fn run(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    argv: []const []const u8,
+) !u8 {
     const command = argv[2];
     var json = false;
     var asked: ?[]const u8 = null;

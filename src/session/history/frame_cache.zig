@@ -11,9 +11,10 @@
 //! and the session thread looks up under one mutex; a lookup copies the
 //! payload bytes under it and decodes outside.
 const std = @import("std");
-const types = @import("frame_cache_types.zig");
-const frame_types = @import("frame_types.zig");
+
 const frame_rebuild = @import("frame_rebuild.zig");
+const frame_types = @import("frame_types.zig");
+const types = @import("frame_cache_types.zig");
 
 pub const Position = types.Position;
 pub const FrameRecord = frame_types.FrameRecord;
@@ -148,7 +149,9 @@ pub const FrameCache = struct {
     /// Capacity was reserved up front, so this cannot fail.
     fn insert(self: *FrameCache, entry: Entry) void {
         var at = self.entries.items.len;
-        while (at > 0 and before(entry.header.position, self.entries.items[at - 1].header.position)) at -= 1;
+        while (at > 0 and before(entry.header.position, self.entries.items[at - 1].header.position)) {
+            at -= 1;
+        }
         self.entries.insertAssumeCapacity(at, entry);
     }
 

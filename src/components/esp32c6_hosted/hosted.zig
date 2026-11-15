@@ -1,27 +1,28 @@
 //! The EK-RA8D2's SPI peer: the idle frame and sideband lines of esp-hosted.
 const std = @import("std");
-const sci = @import("ra8_chip").periph.sci;
-const gpio = @import("ra8_chip").periph.gpio;
 
-pub const frame = @import("frame.zig");
-pub const event = @import("event.zig");
-pub const link = @import("link.zig");
-pub const rpc = @import("rpc.zig");
-pub const station = @import("station.zig");
-pub const queue = @import("queue.zig");
-pub const eth = @import("eth.zig");
+const gpio = @import("ra8_chip").periph.gpio;
+const sci = @import("ra8_chip").periph.sci;
+
 pub const dhcp = @import("dhcp.zig");
-pub const gateway = @import("gateway.zig");
-pub const scan = @import("scan.zig");
 pub const dns = @import("dns/dns.zig");
-pub const net = @import("net.zig");
+pub const eth = @import("eth.zig");
+pub const event = @import("event.zig");
+pub const frame = @import("frame.zig");
+pub const gateway = @import("gateway.zig");
 pub const hold = @import("hold.zig");
-pub const landing = @import("landing.zig");
-pub const tape = @import("tape/tape.zig");
-pub const sock = @import("sock.zig");
 pub const host_net = @import("host_net.zig");
-pub const worker = @import("worker.zig");
+pub const landing = @import("landing.zig");
+pub const link = @import("link.zig");
+pub const net = @import("net.zig");
+pub const queue = @import("queue.zig");
+pub const rpc = @import("rpc.zig");
+pub const scan = @import("scan.zig");
 pub const snapshot = @import("snapshot.zig");
+pub const sock = @import("sock.zig");
+pub const station = @import("station.zig");
+pub const tape = @import("tape/tape.zig");
+pub const worker = @import("worker.zig");
 
 pub const channel: usize = 2;
 pub const handshake_port: u8 = 0;

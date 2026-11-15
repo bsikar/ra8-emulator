@@ -1,8 +1,8 @@
 //! Text for the sat16 group: SSAT16 and USAT16. We print the
 //! saturate position as the bit count, sat_imm + 1 for SSAT16.
+const Fields = @import("../ops/sat16.zig").Fields;
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const Fields = @import("../ops/sat16.zig").Fields;
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = Fields.of(instr).?;

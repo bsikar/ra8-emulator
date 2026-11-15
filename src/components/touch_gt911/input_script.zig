@@ -1,8 +1,10 @@
 //! Timed host input events, dispatched on the board's virtual clock.
 const std = @import("std");
-const host = @import("touch_input.zig");
-const gt911 = @import("gt911.zig");
+
 const gpio = @import("ra8_chip").periph.gpio;
+const gt911 = @import("gt911.zig");
+const host = @import("touch_input.zig");
+
 pub const Event = union(enum) {
     tap: gt911.Contact,
     swipe: struct { from: gt911.Contact, to: gt911.Contact, duration_ns: u64 },
@@ -114,7 +116,9 @@ pub const Script = struct {
         var position = self.cursor;
         while (position < self.len and self.events[position].at_ns <= timed.at_ns) : (position += 1) {}
         var end = self.len;
-        while (end > position) : (end -= 1) self.events[end] = self.events[end - 1];
+        while (end > position) : (end -= 1) {
+            self.events[end] = self.events[end - 1];
+        }
         self.events[position] = timed;
         self.len += 1;
         self.previous_at = @max(self.previous_at, timed.at_ns);
@@ -147,7 +151,14 @@ pub const Script = struct {
         return self.dispatchObserved(now_ns, panel, pins, input, null);
     }
 
-    pub fn dispatchObserved(self: *Script, now_ns: u64, panel: *gt911.Panel, pins: *gpio.Gpio, input: *host.Input, observer: ?*const Landing) void {
+    pub fn dispatchObserved(
+        self: *Script,
+        now_ns: u64,
+        panel: *gt911.Panel,
+        pins: *gpio.Gpio,
+        input: *host.Input,
+        observer: ?*const Landing,
+    ) void {
         // Script times are absolute virtual board time, as the doc says:
         // "at 2s" is 2 s after reset, wherever the first boundary lands.
         const elapsed = now_ns;
@@ -164,20 +175,38 @@ pub const Script = struct {
                     input.refused += 1;
                 },
                 .longpress => |press| {
-                    self.active = .{ .longpress = .{ .point = press.point, .start = timed.at_ns, .duration = press.duration_ns, .next = timed.at_ns + frame_ns } };
+                    self.active = .{
+                        .longpress = .{
+                            .point = press.point,
+                            .start = timed.at_ns,
+                            .duration = press.duration_ns,
+                            .next = timed.at_ns + frame_ns,
+                        },
+                    };
                     panel.queue(press.point) catch {
                         input.refused += 1;
                     };
                 },
                 .swipe => |swipe| {
-                    self.active = .{ .swipe = .{ .from = swipe.from, .to = swipe.to, .start = timed.at_ns, .duration = swipe.duration_ns, .next = timed.at_ns + frame_ns } };
+                    self.active = .{
+                        .swipe = .{
+                            .from = swipe.from,
+                            .to = swipe.to,
+                            .start = timed.at_ns,
+                            .duration = swipe.duration_ns,
+                            .next = timed.at_ns + frame_ns,
+                        },
+                    };
                     panel.queue(swipe.from) catch {
                         input.refused += 1;
                     };
                 },
                 .button => |button| {
                     input.feedLine(panel, pins, switchLine(button.button_id, button.down));
-                    if (button.down) self.button_release = .{ .at_ns = timed.at_ns + button_press_ns, .button_id = button.button_id };
+                    if (button.down) self.button_release = .{
+                        .at_ns = timed.at_ns + button_press_ns,
+                        .button_id = button.button_id,
+                    };
                 },
             }
         }
@@ -216,8 +245,10 @@ fn switchLine(which: Button, down: bool) []const u8 {
 const button_press_ns: u64 = 100_000_000;
 fn interpolate(from: gt911.Contact, to: gt911.Contact, elapsed: u64, duration_ns: u64) gt911.Contact {
     if (duration_ns == 0) return to;
-    const x = @as(i64, from.x) + @divTrunc((@as(i64, to.x) - from.x) * @as(i64, @intCast(elapsed)), @as(i64, @intCast(duration_ns)));
-    const y = @as(i64, from.y) + @divTrunc((@as(i64, to.y) - from.y) * @as(i64, @intCast(elapsed)), @as(i64, @intCast(duration_ns)));
+    const progress: i64 = @intCast(elapsed);
+    const duration_ns_i64: i64 = @intCast(duration_ns);
+    const x = @as(i64, from.x) + @divTrunc((@as(i64, to.x) - from.x) * progress, duration_ns_i64);
+    const y = @as(i64, from.y) + @divTrunc((@as(i64, to.y) - from.y) * progress, duration_ns_i64);
     return .{ .x = @intCast(x), .y = @intCast(y) };
 }
 fn parseLine(line: []const u8) !Timed {
@@ -229,9 +260,20 @@ fn parseLine(line: []const u8) !Timed {
     if (std.mem.eql(u8, verb, "tap")) {
         result = .{ .tap = .{ .x = try number(words.next()), .y = try number(words.next()) } };
     } else if (std.mem.eql(u8, verb, "swipe")) {
-        result = .{ .swipe = .{ .from = .{ .x = try number(words.next()), .y = try number(words.next()) }, .to = .{ .x = try number(words.next()), .y = try number(words.next()) }, .duration_ns = try duration(words.next() orelse return error.InvalidScript) } };
+        result = .{
+            .swipe = .{
+                .from = .{ .x = try number(words.next()), .y = try number(words.next()) },
+                .to = .{ .x = try number(words.next()), .y = try number(words.next()) },
+                .duration_ns = try duration(words.next() orelse return error.InvalidScript),
+            },
+        };
     } else if (std.mem.eql(u8, verb, "longpress")) {
-        result = .{ .longpress = .{ .point = .{ .x = try number(words.next()), .y = try number(words.next()) }, .duration_ns = try duration(words.next() orelse return error.InvalidScript) } };
+        result = .{
+            .longpress = .{
+                .point = .{ .x = try number(words.next()), .y = try number(words.next()) },
+                .duration_ns = try duration(words.next() orelse return error.InvalidScript),
+            },
+        };
     } else if (std.mem.eql(u8, verb, "button")) {
         const name = words.next() orelse return error.InvalidScript;
         if (std.mem.eql(u8, name, "power") or std.mem.eql(u8, name, "sw1")) {
@@ -251,5 +293,9 @@ fn duration(token: []const u8) !u64 {
     const seconds = std.mem.endsWith(u8, token, "s") and !ms;
     if (!ms and !seconds) return error.InvalidScript;
     const digits = token[0 .. token.len - if (ms) @as(usize, 2) else 1];
-    return std.math.mul(u64, try std.fmt.parseInt(u64, digits, 10), if (ms) 1_000_000 else 1_000_000_000) catch error.InvalidScript;
+    return std.math.mul(
+        u64,
+        try std.fmt.parseInt(u64, digits, 10),
+        if (ms) 1_000_000 else 1_000_000_000,
+    ) catch error.InvalidScript;
 }

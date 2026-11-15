@@ -3,8 +3,8 @@
 //! enumeration and a synchronous IMFSourceReader, plus the four DLL
 //! entry points. Plain data, so every host can test it; the externs exist
 //! only when building for Windows.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 pub const Guid = std.os.windows.GUID;
 pub const HRESULT = i32;
@@ -72,7 +72,15 @@ pub const api = if (builtin.os.tag == .windows) struct {
     pub extern "mfplat" fn MFShutdown() callconv(cc) HRESULT;
     pub extern "mfplat" fn MFCreateAttributes(out: *?*anyopaque, size: u32) callconv(cc) HRESULT;
     pub extern "mfplat" fn MFCreateMediaType(out: *?*anyopaque) callconv(cc) HRESULT;
-    pub extern "mf" fn MFEnumDeviceSources(attributes: *anyopaque, out: *?[*]?*anyopaque, count: *u32) callconv(cc) HRESULT;
-    pub extern "mfreadwrite" fn MFCreateSourceReaderFromMediaSource(source: *anyopaque, attributes: ?*anyopaque, out: *?*anyopaque) callconv(cc) HRESULT;
+    pub extern "mf" fn MFEnumDeviceSources(
+        attributes: *anyopaque,
+        out: *?[*]?*anyopaque,
+        count: *u32,
+    ) callconv(cc) HRESULT;
+    pub extern "mfreadwrite" fn MFCreateSourceReaderFromMediaSource(
+        source: *anyopaque,
+        attributes: ?*anyopaque,
+        out: *?*anyopaque,
+    ) callconv(cc) HRESULT;
     pub extern "ole32" fn CoTaskMemFree(ptr: ?*anyopaque) callconv(cc) void;
 } else struct {};

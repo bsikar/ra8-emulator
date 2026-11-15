@@ -18,7 +18,6 @@
 //!
 //! NOT MODELLED: monaural mode. That is SSIOFR.OMOD, which this model only
 //! shadows, so a monaural stream reads here as I2S with two words per frame.
-const std = @import("std");
 
 /// A listener for shifted-out samples.
 pub const Tap = struct {

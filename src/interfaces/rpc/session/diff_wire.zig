@@ -1,6 +1,8 @@
 //! Wire codec for state diff RPC operations (Slice 23.5).
 const std = @import("std");
+
 const ra8_session = @import("ra8_session");
+
 const history_position = ra8_session.history_position;
 
 pub const Position = history_position.Position;
@@ -99,10 +101,14 @@ pub const DecodedDiff = struct {
     periphs: []PeriphItem = &.{},
 
     pub fn deinit(self: *DecodedDiff, allocator: std.mem.Allocator) void {
-        for (self.regs) |r| allocator.free(r.name);
+        for (self.regs) |r| {
+            allocator.free(r.name);
+        }
         allocator.free(self.regs);
         allocator.free(self.pages);
-        for (self.periphs) |p| allocator.free(p.unit);
+        for (self.periphs) |p| {
+            allocator.free(p.unit);
+        }
         allocator.free(self.periphs);
         self.* = undefined;
     }
@@ -235,7 +241,15 @@ fn decodePages(allocator: std.mem.Allocator, bytes: []const u8, at: *usize, coun
         var obj_b: [16]u8 = undefined;
         @memcpy(&obj_b, bytes[at.* + 27 .. at.* + 43]);
         at.* += 43;
-        pages[i] = .{ .space = space, .page_index = p_idx, .address = addr, .has_a = has_a, .obj_a = obj_a, .has_b = has_b, .obj_b = obj_b };
+        pages[i] = .{
+            .space = space,
+            .page_index = p_idx,
+            .address = addr,
+            .has_a = has_a,
+            .obj_a = obj_a,
+            .has_b = has_b,
+            .obj_b = obj_b,
+        };
     }
     return pages;
 }
@@ -258,7 +272,13 @@ fn decodePeriphs(allocator: std.mem.Allocator, bytes: []const u8, at: *usize, co
         at.* += 4;
         const changed = std.mem.readInt(u32, bytes[at.*..][0..4], .little);
         at.* += 4;
-        periphs[i] = .{ .unit = unit, .offset = offset, .old_val = old_val, .new_val = new_val, .changed_bytes = changed };
+        periphs[i] = .{
+            .unit = unit,
+            .offset = offset,
+            .old_val = old_val,
+            .new_val = new_val,
+            .changed_bytes = changed,
+        };
     }
     return periphs;
 }

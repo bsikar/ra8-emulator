@@ -39,9 +39,9 @@
 //! here behind the same PRC1 gate; the other bits read 0 whatever was written.
 /// DPSIER/DPSIFR/DPSIEGR, the deep-standby cancel bytes: dps.zig.
 pub const dps = @import("dps.zig");
+pub const mode = @import("mode.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-pub const mode = @import("mode.zig");
 
 /// The group these sit behind: PRC1, low-power modes and the VBATT file.
 pub const guard: u16 = prcr.group.lpm;

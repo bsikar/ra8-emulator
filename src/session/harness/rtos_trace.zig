@@ -19,7 +19,12 @@ pub fn traceRtos(self: *Harness) bool {
     state.listener = .{ .tracer = tracer };
     state.cpu.bus = state.listener.onBus(state.cpu.bus);
     if (state.cpu.source) |inner| state.cpu.source = state.listener.onSource(inner);
-    state.publisher = .{ .trace = &tracer.trace, .stream = &state.session.event_stream, .inner = state.session.live.boundary, .time = &state.board.time.base };
+    state.publisher = .{
+        .trace = &tracer.trace,
+        .stream = &state.session.event_stream,
+        .inner = state.session.live.boundary,
+        .time = &state.board.time.base,
+    };
     state.session.live.boundary = state.publisher.hook();
     return true;
 }

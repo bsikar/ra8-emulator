@@ -12,16 +12,21 @@
 //!
 //! Only the history's root line is replayed. CPU1, when recorded, runs
 //! offline from its original root bytes beside the rebuilt CPU0 image.
+const served_media = @import("served_media.zig");
+
 const std = @import("std");
-const session_lib = @import("ra8_session");
+
 const history = @import("ra8_host").history;
-const served_setup = @import("served_setup.zig");
 const history_segments = @import("history_segments.zig");
 const object_read = @import("object_read.zig");
+const served_setup = @import("served_setup.zig");
+const session_lib = @import("ra8_session");
 const validity = @import("history_validity.zig");
+
 const transport = session_lib.transport;
 
 const elf = @import("ra8_board").image.elf;
+
 const branch = session_lib.history_branch;
 const elf_compare = session_lib.history_elf_compare;
 const seek_engine = session_lib.history_seek_engine;
@@ -104,7 +109,14 @@ pub const Options = struct {
 const never: u32 = std.math.maxInt(u32);
 
 /// Replays the session `name` of `base` against the ELF at `rebuilt_path`.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, base: *const history.base.Base, name: []const u8, rebuilt_path: []const u8, options: Options) !Result {
+pub fn run(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    base: *const history.base.Base,
+    name: []const u8,
+    rebuilt_path: []const u8,
+    options: Options,
+) !Result {
     const arena = try allocator.create(std.heap.ArenaAllocator);
     arena.* = std.heap.ArenaAllocator.init(allocator);
     errdefer allocator.destroy(arena);
@@ -114,9 +126,19 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, base: *const history.base.B
     defer dir.close(io);
     // The store reads only the session's base, id and directory. The lease
     // field is for writers; a read-only open never takes it.
-    var opened: history.session.Session = .{ .base = base, .id = try history.name.id(name), .dir = dir, .lock = undefined };
+    var opened: history.session.Session = .{
+        .base = base,
+        .id = try history.name.id(name),
+        .dir = dir,
+        .lock = undefined,
+    };
     const store = history.storage.Store.from(&opened);
-    const root_bytes = (try history.branches_file.readAlloc(io, dir, history.layout.files.root, keep)) orelse return Error.NoRoot;
+    const root_bytes = (try history.branches_file.readAlloc(
+        io,
+        dir,
+        history.layout.files.root,
+        keep,
+    )) orelse return Error.NoRoot;
     const root = try history_root.decode(root_bytes);
     try validity.check(root);
     const log = try history_segments.readAll(keep, store);
@@ -125,21 +147,24 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, base: *const history.base.B
     const line = try rootLine(keep, found.checkpoints);
     if (line.len == 0) return Error.NoRootCheckpoints;
     try checkLine(allocator, io, store, root, line);
-    const media = if (root.media) |id| try @import("served_media.zig").read(keep, store, id) else null;
+    const media = if (root.media) |id| try served_media.read(keep, store, id) else null;
     const rebuilt = try std.Io.Dir.cwd().readFileAlloc(io, rebuilt_path, keep, .limited(history_root.max_elf));
 
     var served: served_setup.Served = undefined;
-    try served.openInputs(allocator, io, rebuilt_path, root.board_profile, .{ .ram_budget = options.ram_budget, .checkpoint_every = never, .elf_bytes = rebuilt }, if (root.elf1) |image| .{ .bytes = image.bytes } else null, .{ .media = media });
+    try served.openInputs(
+        allocator,
+        io,
+        rebuilt_path,
+        root.board_profile,
+        .{ .ram_budget = options.ram_budget, .checkpoint_every = never, .elf_bytes = rebuilt },
+        if (root.elf1) |image| .{ .bytes = image.bytes } else null,
+        .{ .media = media },
+    );
     defer served.deinit();
     if (options.prepare) |hook| try hook.prepareFn(hook.context, &served, log);
     const session = served.owner.session();
     try session.loadReplayInterventions(log);
-    if (session.replay_feeder) |*feeder| {
-        for (feeder.items.items) |item| {
-            if (item.action == .load and item.action.load.core == .cpu0) return Error.UnsupportedLoadIntervention;
-        }
-        if (feeder.traffic.items.len > 0 and served.owner.board().usb.bridge == null) return Error.UnattachedUsbipReplay;
-    }
+    try validateInterventions(&served);
     session.setReplaying(true);
 
     var result: Result = .{
@@ -152,7 +177,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, base: *const history.base.B
         .elf = try elf_compare.compare(allocator, root.elf0.bytes, rebuilt),
         .divergence = null,
     };
-    const images = Images{ .original = try elf.Image.init(root.elf0.bytes), .rebuilt = served.owner.image(), .second = if (served.second) |cpu1| cpu1.image else null };
+    const images = Images{
+        .original = try elf.Image.init(root.elf0.bytes),
+        .rebuilt = served.owner.image(),
+        .second = if (served.second) |cpu1| cpu1.image else null,
+    };
     for (line) |checkpoint| {
         if (try compareAt(allocator, keep, &served, store, images, checkpoint, &result)) break;
     }
@@ -186,17 +215,29 @@ fn before(_: void, a: seek_engine.Checkpoint, b: seek_engine.Checkpoint) bool {
 
 /// Validate all comparison points before the rebuilt image or a host hook
 /// is opened. The round-only driver supports round-opening checkpoints.
-fn checkLine(gpa: std.mem.Allocator, io: std.Io, store: history.storage.Store, root: history_root.Root, line: []const seek_engine.Checkpoint) !void {
+fn checkLine(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    store: history.storage.Store,
+    root: history_root.Root,
+    line: []const seek_engine.Checkpoint,
+) !void {
     // The existing snapshot owner validates every section and attachment.
     // Restore only this disposable original-image machine, never the rebuilt
     // run. elf_bytes and profile text need no host files or live adapters.
-    var validator = try session_lib.harness.open(gpa, io, .{ .elf_path = "", .elf_bytes = root.elf0.bytes, .board_profile = root.board_profile });
+    var validator = try session_lib.harness.open(
+        gpa,
+        io,
+        .{ .elf_path = "", .elf_bytes = root.elf0.bytes, .board_profile = root.board_profile },
+    );
     defer validator.deinit();
     var second: session_lib.cpu1.bringup.Cpu1 = .{};
     if (root.elf1) |image| try second.openBytes(gpa, &validator, image.bytes);
     defer if (root.elf1 != null) second.close(gpa);
     for (line) |c| {
-        if (c.position.phase != .cpu0 or c.position.o != 0 or c.position.gap != .retired) return Error.UnsupportedCheckpointPosition;
+        if (c.position.phase != .cpu0 or
+            c.position.o != 0 or
+            c.position.gap != .retired) return Error.UnsupportedCheckpointPosition;
         const bytes = try readCheckpoint(gpa, store, c);
         defer gpa.free(bytes);
         try validator.session().history.?.files.readFrom(bytes);
@@ -207,7 +248,10 @@ fn checkLine(gpa: std.mem.Allocator, io: std.Io, store: history.storage.Store, r
 fn readCheckpoint(gpa: std.mem.Allocator, store: history.storage.Store, checkpoint: seek_engine.Checkpoint) ![]u8 {
     var name: [32]u8 = undefined;
     transport.objectName(checkpoint.object, &name);
-    const bytes = object_read.read(store, gpa, &name) catch |err| return if (err == error.FileNotFound) Error.ObjectMissing else err;
+    const bytes = object_read.read(store, gpa, &name) catch |err| return if (err == error.FileNotFound)
+        Error.ObjectMissing
+    else
+        err;
     errdefer gpa.free(bytes);
     // Recorder.pin uses SHA-256/128 for legacy whole-snapshot objects.
     var hash: [32]u8 = undefined;
@@ -218,7 +262,15 @@ fn readCheckpoint(gpa: std.mem.Allocator, store: history.storage.Store, checkpoi
 
 /// Brings the replay machine to one checkpoint and compares it. True when
 /// the run is over: it diverged here, and `result` says how.
-fn compareAt(allocator: std.mem.Allocator, keep: std.mem.Allocator, served: *served_setup.Served, store: history.storage.Store, images: Images, checkpoint: seek_engine.Checkpoint, result: *Result) !bool {
+fn compareAt(
+    allocator: std.mem.Allocator,
+    keep: std.mem.Allocator,
+    served: *served_setup.Served,
+    store: history.storage.Store,
+    images: Images,
+    checkpoint: seek_engine.Checkpoint,
+    result: *Result,
+) !bool {
     const recorded = try readCheckpoint(allocator, store, checkpoint);
     defer allocator.free(recorded);
     const session = served.owner.session();
@@ -247,7 +299,13 @@ fn compareAt(allocator: std.mem.Allocator, keep: std.mem.Allocator, served: *ser
         .pc_actual = pc_actual,
         .place = if (found) |f| f.place else null,
         .stopped = if (stopped) |tag| try keep.dupe(u8, tag) else null,
-        .symbol = if (core == 1) (if (images.second) |image| try symbolAt(keep, image, pc_actual) else null) else try symbolAt(keep, images.rebuilt, pc_actual),
+        .symbol = if (core == 1)
+            (if (images.second) |image|
+                try symbolAt(keep, image, pc_actual)
+            else
+                null)
+        else
+            try symbolAt(keep, images.rebuilt, pc_actual),
     };
     return true;
 }
@@ -292,3 +350,13 @@ const HaltAt = struct {
         self.session.live.machine.requestHalt();
     }
 };
+
+fn validateInterventions(served: *served_setup.Served) !void {
+    if (served.owner.session().replay_feeder) |*feeder| {
+        for (feeder.items.items) |item| {
+            if (item.action == .load and item.action.load.core == .cpu0) return Error.UnsupportedLoadIntervention;
+        }
+        if (feeder.traffic.items.len > 0 and
+            served.owner.board().usb.bridge == null) return Error.UnattachedUsbipReplay;
+    }
+}

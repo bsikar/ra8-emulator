@@ -1,7 +1,8 @@
 //! Immutable provenance of a root-level lease. Liveness remains its OS lock.
 const std = @import("std");
-const metadata = @import("metadata.zig");
+
 const machine = @import("machine.zig");
+const metadata = @import("metadata.zig");
 const name = @import("name.zig");
 
 pub const max_bytes = 16384;
@@ -20,7 +21,14 @@ pub fn write(io: std.Io, root: std.Io.Dir, held: std.Io.File, id: []const u8) !v
     const local = machine.hostName(&host);
     if (std.mem.eql(u8, local, machine.unknown)) return error.UnknownHost;
     const length = try root.realPath(io, &path);
-    const record: Record = .{ .version = 1, .id = try name.id(id), .nonce = name.newId(io), .host = local, .root_path = path[0..length], .root_inode = @intCast((try root.stat(io)).inode) };
+    const record: Record = .{
+        .version = 1,
+        .id = try name.id(id),
+        .nonce = name.newId(io),
+        .host = local,
+        .root_path = path[0..length],
+        .root_inode = @intCast((try root.stat(io)).inode),
+    };
     const text = try std.json.Stringify.valueAlloc(std.heap.page_allocator, record, .{});
     defer std.heap.page_allocator.free(text);
     if (text.len > max_bytes) return error.BadLease;
@@ -45,7 +53,8 @@ pub fn validate(io: std.Io, root: std.Io.Dir, held: std.Io.File, id: []const u8)
     if (std.mem.eql(u8, local, machine.unknown) or !std.mem.eql(u8, local, record.host)) return error.OtherHost;
     var path: [std.fs.max_path_bytes]u8 = undefined;
     const length = try root.realPath(io, &path);
-    if (!std.mem.eql(u8, path[0..length], record.root_path) or record.root_inode != (try root.stat(io)).inode) return error.BadLease;
+    if (!std.mem.eql(u8, path[0..length], record.root_path) or
+        record.root_inode != (try root.stat(io)).inode) return error.BadLease;
 }
 
 pub fn nonce(io: std.Io, root: std.Io.Dir, id: []const u8) !name.Id {

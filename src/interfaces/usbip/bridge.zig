@@ -6,14 +6,15 @@
 //! firmware opened. A host that hangs up leaves the listener open for
 //! the next one. Nothing is printed here; the caller reports the events.
 const std = @import("std");
-const exp = @import("exported.zig");
+
 const board = @import("board.zig");
+const exp = @import("exported.zig");
 const listen = @import("listen.zig");
 const server = @import("server.zig");
 const session = @import("session.zig");
-const usbfs = @import("ra8_chip").periph.usbfs;
-const traffic = @import("ra8_board").usb.traffic;
 const sock_ready = @import("ra8_host").sock.ready;
+const traffic = @import("ra8_board").usb.traffic;
+const usbfs = @import("ra8_chip").periph.usbfs;
 
 /// What one poll changed.
 pub const Event = enum { none, listening, attached, hung_up, unusable };
@@ -113,7 +114,13 @@ pub const Bridge = struct {
     }
 
     fn connect(self: *Bridge, stream: std.Io.net.Stream) *Conn {
-        self.conn = .{ .stream = stream, .reader = undefined, .writer = undefined, .rbuf = undefined, .wbuf = undefined };
+        self.conn = .{
+            .stream = stream,
+            .reader = undefined,
+            .writer = undefined,
+            .rbuf = undefined,
+            .wbuf = undefined,
+        };
         const conn = &self.conn.?;
         conn.reader = stream.reader(self.io, &conn.rbuf);
         conn.writer = stream.writer(self.io, &conn.wbuf);

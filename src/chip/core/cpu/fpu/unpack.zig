@@ -4,6 +4,7 @@
 //! denormal flag. A half denormal flushed by FZ16 raises no IDC, as FPUnpack
 //! has it for N == 16. NaNs are told apart by the top fraction bit: set is quiet.
 const format = @import("format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
 const Fpscr = @import("fpscr.zig").Fpscr;

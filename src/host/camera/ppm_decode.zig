@@ -3,6 +3,7 @@
 //! smaller. Header fields are separated by whitespace and `#` comments run
 //! to the end of the line, as the Netpbm spec says.
 const std = @import("std");
+
 const decoded = @import("decoded_image.zig");
 
 const Image = decoded.Image;
@@ -28,9 +29,13 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) decoded.DecodeErr
         if (cursor.at > bytes.len or bytes.len - cursor.at < raster) return error.Truncated;
         const samples = bytes[cursor.at..][0..raster];
         // The raster is R, G, B per pixel, the image's own byte order.
-        for (image.pixels, samples) |*byte, sample| byte.* = scale(sample, maxval);
+        for (image.pixels, samples) |*byte, sample| {
+            byte.* = scale(sample, maxval);
+        }
     } else {
-        for (image.pixels) |*byte| byte.* = try cursor.sample(maxval);
+        for (image.pixels) |*byte| {
+            byte.* = try cursor.sample(maxval);
+        }
     }
     return image;
 }
@@ -48,7 +53,9 @@ const Cursor = struct {
         while (self.at < self.bytes.len) {
             const byte = self.bytes[self.at];
             if (byte == '#') {
-                while (self.at < self.bytes.len and self.bytes[self.at] != '\n') self.at += 1;
+                while (self.at < self.bytes.len and self.bytes[self.at] != '\n') {
+                    self.at += 1;
+                }
             } else if (std.ascii.isWhitespace(byte)) {
                 self.at += 1;
             } else return;
@@ -58,7 +65,9 @@ const Cursor = struct {
     fn number(self: *Cursor) decoded.DecodeError!u32 {
         self.skip();
         const start = self.at;
-        while (self.at < self.bytes.len and std.ascii.isDigit(self.bytes[self.at])) self.at += 1;
+        while (self.at < self.bytes.len and std.ascii.isDigit(self.bytes[self.at])) {
+            self.at += 1;
+        }
         if (self.at == start) return if (self.at >= self.bytes.len) error.Truncated else error.BadHeader;
         return std.fmt.parseInt(u32, self.bytes[start..self.at], 10) catch error.BadHeader;
     }

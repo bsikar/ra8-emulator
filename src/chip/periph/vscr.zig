@@ -38,9 +38,9 @@
 //! ways here and nothing in this file claims the return path is real. No
 //! voltage, no timing and no brown-out: the run records which range was
 //! selected, not what the core would have survived.
+const lanes = @import("lanes.zig");
 const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
-const lanes = @import("lanes.zig");
 
 /// The group this sits behind. ra8_cgc.c reaches VSCR only from
 /// internal_cgc_init_protected, and internal_set_vscr_not_high_v states the

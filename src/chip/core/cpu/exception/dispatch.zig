@@ -5,12 +5,12 @@
 //! and takes it when it beats the execution priority. A return followed by
 //! another pending exception is taken at the next boundary, which leaves the
 //! same state tail-chaining would, with the frame popped and pushed again.
-const bus = @import("../bus.zig");
-const memmap = @import("../../memmap.zig");
-const Cpu = @import("../cpu.zig").Cpu;
 const active = @import("active.zig");
+const bus = @import("../bus.zig");
+const Cpu = @import("../cpu.zig").Cpu;
 const entry = @import("entry.zig");
 const fault = @import("fault.zig");
+const memmap = @import("../../memmap.zig");
 const quiet_source = @import("quiet_source.zig");
 const stack_fault = @import("stack_fault.zig");
 
@@ -32,7 +32,20 @@ pub fn poll(cpu: *Cpu) Error!bool {
     const selected_fault = fault_first;
     const r = &cpu.regs;
     const candidate = winner orelse return false;
-    if (active.group(candidate.priority, split) >= active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, split)) return hush(cpu, now, false);
+    if (active.group(
+        candidate.priority,
+        split,
+    ) >= active.executionPriority(
+        &cpu.active,
+        r.primask,
+        r.basepri,
+        r.faultmask,
+        split,
+    )) return hush(
+        cpu,
+        now,
+        false,
+    );
     if (cpu.active.full()) return hush(cpu, now, false);
     // An image with no handler for what it pended keeps the pend rather than
     // branching to address zero.
@@ -48,7 +61,13 @@ pub fn poll(cpu: *Cpu) Error!bool {
 fn key(cpu: *const Cpu) quiet_source.Key {
     const r = &cpu.regs;
     const running: u16 = if (cpu.active.running()) |top| top.number else 0xFFFF;
-    return .{ .primask = r.primask, .basepri = r.basepri, .faultmask = r.faultmask, .depth = cpu.active.depth, .running = running };
+    return .{
+        .primask = r.primask,
+        .basepri = r.basepri,
+        .faultmask = r.faultmask,
+        .depth = cpu.active.depth,
+        .running = running,
+    };
 }
 
 /// Nothing can be taken now; let the quiet source skip the polls that

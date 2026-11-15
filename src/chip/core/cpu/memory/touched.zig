@@ -1,6 +1,8 @@
 //! Distinct 4 KiB backing pages accessed, including all-zero writes.
 const std = @import("std");
+
 const memmap = @import("../../memmap.zig");
+
 pub const Tracker = struct {
     pub const sram_capacity = memmap.sram_end - memmap.sram_base;
     valid: bool = true,
@@ -17,6 +19,8 @@ pub const Tracker = struct {
     fn mark(bits: anytype, offset: usize, len: usize) void {
         const end = @min((offset + len - 1) / 4096 + 1, bits.capacity());
         var page = offset / 4096;
-        while (page < end) : (page += 1) bits.set(page);
+        while (page < end) : (page += 1) {
+            bits.set(page);
+        }
     }
 };

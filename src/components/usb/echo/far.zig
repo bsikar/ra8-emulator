@@ -5,6 +5,7 @@
 //! a control read has its reply staged by then, and an IN token finds a packet
 //! or a NAK.
 const std = @import("std");
+
 const Device = @import("device.zig").Device;
 const setup = @import("ra8_chip").periph.usbhs.setup;
 const usbhs_far = @import("ra8_chip").periph.usbhs.far;

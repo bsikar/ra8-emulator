@@ -5,16 +5,17 @@
 //! where it was made. The session ends by being deleted, or, when kept, by
 //! moving under the kept root or staying put behind a pointer file.
 const std = @import("std");
+
+const Base = @import("base.zig").Base;
+const gates = @import("gates.zig");
 const layout = @import("layout.zig");
 const lock = @import("lock.zig");
+const metadata = @import("metadata.zig");
+const move = @import("move/root.zig");
 const name = @import("name.zig");
 const owner = @import("owner.zig");
-const metadata = @import("metadata.zig");
 const remove = @import("remove.zig");
-const move = @import("move/root.zig");
 const rename_file = @import("rename.zig");
-const gates = @import("gates.zig");
-const Base = @import("base.zig").Base;
 
 /// How a closed session left its root.
 pub const Outcome = enum { deleted, left, moved, pointed };
@@ -67,7 +68,13 @@ pub const Session = struct {
         errdefer held.close(io);
         try prepare(base, draft, options.owner);
         try rename(base, draft, &id, options.move_probe, &.{ gate.file, held });
-        return .{ .base = base, .id = id, .dir = try base.dir.openDir(io, &id, .{ .iterate = true }), .lock = held, .move_probe = options.move_probe };
+        return .{
+            .base = base,
+            .id = id,
+            .dir = try base.dir.openDir(io, &id, .{ .iterate = true }),
+            .lock = held,
+            .move_probe = options.move_probe,
+        };
     }
 
     /// Take over a session that is in `base` and that nothing holds, as a
@@ -154,8 +161,19 @@ fn arrive(self: *Session, target: *const Base, gate: *const gates.Pair) !bool {
     var buffer: [move.tree.limits.receipt]u8 = undefined;
     const receipt = std.fmt.bufPrint(&buffer, layout.moves.keep ++ "{s}\n", .{target.path}) catch return false;
     const arrived = try lock.create(io, target.dir, &self.id);
-    const authorities: []const std.Io.File = if (gate.second) |second| &[_]std.Io.File{ gate.first.file, second.file, self.lock, arrived } else &[_]std.Io.File{ gate.first.file, self.lock, arrived };
-    move.dispatch.directory(.{ .source = self.base, .target = target, .authorities = authorities }, &self.id, &self.id, receipt, self.move_probe) catch |err| {
+    const authorities: []const std.Io.File = if (gate.second) |second| &[_]std.Io.File{
+        gate.first.file,
+        second.file,
+        self.lock,
+        arrived,
+    } else &[_]std.Io.File{ gate.first.file, self.lock, arrived };
+    move.dispatch.directory(
+        .{ .source = self.base, .target = target, .authorities = authorities },
+        &self.id,
+        &self.id,
+        receipt,
+        self.move_probe,
+    ) catch |err| {
         // A move that began is carried on by recovery, under this lease.
         const began = move.tree.moving(io, self.base.dir, &self.id) catch true;
         if (began) arrived.close(io) else try lock.retire(io, target.dir, &self.id, arrived);
@@ -177,13 +195,27 @@ fn prepare(base: *const Base, draft: []const u8, record: ?owner.Record) !void {
     var self: owner.Self = .{};
     try owner.write(io, dir, record orelse self.record(io));
     try metadata.ensure(io, dir, layout.files.incomplete, "");
-    for (layout.spaces) |space| try dir.createDir(io, @tagName(space), layout.directory_permissions);
+    for (layout.spaces) |space| {
+        try dir.createDir(io, @tagName(space), layout.directory_permissions);
+    }
 }
 
 /// Give the draft its final name. The lease is not in it and does not move.
-fn rename(base: *const Base, from: []const u8, to: []const u8, probe: ?move.probe.Probe, authorities: []const std.Io.File) !void {
+fn rename(
+    base: *const Base,
+    from: []const u8,
+    to: []const u8,
+    probe: ?move.probe.Probe,
+    authorities: []const std.Io.File,
+) !void {
     try base.owns(from);
-    move.dispatch.directory(.{ .source = base, .target = base, .authorities = authorities }, from, to, layout.moves.publish, probe) catch |err| switch (err) {
+    move.dispatch.directory(
+        .{ .source = base, .target = base, .authorities = authorities },
+        from,
+        to,
+        layout.moves.publish,
+        probe,
+    ) catch |err| switch (err) {
         error.PathAlreadyExists => return error.IdTaken,
         else => return err,
     };

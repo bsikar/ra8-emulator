@@ -10,13 +10,15 @@
 //! stay unclaimed (CONSTRAINED UNPREDICTABLE, undefined as QEMU does).
 //! Active elements are MemA accesses and fault before reaching the bus.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
+const alignment = @import("../../../alignment.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const alignment = @import("../../../alignment.zig");
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
 pub const wide = @import("wide.zig");
+
 const contiguous = mve.contiguous;
 const Size = mve.qreg.Size;
 

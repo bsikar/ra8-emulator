@@ -3,9 +3,9 @@
 //! reads as the instruction's address plus 4, so a table can sit straight
 //! after the instruction. Rn = SP and Rm = SP or PC are UNPREDICTABLE and are
 //! left unclaimed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     pub const hw1_mask: u16 = 0xFFF0;

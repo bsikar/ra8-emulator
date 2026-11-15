@@ -5,8 +5,9 @@
 //! frame is enqueued with kind .regenerate_by_replay to record that replay must
 //! synthesize this frame when requested.
 const std = @import("std");
-const glcdc_mod = @import("ra8_chip").periph.glcdc;
+
 const frame_types = @import("frame_types.zig");
+const glcdc_mod = @import("ra8_chip").periph.glcdc;
 
 pub const Position = frame_types.Position;
 pub const FrameKind = frame_types.FrameKind;

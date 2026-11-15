@@ -13,8 +13,9 @@
 //! hands the Module Manager, so a debugger can pair a loaded instance with
 //! its symbols. The ELF never goes on the card.
 const std = @import("std");
-const ra8app = @import("ra8_board").image.ra8app;
+
 const host_folder = @import("ra8_host").folder;
+const ra8app = @import("ra8_board").image.ra8app;
 
 /// The most `--app` flags one run takes.
 pub const max_apps = 8;
@@ -118,9 +119,14 @@ pub const Root = struct {
     }
 
     pub fn list(self: Root, allocator: std.mem.Allocator) ![]host_folder.Entry {
-        var entries: std.ArrayList(host_folder.Entry) = if (self.base) |base| .fromOwnedSlice(try base.list(allocator)) else .empty;
+        var entries: std.ArrayList(host_folder.Entry) = if (self.base) |base|
+            .fromOwnedSlice(try base.list(allocator))
+        else
+            .empty;
         errdefer {
-            for (entries.items) |entry| allocator.free(entry.name);
+            for (entries.items) |entry| {
+                allocator.free(entry.name);
+            }
             entries.deinit(allocator);
         }
         for (self.apps) |app| {

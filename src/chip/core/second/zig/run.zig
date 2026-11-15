@@ -5,19 +5,21 @@
 //! and writes only through CPU1's memory.Guest (RA8EMU-535). The
 //! instructions themselves run on CPU1's Zig core
 //! (src/chip/core/second/zig/zig.zig), which takes one turn per CPU0 round. Turns
-//! are sized by CPUCLK1 against CPUCLK0 (src/chip/core/rate.zig). CPU1's own timebase (its SysTick) advances by what it ran.
+//! are sized by CPUCLK1 against CPUCLK0 (src/chip/core/rate.zig). CPU1's own timebase (its SysTick) advances by what it
+//! ran.
 const std = @import("std");
-const loaded_image = @import("../../loaded_image.zig");
-const second_core = @import("../core.zig");
-const SecondZig = @import("zig.zig").SecondZig;
-const Wiring = @import("../wiring.zig").Wiring;
+
 const clocks = @import("../../../periph/clocks.zig");
-const systick_bank = @import("../../systick_bank.zig");
-const second_zig = @import("zig.zig");
-const Store = @import("../../cpu/memory/store.zig").Store;
-const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
-const memmap = @import("../../memmap.zig");
 const cpu_mod = @import("../../cpu/cpu.zig");
+const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
+const loaded_image = @import("../../loaded_image.zig");
+const memmap = @import("../../memmap.zig");
+const second_core = @import("../core.zig");
+const second_zig = @import("zig.zig");
+const SecondZig = @import("zig.zig").SecondZig;
+const Store = @import("../../cpu/memory/store.zig").Store;
+const systick_bank = @import("../../systick_bank.zig");
+const Wiring = @import("../wiring.zig").Wiring;
 
 /// A latched turn survives debugger stops without consulting the divider again.
 pub const Turn = struct {

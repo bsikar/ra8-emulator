@@ -31,11 +31,11 @@
 //! particular would change which of the two write-protect paths owns a port.
 //! Modelling it on no evidence would be guessing at the thing the gate turns
 //! on, so it stores and reads back and nothing more.
-const periph = @import("../registry.zig");
+pub const capabilities = @import("capabilities.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 pub const protect = @import("protect.zig");
 pub const route = @import("route.zig");
-pub const capabilities = @import("capabilities.zig");
 
 pub const win_base: u32 = 0x4040_0800;
 pub const win_span: u32 = 0x580;

@@ -9,6 +9,7 @@
 //! gives a `Staged` target, and `install` puts it in place.
 const fields = @import("ra8_snapshot").fields;
 const stick = @import("stick.zig");
+
 const Target = stick.Target;
 
 const skip: []const []const u8 = &.{ "disk", "data", "sink", "obs" };
@@ -71,8 +72,9 @@ fn locate(target: *const Target, cursor: []const u8) error{Stray}!Span {
     inline for (.{ Where.disk, Where.scratch, Where.inquiry }) |where| {
         const within = base(target, where);
         const lo = @intFromPtr(within.ptr);
-        if (at >= lo and at + cursor.len <= lo + within.len)
+        if (at >= lo and at + cursor.len <= lo + within.len) {
             return .{ .where = where, .offset = @intCast(at - lo), .len = @intCast(cursor.len) };
+        }
     }
     return error.Stray;
 }

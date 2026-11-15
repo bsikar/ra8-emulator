@@ -8,9 +8,9 @@
 //! (LSPENS, CLRONRETS, TS) belong to RA8EMU-165; lazy state preservation
 //! (LSPACT, FPCAR use) to RA8EMU-163. Here every defined bit reads back as
 //! written.
-const Fpscr = @import("fpscr.zig").Fpscr;
-const control_bits = @import("../regs.zig").control_bits;
 const banked = @import("../../banked.zig");
+const control_bits = @import("../regs.zig").control_bits;
+const Fpscr = @import("fpscr.zig").Fpscr;
 const Vpr = @import("../mve/predicate.zig").Vpr;
 
 /// FPCCR, least significant bit first.

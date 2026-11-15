@@ -1,7 +1,9 @@
 //! Content revision of regular workspace inputs, with explicit finite limits.
 const std = @import("std");
-const paths = @import("../workspace/path.zig");
+
 const Budget = @import("request.zig").Budget;
+const paths = @import("../workspace/path.zig");
+
 const Hash = std.crypto.hash.sha2.Sha256;
 const allocator = std.heap.page_allocator;
 const Totals = struct { entries: usize = 0, bytes: u64 = 0 };
@@ -14,7 +16,16 @@ pub fn revision(root: std.Io.Dir, budget: Budget) ![64]u8 {
 }
 
 fn ignored(name: []const u8) bool {
-    inline for (.{ ".git", ".zig-cache", "zig-out", ".ra8-builds" }) |skip| if (std.mem.eql(u8, name, skip)) return true;
+    inline for (.{
+        ".git",
+        ".zig-cache",
+        "zig-out",
+        ".ra8-builds",
+    }) |skip| if (std.mem.eql(
+        u8,
+        name,
+        skip,
+    )) return true;
     return false;
 }
 
@@ -22,7 +33,9 @@ fn directory(dir: std.Io.Dir, budget: Budget, hash: *Hash, totals: *Totals, dept
     if (depth > 32) return error.SourceLimit;
     var names: std.ArrayList([]const u8) = .empty;
     defer {
-        for (names.items) |name| allocator.free(name);
+        for (names.items) |name| {
+            allocator.free(name);
+        }
         names.deinit(allocator);
     }
     var iterator = dir.iterate();
@@ -78,17 +91,24 @@ pub fn fileHash(file: std.Io.File, budget: Budget, total: *u64, limit: u64) ![32
         offset += n;
     }
     const after = try file.stat(budget.io);
-    if (offset != before.size or before.size != after.size or before.mtime.nanoseconds != after.mtime.nanoseconds) return error.SourceChanged;
+    if (offset != before.size or
+        before.size != after.size or
+        before.mtime.nanoseconds != after.mtime.nanoseconds) return error.SourceChanged;
     return hash.finalResult();
 }
 
 pub fn artifact(root: std.Io.Dir, name: []const u8, budget: Budget) ![64]u8 {
     const parent = try paths.parent(root, budget.io, name);
     defer parent.close(budget.io);
-    const file = try parent.dir.openFile(budget.io, parent.name, .{ .follow_symlinks = false, .allow_directory = false });
+    const file = try parent.dir.openFile(
+        budget.io,
+        parent.name,
+        .{ .follow_symlinks = false, .allow_directory = false },
+    );
     defer file.close(budget.io);
     var magic: [4]u8 = undefined;
-    if (try file.readPositionalAll(budget.io, &magic, 0) != 4 or !std.mem.eql(u8, &magic, "\x7fELF")) return error.NotElf;
+    if (try file.readPositionalAll(budget.io, &magic, 0) != 4 or
+        !std.mem.eql(u8, &magic, "\x7fELF")) return error.NotElf;
     var size: u64 = 0;
     return std.fmt.bytesToHex(try fileHash(file, budget, &size, 64 * 1024 * 1024), .lower);
 }

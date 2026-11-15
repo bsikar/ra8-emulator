@@ -1,7 +1,9 @@
 //! Coalescing directory observation includes direct-child metadata, never link targets.
 const std = @import("std");
+
 const entry = @import("entry.zig");
 const paths = @import("path.zig");
+
 pub const max_entries = 1024;
 pub const Snapshot = struct {
     version: entry.Version = .{},

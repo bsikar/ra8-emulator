@@ -15,10 +15,11 @@
 //! single register numbering, reads S[i]<15:0> and writes Zeros(16):value;
 //! VCVT from F16 still writes a full S32/U32 word. D16+ and every other bit
 //! pattern stay unclaimed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fpu = @import("../../fpu/all.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+
 const Format = fpu.format.Format;
 const Rounding = fpu.rounding.Rounding;
 const fp_regs = @import("regs.zig");

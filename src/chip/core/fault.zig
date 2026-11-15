@@ -10,7 +10,6 @@
 //! Both sit here rather than in engine.zig because the C-convention hooks
 //! need them and the engine needs the hooks: with the pair in their own file
 //! that is a line, not a loop.
-const std = @import("std");
 
 pub const Fault = struct {
     pc: u32,

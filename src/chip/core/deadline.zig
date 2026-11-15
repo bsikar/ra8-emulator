@@ -14,7 +14,6 @@
 //! by. An image that never arms SysTick has no millisecond to count, and
 //! nothing here fires: that run ends on its instruction budget, and the
 //! verdict says which of the two ended it.
-const std = @import("std");
 
 pub const Deadline = struct {
     /// SysTick periods the run is allowed, which is milliseconds for as long

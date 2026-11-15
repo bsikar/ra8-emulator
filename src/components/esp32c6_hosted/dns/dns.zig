@@ -126,13 +126,17 @@ fn hostLookup(_: ?*anyopaque, maybe_io: ?std.Io, name: []const u8, out: *[max_an
         };
         if (count == max_answers) continue;
         var duplicate = false;
-        for (out[0..count]) |seen| duplicate = duplicate or std.mem.eql(u8, &seen, &octets);
+        for (out[0..count]) |seen| {
+            duplicate = duplicate or std.mem.eql(u8, &seen, &octets);
+        }
         if (duplicate) continue;
         out[count] = octets;
         count += 1;
-    } else |err| switch (err) {
-        error.Closed => {},
-        else => |other| return other,
+    } else |err| {
+        switch (err) {
+            error.Closed => {},
+            else => |other| return other,
+        }
     }
     return count;
 }

@@ -25,6 +25,7 @@
 //! round-trip PASS or FAIL prints one line earlier and never reaches the
 //! table: the report carries the last console line only.
 const std = @import("std");
+
 const hil_conf = @import("hil_conf");
 
 pub const Expect = struct {

@@ -5,11 +5,11 @@
 //! back on the faulting instruction so it is the stacked return address, and
 //! enter the handler. The raisers latch their own status bits and call this.
 
-const memmap = @import("../../core/memmap.zig");
-const status = @import("status.zig");
-const fault_route = @import("route.zig");
 const exec_priority = @import("../exec_priority.zig");
+const fault_route = @import("route.zig");
+const memmap = @import("../../core/memmap.zig");
 const nvic = @import("../nvic/nvic.zig");
+const status = @import("status.zig");
 
 /// Route `fault`, raised by the instruction at `pc`, and enter its handler.
 pub fn take(core: anytype, controller: *nvic.Nvic, fault: status.Fault, pc: u32) !fault_route.Taken {

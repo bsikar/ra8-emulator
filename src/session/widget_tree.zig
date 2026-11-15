@@ -1,5 +1,6 @@
 //! Reader for the versioned ra8_widget debug-tree channel (RA8EMU-562).
 const std = @import("std");
+
 const core_view = @import("core_view.zig");
 
 pub const symbol = "ra8_widget_debug_tree";

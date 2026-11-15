@@ -26,8 +26,8 @@
 //! they are stored and read back and raise nothing. Every offset in the
 //! channel window besides the seven named above is shadowed so a
 //! read-modify-write survives, and never interpreted.
-const periph = @import("../registry.zig");
 pub const output = @import("output.zig");
+const periph = @import("../registry.zig");
 
 /// ACMPHS geometry. The bus folds the Non-secure alias onto this base.
 pub const win_base: u32 = 0x4023_6000;

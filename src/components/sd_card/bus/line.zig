@@ -1,7 +1,7 @@
 //! The SD-bus card as SDHI0's slot sees it: bus_card.Card behind the line
 //! the controller declares (periph/sdhi/line.zig).
-const sd_line = @import("ra8_chip").periph.sdhi.line;
 const Card = @import("card.zig").Card;
+const sd_line = @import("ra8_chip").periph.sdhi.line;
 
 pub fn line(card: *Card) sd_line.Line {
     return .{ .context = card, .vtable = &vtable };

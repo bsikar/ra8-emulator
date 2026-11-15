@@ -4,52 +4,33 @@
 //! previous manifest identities without rehashing or disk I/O; dirty pages
 //! are hashed and deduplicated across spaces and time before being emitted
 //! to an injected object sink.
+const capture_types = @import("capture_types.zig");
+const manifest_lookup = @import("manifest_lookup.zig");
+
 const std = @import("std");
+
+const DirtyPages = @import("dirty_pages.zig").DirtyPages;
 const manifest_mod = @import("manifest.zig");
 pub const ObjectId = @import("object_id.zig").ObjectId;
-const Position = @import("position.zig").Position;
-const DirtyPages = @import("dirty_pages.zig").DirtyPages;
-const SpaceMap = @import("dirty_pages.zig").SpaceMap;
 const page_size = @import("dirty_pages.zig").page_size;
-const Touched = @import("touched_pages.zig").Touched;
+const Position = @import("position.zig").Position;
 const snap_state = @import("../root.zig").board.state;
+const SpaceMap = @import("dirty_pages.zig").SpaceMap;
+const Touched = @import("touched_pages.zig").Touched;
+
 const Files = snap_state.Files;
 const inc_restore = @import("incremental_restore.zig");
+
 const getSpaceSlice = inc_restore.getSpaceSlice;
 const SpaceAccessor = inc_restore.SpaceAccessor;
 
 const zero_page_bytes: [page_size]u8 = @splat(0);
 
-pub const SpaceSpan = struct {
-    space: manifest_mod.SpaceId,
-    bytes: []const u8,
-    sdram_resident: ?*const @import("ra8_chip").core.cpu.memory.store.SdramSet = null,
-};
-
-pub const BlobSpan = struct {
-    space: manifest_mod.SpaceId,
-    bytes: []const u8,
-};
-
-pub const ObjectSink = struct {
-    context: *anyopaque,
-    putFn: *const fn (context: *anyopaque, id: ObjectId, bytes: []const u8) anyerror!void,
-
-    pub fn put(self: ObjectSink, id: ObjectId, bytes: []const u8) anyerror!void {
-        return self.putFn(self.context, id, bytes);
-    }
-};
-
-pub const CaptureStats = struct {
-    pages_hashed: usize = 0,
-    pages_reused: usize = 0,
-    objects_stored: usize = 0,
-};
-
-pub const CaptureResult = struct {
-    manifest: manifest_mod.Manifest,
-    stats: CaptureStats,
-};
+pub const SpaceSpan = capture_types.SpaceSpan;
+pub const BlobSpan = capture_types.BlobSpan;
+pub const ObjectSink = capture_types.ObjectSink;
+pub const CaptureStats = capture_types.CaptureStats;
+pub const CaptureResult = capture_types.CaptureResult;
 
 const DirtyCoord = struct {
     space: manifest_mod.SpaceId,
@@ -103,7 +84,9 @@ pub const CheckpointEngine = struct {
             last_page = page.object;
             try self.seen_objects.put(page.object.bytes, {});
         }
-        for (manifest.blobs) |blob| try self.seen_objects.put(blob.object.bytes, {});
+        for (manifest.blobs) |blob| {
+            try self.seen_objects.put(blob.object.bytes, {});
+        }
         self.registered_root = manifest.root_hash;
     }
 
@@ -208,8 +191,10 @@ pub const CheckpointEngine = struct {
                     const w_idx = p_idx >> 6;
                     const mask = if (w_idx < dirty.masks[s_idx.?].len) dirty.masks[s_idx.?][w_idx] else 0;
                     if (mask == 0 and prev_cursor + 64 <= prev_pages.len and
-                        prev_pages[prev_cursor].space == span.space and prev_pages[prev_cursor].page_index == @as(u32, @intCast(p_idx)) and
-                        prev_pages[prev_cursor + 63].space == span.space and prev_pages[prev_cursor + 63].page_index == @as(u32, @intCast(p_idx + 63)))
+                        prev_pages[prev_cursor].space == span.space and
+                        prev_pages[prev_cursor].page_index == @as(u32, @intCast(p_idx)) and
+                        prev_pages[prev_cursor + 63].space == span.space and
+                        prev_pages[prev_cursor + 63].page_index == @as(u32, @intCast(p_idx + 63)))
                     {
                         @memcpy(page_refs[out_idx..][0..64], prev_pages[prev_cursor..][0..64]);
                         prev_cursor += 64;
@@ -219,7 +204,18 @@ pub const CheckpointEngine = struct {
                         continue;
                     }
                 }
-                const obj_id = try self.resolvePage(dirty, dirty_clears, prev_manifest, prev_pages, &prev_cursor, span, p_idx, zero_id, sink, stats);
+                const obj_id = try self.resolvePage(
+                    dirty,
+                    dirty_clears,
+                    prev_manifest,
+                    prev_pages,
+                    &prev_cursor,
+                    span,
+                    p_idx,
+                    zero_id,
+                    sink,
+                    stats,
+                );
                 page_refs[out_idx] = .{ .space = span.space, .page_index = @intCast(p_idx), .object = obj_id };
                 out_idx += 1;
                 p_idx += 1;
@@ -288,7 +284,9 @@ pub const CheckpointEngine = struct {
         if (prev_manifest == null) {
             dirty.clearAll();
         } else {
-            for (dirty_clears.items) |coord| dirty.clearDirty(coord.space, coord.page_index);
+            for (dirty_clears.items) |coord| {
+                dirty.clearDirty(coord.space, coord.page_index);
+            }
         }
         self.registered_root = root;
         self.last_stats = stats;
@@ -322,7 +320,17 @@ pub const CheckpointEngine = struct {
         var full_snap: std.Io.Writer.Allocating = try .initCapacity(self.allocator, 1024);
         defer full_snap.deinit();
         try files.writeParts(&full_snap.writer, .{ .memory = false });
-        return self.captureFromFilesWithRunState(files, dirty, prev_manifest, pos, checkpoint_id, picture, full_snap.written(), sink, accessor);
+        return self.captureFromFilesWithRunState(
+            files,
+            dirty,
+            prev_manifest,
+            pos,
+            checkpoint_id,
+            picture,
+            full_snap.written(),
+            sink,
+            accessor,
+        );
     }
 
     pub fn captureFromFilesWithRunState(
@@ -344,10 +352,17 @@ pub const CheckpointEngine = struct {
             .cpu0_ppb,    .cpu1_mram, .cpu1_dtcm, .cpu1_ppb,
             .store_extra, .nor_flash, .sd_card,   .eink_buffer,
         };
-        const res = if (accessor == null and files.store.owns_port and files.store.sdram_demand_zero) files.store.sdramResident() else null;
+        const res = if (accessor == null and
+            files.store.owns_port and
+            files.store.sdram_demand_zero) files.store.sdramResident() else null;
         for (tracked_spaces) |space| {
             if (getSpaceSlice(files, space, accessor)) |slice| {
-                spans[count] = .{ .space = space, .bytes = slice, .sdram_resident = if (space == .cpu0_sdram and slice.len <= 128 * 1024 * 1024) res else null };
+                spans[count] = .{
+                    .space = space,
+                    .bytes = slice,
+                    .sdram_resident = if (space == .cpu0_sdram and
+                        slice.len <= 128 * 1024 * 1024) res else null,
+                };
                 count += 1;
             }
         }
@@ -356,28 +371,7 @@ pub const CheckpointEngine = struct {
     }
 };
 
-pub fn findPage(pages: []const manifest_mod.PageRef, space: manifest_mod.SpaceId, page_index: u32) ?ObjectId {
-    var low: usize = 0;
-    var high: usize = pages.len;
-    const target_space = @backingInt(space);
-    while (low < high) {
-        const mid = low + (high - low) / 2;
-        const mid_item = pages[mid];
-        const item_space = @backingInt(mid_item.space);
-        if (target_space < item_space) {
-            high = mid;
-        } else if (target_space > item_space) {
-            low = mid + 1;
-        } else if (page_index < mid_item.page_index) {
-            high = mid;
-        } else if (page_index > mid_item.page_index) {
-            low = mid + 1;
-        } else {
-            return mid_item.object;
-        }
-    }
-    return null;
-}
+pub const findPage = manifest_lookup.findPage;
 
 fn pageLessThan(_: void, a: manifest_mod.PageRef, b: manifest_mod.PageRef) bool {
     const sa = @backingInt(a.space);

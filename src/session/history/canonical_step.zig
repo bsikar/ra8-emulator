@@ -12,7 +12,7 @@
 //! A step that needs a slot outside the window refuses with
 //! `OutsideWindow`: the caller rebuilds the window, or past the end runs
 //! live. Nothing moves in that case.
-const std = @import("std");
+
 const engine = @import("window_engine.zig");
 
 const ReverseWindow = engine.ReverseWindow;
@@ -44,13 +44,19 @@ pub fn retiresOn(slot: *const engine.Slot, core: Core) bool {
 pub fn stepForward(w: *ReverseWindow, core: Core) !Landed {
     var landed: Landed = .{};
     var next = w.cursor();
-    while (next < w.count() and !retiresOn(w.slotAt(next), core)) next += 1;
+    while (next < w.count() and !retiresOn(w.slotAt(next), core)) {
+        next += 1;
+    }
     if (next == w.count()) return Error.OutsideWindow;
     var target = next + 1;
-    while (target < w.count() and !retiresOn(w.slotAt(target), core)) target += 1;
+    while (target < w.count() and !retiresOn(w.slotAt(target), core)) {
+        target += 1;
+    }
     const from = w.cursor();
     try w.walkTo(target);
-    for (from..target) |idx| landed.cross(w.slotAt(idx), core);
+    for (from..target) |idx| {
+        landed.cross(w.slotAt(idx), core);
+    }
     landed.at_window_end = w.cursor() == w.count();
     return landed;
 }
@@ -59,7 +65,9 @@ pub fn stepForward(w: *ReverseWindow, core: Core) !Landed {
 pub fn stepBack(w: *ReverseWindow, core: Core) !Landed {
     var landed: Landed = .{};
     var last = w.cursor();
-    while (last > 0 and !retiresOn(w.slotAt(last - 1), core)) last -= 1;
+    while (last > 0 and !retiresOn(w.slotAt(last - 1), core)) {
+        last -= 1;
+    }
     if (last == 0) return Error.OutsideWindow;
     const target = last - 1;
     var idx = w.cursor();

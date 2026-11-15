@@ -10,13 +10,15 @@
 //! frame is held and one line says so. The run never waits on the writer.
 //! On Windows the emulator serves `\\.\pipe\NAME` itself (pipe_windows.zig,
 //! RA8EMU-585).
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const posix = std.posix;
 const decoded = @import("../decoded_image.zig");
 const host_read = @import("../../read.zig");
-pub const raw = @import("frame.zig");
 pub const pipe_windows = @import("windows.zig");
+pub const raw = @import("frame.zig");
+
 const win = pipe_windows;
 const is_windows = builtin.os.tag == .windows;
 
@@ -123,7 +125,10 @@ pub const Pipe = struct {
 
     fn hangUp(self: *Pipe) void {
         self.closed = true;
-        std.debug.print("--camera-source pipe:{s}: the writer closed after {d} frames; holding the last one\n", .{ self.arg.path, self.frames });
+        std.debug.print(
+            "--camera-source pipe:{s}: the writer closed after {d} frames; holding the last one\n",
+            .{ self.arg.path, self.frames },
+        );
     }
 
     /// The newest whole frame at a capture: drain what the writer sent and

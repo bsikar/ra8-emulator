@@ -6,6 +6,7 @@
 //! Without those references, pruning requires a quiescent session.
 
 const std = @import("std");
+
 const storage = @import("storage.zig");
 
 /// The bridge that names the referenced objects. The session library
@@ -30,17 +31,28 @@ pub const Referrer = struct {
         collect: *const fn (*anyopaque, std.mem.Allocator, *std.StringHashMap(void)) anyerror!void,
     };
 
-    pub fn collectAll(self: Referrer, store: storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) !void {
+    pub fn collectAll(
+        self: Referrer,
+        store: storage.Store,
+        allocator: std.mem.Allocator,
+        names: *std.StringHashMap(void),
+    ) !void {
         try self.collect(store, allocator, names);
         if (self.extra) |extra| try extra.collect(extra.context, allocator, names);
     }
 };
 
-pub const Collect = fn (store: storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void;
+pub const Collect = fn (
+    store: storage.Store,
+    allocator: std.mem.Allocator,
+    names: *std.StringHashMap(void),
+) anyerror!void;
 
 fn freeNames(allocator: std.mem.Allocator, names: *std.StringHashMap(void)) void {
     var it = names.keyIterator();
-    while (it.next()) |key| allocator.free(key.*);
+    while (it.next()) |key| {
+        allocator.free(key.*);
+    }
     names.deinit();
 }
 
@@ -62,10 +74,11 @@ pub fn orphans(store: storage.Store, allocator: std.mem.Allocator, referrer: Ref
 
     var sweep = Sweep{ .store = store, .names = &names };
     const visitor: storage.Visitor = .{ .context = &sweep, .visit = &Sweep.visit };
-    if (store.vtable.sweep) |guarded|
-        try guarded(store.context, allocator, &names, visitor)
-    else
+    if (store.vtable.sweep) |guarded| {
+        try guarded(store.context, allocator, &names, visitor);
+    } else {
         try store.vtable.list(store.context, .objects, visitor);
+    }
     return .{ .orphans = sweep.count, .orphan_bytes = sweep.bytes };
 }
 

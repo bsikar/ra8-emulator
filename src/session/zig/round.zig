@@ -1,10 +1,11 @@
 //! CPU0, then the latched CPU1 turn, then one atomic board completion.
 const chip = @import("ra8_chip");
+
 const scheduler = chip.core.scheduler;
 const boundary = @import("boundary.zig");
+const CutBus = @import("cut_bus.zig").CutBus;
 const drive = @import("drive.zig");
 const session = @import("session.zig");
-const CutBus = @import("cut_bus.zig").CutBus;
 
 pub const Target = struct { core: u1, slots: u64 };
 pub const SlotStep = struct { ended: drive.Ended, cpu0_elapsed: u64 = 0 };
@@ -31,7 +32,12 @@ pub fn run(live: *session.ZigSession, edge: boundary.Boundary, target: ?Target) 
     while (true) if (try running.advance()) |ended| return ended;
 }
 
-pub fn runSlot(live: *session.ZigSession, edge: boundary.Boundary, cpu0_budget: u64, target: ?Target) session.Error!SlotStep {
+pub fn runSlot(
+    live: *session.ZigSession,
+    edge: boundary.Boundary,
+    cpu0_budget: u64,
+    target: ?Target,
+) session.Error!SlotStep {
     const selected = live.index;
     defer live.switchTo(selected) catch unreachable;
     const saved = edge.saved orelse &live.saved;
@@ -80,7 +86,13 @@ fn finishCpu0Phase(saved: *scheduler.State, edge: boundary.Boundary) session.Err
     try closeBoard(saved, edge);
 }
 
-fn checkStepTarget(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, target: ?Target, cpu0_elapsed: u64) session.Error!SlotStep {
+fn checkStepTarget(
+    live: *session.ZigSession,
+    saved: *scheduler.State,
+    edge: boundary.Boundary,
+    target: ?Target,
+    cpu0_elapsed: u64,
+) session.Error!SlotStep {
     const asked = target orelse return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
     const phase_core: u1 = if (saved.at.phase == .cpu1) 1 else 0;
     if (asked.core != phase_core) return .{ .ended = .count, .cpu0_elapsed = cpu0_elapsed };
@@ -106,7 +118,13 @@ fn checkStepTarget(live: *session.ZigSession, saved: *scheduler.State, edge: bou
     return .{ .ended = settled, .cpu0_elapsed = cpu0_elapsed };
 }
 
-fn slotCpu0(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, cpu0_budget: u64, target: ?Target) session.Error!SlotStep {
+fn slotCpu0(
+    live: *session.ZigSession,
+    saved: *scheduler.State,
+    edge: boundary.Boundary,
+    cpu0_budget: u64,
+    target: ?Target,
+) session.Error!SlotStep {
     try live.switchTo(0);
     if (saved.cut) {
         saved.endCpu0(true, edge.pair != null);
@@ -121,7 +139,8 @@ fn slotCpu0(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.B
         saved.open(boundary.widthOf(edge), cpu.slots);
         saved.base[1] = if (live.other) |other| other.core.cpu.slots else 0;
     }
-    const max_stretch = if (target != null and cpu0_budget == 0) @as(u64, saved.stretch.left()) else @min(cpu0_budget, saved.stretch.left());
+    const max_stretch = if (target != null and
+        cpu0_budget == 0) @as(u64, saved.stretch.left()) else @min(cpu0_budget, saved.stretch.left());
     const want = @min(@as(u64, 1), max_stretch);
     var slots: u64 = 0;
     const ended = drive.runTarget(live.core, live.machine, want, live.watch, &live.clock, &slots, limitOf(target, 0));
@@ -145,7 +164,12 @@ fn slotCpu0(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.B
     return checkStepTarget(live, saved, edge, target, elapsed);
 }
 
-fn slotCpu1(live: *session.ZigSession, saved: *scheduler.State, edge: boundary.Boundary, target: ?Target) session.Error!SlotStep {
+fn slotCpu1(
+    live: *session.ZigSession,
+    saved: *scheduler.State,
+    edge: boundary.Boundary,
+    target: ?Target,
+) session.Error!SlotStep {
     const pair = edge.pair orelse return error.CoreNotAttached;
     try live.switchTo(1);
     pair.openTurn(saved.stretch.carry, chip.periph.clocks.timebase.default_hz);
@@ -217,7 +241,8 @@ const Round = struct {
             saved.open(boundary.widthOf(self.edge), cpu.slots);
             saved.base[1] = if (live.other) |other| other.core.cpu.slots else 0;
         }
-        const want = if (self.target != null and self.left == 0) saved.stretch.left() else @min(self.left, saved.stretch.left());
+        const want = if (self.target != null and
+            self.left == 0) saved.stretch.left() else @min(self.left, saved.stretch.left());
         var slots: u64 = 0;
         const ended = drive.runTarget(live.core, live.machine, want, live.watch, &live.clock, &slots, self.limit(0));
         const elapsed = if (ended == .count and cpu.waiting != null) want else slots;

@@ -70,7 +70,13 @@ pub fn path(allocator: std.mem.Allocator, env: *const std.process.Environ.Map, g
 
 /// Read the hosts file and return the profile called `name`. Slices point
 /// into memory from `allocator`, which ctl runs as an arena.
-pub fn load(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, given: ?[]const u8, name: []const u8) !Profile {
+pub fn load(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    given: ?[]const u8,
+    name: []const u8,
+) !Profile {
     const file = try path(allocator, env, given);
     const text = std.Io.Dir.cwd().readFileAlloc(io, file, allocator, .limited(max_file)) catch return error.NoHostsFile;
     return find(text, name);

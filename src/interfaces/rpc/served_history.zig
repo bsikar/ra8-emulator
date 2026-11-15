@@ -5,26 +5,30 @@
 //! root and identity, the new-history hook for program reloads, the bounded
 //! queue for host traffic during rewinds, the C6 hold, and console stdin
 //! routing through the fork router choke point.
+const board = @import("ra8_board");
+const history_validity = @import("history_validity.zig");
+
 const std = @import("std");
+
+const board_c6 = @import("ra8_session").board.recorded_c6;
+const frame_tap = @import("ra8_session").history_frame_tap;
 const history = @import("ra8_host").history;
-const session_api = @import("ra8_session").api;
-const session_branch = @import("ra8_session").history_branch;
-const session_fork = @import("ra8_session").history_fork_router;
-const session_async = @import("ra8_session").history_async_queue;
-const session_async_traffic = @import("ra8_session").history_async_traffic;
 const history_root = @import("ra8_session").history_root;
-const session_nav = @import("ra8_session").history_nav_index;
-const session_feed = @import("ra8_session").history_nav_feed;
-const session_smooth_rewind = @import("ra8_session").smooth_rewind;
-const symbols = @import("ra8_session").symbols;
-const late_marker = @import("ra8_session").history_late_marker;
 const history_segments = @import("history_segments.zig");
+const late_marker = @import("ra8_session").history_late_marker;
 const marker_store = @import("history_marker_store.zig");
 const nav_marker = @import("session/nav_marker.zig");
 const served_rewind = @import("served_rewind.zig");
-const frame_tap = @import("ra8_session").history_frame_tap;
 const served_setup = @import("served_setup.zig");
-const board_c6 = @import("ra8_session").board.recorded_c6;
+const session_api = @import("ra8_session").api;
+const session_async = @import("ra8_session").history_async_queue;
+const session_async_traffic = @import("ra8_session").history_async_traffic;
+const session_branch = @import("ra8_session").history_branch;
+const session_feed = @import("ra8_session").history_nav_feed;
+const session_fork = @import("ra8_session").history_fork_router;
+const session_nav = @import("ra8_session").history_nav_index;
+const session_smooth_rewind = @import("ra8_session").smooth_rewind;
+const symbols = @import("ra8_session").symbols;
 
 /// The camera source a served session starts with; later changes are
 /// recorded as interventions, and the frames it captures as boundaries.
@@ -43,11 +47,11 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
     const session = self.owner.session();
     self.root = .{
         .media = self.media,
-        .snapshot_version = @import("history_validity.zig").snapshot_version,
-        .emulator_commit = @import("history_validity.zig").commit,
-        .model_version = @import("history_validity.zig").model,
+        .snapshot_version = history_validity.snapshot_version,
+        .emulator_commit = history_validity.commit,
+        .model_version = history_validity.model,
         .part = @tagName(self.owner.board().part),
-        .board_profile = board_profile orelse @import("ra8_board").profile.ek_ra8d2,
+        .board_profile = board_profile orelse board.profile.ek_ra8d2,
         .pace = .virtual,
         .camera = initial_camera,
         .camera_hash = history_root.identity(initial_camera),
@@ -60,7 +64,11 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
     if (self.history) |b| if (b.root) |existing| {
         if (!std.mem.eql(u8, &existing.elf0.identity, &self.root.elf0.identity)) return error.ImageMismatch;
         if ((existing.elf1 == null) != (self.root.elf1 == null)) return error.ImageMismatch;
-        if (existing.elf1) |image| if (!std.mem.eql(u8, &image.identity, &self.root.elf1.?.identity)) return error.ImageMismatch;
+        if (existing.elf1) |image| if (!std.mem.eql(
+            u8,
+            &image.identity,
+            &self.root.elf1.?.identity,
+        )) return error.ImageMismatch;
     };
     session.attachRoot(&self.root);
     session.attachImageIdentity(.cpu0, self.root.elf0.identity);
@@ -136,7 +144,10 @@ pub fn attachNav(self: *served_setup.Served, allocator: std.mem.Allocator) !void
     if (self.frames) |f| f.bindNav(nav);
     served_rewind.attach(self, rewind);
     if (self.frames) |f| {
-        if (self.owner.session().fork_router) |router| router.switch_observer = .{ .context = &f.tap, .switchedFn = &frame_tap.FrameTap.lineSwitched };
+        if (self.owner.session().fork_router) |router| router.switch_observer = .{
+            .context = &f.tap,
+            .switchedFn = &frame_tap.FrameTap.lineSwitched,
+        };
     }
 
     const reopened = if (self.history) |b| b.reopened else false;
@@ -187,7 +198,12 @@ fn standAtFirstCheckpoint(self: *served_setup.Served) void {
 /// Binds the late-marker cache to the history's index space. A reopened
 /// history loads its cached arrivals back, so `seek marker` needs no
 /// replay, and has its recorded interventions due again from the start.
-fn attachMarkers(self: *served_setup.Served, allocator: std.mem.Allocator, nav: *session_nav.NavIndex, reopened: bool) void {
+fn attachMarkers(
+    self: *served_setup.Served,
+    allocator: std.mem.Allocator,
+    nav: *session_nav.NavIndex,
+    reopened: bool,
+) void {
     const bind = self.history orelse return;
     const cache = allocator.create(marker_store.MarkerStore) catch return;
     cache.* = .{ .gpa = allocator, .store = history.storage.Store.from(&bind.session) };

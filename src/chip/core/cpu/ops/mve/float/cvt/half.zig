@@ -5,11 +5,11 @@
 //! half of each word. D and M would name Q8 and above, so they must be
 //! zero. hw2 bit 7 set is VMAXNMA/VMINNMA and is left to its own group.
 //! The lane semantics are in src/chip/core/cpu/mve/float/cvt/cvt.zig.
-const op = @import("../../../../op.zig");
 const Cpu = @import("../../../../cpu.zig").Cpu;
 const Instr = @import("../../../../instr.zig").Instr;
 const mve = @import("../../../../mve/all.zig");
 const mve_beats = @import("../../beats.zig");
+const op = @import("../../../../op.zig");
 
 pub const group: op.Group = .{ .name = "mve_float_cvt_half", .decode = decode, .oracle = false };
 

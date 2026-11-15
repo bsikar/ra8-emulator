@@ -4,8 +4,8 @@
 //! operand. Between two NaN operands, any signalling NaN beats any quiet one,
 //! and the first operand beats the second.
 const Format = @import("format.zig").Format;
-const Kind = @import("unpack.zig").Kind;
 const Fpscr = @import("fpscr.zig").Fpscr;
+const Kind = @import("unpack.zig").Kind;
 
 /// Positive, all-ones exponent, only the top fraction bit set:
 /// 0x7FC00000 in single precision.

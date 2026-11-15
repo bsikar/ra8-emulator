@@ -3,32 +3,33 @@
 //! (src/session/zig/wall.zig). The command line builds one per run
 //! (src/interfaces/cli/zig/run.zig) and hands the core its boundary.
 const std = @import("std");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const boot = @import("ra8_chip").core.cpu.boot;
-const clocks = @import("ra8_chip").periph.clocks;
-const soak_fault = @import("run.zig").soak.fault;
-const bus_fault = @import("ra8_chip").periph.bus_fault;
-const systick_bank = @import("ra8_chip").core.systick_bank;
-const scs_route = @import("ra8_chip").core.cpu.scs_route;
-const sleep_pace = @import("ra8_chip").core.sleep_pace;
-const board_edge = @import("ra8_board").boundary;
-const core_clock = @import("ra8_board").core_clock;
-const quiet_due = @import("ra8_board").quiet_due;
-const Board = @import("ra8_board").board.Board;
-const second_core = @import("ra8_chip").core.second.core;
-const RunPolicy = @import("policy.zig").RunPolicy;
-const Stop = @import("ra8_chip").core.stop.Stop;
-const Deadline = @import("ra8_chip").core.deadline.Deadline;
-const clock_rate = @import("../zig/clock_rate.zig");
-const break_sym = @import("../zig/break_sym.zig");
-const undefined_sites = @import("../zig/undefined_sites.zig");
-const state_options = @import("../state_options.zig");
-const wall = @import("../zig/wall.zig");
-const scheduler = @import("ra8_chip").core.scheduler;
-const attachments = @import("../board/attachments.zig");
+
 const attachment_ownership = @import("../board/attachment_ownership.zig");
-const Plugs = @import("../board/plug.zig").Plugs;
+const attachments = @import("../board/attachments.zig");
+const Board = @import("ra8_board").board.Board;
+const board_edge = @import("ra8_board").boundary;
+const boot = @import("ra8_chip").core.cpu.boot;
+const break_sym = @import("../zig/break_sym.zig");
+const bus_fault = @import("ra8_chip").periph.bus_fault;
+const clock_rate = @import("../zig/clock_rate.zig");
+const clocks = @import("ra8_chip").periph.clocks;
+const core_clock = @import("ra8_board").core_clock;
+const Deadline = @import("ra8_chip").core.deadline.Deadline;
 const Faults = @import("../board/faults/faults.zig").Faults;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const Plugs = @import("../board/plug.zig").Plugs;
+const quiet_due = @import("ra8_board").quiet_due;
+const RunPolicy = @import("policy.zig").RunPolicy;
+const scheduler = @import("ra8_chip").core.scheduler;
+const scs_route = @import("ra8_chip").core.cpu.scs_route;
+const second_core = @import("ra8_chip").core.second.core;
+const sleep_pace = @import("ra8_chip").core.sleep_pace;
+const soak_fault = @import("run.zig").soak.fault;
+const state_options = @import("../state_options.zig");
+const Stop = @import("ra8_chip").core.stop.Stop;
+const systick_bank = @import("ra8_chip").core.systick_bank;
+const undefined_sites = @import("../zig/undefined_sites.zig");
+const wall = @import("../zig/wall.zig");
 
 const SnapshotOwner = struct {
     arena: std.heap.ArenaAllocator,
@@ -108,7 +109,16 @@ pub const Clock = struct {
     }
 
     pub fn boundary(self: *Clock) boot.Boundary {
-        return .{ .context = self, .widthFn = widthThunk, .closeFn = closeThunk, .abortFn = abortThunk, .cyclesFn = cyclesThunk, .reboot = self.board.reboot, .doneFn = doneThunk, .saved = &self.saved };
+        return .{
+            .context = self,
+            .widthFn = widthThunk,
+            .closeFn = closeThunk,
+            .abortFn = abortThunk,
+            .cyclesFn = cyclesThunk,
+            .reboot = self.board.reboot,
+            .doneFn = doneThunk,
+            .saved = &self.saved,
+        };
     }
 
     /// A sleeping CPU0's width: to the nearest armed SysTick period, the
@@ -167,9 +177,19 @@ pub const Clock = struct {
     pub fn width(self: *Clock) u32 {
         if (self.saved.stretch.full == 0) self.saved.base[1] = if (self.cpu1) |second| second.core.cpu.slots else 0;
         var edges: [6]u64 = undefined;
-        for (edges[0..5], 0..) |*edge, which| edge.* = self.instructionsForCycles(self.edgeCycles(which));
-        edges[5] = if (self.board.input_script.nextDue()) |at| self.instructionsForCycles(self.board.time.base.cyclesUntil(at)) else 0;
-        return scheduler.stretch.width(self.timebase.per_chunk, &edges, self.idle_skip and self.cpu1 == null and quiet_due.quietUntilDue(self.board));
+        for (edges[0..5], 0..) |*edge, which| {
+            edge.* = self.instructionsForCycles(self.edgeCycles(which));
+        }
+        edges[5] = if (self.board.input_script.nextDue()) |at| self.instructionsForCycles(
+            self.board.time.base.cyclesUntil(at),
+        ) else 0;
+        return scheduler.stretch.width(
+            self.timebase.per_chunk,
+            &edges,
+            self.idle_skip and
+                self.cpu1 == null and
+                quiet_due.quietUntilDue(self.board),
+        );
     }
     fn instructionsForCycles(self: *Clock, cycles: u64) u64 {
         if (cycles == 0 or !self.rateScaled()) return cycles;
@@ -178,7 +198,11 @@ pub const Clock = struct {
     pub fn rateScaled(self: *Clock) bool {
         if (self.boundary_hz != null) return true;
         if (self.resume_unscaled) return false;
-        if (self.timed == null or systick_bank.width(self.timebase.period(self.memory), self.ns_timebase.period(self.memory)) == 0) return false;
+        if (self.timed == null or
+            systick_bank.width(
+                self.timebase.period(self.memory),
+                self.ns_timebase.period(self.memory),
+            ) == 0) return false;
         if (!self.resume_boundary) core_clock.retune(self.board);
         self.boundary_hz = self.board.time.base.hz;
         return true;
@@ -200,11 +224,6 @@ fn landScs(address: u32) ?u32 {
 fn widthThunk(context: *anyopaque) u32 {
     const self: *Clock = @ptrCast(@alignCast(context));
     return self.width();
-}
-
-fn sleepThunk(context: *anyopaque, normal: u32) u32 {
-    const self: *Clock = @ptrCast(@alignCast(context));
-    return self.asleepWidth(normal);
 }
 
 fn doneThunk(context: *anyopaque) bool {

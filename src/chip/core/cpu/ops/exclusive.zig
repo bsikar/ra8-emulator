@@ -11,10 +11,12 @@
 //!
 //! Left unclaimed: SP or PC as Rt or Rd, PC as Rn, and a store whose Rd
 //! repeats Rt or Rn. Every form is MemA: an unaligned one stops (RA8EMU-85).
-const op = @import("../op.zig");
+const std = @import("std");
+
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const rn_mask: u16 = 0xFFF0;
@@ -60,15 +62,39 @@ pub fn access(instr: Instr) ?Access {
     const rt: u4 = @intCast(instr.hw2 >> 12);
     const nibble: u4 = @intCast((instr.hw2 >> 8) & 0xF);
     const a: Access = switch (instr.hw1 & encodings.rn_mask) {
-        encodings.ldrex => if (nibble != 0xF) return null else .{ .load = true, .size = 4, .rt = rt, .rn = rn, .offset = @as(u32, instr.hw2 & 0xFF) << 2 },
-        encodings.strex => .{ .load = false, .size = 4, .rt = rt, .rn = rn, .rd = nibble, .offset = @as(u32, instr.hw2 & 0xFF) << 2 },
+        encodings.ldrex => if (nibble != 0xF) return null else .{
+            .load = true,
+            .size = 4,
+            .rt = rt,
+            .rn = rn,
+            .offset = @as(u32, instr.hw2 & 0xFF) << 2,
+        },
+        encodings.strex => .{
+            .load = false,
+            .size = 4,
+            .rt = rt,
+            .rn = rn,
+            .rd = nibble,
+            .offset = @as(u32, instr.hw2 & 0xFF) << 2,
+        },
         encodings.ldrex_narrow => blk: {
             if (nibble != 0xF or instr.hw2 & 0xF != 0xF) return null;
-            break :blk .{ .load = true, .size = narrowSize((instr.hw2 >> 4) & 0xF) orelse return null, .rt = rt, .rn = rn };
+            break :blk .{
+                .load = true,
+                .size = narrowSize((instr.hw2 >> 4) & 0xF) orelse return null,
+                .rt = rt,
+                .rn = rn,
+            };
         },
         encodings.strex_narrow => blk: {
             if (nibble != 0xF) return null;
-            break :blk .{ .load = false, .size = narrowSize((instr.hw2 >> 4) & 0xF) orelse return null, .rt = rt, .rn = rn, .rd = @intCast(instr.hw2 & 0xF) };
+            break :blk .{
+                .load = false,
+                .size = narrowSize((instr.hw2 >> 4) & 0xF) orelse return null,
+                .rt = rt,
+                .rn = rn,
+                .rd = @intCast(instr.hw2 & 0xF),
+            };
         },
         else => return null,
     };
@@ -93,7 +119,7 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     try alignment.memA(address, a.size);
     var bytes: [4]u8 = .{ 0, 0, 0, 0 };
     try cpu.bus.read(address, bytes[0..a.size]);
-    cpu.regs.set(a.rt, @import("std").mem.readInt(u32, &bytes, .little));
+    cpu.regs.set(a.rt, std.mem.readInt(u32, &bytes, .little));
     cpu.exclusive = address;
 }
 
@@ -105,7 +131,7 @@ fn store(cpu: *Cpu, instr: Instr) op.Error!void {
     cpu.exclusive = null;
     if (held) {
         var bytes: [4]u8 = undefined;
-        @import("std").mem.writeInt(u32, &bytes, cpu.regs.get(a.rt), .little);
+        std.mem.writeInt(u32, &bytes, cpu.regs.get(a.rt), .little);
         try cpu.bus.write(address, bytes[0..a.size]);
     }
     cpu.regs.set(a.rd, if (held) 0 else 1);

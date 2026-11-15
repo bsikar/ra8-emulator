@@ -10,11 +10,12 @@
 //! any of its bytes is predicated, its flags count only when its first
 //! byte is, and the result is masked with the predicate.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const format = fpu.format;
 const nzcv = fpu.compare.nzcv;
-const qreg = @import("../../qreg.zig");
 const float = @import("../float.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 pub const Cond = enum { eq, ne, ge, lt, gt, le };

@@ -43,8 +43,8 @@
 //! descriptor execution time, so inventing one would only move the lie.
 //! Descriptors, payload words and the timeout registers are a plain shadow:
 //! the driver reads back what it wrote, which is what it does on silicon too.
-const periph = @import("../../registry.zig");
 pub const link = @import("link.zig");
+const periph = @import("../../registry.zig");
 
 /// Host geometry. The bus folds the Non-secure alias at 0x5034_6000 onto
 /// this base.

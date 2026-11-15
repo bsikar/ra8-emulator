@@ -10,9 +10,9 @@
 //! per boundary; a far alarm costs one event a second, which idle
 //! fast-forward (RA8EMU-185) skips through. A geared clock and a stopped one
 //! queue nothing, which is what keeps the corpus unchanged.
+const event_queue = @import("../time/event_queue.zig");
 const rtc = @import("rtc.zig");
 const rtc_pace = @import("pace.zig");
-const event_queue = @import("../time/event_queue.zig");
 
 /// The queue id the RTC's second edge is scheduled under.
 pub const queue_id: u16 = 0x0C00;

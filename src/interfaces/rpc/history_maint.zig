@@ -6,8 +6,10 @@
 //! pack compaction to reclaim. The segments are rewritten in place, so a
 //! session must be closed (the command line holds its lock).
 const std = @import("std");
+
 const history = @import("ra8_host").history;
 const session = @import("ra8_session");
+
 const record = session.history_record;
 const session_log = session.history_log;
 const branch_mod = session.history_branch;
@@ -38,9 +40,18 @@ const Gather = struct {
 
     fn see(self: *Gather, boundary: session_log.Boundary) void {
         if (boundary.kind & 0x7FFF != @backingInt(record.Kind.checkpoint)) return;
-        const payload = self.bytes[boundary.offset + session.history_format.header_len .. boundary.offset + boundary.consumed];
+        const payload_start = boundary.offset + session.history_format.header_len;
+        const payload_end = boundary.offset + boundary.consumed;
+        const payload = self.bytes[payload_start..payload_end];
         const hit = record.decodeCheckpoint(payload) catch return;
-        self.list.append(self.allocator, .{ .id = hit.checkpoint.id, .position = hit.header.position, .object = hit.checkpoint.object }) catch |err| {
+        self.list.append(
+            self.allocator,
+            .{
+                .id = hit.checkpoint.id,
+                .position = hit.header.position,
+                .object = hit.checkpoint.object,
+            },
+        ) catch |err| {
             self.failed = err;
         };
     }
@@ -65,7 +76,12 @@ fn checkpoints(allocator: std.mem.Allocator, store: history.storage.Store) ![]Fo
 /// Thins each line's checkpoints around its newest one: dense behind the
 /// cursor, exponentially sparser away, never past `max_replay_gap` rounds
 /// between survivors, with fork bases kept.
-pub fn thin(allocator: std.mem.Allocator, store: history.storage.Store, graph: *const branch_mod.BranchGraph, max_replay_gap: u64) !Report {
+pub fn thin(
+    allocator: std.mem.Allocator,
+    store: history.storage.Store,
+    graph: *const branch_mod.BranchGraph,
+    max_replay_gap: u64,
+) !Report {
     const all = try checkpoints(allocator, store);
     defer allocator.free(all);
     var dropped: std.ArrayList(u32) = .empty;
@@ -73,12 +89,22 @@ pub fn thin(allocator: std.mem.Allocator, store: history.storage.Store, graph: *
     var line_ids: std.ArrayList(u32) = .empty;
     defer line_ids.deinit(allocator);
     for (all) |c| {
-        if (std.mem.indexOfScalar(u32, line_ids.items, c.position.branch) == null) try line_ids.append(allocator, c.position.branch);
+        if (std.mem.indexOfScalar(
+            u32,
+            line_ids.items,
+            c.position.branch,
+        ) == null) try line_ids.append(
+            allocator,
+            c.position.branch,
+        );
     }
     for (line_ids.items) |line| {
         var refs: std.ArrayList(thinning.CheckpointRef) = .empty;
         defer refs.deinit(allocator);
-        for (all) |c| if (c.position.branch == line) try refs.append(allocator, .{ .id = c.id, .position = c.position });
+        for (all) |c| if (c.position.branch == line) try refs.append(
+            allocator,
+            .{ .id = c.id, .position = c.position },
+        );
         thinning.markForkBases(refs.items, graph);
         const cursor = refs.items[refs.items.len - 1].position;
         var plan = try thinning.planThinning(allocator, refs.items, cursor, .{ .max_replay_gap = max_replay_gap });
@@ -92,13 +118,21 @@ pub fn thin(allocator: std.mem.Allocator, store: history.storage.Store, graph: *
 /// Re-roots the history at checkpoint `target`: the history strictly before
 /// it on its line is dropped. Refused without `confirm`, and when a pin
 /// sits before the new root.
-pub fn reroot(allocator: std.mem.Allocator, store: history.storage.Store, graph: *const branch_mod.BranchGraph, target: u32, confirm: bool) !Report {
+pub fn reroot(
+    allocator: std.mem.Allocator,
+    store: history.storage.Store,
+    graph: *const branch_mod.BranchGraph,
+    target: u32,
+    confirm: bool,
+) !Report {
     const all = try checkpoints(allocator, store);
     defer allocator.free(all);
     var manifests = try allocator.alloc(manifest_mod.Manifest, all.len);
     defer allocator.free(manifests);
     var loaded: usize = 0;
-    defer for (manifests[0..loaded]) |*m| m.deinit(allocator);
+    defer for (manifests[0..loaded]) |*m| {
+        m.deinit(allocator);
+    };
     var entries = try allocator.alloc(reroot_mod.CheckpointEntry, all.len);
     defer allocator.free(entries);
     for (all, 0..) |c, i| {
@@ -112,7 +146,11 @@ pub fn reroot(allocator: std.mem.Allocator, store: history.storage.Store, graph:
     var plan = try reroot_mod.planReroot(allocator, target, confirm, entries, graph, &.{});
     defer plan.deinit(allocator);
     try dropCheckpoints(allocator, store, plan.dropped_checkpoints);
-    return .{ .dropped = plan.dropped_checkpoints.len, .kept = all.len - plan.dropped_checkpoints.len, .branches_orphaned = plan.dropped_branches.len };
+    return .{
+        .dropped = plan.dropped_checkpoints.len,
+        .kept = all.len - plan.dropped_checkpoints.len,
+        .branches_orphaned = plan.dropped_branches.len,
+    };
 }
 
 const Cut = struct {
@@ -125,7 +163,8 @@ const Cut = struct {
     fn see(self: *Cut, boundary: session_log.Boundary) void {
         const frame = self.bytes[boundary.offset .. boundary.offset + boundary.consumed];
         const kind = boundary.kind & 0x7FFF;
-        const shaped = kind == @backingInt(record.Kind.checkpoint) or kind == @backingInt(record.Kind.checkpoint_picture);
+        const shaped = kind == @backingInt(record.Kind.checkpoint) or
+            kind == @backingInt(record.Kind.checkpoint_picture);
         if (shaped) {
             const payload = frame[session.history_format.header_len..];
             if (record.decodeCheckpoint(payload)) |hit| {
@@ -144,7 +183,9 @@ fn dropCheckpoints(allocator: std.mem.Allocator, store: history.storage.Store, i
     var names: Names = .{ .allocator = allocator };
     defer names.deinit();
     try store.vtable.list(store.context, .log, .{ .context = &names, .visit = &Names.visit });
-    for (names.list.items) |name| try rewrite(allocator, store, name, ids);
+    for (names.list.items) |name| {
+        try rewrite(allocator, store, name, ids);
+    }
 }
 
 fn rewrite(allocator: std.mem.Allocator, store: history.storage.Store, name: []const u8, ids: []const u32) !void {
@@ -176,7 +217,9 @@ const Names = struct {
     list: std.ArrayList([]u8) = .empty,
 
     fn deinit(self: *Names) void {
-        for (self.list.items) |n| self.allocator.free(n);
+        for (self.list.items) |n| {
+            self.allocator.free(n);
+        }
         self.list.deinit(self.allocator);
     }
 

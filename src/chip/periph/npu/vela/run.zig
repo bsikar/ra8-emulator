@@ -19,17 +19,18 @@
 //! convop.zig, and any other register set is passed over for now.
 //! The convolution's scratch buffers come from the page allocator.
 const std = @import("std");
-const vela = @import("vela.zig");
-const regs = @import("regs.zig");
-const dma = @import("dma.zig");
-const fm = @import("fm.zig");
-const quant = @import("quant.zig");
-const minmax = @import("minmax.zig");
-const pool = @import("pool.zig");
+
+const addsub = @import("addsub.zig");
 const avgpool = @import("avgpool.zig");
 const convop = @import("convop.zig");
+const dma = @import("dma.zig");
+const fm = @import("fm.zig");
+const minmax = @import("minmax.zig");
 const mul = @import("mul.zig");
-const addsub = @import("addsub.zig");
+const pool = @import("pool.zig");
+const quant = @import("quant.zig");
+const regs = @import("regs.zig");
+const vela = @import("vela.zig");
 
 pub const Error = vela.Error || dma.Error || minmax.Error || convop.Error;
 
@@ -82,9 +83,17 @@ fn operate(machine: *Machine, memory: anytype, regions: *const dma.Regions, op: 
             .conv = machine.conv,
         }, op == .depthwise),
         .pool => {
-            const inputs = pool.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant, .kernel = machine.kernel };
+            const inputs = pool.Inputs{
+                .bases = machine.state,
+                .maps = machine.maps,
+                .quant = machine.quant,
+                .kernel = machine.kernel,
+            };
             const mode = vela.param(word);
-            machine.elements += try if (mode == avgpool.mode_average) avgpool.run(memory, regions, inputs) else pool.run(memory, regions, mode, inputs);
+            machine.elements += try if (mode == avgpool.mode_average)
+                avgpool.run(memory, regions, inputs)
+            else
+                pool.run(memory, regions, mode, inputs);
         },
         .elementwise => {
             const inputs = minmax.Inputs{ .bases = machine.state, .maps = machine.maps, .quant = machine.quant };
@@ -124,5 +133,12 @@ pub fn run(memory: anytype, regions: *const dma.Regions, words: []const u32) Err
         // walk() already refused any opcode outside Op.
         try operate(&machine, memory, regions, @fromBackingInt(@intCast(code)), word);
     }
-    return .{ .summary = summary, .moved = machine.moved, .state = machine.state, .maps = machine.maps, .quant = machine.quant, .elements = machine.elements };
+    return .{
+        .summary = summary,
+        .moved = machine.moved,
+        .state = machine.state,
+        .maps = machine.maps,
+        .quant = machine.quant,
+        .elements = machine.elements,
+    };
 }

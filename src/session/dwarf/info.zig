@@ -11,9 +11,10 @@
 //! goes through .debug_addr (DW_FORM_addrx) or that only has DW_AT_ranges
 //! is left out.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
+
 const dwarf_cursor = @import("cursor.zig");
 const dwarf_line = @import("line/line.zig");
+const elf = @import("ra8_board").image.elf;
 
 const Cursor = dwarf_cursor.Cursor;
 pub const Error = dwarf_cursor.Error;
