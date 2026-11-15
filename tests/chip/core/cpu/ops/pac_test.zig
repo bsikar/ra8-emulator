@@ -126,7 +126,8 @@ test "disabled PAC instructions are inert and BXAUT still branches" {
     try execute(&cpu, 0xF3AF, 0x802D); // AUT is inert when disabled
     cpu.regs.low[0] = 0xDEAD_BEEF;
     cpu.regs.low[2] = 0x2000_0010;
-    try execute(&cpu, 0xFB61, 0xF002); // PACG leaves its destination untouched
+    // DDI0553B.y ID09082024 C2.4.137 PACG writes R[d] only when PACEnabled().
+    try execute(&cpu, 0xFB61, 0xF002); // Disabled PACG leaves Rd unchanged.
     try std.testing.expectEqual(@as(u32, 0xDEAD_BEEF), cpu.regs.low[0]);
     try execute(&cpu, 0xFB51, 0x0F02); // AUTG is inert when disabled
     try execute(&cpu, 0xFB51, 0x0F12); // bxaut r0, r1, r2 skips the check, then branches
