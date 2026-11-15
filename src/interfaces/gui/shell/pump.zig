@@ -10,7 +10,9 @@ const shell_memory = @import("memory.zig");
 
 /// Pump the link into the leaves, then take the arrivals this frame allows.
 pub fn pump(self: *Shell) !void {
+    self.recovery.sync(self);
     const link = self.link orelse return;
+    self.recovery.attach(self);
     if (self.layout.shows(.device_metrics) and self.now() -| self.device_metrics_at >= 250_000_000) {
         if (link.native) |native| if (native.metrics()) |snapshots| {
             self.device_metrics = snapshots;
@@ -44,6 +46,7 @@ pub fn pump(self: *Shell) !void {
 
 /// Take the arrivals this frame allows without queueing new leaf reads.
 pub fn drain(self: *Shell, link: *session_link.Link) !void {
+    self.recovery.sync(self);
     self.drained = false;
     var taken: usize = 0;
     while (taken < loop.max_arrivals) : (taken += 1) {
@@ -53,16 +56,17 @@ pub fn drain(self: *Shell, link: *session_link.Link) !void {
         };
         if (self.timeline) |*model| try timeline_feed.take(model, arrival);
         self.snaps.observe(arrival);
+        const restored = self.recovery.observe(self, arrival);
         // A slice's end is not a stop: the run goes on.
         if (self.time) |time| if (time.observe(arrival, self.now()) == .boundary) continue;
         const loading = self.status.load_id;
         self.status.observe(link, arrival);
         const answered = loading != null and self.status.load_id == null;
         if (answered) self.loaded = true;
-        if (answered) if (self.time) |time| time.loaded(&self.status);
-        observeCore(self, answered, arrival);
+        if (answered or restored) if (self.time) |time| time.loaded(&self.status);
+        observeCore(self, answered or restored, arrival);
         if (self.breaks) |breaks| breaks.observe(arrival);
-        observeHistory(self, answered, arrival);
+        observeHistory(self, answered or restored, arrival);
         if (self.console) |console| try console.observe(arrival);
         if (self.board) |board| try board.observe(arrival, self.now());
         if (self.devices) |devices| devices.observe(arrival);
@@ -89,14 +93,20 @@ fn observeCore(self: *Shell, loaded: bool, arrival: session_link.Arrival) void {
         if (loaded) locals.reload();
         locals.observe(arrival);
     }
-    const registers = self.registers orelse return;
-    if (loaded) registers.reload();
-    registers.observe(arrival);
-    if (self.edit) |edit| _ = edit.observe(registers, arrival);
+    if (self.registers) |registers| {
+        if (loaded) registers.reload();
+        registers.observe(arrival);
+        if (self.edit) |edit| _ = edit.observe(registers, arrival);
+    }
     for ([_]?*shell_memory.Pair{ self.memory, self.code }) |leaf| if (leaf) |memory| {
-        if (loaded) memory.reload();
+        if (loaded) {
+            memory.reload();
+            for (&memory.cores) |*model| {
+                model.want = true;
+            }
+        }
         memory.observe(arrival);
-        memory.follow(registers);
+        if (self.registers) |registers| memory.follow(registers);
     };
 }
 

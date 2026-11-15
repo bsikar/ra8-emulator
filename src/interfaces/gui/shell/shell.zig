@@ -24,6 +24,7 @@ pub const filmstrip_feed = @import("filmstrip_feed.zig");
 pub const layout_store = @import("layout_store.zig");
 pub const loop = @import("loop.zig");
 pub const menu_actions = @import("menu_actions.zig");
+pub const recovery = @import("recovery.zig");
 pub const main = @import("main.zig");
 pub const memory = @import("memory.zig");
 pub const memory_field = @import("memory_field.zig");

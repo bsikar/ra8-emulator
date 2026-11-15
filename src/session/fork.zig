@@ -71,6 +71,7 @@ pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!v
 /// Stages the intervention record for `action` at `pos`.
 fn recordActionIntervention(self: *Session, pos: Position, action: Action) anyerror!void {
     if (self.replaying) return;
+    if (self.persistent_recorder == null and (self.history == null or self.history.?.recorder == null)) return;
     const router = self.fork_router;
     const allocator = if (router) |r| r.allocator else if (self.persistent_recorder) |rec| rec.gpa else return;
     var encoded = try action_codec.encode(allocator, action);
@@ -151,9 +152,8 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     if (self.persistent_recorder) |rec| try rec.commit(now_ns);
     router.switchActiveLine(undo.new_id);
     line.stampLine(self);
-    window_fork.noteFork(self, undo.new_id);
     undo.stage = .switched;
-    try apply.applyAction(self, action);
+    try applyForkAction(self, undo.new_id, action);
     // The cut window still holds the state before the write.
     session_window.replantWindow(self);
     if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);
@@ -161,6 +161,21 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     _ = async_traffic.clearOnFork(self);
     if (self.async_traffic.usbip_hook) |hook| if (hook.forkedFn) |forked| forked(hook.context);
     replay_feeder.release(self);
+}
+
+fn applyForkAction(self: *Session, branch: u32, action: Action) !void {
+    switch (action) {
+        .restore => {
+            // Snapshot preparation can still refuse. Keep the old window
+            // intact until every fallible restore operation has succeeded.
+            try apply.applyAction(self, action);
+            window_fork.noteFork(self, branch);
+        },
+        else => {
+            window_fork.noteFork(self, branch);
+            try apply.applyAction(self, action);
+        },
+    }
 }
 
 /// The single Session-level routing choke point for host interventions.

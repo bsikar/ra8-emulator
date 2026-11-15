@@ -112,6 +112,8 @@ const session_routes = .{
     .{ @backingInt(M.branch_status), session_branch.branchStatus },
     .{ @backingInt(M.console_input), session_intervene.consoleInput },
     .{ @backingInt(M.skip_bkpt), session_intervene.skipBkpt },
+    .{ @backingInt(M.undo_write), session_intervene.undoWrite },
+    .{ @backingInt(M.reset_image), session_intervene.resetImage },
     .{ @backingInt(M.play), session_nav.play },
     .{ @backingInt(M.nav_query), session_nav.navQuery },
     .{ @backingInt(M.marker_set), session_marker.markerSet },

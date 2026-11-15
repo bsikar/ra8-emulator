@@ -195,6 +195,9 @@ pub const Served = struct {
         };
         errdefer served_prefetch.detach(self);
         try served_prefetch.attach(self, if (history_opts) |o| o.ram_budget else null);
+        // Freeze the clean startup after both images and media, before a
+        // reopened history restores a historical checkpoint in attachContext.
+        self.owner.session().history.?.edits.loaded();
         try self.attachContext(allocator, profile);
         if (self.history) |b| if (history_opts.?.kept) try b.session.keep();
     }
@@ -311,6 +314,7 @@ pub const Served = struct {
             try card.addApp(path);
         }
         try served_card.stage(self, card);
+        self.owner.session().history.?.edits.loaded();
     }
 
     pub fn sampleStacks(self: *Served, every: u32) !void {
@@ -328,6 +332,7 @@ pub const Served = struct {
     /// it (RA8EMU-1147). Call once, after open and before sampleStacks.
     pub fn openSecond(self: *Served, path: []const u8) !void {
         try served_second.open(self, .{ .path = path });
+        self.owner.session().history.?.edits.loaded();
     }
 
     pub fn frameCache(self: *Served) ?*frame_cache.FrameCache {

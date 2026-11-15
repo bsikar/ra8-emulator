@@ -43,6 +43,7 @@ const tap_part = @import("tap_part.zig");
 const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
 const watch_table = @import("watch/table.zig");
 const window_engine = @import("history/window_engine.zig");
+const write_undo = @import("write_undo.zig");
 const zig_drive = @import("zig/drive.zig");
 const zig_session = @import("zig/session.zig");
 
@@ -187,10 +188,8 @@ pub const Session = struct {
     /// Frees what replay holds for this session (the feeder); its owner
     /// calls this at teardown.
     pub const releaseReplay = replay_feeder.release;
-
     /// Put the part on `at` into `mode` from now on, mid-run included.
     pub const setFault = session_fork.setFault;
-
     /// Let the part on `at` behave like the part again.
     pub const clearFault = session_fork.clearFault;
 
@@ -309,6 +308,8 @@ pub const Session = struct {
     pub fn read(self: *Session, core: Core, address: u32, into: []u8) anyerror!void {
         try (try self.view(core)).read(address, into);
     }
+    pub const undoWrite = write_undo.undoWrite;
+    pub const resetImage = write_undo.resetImage;
     pub fn write(self: *Session, core: Core, address: u32, bytes: []const u8) anyerror!void {
         return session_fork.write(self, core, address, bytes);
     }

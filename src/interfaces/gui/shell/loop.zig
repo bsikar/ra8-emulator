@@ -37,6 +37,7 @@ const shell_breaks = @import("breaks.zig");
 const shell_memory_field = @import("memory_field.zig");
 const shell_time = @import("time.zig");
 const shell_snaps = @import("snapshots.zig");
+const shell_recovery = @import("recovery.zig");
 const wall_clock = @import("../wall_clock.zig");
 const shell_stack = @import("stack.zig");
 const shell_source = @import("source.zig");
@@ -66,6 +67,7 @@ pub const Shell = struct {
     allocator: std.mem.Allocator,
     layout: pane_layout.Layout,
     status: status_bar.Status = .{},
+    recovery: shell_recovery.Recovery = .{},
     link: ?*session_link.Link = null,
     device_metrics: [2]@import("ra8_session").device_metrics.Snapshot = .{ .{}, .{} },
     device_windows: [2]@import("ra8_session").device_metrics.Window = .{ .{}, .{} },
@@ -189,10 +191,10 @@ pub const Shell = struct {
         try execution.exchange(self);
         if (self.registers) |registers| if (self.time) |time| registers.live(time.run.lit, self.now(), self.settings.display.registers.interval());
         try execution.paySlices(self, .fresh);
-        if (self.files) |files| {
+        if (self.recovery.asked == null) if (self.files) |files| {
             if (self.link) |link| files.retry(link, &self.status);
             files.frame(window, &self.status);
-        }
+        };
         if (!window.visible()) return true;
         if (self.pick) |pick| pick.frame(window);
         solved.deinit(self.allocator);
@@ -230,6 +232,7 @@ pub const Shell = struct {
         switch (event) {
             .quit => self.open = false,
             .button => |press| {
+                if (self.recovery.asked != null) return;
                 if (press.button != 1) return;
                 if (press.down and menu_actions.press(self, window, press.x, press.y)) return;
                 if (press.down and self.themes.press(shell_frame.stripUnder(self.bar), press.x, press.y)) return;
@@ -263,6 +266,7 @@ pub const Shell = struct {
             },
             .text, .key => {
                 if (menu_actions.key(self, window, event)) return;
+                if (self.recovery.asked != null) return;
                 if (self.edit) |edit| if (self.link) |link| if (edit.handle(link, event)) return;
                 if (self.themes.key(event)) return;
                 if (shell_press.pageConsole(self, event, solved)) return;
@@ -303,6 +307,8 @@ pub const Shell = struct {
     /// Opens `path`: loaded on the session, or the session started on it
     /// when none is up yet.
     pub fn openImage(self: *Shell, path: []const u8) void {
+        self.recovery.sync(self);
+        if (self.recovery.asked != null) return;
         if (self.link) |link| {
             if (self.files) |files| files.picked(path, link, &self.status);
         } else if (self.boot) |boot| boot.startFn(boot.context, path);
