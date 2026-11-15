@@ -11,12 +11,12 @@
 //! single register layout: operands are S[x]<15:0> and the result is
 //! written as Zeros(16):result. FZ16 rather than FZ flushes them.
 //! The CPACR enable check (NOCP) is not modelled yet.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fpu = @import("../../fpu/all.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+
 const Format = fpu.format.Format;
-const Fpscr = fpu.fpscr.Fpscr;
 const Bank = fpu.bank.Bank;
 
 pub const group: op.Group = .{ .name = "fp_arith", .decode = decode, .oracle = false };

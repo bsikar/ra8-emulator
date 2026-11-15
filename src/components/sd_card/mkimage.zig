@@ -10,10 +10,11 @@
 //! `kind` (.file, .directory, anything else), `free(allocator, entries)`,
 //! `sub(name)` and `close()`, `size(name)` and `read(allocator, name)`.
 const std = @import("std");
-const image = @import("image.zig");
+
+const dirent = @import("dirent.zig");
 const fat = @import("fat.zig");
 const format = @import("format/format.zig");
-const dirent = @import("dirent.zig");
+const image = @import("image.zig");
 
 pub const Error = error{ UnsupportedEntry, FileTooLarge, TooManyNames, NoCardFits, WriteRefused };
 
@@ -52,7 +53,9 @@ fn listed(allocator: std.mem.Allocator, folder: anytype) ![]Item {
     defer @TypeOf(folder).free(allocator, entries);
     var items: std.ArrayList(Item) = .empty;
     errdefer {
-        for (items.items) |item| allocator.free(item.name);
+        for (items.items) |item| {
+            allocator.free(item.name);
+        }
         items.deinit(allocator);
     }
     for (entries) |entry| {
@@ -73,7 +76,9 @@ fn listed(allocator: std.mem.Allocator, folder: anytype) ![]Item {
 }
 
 fn freeItems(allocator: std.mem.Allocator, items: []Item) void {
-    for (items) |item| allocator.free(item.name);
+    for (items) |item| {
+        allocator.free(item.name);
+    }
     allocator.free(items);
 }
 
@@ -81,7 +86,9 @@ fn freeItems(allocator: std.mem.Allocator, items: []Item) void {
 /// plus one spare to keep the count alike) and every child's.
 fn slotsFor(items: []const Item) !usize {
     var count: usize = 2;
-    for (items) |item| count += try dirent.slots(item.name);
+    for (items) |item| {
+        count += try dirent.slots(item.name);
+    }
     return count;
 }
 
@@ -139,7 +146,9 @@ const Writer = struct {
         if (count == 0) return 0;
         const first = self.next;
         var c = first;
-        while (c < first + count - 1) : (c += 1) self.table[c] = c + 1;
+        while (c < first + count - 1) : (c += 1) {
+            self.table[c] = c + 1;
+        }
         self.table[c] = fat.value.fat32_end_of_chain;
         self.next = first + count;
         return first;
@@ -170,7 +179,10 @@ const Writer = struct {
         defer freeItems(self.allocator, items);
         const slots = try slotsFor(items);
         const first = self.take(clustersOf(slots * dirent.bytes, self.clusterBytes()));
-        const entries = try self.allocator.alloc(dirent.Entry, clustersOf(slots * dirent.bytes, self.clusterBytes()) * self.clusterBytes() / dirent.bytes);
+        const entries = try self.allocator.alloc(
+            dirent.Entry,
+            clustersOf(slots * dirent.bytes, self.clusterBytes()) * self.clusterBytes() / dirent.bytes,
+        );
         defer self.allocator.free(entries);
         @memset(entries, @as([dirent.bytes]u8, @splat(0)));
         var at: usize = 0;
@@ -243,6 +255,8 @@ const Writer = struct {
 /// The volume label as an 11-byte space-padded name.
 fn labelName(label: []const u8) [11]u8 {
     var out = @as([11]u8, @splat(' '));
-    for (label[0..@min(label.len, 11)], 0..) |c, i| out[i] = std.ascii.toUpper(c);
+    for (label[0..@min(label.len, 11)], 0..) |c, i| {
+        out[i] = std.ascii.toUpper(c);
+    }
     return out;
 }

@@ -1,9 +1,9 @@
 //! Text for the saturate group: SSAT and USAT with an optional shift of Rn.
 //! We print the saturate position as the bit count (sat_imm + 1 for
 //! SSAT), and the shift amount as an ordinary immediate; LSL #0 is omitted.
+const Fields = @import("../ops/saturate.zig").Fields;
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const Fields = @import("../ops/saturate.zig").Fields;
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = Fields.of(instr).?;

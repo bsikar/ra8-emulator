@@ -2,12 +2,13 @@
 //! worker and the frame cache, sized from the history's budgets and bound
 //! to the board the served session owns.
 const std = @import("std");
+
+const frame_pipeline = @import("frame_pipeline.zig");
+const frame_tap = @import("ra8_session").history_frame_tap;
 const harness = @import("ra8_session").harness;
+const history_bind = @import("history_bind.zig");
 const history_resources = @import("ra8_host").history.resources;
 const history_storage = @import("ra8_host").history.storage;
-const frame_tap = @import("ra8_session").history_frame_tap;
-const frame_pipeline = @import("frame_pipeline.zig");
-const history_bind = @import("history_bind.zig");
 const served_setup = @import("served_setup.zig");
 
 pub fn init(
@@ -19,7 +20,19 @@ pub fn init(
 ) !void {
     const store = if (bind_inst) |b| history_storage.Store.from(&b.session) else null;
     const ram_val = try history_resources.ramBudget(if (history_opts) |o| o.ram_budget else null);
-    const disk_val = if (bind_inst) |b| (if (b.disk) |d| d.cap else (if (history_opts) |o| o.budget orelse 0 else 0)) else (if (history_opts) |o| o.budget orelse 0 else 0);
+    const disk_val = if (bind_inst) |b|
+        (if (b.disk) |d|
+            d.cap
+        else
+            (if (history_opts) |o|
+                o.budget orelse 0
+            else
+                0))
+    else
+        (if (history_opts) |o|
+            o.budget orelse 0
+        else
+            0);
     const state_file: *harness.files.StateFile = @ptrCast(@alignCast(self.owner.stateFiles().context));
     const grid_ptr = &state_file.files.edge.saved;
     const cpu_store = self.owner.guest().store;

@@ -1,9 +1,10 @@
 //! Text for the parallel group: {s,q,sh,u,uq,uh}{add8,add16,asx,sub8,sub16,sax}
 //! Rd, Rn, Rm, in the spelling the parity digests pin.
 const std = @import("std");
+
 const Instr = @import("../instr.zig").Instr;
-const text = @import("text.zig");
 const parallel = @import("../ops/parallel.zig");
+const text = @import("text.zig");
 
 /// Prefix by [unsigned][mode].
 const prefixes = [2][3][]const u8{
@@ -17,7 +18,9 @@ const mnemonics = blk: {
     var out: [2][3][shapes.len][]const u8 = undefined;
     for (0..2) |u| {
         for (0..3) |m| {
-            for (shapes, 0..) |shape, s| out[u][m][s] = prefixes[u][m] ++ shape;
+            for (shapes, 0..) |shape, s| {
+                out[u][m][s] = prefixes[u][m] ++ shape;
+            }
         }
     }
     break :blk out;

@@ -9,6 +9,7 @@
 //! segment's pages are collected and merged here and only whole, disjoint
 //! ranges are handed over to be mapped.
 const std = @import("std");
+
 const elf = @import("elf.zig");
 const loaded_image = @import("ra8_chip").core.loaded_image;
 

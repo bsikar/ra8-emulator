@@ -2,8 +2,8 @@
 //! D20, RA8EMU-1175). `ra8_session` declares structural callback types in
 //! `file_ops.zig`; applications and host tests fill them from here so nothing
 //! inside `src/session/` touches `std.Io.Dir`, `std.Io.File`, or `std.posix`.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 /// Validate that `path` is a bare file name: non-empty, no `/` or `\`, no drive
 /// colon `:`, no NUL byte, and neither `.` nor `..`.

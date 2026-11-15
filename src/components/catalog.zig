@@ -8,11 +8,12 @@
 //! that hands back that bus's Device. The controllers never learn that a
 //! model exists.
 const std = @import("std");
+
 const endpoint = @import("endpoint.zig");
+const gpio_pins = @import("ra8_chip").periph.gpio.pins;
 const riic_bus = @import("ra8_chip").periph.riic.bus;
 const sci_device = @import("ra8_chip").periph.sci.device;
 const spi = @import("ra8_chip").periph.spi;
-const gpio_pins = @import("ra8_chip").periph.gpio.pins;
 
 /// What an instance offers its bus or pin.
 pub const Device = union(enum) {

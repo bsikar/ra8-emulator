@@ -14,9 +14,11 @@
 //! wrong. That refusal is the U55's own shape, not a gap: the Ethos-U55 TRM
 //! (102420_0200_02) gives SKIP0/SKIP1 (cmd1 0x033/0x034) a 2D/3D meaning
 //! but lists cmd0 0x132-0x17F, where the 2D/3D sizes would go, as
-//! reserved, and Vela 3.12.0 only emits 1D DMA for the U55. `memory` is anything with read/write(address, bytes), so the
+//! reserved, and Vela 3.12.0 only emits 1D DMA for the U55. `memory` is anything with read/write(address, bytes), so
+//! the
 //! copy holds on either engine and in tests.
 const std = @import("std");
+
 const regs = @import("regs.zig");
 
 pub const set_dma0_src_region: u10 = 0x130;

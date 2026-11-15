@@ -15,12 +15,13 @@
 //! because it needs no object loaded and no digest checked.
 
 const std = @import("std");
-const seek_target = @import("seek_target.zig");
-const position_mod = @import("position.zig");
+
+const bisect = @import("value_bisect.zig");
 const branch_mod = @import("branch.zig");
 const cross_seek = @import("cross_seek.zig");
 const nav_index = @import("nav_index.zig");
-const bisect = @import("value_bisect.zig");
+const position_mod = @import("position.zig");
+const seek_target = @import("seek_target.zig");
 
 pub const Position = position_mod.Position;
 pub const BranchGraph = branch_mod.BranchGraph;
@@ -216,8 +217,9 @@ fn planPosition(target: Position, facts: Facts) Outcome {
             const best = nearestOnLine(graph, facts.active_line, target, facts.checkpoints);
             if (order == .gt) {
                 const live_rounds = target.r -| facts.current.r;
-                if (best == null or live_rounds <= target.r -| best.?.position.r)
+                if (best == null or live_rounds <= target.r -| best.?.position.r) {
                     return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds, .target = target } };
+                }
                 return checkpointPlan(best.?, target);
             }
             const chosen = best orelse return .{ .pending = .{ .what = "the reverse window's undo base" } };
@@ -235,8 +237,9 @@ fn planPosition(target: Position, facts: Facts) Outcome {
         // Forward: the live cursor is a candidate too, and the tie goes
         // to it. With no checkpoint the cursor is the only base.
         const live_rounds = target.r - facts.current.r;
-        if (best == null or live_rounds <= target.r - best.?.position.r)
+        if (best == null or live_rounds <= target.r - best.?.position.r) {
             return .{ .plan = .{ .base = .current, .replay_rounds = live_rounds, .target = target } };
+        }
         return checkpointPlan(best.?, target);
     }
     // Backward: the cursor cannot go back, so the plan replays forward

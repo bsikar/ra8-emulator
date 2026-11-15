@@ -68,7 +68,9 @@ pub fn main(init: std.process.Init) !void {
     var err = std.Io.File.stderr().writer(init.io, &buf);
     var run: Run = .{ .alloc = alloc, .io = init.io, .out = &err.interface };
     const argv = try init.minimal.args.toSlice(alloc);
-    for (argv[1..]) |path| try run.walk(path);
+    for (argv[1..]) |path| {
+        try run.walk(path);
+    }
     if (run.scanned == 0) return error.NothingToCheck;
     if (run.findings > 0) {
         try run.out.print("terms: {d} lines with a banned word in {d} files\n", .{ run.findings, run.scanned });
@@ -108,7 +110,10 @@ const Run = struct {
             number += 1;
             const word = firstBanned(line) orelse continue;
             self.findings += 1;
-            try self.out.print("{s}:{d}: says \"{s}\"; see tools/terms.zig for the word to use\n", .{ path, number, word });
+            try self.out.print(
+                "{s}:{d}: says \"{s}\"; see tools/terms.zig for the word to use\n",
+                .{ path, number, word },
+            );
         }
     }
 };

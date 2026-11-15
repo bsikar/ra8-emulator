@@ -10,15 +10,16 @@
 //! cannot preempt, stops instead.
 
 const std = @import("std");
-const memmap = @import("../../memmap.zig");
-const fault_route = @import("../../../periph/fault/route.zig");
-const status = @import("../../../periph/fault/status.zig");
-const afsr = @import("../../../periph/afsr.zig");
+
 const active = @import("active.zig");
+const afsr = @import("../../../periph/afsr.zig");
+const Cpu = @import("../cpu.zig").Cpu;
 const dispatch = @import("dispatch.zig");
 const fault = @import("fault.zig");
+const fault_route = @import("../../../periph/fault/route.zig");
 const mem_manage = @import("mem_manage.zig");
-const Cpu = @import("../cpu.zig").Cpu;
+const memmap = @import("../../memmap.zig");
+const status = @import("../../../periph/fault/status.zig");
 const Stop = @import("../cpu.zig").Stop;
 
 pub const Error = fault.Error || error{NotRecorded};

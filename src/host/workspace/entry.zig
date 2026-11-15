@@ -1,5 +1,6 @@
 //! Workspace metadata, independent of wire framing.
 const std = @import("std");
+
 pub const Kind = enum(u8) { missing, file, directory, symlink, other };
 pub const Version = struct {
     kind: Kind = .missing,
@@ -23,7 +24,12 @@ pub fn kind(value: std.Io.File.Kind) Kind {
 }
 
 pub fn version(stat: std.Io.File.Stat) !Version {
-    return .{ .kind = kind(stat.kind), .size = stat.size, .modified_ns = std.math.cast(i64, stat.mtime.nanoseconds) orelse return error.InvalidTimestamp, .identity = std.math.cast(u64, stat.inode) orelse return error.InvalidIdentity };
+    return .{
+        .kind = kind(stat.kind),
+        .size = stat.size,
+        .modified_ns = std.math.cast(i64, stat.mtime.nanoseconds) orelse return error.InvalidTimestamp,
+        .identity = std.math.cast(u64, stat.inode) orelse return error.InvalidIdentity,
+    };
 }
 
 pub fn at(dir: std.Io.Dir, io: std.Io, name: []const u8) !Version {

@@ -12,13 +12,14 @@
 //! armed when the run lends CPU0, in front of whatever listened on CPU1,
 //! and names its frames from CPU1's own image.
 const std = @import("std");
-const elf = @import("ra8_board").image.elf;
+
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const dwarf_line = @import("../dwarf/line/line.zig");
+const elf = @import("ra8_board").image.elf;
 const profile = @import("../profile.zig");
 const rtos_trace = @import("../rtos/trace.zig");
-const stack_samples = @import("samples.zig");
 const stack_sampler = @import("sampler.zig");
+const stack_samples = @import("samples.zig");
 const stack_walk = @import("walk.zig");
 const symbols = @import("../symbols.zig");
 
@@ -38,10 +39,23 @@ pub const Run = struct {
 
     /// Sample when `table` carries a store, every `period(budget)`th
     /// instruction, stamped from `clock` and tagged from `trace`.
-    pub fn of(table: ?*profile.Table, image: elf.Image, budget: u64, clock: *const u64, trace: ?*const rtos_trace.Trace) Run {
+    pub fn of(
+        table: ?*profile.Table,
+        image: elf.Image,
+        budget: u64,
+        clock: *const u64,
+        trace: ?*const rtos_trace.Trace,
+    ) Run {
         const store = if (table) |found| found.samples else null;
         const second = if (table) |found| found.second else null;
-        return .{ .image = image, .second_image = second, .store = store, .every = period(budget), .clock = clock, .trace = trace };
+        return .{
+            .image = image,
+            .second_image = second,
+            .store = store,
+            .every = period(budget),
+            .clock = clock,
+            .trace = trace,
+        };
     }
 
     /// The listener the core gets: this in front of `next`, or `next`
@@ -70,11 +84,23 @@ pub const Run = struct {
             if (self.next) |chained| chained.instruction(address);
             return;
         };
-        if (self.sampler == null or self.sampler.?.view.zig.cpu != core) self.sampler = self.samplerOn(core, 0, &self.image, self.next);
+        if (self.sampler == null or
+            self.sampler.?.view.zig.cpu != core) self.sampler = self.samplerOn(
+            core,
+            0,
+            &self.image,
+            self.next,
+        );
         self.sampler.?.listener().instruction(address);
     }
 
-    fn samplerOn(self: *const Run, core: *cpu_mod.Cpu, index: u1, image: *const elf.Image, next: ?cpu_mod.RetireListener) stack_sampler.Sampler {
+    fn samplerOn(
+        self: *const Run,
+        core: *cpu_mod.Cpu,
+        index: u1,
+        image: *const elf.Image,
+        next: ?cpu_mod.RetireListener,
+    ) stack_sampler.Sampler {
         return .{
             .view = .{ .zig = .{ .cpu = core } },
             .core = index,

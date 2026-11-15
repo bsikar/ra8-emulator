@@ -11,10 +11,11 @@
 //! VCVT, VRINT and the rest of the space). Half precision (hw2 bits 11-8
 //! 1001) covers VMOV (immediate), VABS, VNEG and VSQRT on S[x]<15:0>,
 //! writing Zeros(16):result; VMOV (register) has no half form.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fpu = @import("../../fpu/all.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+
 const Format = fpu.format.Format;
 const fp_regs = @import("regs.zig");
 

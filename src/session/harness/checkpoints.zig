@@ -1,19 +1,23 @@
 //! The harness's checkpoint arming (RA8EMU-1196): the closed-round
 //! controller bound to the run's own save stream, fed by the
 //! application's host storage and object space.
+const board_api = @import("ra8_board");
+const chip = @import("ra8_chip");
+
 const std = @import("std");
-const history_checkpoint = @import("../history/checkpoint.zig");
-const history_recorder = @import("../history/recorder.zig");
-const session_state = @import("../board/state.zig");
-const scheduler = @import("ra8_chip").core.scheduler;
-const zig_session = @import("../zig/session.zig");
-const picture = @import("picture.zig");
+
 const checkpoint_engine = @import("../history/checkpoint_engine.zig");
 const dirty_pages = @import("../history/dirty_pages.zig");
+const history_checkpoint = @import("../history/checkpoint.zig");
+const history_recorder = @import("../history/recorder.zig");
 const manifest_mod = @import("../history/manifest.zig");
 const observer_mod = @import("ra8_chip").core.cpu.memory.observer;
+const picture = @import("picture.zig");
+const scheduler = @import("ra8_chip").core.scheduler;
+const session_state = @import("../board/state.zig");
 const snap_file = @import("ra8_board").snapshot.run.file;
 const snap_memory = @import("ra8_board").snapshot.memory;
+const zig_session = @import("../zig/session.zig");
 
 /// The armed pair in one heap-stable box: the recorder owns the staging,
 /// the controller owns the policy, and the boundary's hook points here,
@@ -137,7 +141,7 @@ fn saveMachine(context: *anyopaque, writer: *std.Io.Writer) anyerror!void {
 
 fn spliceRunState(
     allocator: std.mem.Allocator,
-    store: *const @import("ra8_chip").core.cpu.memory.store.Store,
+    store: *const chip.core.cpu.memory.store.Store,
     full_bytes: []const u8,
 ) !std.Io.Writer.Allocating {
     var out: std.Io.Writer.Allocating = try .initCapacity(allocator, 8192);
@@ -196,15 +200,20 @@ pub fn armSession(
 }
 
 /// Disarms what armSession armed, detaching the recorder first.
-pub fn disarmSession(allocator: std.mem.Allocator, session: *session_api.Session, history: *session_history.History, armed: *Armed) void {
+pub fn disarmSession(
+    allocator: std.mem.Allocator,
+    session: *session_api.Session,
+    history: *session_history.History,
+    armed: *Armed,
+) void {
     if (session.persistent_recorder == &armed.recorder) session.persistent_recorder = null;
     if (history.recorder == &armed.recorder) history.recorder = null;
     disarm(allocator, armed);
 }
 
 fn feedBoardConsole(context: *anyopaque, bytes: []const u8) anyerror!void {
-    const board: *@import("ra8_board").board.Board = @ptrCast(@alignCast(context));
-    board.serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
+    const board: *board_api.board.Board = @ptrCast(@alignCast(context));
+    board.serial.feed(chip.periph.sci.console_channel, bytes);
 }
 
 fn routeConsoleStdin(context: *anyopaque, bytes: []const u8) void {

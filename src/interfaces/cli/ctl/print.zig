@@ -2,6 +2,7 @@
 //! line with --json, one plain line without. Errors under --json go to
 //! stdout too, so an agent reads a single stream.
 const std = @import("std");
+
 const proto = @import("ra8_rpc").session.rpc;
 
 pub const Reg = struct { register: proto.Register, value: u32 };
@@ -28,7 +29,10 @@ pub fn advanced(w: anytype, json: bool, moved: proto.Advanced) !void {
         "{{\"advanced\":{{\"core\":\"{s}\",\"from_ns\":{d},\"to_ns\":{d},\"reason\":\"{s}\",\"pc\":{d}}}}}\n",
         .{ core, moved.from_ns, moved.to_ns, reason, moved.address },
     );
-    try w.print("{s} advanced {d} ns to {d} ns: {s} at 0x{x:0>8}\n", .{ core, moved.to_ns - moved.from_ns, moved.to_ns, reason, moved.address });
+    try w.print(
+        "{s} advanced {d} ns to {d} ns: {s} at 0x{x:0>8}\n",
+        .{ core, moved.to_ns - moved.from_ns, moved.to_ns, reason, moved.address },
+    );
 }
 
 pub fn paused(w: anytype, json: bool) !void {
@@ -124,11 +128,17 @@ pub fn folded(w: anytype, json: bool, text: []const u8) !void {
 /// The stack pointers, their low marks and the reservation (RA8EMU-816).
 pub fn stack(w: anytype, json: bool, r: proto.StackReport) !void {
     if (json) {
-        try w.print("{{\"msp\":{d},\"psp\":{d},\"low_msp\":{d},\"low_psp\":{d},\"stack\":", .{ r.msp, r.psp, r.low_msp, r.low_psp });
+        try w.print(
+            "{{\"msp\":{d},\"psp\":{d},\"low_msp\":{d},\"low_psp\":{d},\"stack\":",
+            .{ r.msp, r.psp, r.low_msp, r.low_psp },
+        );
         if (r.has_stack == 0) return w.writeAll("null}\n");
         return w.print("{{\"base\":{d},\"size\":{d},\"overflow\":{d}}}}}\n", .{ r.base, r.size, r.overflow });
     }
-    try w.print("msp 0x{x:0>8} lowest 0x{x:0>8}\npsp 0x{x:0>8} lowest 0x{x:0>8}\n", .{ r.msp, r.low_msp, r.psp, r.low_psp });
+    try w.print(
+        "msp 0x{x:0>8} lowest 0x{x:0>8}\npsp 0x{x:0>8} lowest 0x{x:0>8}\n",
+        .{ r.msp, r.low_msp, r.psp, r.low_psp },
+    );
     if (r.has_stack == 0) return w.writeAll("stack: the image names no reservation\n");
     try w.print("stack 0x{x:0>8}..0x{x:0>8} ", .{ r.base, r.base +% r.size });
     if (r.overflow == 0) return w.writeAll("within bounds\n");
@@ -174,7 +184,9 @@ pub fn failed(io: std.Io, json: bool, err: anyerror, code: u16) u8 {
 /// A sentence for the failures a user can act on, else empty.
 pub fn explain(err: anyerror) []const u8 {
     return switch (err) {
-        error.VersionMismatch => "the server speaks another session protocol version; run the same ra8_emulator build on both ends",
+        error.VersionMismatch,
+        => "the server speaks another session protocol version; run the same ra8_emulator bu" ++
+            "ild on both ends",
         error.UnknownHost => "no profile of that name in the hosts file",
         error.BadHostsLine => "the hosts file has a malformed profile line",
         error.NoHostsFile => "no hosts file at --hosts FILE, $RA8_HOSTS or ~/.config/ra8_emulator/hosts",
@@ -187,14 +199,23 @@ pub fn explain(err: anyerror) []const u8 {
 
 pub fn uart(w: anytype, json: bool, sent: proto.Uart) !void {
     if (!json) return w.writeAll(sent.bytes);
-    try w.print("{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"virtual_ns\":{d},\"text\":{f}}}}}\n", .{ @tagName(sent.core), sent.channel, sent.virtual_ns, std.json.fmt(sent.bytes, .{}) });
+    try w.print(
+        "{{\"uart\":{{\"core\":\"{s}\",\"channel\":{d},\"virtual_ns\":{d},\"text\":{f}}}}}\n",
+        .{
+            @tagName(sent.core),           sent.channel, sent.virtual_ns,
+            std.json.fmt(sent.bytes, .{}),
+        },
+    );
 }
 
 /// One session event (RA8EMU-1139): its kind, core and address.
 pub fn session(w: anytype, json: bool, event: proto.SessionEvent) !void {
     const core = @tagName(event.core);
     const kind = @tagName(event.kind);
-    if (json) return w.print("{{\"session\":{{\"core\":\"{s}\",\"kind\":\"{s}\",\"address\":{d}}}}}\n", .{ core, kind, event.address });
+    if (json) return w.print(
+        "{{\"session\":{{\"core\":\"{s}\",\"kind\":\"{s}\",\"address\":{d}}}}}\n",
+        .{ core, kind, event.address },
+    );
     try w.print("{s} {s} 0x{x:0>8}\n", .{ core, kind, event.address });
 }
 

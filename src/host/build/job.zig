@@ -1,13 +1,14 @@
 //! A retained build record. Only its worker mutates provenance and result bytes.
-const std = @import("std");
 const builtin = @import("builtin");
-const request = @import("request.zig");
-const store_file = @import("store.zig");
-const Queue = @import("queue.zig").Queue;
-const Store = @import("store.zig").Store;
-const source = @import("source.zig");
+const std = @import("std");
+
 const execute = @import("execute.zig");
 const Output = @import("output.zig").Output;
+const Queue = @import("queue.zig").Queue;
+const request = @import("request.zig");
+const source = @import("source.zig");
+const Store = @import("store.zig").Store;
+const store_file = @import("store.zig");
 
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
@@ -25,7 +26,12 @@ pub const Job = struct {
 
     pub fn run(self: *Job) void {
         const allocator = self.arena.allocator();
-        var record: Record = .{ .id = self.id, .compiler = self.compiler, .step = self.recipe.step, .options = self.recipe.options };
+        var record: Record = .{
+            .id = self.id,
+            .compiler = self.compiler,
+            .step = self.recipe.step,
+            .options = self.recipe.options,
+        };
         var store: ?Store = null;
         defer if (store) |s| s.dir.close(self.io);
         self.perform(&record, &store) catch |err| {
@@ -41,7 +47,10 @@ pub const Job = struct {
             self.publish("{\"state\":\"failed\",\"failure\":\"ResultEncodingFailed\"}");
             return;
         };
-        if (store) |s| s.dir.writeFile(self.io, .{ .sub_path = "result.json", .data = encoded, .flags = .{ .exclusive = true } }) catch {
+        if (store) |s| s.dir.writeFile(
+            self.io,
+            .{ .sub_path = "result.json", .data = encoded, .flags = .{ .exclusive = true } },
+        ) catch {
             self.publish("{\"state\":\"failed\",\"failure\":\"ResultPersistenceFailed\"}");
             return;
         };
@@ -57,7 +66,11 @@ pub const Job = struct {
 
     fn perform(self: *Job, record: *Record, store: *?Store) !void {
         const allocator = self.arena.allocator();
-        const budget: request.Budget = .{ .io = self.io, .cancel = &self.cancel, .deadline = std.Io.Clock.awake.now(self.io).nanoseconds + @as(i96, self.recipe.timeout_ms) * 1_000_000 };
+        const budget: request.Budget = .{
+            .io = self.io,
+            .cancel = &self.cancel,
+            .deadline = std.Io.Clock.awake.now(self.io).nanoseconds + @as(i96, self.recipe.timeout_ms) * 1_000_000,
+        };
         try budget.check();
         store.* = try Store.open(self.root, self.io);
         const saved = &store.*.?;
@@ -67,7 +80,14 @@ pub const Job = struct {
         const root_path = root_buffer[0..try self.root.realPath(self.io, &root_buffer)];
         var version: std.ArrayList(u8) = .empty;
         defer version.deinit(std.heap.page_allocator);
-        if (try execute.run(&.{ self.compiler, "version" }, self.root, budget, null, &version, &record.cleanup) != 0) return error.CompilerVersionFailed;
+        if (try execute.run(
+            &.{ self.compiler, "version" },
+            self.root,
+            budget,
+            null,
+            &version,
+            &record.cleanup,
+        ) != 0) return error.CompilerVersionFailed;
         record.compiler_version = try allocator.dupe(u8, std.mem.trim(u8, version.items, "\r\n "));
         const revision = try source.revision(self.root, budget);
         record.source_sha256 = try allocator.dupe(u8, &revision);
@@ -82,7 +102,13 @@ pub const Job = struct {
         defer stdout.close(self.io);
         const stderr = try saved.dir.createFile(self.io, "stderr.log", .{ .exclusive = true });
         defer stderr.close(self.io);
-        var output: Output = .{ .io = self.io, .queue = &self.queue, .root_path = root_path, .stdout = stdout, .stderr = stderr };
+        var output: Output = .{
+            .io = self.io,
+            .queue = &self.queue,
+            .root_path = root_path,
+            .stdout = stdout,
+            .stderr = stderr,
+        };
         record.exit_code = try execute.run(argv.items, self.root, budget, &output, null, &record.cleanup);
         if (record.exit_code != 0) return error.CompilerFailed;
         const after = try source.revision(self.root, budget);
@@ -113,7 +139,9 @@ const Record = struct {
     argv: []const []const u8 = &.{},
     directory: []const u8 = "",
     source_sha256: []const u8 = "",
-    source_scope: []const u8 = "workspace regular files; excludes .git, .zig-cache, zig-out, .ra8-builds; external dependencies are not sealed",
+    source_scope: []const u8 = "workspace regular files; excludes .git, .zig-cache, zig-out, .ra8-builds; " ++
+        "external dependencies are not " ++
+        "sealed",
     artifact: []const u8 = "",
     artifact_sha256: []const u8 = "",
     stream_truncated: bool = false,

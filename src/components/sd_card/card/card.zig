@@ -63,27 +63,28 @@
 //! which are pins rather than protocol. The capacity is the image's own,
 //! declared there.
 const std = @import("std");
-pub const image = @import("../image.zig");
-const sd_reply = @import("../reply.zig");
-const sd_write = @import("../write.zig");
-const sd_trace = @import("../trace.zig");
-const sd_command = @import("../command.zig");
-const spi = @import("ra8_chip").periph.spi;
-pub const line = @import("line.zig");
+
+pub const bus_card = @import("../bus/card.zig");
+pub const bus_line = @import("../bus/line.zig");
 pub const command = @import("../command.zig");
 pub const crc = @import("../crc.zig");
+pub const dirent = @import("../dirent.zig");
 pub const dump = @import("../dump.zig");
 pub const fat = @import("../fat.zig");
 pub const format = @import("../format/format.zig");
 pub const format_advice = @import("../format/advice.zig");
-pub const dirent = @import("../dirent.zig");
+pub const image = @import("../image.zig");
+pub const line = @import("line.zig");
 pub const mkimage = @import("../mkimage.zig");
 pub const reply = @import("../reply.zig");
+const sd_command = @import("../command.zig");
+const sd_reply = @import("../reply.zig");
+const sd_trace = @import("../trace.zig");
+const sd_write = @import("../write.zig");
+pub const snapshot = @import("../snapshot.zig");
+const spi = @import("ra8_chip").periph.spi;
 pub const trace = @import("../trace.zig");
 pub const write = @import("../write.zig");
-pub const bus_card = @import("../bus/card.zig");
-pub const bus_line = @import("../bus/line.zig");
-pub const snapshot = @import("../snapshot.zig");
 
 /// Which SPI_B channel the card is wired to. The model's own rule; see the
 /// header.

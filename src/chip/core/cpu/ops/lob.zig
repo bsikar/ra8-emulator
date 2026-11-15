@@ -12,11 +12,11 @@
 //! Left unclaimed: SP or PC as the DLS/WLS source (UNPREDICTABLE), and the
 //! tail-predicated DLSTP, WLSTP and LETP, which belong to the MVE
 //! tail-predication work under RA8EMU-24 (lob.zig's decode refuses them).
-const op = @import("../op.zig");
+const control_bits = @import("../regs.zig").control_bits;
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
 const lob = @import("../../lob.zig");
-const control_bits = @import("../regs.zig").control_bits;
+const op = @import("../op.zig");
 const tail = @import("../mve/all.zig").tail;
 
 pub const encodings = struct {

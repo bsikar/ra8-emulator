@@ -26,14 +26,15 @@
 //! it has to wait, the way it would wait on any transfer. Silicon steals a
 //! bus cycle and is done long before either, so a driver that polls is right
 //! on all three and a driver that reads straight through is only right on dev.
-const periph = @import("../registry.zig");
-const icu = @import("../icu/icu.zig");
-pub const xfer = @import("xfer.zig");
-pub const skip = @import("skip.zig");
-pub const regs = @import("regs.zig");
-const bytelanes = @import("../bytelanes.zig");
 /// DTCSAR, the two controllers' security attribution word in CPSCU.
 pub const attribution = @import("sar.zig");
+const bytelanes = @import("../bytelanes.zig");
+const icu = @import("../icu/icu.zig");
+const periph = @import("../registry.zig");
+pub const regs = @import("regs.zig");
+pub const skip = @import("skip.zig");
+pub const xfer = @import("xfer.zig");
+
 /// The read-skip cache lives next door; re-exported so a caller holding the
 /// block also has the RRS vocabulary.
 pub const readskip = skip;

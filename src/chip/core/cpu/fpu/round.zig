@@ -9,9 +9,11 @@
 //! - Overflow sets OFC and IXC, and gives infinity or the largest finite
 //!   value depending on the mode and the sign.
 const format = @import("format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
 const fpscr_mod = @import("fpscr.zig");
+
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
 

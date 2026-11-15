@@ -4,13 +4,14 @@
 //! or when the line table does not cover the pc, `found` is 0 and the path
 //! is empty; the leaf reads the file's rows itself.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
+
 const api = @import("ra8_session").api;
-const symbols = @import("ra8_session").symbols;
 const dwarf_line = @import("ra8_session").dwarf.line;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const session_source = @import("ra8_session").source;
+const symbols = @import("ra8_session").symbols;
 
 const Image = symbols.Image;
 const Outcome = rpc.Outcome(proto.SourceLine);

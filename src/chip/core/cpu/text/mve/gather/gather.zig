@@ -1,7 +1,6 @@
 //! Text for MVE register-offset gather/scatter, per DDI0553 B5.
 const Instr = @import("../../../instr.zig").Instr;
 const ops = @import("../../../ops/mve/gather/gather.zig");
-const gather = @import("../../../mve/gather/gather.zig");
 const Size = @import("../../../mve/qreg.zig").Size;
 const text = @import("../../text.zig");
 
@@ -37,9 +36,15 @@ pub fn printPredicated(instr: Instr, out: *text.Text, suffix: []const u8) void {
         .word => ", uxtw #2",
     };
     if (f.store) {
-        out.put("{s}{s}{s}.{s} q{d}, [{s}, q{d}{s}]", .{ root, letter(f.msize), suffix, width(f.msize), qd, rn, qm, os });
+        out.put(
+            "{s}{s}{s}.{s} q{d}, [{s}, q{d}{s}]",
+            .{ root, letter(f.msize), suffix, width(f.msize), qd, rn, qm, os },
+        );
     } else {
         const sign = if (f.signed) "s" else "u";
-        out.put("{s}{s}{s}.{s}{s} q{d}, [{s}, q{d}{s}]", .{ root, letter(f.msize), suffix, sign, width(f.esize), qd, rn, qm, os });
+        out.put(
+            "{s}{s}{s}.{s}{s} q{d}, [{s}, q{d}{s}]",
+            .{ root, letter(f.msize), suffix, sign, width(f.esize), qd, rn, qm, os },
+        );
     }
 }

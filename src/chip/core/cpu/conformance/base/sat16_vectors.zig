@@ -63,8 +63,16 @@ pub const all = [_]V{
     sat("usat16 #0 clamps everything to zero", usat16, 0, 0x0001_0000, 0, true),
     sat("usat16 #15 clamps a negative half only", usat16, 15, 0x8000_7FFF, 0x0000_7FFF, true),
     vec("Q is sticky", .{ .hw1 = ssat16, .hw2 = 0x0007, .q = true, .n = 5 }, .{ .rd = 5, .flags = flags_q }),
-    vec("ssat16 r12, lr, #8", .{ .hw1 = 0xF32E, .hw2 = 0x0C07, .n = 0x0200_0003 }, .{ .rd = 0x007F_0003, .flags = flags_q }),
-    vec("ssat16 r1, r1, #8 reads before writing", .{ .hw1 = ssat16, .hw2 = 0x0107, .n = 0x0100_0001 }, .{ .rd = 0x007F_0001, .flags = flags_q }),
+    vec(
+        "ssat16 r12, lr, #8",
+        .{ .hw1 = 0xF32E, .hw2 = 0x0C07, .n = 0x0200_0003 },
+        .{ .rd = 0x007F_0003, .flags = flags_q },
+    ),
+    vec(
+        "ssat16 r1, r1, #8 reads before writing",
+        .{ .hw1 = ssat16, .hw2 = 0x0107, .n = 0x0100_0001 },
+        .{ .rd = 0x007F_0001, .flags = flags_q },
+    ),
     bad("Rd of sp is unclaimed", ssat16, 0x0D07),
     bad("Rd of pc is unclaimed", ssat16, 0x0F07),
     bad("Rn of sp is unclaimed", 0xF32D, 0x0007),

@@ -22,8 +22,8 @@
 //! RESET STATE: the tree states 0 for the delay cells (ra8_pdg_deinit wipes
 //! them "back to the post-reset value of 0") and nothing for the two control
 //! registers; this model starts them at 0 as well.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const base: u32 = 0x4032_4000;
 pub const span: u32 = 0x30;

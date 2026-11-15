@@ -1,6 +1,7 @@
 //! Session control register, memory, and variable write commands.
-const std = @import("std");
 const rpc_session = @import("ra8_rpc").session;
+const std = @import("std");
+
 const proto = rpc_session.rpc;
 const set_var_wire = rpc_session.set_var_wire;
 const Client = @import("client.zig").Client;
@@ -86,7 +87,10 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
                 .value = reg.value,
             });
             if (json) {
-                try w.print("{{\"write_reg\":{{\"register\":\"{s}\",\"value\":{d}}}}}\n", .{ @tagName(reg.reg), reg.value });
+                try w.print(
+                    "{{\"write_reg\":{{\"register\":\"{s}\",\"value\":{d}}}}}\n",
+                    .{ @tagName(reg.reg), reg.value },
+                );
             } else {
                 try w.print("register {s} set to 0x{x:0>8}\n", .{ @tagName(reg.reg), reg.value });
             }
@@ -106,7 +110,11 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
         .set_var => |s| return try performSetVar(client, w, json, s.frame, s.name, s.value),
         .console => |text| {
             _ = try client.call(proto.Ack, intervene.ConsoleInput, .console_input, .{ .core = .cpu0, .bytes = text });
-            if (json) try w.print("{{\"console\":{d}}}\n", .{text.len}) else try w.print("console: {d} bytes typed\n", .{text.len});
+            if (json) {
+                try w.print("{{\"console\":{d}}}\n", .{text.len});
+            } else {
+                try w.print("console: {d} bytes typed\n", .{text.len});
+            }
         },
         .skip_bkpt => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .skip_bkpt, .{ .core = .cpu0 });
@@ -137,16 +145,25 @@ fn performSetVar(client: *Client, w: anytype, json: bool, frame: u32, name: []co
             }
             try w.print(",\"size\":{d}}}}}\n", .{reply.size});
         } else if (reply.in_register != 0xff) {
-            try w.print("{s} = {s} ({s}, r{d}, {d} bytes)\n", .{ name, value, @tagName(reply.scope), reply.in_register, reply.size });
+            try w.print(
+                "{s} = {s} ({s}, r{d}, {d} bytes)\n",
+                .{ name, value, @tagName(reply.scope), reply.in_register, reply.size },
+            );
         } else {
-            try w.print("{s} = {s} ({s}, 0x{x:0>8}, {d} bytes)\n", .{ name, value, @tagName(reply.scope), reply.address, reply.size });
+            try w.print(
+                "{s} = {s} ({s}, 0x{x:0>8}, {d} bytes)\n",
+                .{ name, value, @tagName(reply.scope), reply.address, reply.size },
+            );
         }
         return 0;
     }
     if (json) {
         try w.writeAll("{\"error\":");
         try writeJsonString(w, reply.message);
-        try w.print(",\"status\":\"{s}\",\"scope\":\"{s}\",\"name\":", .{ @tagName(reply.status), @tagName(reply.scope) });
+        try w.print(
+            ",\"status\":\"{s}\",\"scope\":\"{s}\",\"name\":",
+            .{ @tagName(reply.status), @tagName(reply.scope) },
+        );
         try writeJsonString(w, name);
         try w.writeAll("}\n");
     } else {
@@ -157,13 +174,15 @@ fn performSetVar(client: *Client, w: anytype, json: bool, frame: u32, name: []co
 
 fn writeJsonString(w: anytype, text: []const u8) !void {
     try w.writeByte('"');
-    for (text) |c| switch (c) {
-        '"' => try w.writeAll("\\\""),
-        '\\' => try w.writeAll("\\\\"),
-        '\n' => try w.writeAll("\\n"),
-        '\r' => try w.writeAll("\\r"),
-        '\t' => try w.writeAll("\\t"),
-        else => if (c < 0x20) try w.print("\\u{x:0>4}", .{c}) else try w.writeByte(c),
-    };
+    for (text) |c| {
+        switch (c) {
+            '"' => try w.writeAll("\\\""),
+            '\\' => try w.writeAll("\\\\"),
+            '\n' => try w.writeAll("\\n"),
+            '\r' => try w.writeAll("\\r"),
+            '\t' => try w.writeAll("\\t"),
+            else => if (c < 0x20) try w.print("\\u{x:0>4}", .{c}) else try w.writeByte(c),
+        }
+    }
     try w.writeByte('"');
 }

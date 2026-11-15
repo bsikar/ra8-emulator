@@ -1,7 +1,9 @@
 //! Bounded anonymous-pipe protocol for one native directory move.
 const std = @import("std");
-const name = @import("../name.zig");
+
 const Deadline = @import("deadline.zig").Deadline;
+const name = @import("../name.zig");
+
 pub const version = 3;
 pub const max_bytes = 32768;
 /// One request frame and one COMMIT frame, the most a caller ever writes.
@@ -22,7 +24,8 @@ pub const Bounds = struct {
     pub const limit = 60_000;
 
     pub fn check(self: Bounds) !void {
-        for ([_]u32{ self.ready, self.commit, self.drain, self.reap, self.settle }) |ms| if (ms == 0 or ms > limit) return error.BadBounds;
+        for ([_]u32{ self.ready, self.commit, self.drain, self.reap, self.settle }) |ms| if (ms == 0 or
+            ms > limit) return error.BadBounds;
         if (self.total() > limit) return error.BadBounds;
     }
 
@@ -37,12 +40,36 @@ pub const Proof = struct { anchor: Digest, note: Digest };
 pub const Root = struct { path: []const u8, marker: []const u8 };
 /// `nonce` names the durable intent and `operation` this one exchange, so a
 /// frame from an earlier exchange of the same intent is never honored.
-pub const Request = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, source: Root, target: Root, from: []const u8, to: []const u8, ready_ms: u32, commit_ms: u32, drain_ms: u32 };
+pub const Request = struct {
+    version: u32,
+    nonce: name.Id,
+    operation: name.Id,
+    proof: Proof,
+    source: Root,
+    target: Root,
+    from: []const u8,
+    to: []const u8,
+    ready_ms: u32,
+    commit_ms: u32,
+    drain_ms: u32,
+};
 pub const Phase = enum { starting, bound, done };
 pub const Status = enum { success, collision, cross_device, refused, expired };
 /// `pid` and `birth` are the peer's own report. They are compared between
 /// its two replies and shown to observers; they never authorize a signal.
-pub const Reply = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, phase: Phase, pid: u32, birth: u64, source_inode: u64, source_root: u64, target_root: u64, status: Status = .success };
+pub const Reply = struct {
+    version: u32,
+    nonce: name.Id,
+    operation: name.Id,
+    proof: Proof,
+    phase: Phase,
+    pid: u32,
+    birth: u64,
+    source_inode: u64,
+    source_root: u64,
+    target_root: u64,
+    status: Status = .success,
+};
 pub const Commit = struct { version: u32, nonce: name.Id, operation: name.Id, proof: Proof, commit: bool };
 
 pub fn digest(bytes: []const u8) Digest {
@@ -62,7 +89,13 @@ pub fn write(allocator: std.mem.Allocator, io: std.Io, stream: std.Io.File, valu
 }
 
 /// A null deadline waits for as long as the writer takes.
-pub fn read(comptime T: type, allocator: std.mem.Allocator, io: std.Io, stream: std.Io.File, deadline: ?Deadline) !std.json.Parsed(T) {
+pub fn read(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    stream: std.Io.File,
+    deadline: ?Deadline,
+) !std.json.Parsed(T) {
     var prefix: [4]u8 = undefined;
     try exact(io, stream, &prefix, deadline);
     const size = std.mem.readInt(u32, &prefix, .little);
@@ -84,10 +117,16 @@ fn exact(io: std.Io, stream: std.Io.File, bytes: []u8, deadline: ?Deadline) !voi
 }
 
 pub fn windowsPath(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
-    if (path.len < 7 or !std.mem.startsWith(u8, path, "/mnt/") or path[5] < 'a' or path[5] > 'z' or path[6] != '/') return error.UnsupportedRoot;
+    if (path.len < 7 or
+        !std.mem.startsWith(u8, path, "/mnt/") or
+        path[5] < 'a' or
+        path[5] > 'z' or
+        path[6] != '/') return error.UnsupportedRoot;
     const result = try allocator.alloc(u8, path.len - 4);
     result[0] = std.ascii.toUpper(path[5]);
     result[1] = ':';
-    for (path[6..], 2..) |c, i| result[i] = if (c == '/') '\\' else c;
+    for (path[6..], 2..) |c, i| {
+        result[i] = if (c == '/') '\\' else c;
+    }
     return result;
 }

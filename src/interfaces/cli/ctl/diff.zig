@@ -1,6 +1,8 @@
 //! State diff CLI command (Slice 23.5).
 const std = @import("std");
+
 const proto = @import("ra8_rpc").session.rpc;
+
 const diff_wire = proto.diff_wire;
 const Client = @import("client.zig").Client;
 

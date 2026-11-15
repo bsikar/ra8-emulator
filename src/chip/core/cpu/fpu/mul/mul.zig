@@ -7,11 +7,12 @@
 //! infinity or zero whose sign is the XOR of the operand signs. Everything
 //! else is the exact product, rounded once by FPRound.
 const format = @import("../format.zig");
+
 const Format = format.Format;
-const unpack_mod = @import("../unpack.zig");
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
 
 pub fn mul(comptime fmt: Format, op1: fmt.Bits(), op2: fmt.Bits(), fpscr: *Fpscr) fmt.Bits() {

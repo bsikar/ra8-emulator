@@ -6,9 +6,9 @@
 //! bus access and raises no fault; the MPU and SAU never see it. The
 //! halfword loads with Rt = PC (other than PLDW) are unallocated hints and
 //! stay unclaimed, as do the register forms with Rm = SP or PC.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with S ([8]), U ([7]), W ([5]) and Rn masked out: a byte load.

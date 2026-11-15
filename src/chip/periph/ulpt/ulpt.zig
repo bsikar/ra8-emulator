@@ -44,12 +44,12 @@
 //! storage on both, so a count could run straight past one and nothing said
 //! so. The comparison lives in compare.zig now, and the flags it raises
 //! are AGTCR's TCMAF and TCMBF, which ULPTCR mirrors.
-const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
 
 const bytelanes = @import("../bytelanes.zig");
-const periph = @import("../registry.zig");
 pub const compare = @import("compare.zig");
+const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
 
 /// The compare pair, re-exported so a caller reaches it through the block.

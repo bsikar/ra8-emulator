@@ -6,9 +6,9 @@
 //! the URB's length. `null` means the pipe is not ready yet: run the
 //! firmware and advance again. Endpoint 0 goes through control.zig;
 //! endpoints the firmware never opened stall, as the kernel's -EPIPE.
-const wire = @import("wire.zig");
-const usbfs = @import("ra8_chip").periph.usbfs;
 const control = @import("control.zig");
+const usbfs = @import("ra8_chip").periph.usbfs;
+const wire = @import("wire.zig");
 
 pub const epipe: i32 = -32;
 pub const econnreset: i32 = -104;

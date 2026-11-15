@@ -1,8 +1,9 @@
 //! DWARF variable location classification and frame-base evaluation.
-const std = @import("std");
 const Cursor = @import("cursor.zig").Cursor;
 const frame = @import("frame.zig");
+const std = @import("std");
 const unwind = @import("../unwind/unwind.zig");
+
 const dwarf = std.dwarf;
 
 pub const ReadOnlyReason = enum {
@@ -107,7 +108,11 @@ fn classifyComplexExpr(expr: []const u8, addr_size: u8) ReadOnlyReason {
         const op = cur.byte() catch return .unsupported_op;
         ops += 1;
         if (op == dwarf.OP.piece or op == dwarf.OP.bit_piece) return .composite;
-        if (op == dwarf.OP.stack_value or op == dwarf.OP.implicit_value or op == dwarf.OP.implicit_pointer or op == dwarf.OP.GNU_implicit_pointer) {
+        if (op == dwarf.OP.stack_value or
+            op == dwarf.OP.implicit_value or
+            op == dwarf.OP.implicit_pointer or
+            op == dwarf.OP.GNU_implicit_pointer)
+        {
             return .implicit_value;
         }
         skipOperands(&cur, op, addr_size) catch return .unsupported_op;
@@ -118,11 +123,22 @@ fn classifyComplexExpr(expr: []const u8, addr_size: u8) ReadOnlyReason {
 fn skipOperands(cur: *Cursor, op: u8, addr_size: u8) !void {
     switch (op) {
         dwarf.OP.addr => try cur.skip(addr_size),
-        dwarf.OP.const1u, dwarf.OP.const1s, dwarf.OP.pick, dwarf.OP.deref_size, dwarf.OP.xderef_size => _ = try cur.byte(),
+        dwarf.OP.const1u,
+        dwarf.OP.const1s,
+        dwarf.OP.pick,
+        dwarf.OP.deref_size,
+        dwarf.OP.xderef_size,
+        => _ = try cur.byte(),
         dwarf.OP.const2u, dwarf.OP.const2s, dwarf.OP.skip, dwarf.OP.bra => _ = try cur.int(u16),
         dwarf.OP.const4u, dwarf.OP.const4s => _ = try cur.int(u32),
         dwarf.OP.const8u, dwarf.OP.const8s => _ = try cur.int(u64),
-        dwarf.OP.constu, dwarf.OP.plus_uconst, dwarf.OP.regx, dwarf.OP.piece, dwarf.OP.addrx, dwarf.OP.constx => _ = try cur.uleb(),
+        dwarf.OP.constu,
+        dwarf.OP.plus_uconst,
+        dwarf.OP.regx,
+        dwarf.OP.piece,
+        dwarf.OP.addrx,
+        dwarf.OP.constx,
+        => _ = try cur.uleb(),
         dwarf.OP.consts, dwarf.OP.fbreg, dwarf.OP.breg0...dwarf.OP.breg31 => _ = try cur.sleb(),
         dwarf.OP.bregx, dwarf.OP.bit_piece => {
             _ = try cur.uleb();

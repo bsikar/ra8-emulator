@@ -8,6 +8,7 @@
 //! `--sd` imports a raw host file into the sparse RAM-backed image, so its
 //! capacity is stated by the file and checked against the CSD field.
 const std = @import("std");
+
 const observer = @import("ra8_chip").core.cpu.memory.observer;
 
 pub const geometry = struct {
@@ -54,7 +55,9 @@ pub const Image = struct {
     pub fn release(self: *Image) void {
         if (self.obs) |o| o.barrier(.{ .component = .{ .owner = self, .what = .release } });
         var it = self.blocks.valueIterator();
-        while (it.next()) |stored| self.allocator.destroy(stored.*);
+        while (it.next()) |stored| {
+            self.allocator.destroy(stored.*);
+        }
         self.blocks.clearRetainingCapacity();
     }
 

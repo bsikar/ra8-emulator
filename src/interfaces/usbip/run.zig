@@ -4,10 +4,12 @@
 //! host that imports it, and keeps listening after that host leaves.
 //! Its events go to stderr, beside the gdb listener's.
 const std = @import("std");
-const usb = @import("ra8_board").usb;
-const usbfs = @import("ra8_chip").periph.usbfs;
+
 const bridge = @import("bridge.zig");
 const replay = @import("replay.zig");
+const usb = @import("ra8_board").usb;
+const usbfs = @import("ra8_chip").periph.usbfs;
+
 const traffic = usb.traffic;
 
 pub const Live = struct {
@@ -17,7 +19,13 @@ pub const Live = struct {
     replayer: replay.Replayer = .{},
 
     /// What the recorded port can ask of this bridge.
-    pub const port: traffic.Port = .{ .tapFn = tap, .feedFn = feed, .pumpFn = settle, .restoreFn = restore, .dropFn = drop };
+    pub const port: traffic.Port = .{
+        .tapFn = tap,
+        .feedFn = feed,
+        .pumpFn = settle,
+        .restoreFn = restore,
+        .dropFn = drop,
+    };
 
     fn tap(context: *anyopaque, sink: ?traffic.Sink) void {
         const self: *Live = @ptrCast(@alignCast(context));
@@ -73,7 +81,10 @@ pub fn report(out: anytype, event: bridge.Event, link: *const bridge.Bridge) !vo
         .none => {},
         .listening => {
             const item = link.exported().?;
-            try out.print("usbip: exporting {s} ({x:0>4}:{x:0>4}) on 127.0.0.1:{d}\n", .{ item.device.busid, item.device.vendor, item.device.product, link.port().? });
+            try out.print(
+                "usbip: exporting {s} ({x:0>4}:{x:0>4}) on 127.0.0.1:{d}\n",
+                .{ item.device.busid, item.device.vendor, item.device.product, link.port().? },
+            );
         },
         .attached => try out.print("usbip: a host imported {s}\n", .{link.exported().?.device.busid}),
         .hung_up => try out.print("usbip: the host detached; still listening on 127.0.0.1:{d}\n", .{link.port().?}),

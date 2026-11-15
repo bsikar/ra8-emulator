@@ -10,11 +10,12 @@
 //! firmware just armed. src/chip/periph/systick_arm.zig holds the rule; this
 //! only finds the timer a store lands on and latches the cut.
 const std = @import("std");
-const bus = @import("bus.zig");
-const memmap = @import("../memmap.zig");
-const clocks = @import("../../periph/clocks.zig");
-const systick_arm = @import("../../periph/systick_arm.zig");
+
 const banked = @import("../banked.zig");
+const bus = @import("bus.zig");
+const clocks = @import("../../periph/clocks.zig");
+const memmap = @import("../memmap.zig");
+const systick_arm = @import("../../periph/systick_arm.zig");
 
 /// The timer that caused a cut and its state before the instruction's stores.
 pub const Pending = struct {
@@ -62,7 +63,10 @@ pub const Cut = struct {
             }
         }
         const ns_normal = if (self.requester) |state|
-            state.current == .non_secure and (address == memmap.syst.csr or address == memmap.syst.rvr or address == memmap.syst.cvr)
+            state.current == .non_secure and
+                (address == memmap.syst.csr or
+                    address == memmap.syst.rvr or
+                    address == memmap.syst.cvr)
         else
             false;
         const landed = if (ns_normal) address + 0x2_0000 else address;
@@ -75,7 +79,10 @@ pub const Cut = struct {
             if (self.seen[index] == null) self.seen[index] = .{
                 .reload = if (csr & clocks.csr_enable != 0) rvr & clocks.counter_mask else 0,
                 .control = @intCast(csr & (clocks.csr_enable | clocks.csr_tickint)),
-                .current = (try memory.readWord(if (ns_normal) memmap.syst.cvr else clock.words.cvr)) & clocks.counter_mask,
+                .current = (try memory.readWord(if (ns_normal)
+                    memmap.syst.cvr
+                else
+                    clock.words.cvr)) & clocks.counter_mask,
             };
             const prior = &self.seen[index].?;
             const bank: Pending.Bank = if (index == 0) .secure else .non_secure;

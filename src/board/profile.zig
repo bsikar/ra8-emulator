@@ -1,11 +1,12 @@
 //! Versioned board composition files: fitted devices, external memory and
 //! front-panel parts (RA8EMU-1151).
 const std = @import("std");
-const request = @import("ra8_components").request;
+
+const board_switches = @import("switches.zig");
+const chip_gpio = @import("ra8_chip").periph.gpio;
 const external = @import("external/memory.zig");
 const panels = @import("panels.zig");
-const chip_gpio = @import("ra8_chip").periph.gpio;
-const board_switches = @import("switches.zig");
+const request = @import("ra8_components").request;
 
 pub const max_fits: usize = 4;
 pub const max_leds: usize = 8;
@@ -95,7 +96,11 @@ pub fn parse(text: []const u8) Error!Profile {
             has_sdram = true;
         } else if (std.mem.startsWith(u8, line, "memory_window_cycles=")) {
             if (has_window) return Error.DuplicateMemory;
-            result.memory.window_cycles = std.fmt.parseInt(u32, line["memory_window_cycles=".len..], 10) catch return Error.BadMemory;
+            result.memory.window_cycles = std.fmt.parseInt(
+                u32,
+                line["memory_window_cycles=".len..],
+                10,
+            ) catch return Error.BadMemory;
             has_window = true;
         } else if (std.mem.startsWith(u8, line, "led=")) {
             try addLed(&result, line["led=".len..]);
@@ -130,7 +135,16 @@ fn addLed(profile: *Profile, entry: []const u8) Error!void {
     const rgb565 = std.fmt.parseInt(u16, nextField(&fields), 0) catch return Error.BadLed;
     const label = std.mem.trim(u8, nextField(&fields), " \t");
     if (label.len == 0 or fields.next() != null) return Error.BadLed;
-    try checkedAdd(profile.leds[0..], &profile.led_count, max_leds, Error.TooManyLeds, where, Error.BadLed, isTrackedLed(where), Error.UntrackedLed);
+    try checkedAdd(
+        profile.leds[0..],
+        &profile.led_count,
+        max_leds,
+        Error.TooManyLeds,
+        where,
+        Error.BadLed,
+        isTrackedLed(where),
+        Error.UntrackedLed,
+    );
     profile.leds[profile.led_count - 1] = .{ .port = where.port, .pin = where.pin, .rgb565 = rgb565, .label = label };
 }
 
@@ -140,7 +154,16 @@ fn addSwitch(profile: *Profile, entry: []const u8) Error!void {
     const where = parsePin(nextField(&fields)) catch return Error.BadSwitch;
     const label = std.mem.trim(u8, nextField(&fields), " \t");
     if (label.len == 0 or fields.next() != null) return Error.BadSwitch;
-    try checkedAdd(profile.switches[0..], &profile.switch_count, max_switches, Error.TooManySwitches, where, Error.BadSwitch, isTrackedSwitch(where), Error.UntrackedSwitch);
+    try checkedAdd(
+        profile.switches[0..],
+        &profile.switch_count,
+        max_switches,
+        Error.TooManySwitches,
+        where,
+        Error.BadSwitch,
+        isTrackedSwitch(where),
+        Error.UntrackedSwitch,
+    );
     profile.switches[profile.switch_count - 1] = .{ .port = where.port, .pin = where.pin, .label = label };
 }
 

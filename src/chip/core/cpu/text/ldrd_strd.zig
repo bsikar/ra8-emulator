@@ -5,9 +5,9 @@
 //! one in hex, zero included (`#-0x0`). A pre-indexed form keeps a zero
 //! (`[r0, #0]!`) and also prints a subtracted offset in hex. A post-indexed
 //! form uses the decimal-below-ten rule on both signs (`#-0`, `#-8`, `#-0xc`).
+const Form = @import("../ops/ldrd_strd.zig").Form;
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const Form = @import("../ops/ldrd_strd.zig").Form;
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = Form.of(instr) orelse return;

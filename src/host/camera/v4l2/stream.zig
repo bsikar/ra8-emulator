@@ -68,7 +68,9 @@ pub const Stream = struct {
     }
 
     fn release(self: *Stream) void {
-        for (self.maps[0..self.count]) |memory| self.mapper.unmapFn(self.mapper.ctx, memory);
+        for (self.maps[0..self.count]) |memory| {
+            self.mapper.unmapFn(self.mapper.ctx, memory);
+        }
         self.count = 0;
         var request: abi.RequestBuffers = .{ .count = 0 };
         _ = self.dev.ioctl(abi.vidioc_reqbufs, &request);

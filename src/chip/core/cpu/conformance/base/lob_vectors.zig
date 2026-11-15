@@ -75,23 +75,55 @@ const wls = [_]V{
     vec("wls lr, r0 with a count falls through", .{ .hw1 = 0xF040, .hw2 = by8, .rn = 3 }, .{ .lr = 3 }),
     vec("wls lr, r0 with zero skips 8 bytes", .{ .hw1 = 0xF040, .hw2 = by8, .rn = 0 }, .{ .pc = after + 8 }),
     vec("wls with immL set skips 6 bytes", .{ .hw1 = 0xF040, .hw2 = by6, .rn = 0 }, .{ .pc = after + 6 }),
-    vec("wls with the widest field skips 0xFFE bytes", .{ .hw1 = 0xF040, .hw2 = by_max, .rn = 0 }, .{ .pc = after + 0xFFE }),
+    vec(
+        "wls with the widest field skips 0xFFE bytes",
+        .{ .hw1 = 0xF040, .hw2 = by_max, .rn = 0 },
+        .{ .pc = after + 0xFFE },
+    ),
     vec("wls lr, r12 with a count", .{ .hw1 = 0xF04C, .hw2 = by8, .rn = 1 }, .{ .lr = 1 }),
     vec("wls lr, lr with zero lr skips", .{ .hw1 = 0xF04E, .hw2 = by8, .lr = 0 }, .{ .pc = after + 8, .lr = 0 }),
 };
 
 const le = [_]V{
-    vec("le with lr 3 decrements and branches back", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3 }, .{ .pc = after - 8, .lr = 2 }),
+    vec(
+        "le with lr 3 decrements and branches back",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3 },
+        .{ .pc = after - 8, .lr = 2 },
+    ),
     vec("le with lr 2 branches once more", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 2 }, .{ .pc = after - 8, .lr = 1 }),
     vec("le with lr 1 writes zero and falls through", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 1 }, .{ .lr = 0 }),
     vec("le with lr 0 falls through untouched", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 0 }, .{ .lr = 0 }),
-    vec("le with a full lr branches", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 0xFFFF_FFFF }, .{ .pc = after - 8, .lr = 0xFFFF_FFFE }),
+    vec(
+        "le with a full lr branches",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 0xFFFF_FFFF },
+        .{ .pc = after - 8, .lr = 0xFFFF_FFFE },
+    ),
     vec("le with immL set branches back 6", .{ .hw1 = 0xF00F, .hw2 = by6, .lr = 9 }, .{ .pc = after - 6, .lr = 8 }),
-    vec("le with the widest field branches back 0xFFE", .{ .hw1 = 0xF00F, .hw2 = by_max, .lr = 4 }, .{ .pc = after -% 0xFFE, .lr = 3 }),
-    vec("le with an fp context and ltpsize 4 runs", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true }, .{ .pc = after - 8, .lr = 2 }),
-    vec("le with an fp context and ltpsize 2 faults", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true, .ltpsize = 2 }, .{ .fault = .invalid_state, .pc = pc_in, .lr = 3 }),
-    vec("le with an fp context and ltpsize 0 faults", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true, .ltpsize = 0 }, .{ .fault = .invalid_state, .pc = pc_in, .lr = 3 }),
-    vec("le with no fp context ignores ltpsize", .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .ltpsize = 2 }, .{ .pc = after - 8, .lr = 2 }),
+    vec(
+        "le with the widest field branches back 0xFFE",
+        .{ .hw1 = 0xF00F, .hw2 = by_max, .lr = 4 },
+        .{ .pc = after -% 0xFFE, .lr = 3 },
+    ),
+    vec(
+        "le with an fp context and ltpsize 4 runs",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true },
+        .{ .pc = after - 8, .lr = 2 },
+    ),
+    vec(
+        "le with an fp context and ltpsize 2 faults",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true, .ltpsize = 2 },
+        .{ .fault = .invalid_state, .pc = pc_in, .lr = 3 },
+    ),
+    vec(
+        "le with an fp context and ltpsize 0 faults",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .fpca = true, .ltpsize = 0 },
+        .{ .fault = .invalid_state, .pc = pc_in, .lr = 3 },
+    ),
+    vec(
+        "le with no fp context ignores ltpsize",
+        .{ .hw1 = 0xF00F, .hw2 = by8, .lr = 3, .ltpsize = 2 },
+        .{ .pc = after - 8, .lr = 2 },
+    ),
 };
 
 const unclaimed = [_]V{

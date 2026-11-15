@@ -71,7 +71,7 @@
 //! is derived from them, and OSCSF does not depend on them: a PLL whose
 //! multiplier was never programmed still reports stable here. Wiring the
 //! dividers into the modelled clock tree is its own slice.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
 

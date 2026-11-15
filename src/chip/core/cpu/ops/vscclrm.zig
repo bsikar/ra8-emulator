@@ -16,11 +16,11 @@
 //!
 //! Left unclaimed (UNPREDICTABLE): a run past S31 or D15, and an odd imm8
 //! in the double form.
-const op = @import("../op.zig");
-const Cpu = @import("../cpu.zig").Cpu;
-const Instr = @import("../instr.zig").Instr;
 const control_bits = @import("../regs.zig").control_bits;
+const Cpu = @import("../cpu.zig").Cpu;
 const fp_gate = @import("fp/gate.zig");
+const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with D ([6]) masked out.
@@ -72,6 +72,8 @@ fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
     try fp_gate.check(cpu);
     const r = run(instr).?;
     var i: u6 = 0;
-    while (i < r.count) : (i += 1) cpu.fp.bank.writeS(@intCast(r.first + i), 0);
+    while (i < r.count) : (i += 1) {
+        cpu.fp.bank.writeS(@intCast(r.first + i), 0);
+    }
     cpu.fp.vpr = .{};
 }

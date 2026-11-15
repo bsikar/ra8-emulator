@@ -12,12 +12,13 @@
 //! A checkpoint with no scan before it (the display never came up) has
 //! no picture; a lookup then answers null, the display-off source.
 const std = @import("std");
-const frame_types = @import("frame_types.zig");
+
 const frame_crop = @import("frame_crop.zig");
-const recorder_mod = @import("recorder.zig");
+const frame_types = @import("frame_types.zig");
 const record = @import("record.zig");
-const replay_mod = @import("replay.zig");
+const recorder_mod = @import("recorder.zig");
 const refs = @import("refs.zig");
+const replay_mod = @import("replay.zig");
 
 pub const Position = frame_types.Position;
 pub const Error = error{ NotAKeyframe, BadPixelCount } || frame_types.Error || frame_crop.Error;
@@ -178,7 +179,9 @@ pub const Index = struct {
             }
         }
         var at = self.entries.items.len;
-        while (at > 0 and before(entry.at, self.entries.items[at - 1].at)) at -= 1;
+        while (at > 0 and before(entry.at, self.entries.items[at - 1].at)) {
+            at -= 1;
+        }
         self.entries.insertAssumeCapacity(at, entry);
     }
 

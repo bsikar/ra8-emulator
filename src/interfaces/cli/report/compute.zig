@@ -1,8 +1,8 @@
 //! The compute part of the end-of-run report: what the NPU was asked to do,
 //! what it actually moved, and the kicks it refused to pretend about.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
 const hook = @import("ra8_chip").periph.npu.vela.hook;
+const Writer = @import("../report.zig").Writer;
 
 /// One line per run that touched the NPU window, plus a line for each kind
 /// of kick that produced no job. A stream dev would have run down the copy

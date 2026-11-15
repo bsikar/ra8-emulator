@@ -19,6 +19,7 @@
 //! events arrive, so the load does not depend on the trace's 256-event ring
 //! and costs fixed memory however long the run goes.
 const std = @import("std");
+
 const rtos_trace = @import("trace.zig");
 
 pub const limits = struct {
@@ -134,7 +135,9 @@ pub const Load = struct {
 
     /// Charge every core up to `now`, as the run ends.
     pub fn finish(self: *Load, now: u64) void {
-        for (0..limits.cores) |index| self.charge(@intCast(index), now);
+        for (0..limits.cores) |index| {
+            self.charge(@intCast(index), now);
+        }
     }
 
     /// The owners one core's time went to, in the order first charged.
@@ -147,7 +150,9 @@ pub const Load = struct {
     pub fn total(self: *const Load, core: u1) u64 {
         const one = &self.cores[core];
         var sum: u64 = one.other;
-        for (one.slots[0..one.len]) |slot| sum += slot.ticks;
+        for (one.slots[0..one.len]) |slot| {
+            sum += slot.ticks;
+        }
         return sum;
     }
 

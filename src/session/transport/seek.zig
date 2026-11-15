@@ -9,13 +9,13 @@
 //! offset, gap), never before it within the target's round.
 
 const std = @import("std");
+
 const api = @import("../api.zig");
 const command_mod = @import("command.zig");
-const seek_target = @import("../history/seek_target.zig");
-const position_mod = @import("../history/position.zig");
-const seek_engine = @import("../history/seek_engine.zig");
-const transport_mod = @import("transport.zig");
 const run_slice = @import("../run_slice.zig");
+const seek_engine = @import("../history/seek_engine.zig");
+const seek_target = @import("../history/seek_target.zig");
+const transport_mod = @import("transport.zig");
 
 const Transport = transport_mod.Transport;
 const Job = transport_mod.Job;

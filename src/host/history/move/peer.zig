@@ -2,16 +2,20 @@
 //! roots and the source entry, prove the intent, and rename only inside the
 //! caller's window. Linux and Windows primitives live in linux.zig and
 //! windows.zig; everything here is portable.
-const std = @import("std");
+const linux = @import("linux.zig");
+const windows = @import("windows.zig");
+
 const builtin = @import("builtin");
-const wire = @import("wire.zig");
+const std = @import("std");
+
+const intent = @import("intent.zig");
+const layout = @import("../layout.zig");
+const metadata = @import("../metadata.zig");
 const verify = @import("verify.zig");
 const Window = @import("window.zig").Window;
-const metadata = @import("../metadata.zig");
-const layout = @import("../layout.zig");
-const intent = @import("intent.zig");
+const wire = @import("wire.zig");
 
-const platform = if (builtin.os.tag == .windows) @import("windows.zig") else @import("linux.zig");
+const platform = if (builtin.os.tag == .windows) windows else linux;
 
 /// Normal reply exits and watchdog exits. `unready` and `expired` mean no
 /// rename started and `drained` that one returned. `unsettled` is the only
@@ -49,7 +53,18 @@ fn run(allocator: std.mem.Allocator, io: std.Io) !u8 {
     ready_ms.store(request.ready_ms, .seq_cst);
     var pins = try Pins.take(allocator, io, request);
     defer pins.close(io);
-    var reply: wire.Reply = .{ .version = wire.version, .nonce = request.nonce, .operation = request.operation, .proof = try prove(allocator, io, pins, request), .phase = .bound, .pid = platform.selfPid(), .birth = try platform.birth(io), .source_inode = @intCast((try pins.source.stat(io)).inode), .source_root = @intCast((try pins.source_root.stat(io)).inode), .target_root = @intCast((try pins.target_root.stat(io)).inode) };
+    var reply: wire.Reply = .{
+        .version = wire.version,
+        .nonce = request.nonce,
+        .operation = request.operation,
+        .proof = try prove(allocator, io, pins, request),
+        .phase = .bound,
+        .pid = platform.selfPid(),
+        .birth = try platform.birth(io),
+        .source_inode = @intCast((try pins.source.stat(io)).inode),
+        .source_root = @intCast((try pins.source_root.stat(io)).inode),
+        .target_root = @intCast((try pins.target_root.stat(io)).inode),
+    };
     commit_ms = request.commit_ms;
     drain_ms = request.drain_ms;
     opened = std.Io.Timestamp.now(io, .awake);
@@ -64,7 +79,14 @@ fn run(allocator: std.mem.Allocator, io: std.Io) !u8 {
     // a peer suspended as a whole wakes with its watchdog not yet run.
     const late = opened.untilNow(io, .awake).toMilliseconds() >= request.commit_ms;
     reply.status = if (!late and window.claim()) status: {
-        const renamed = platform.rename(allocator, pins.source, pins.source_root, request.from, pins.target_root, request.to);
+        const renamed = platform.rename(
+            allocator,
+            pins.source,
+            pins.source_root,
+            request.from,
+            pins.target_root,
+            request.to,
+        );
         if (!window.settle()) park(io);
         break :status try renamed;
     } else .expired;
@@ -83,7 +105,17 @@ fn prove(allocator: std.mem.Allocator, io: std.Io, pins: Pins, request: wire.Req
     defer allocator.free(source);
     const target = try platform.leafPath(allocator, record.to_path);
     defer allocator.free(target);
-    try verify.bound(request, .{ .nonce = record.nonce, .from = record.from, .to = record.to, .source = source, .target = target, .proof = proof.digest });
+    try verify.bound(
+        request,
+        .{
+            .nonce = record.nonce,
+            .from = record.from,
+            .to = record.to,
+            .source = source,
+            .target = target,
+            .proof = proof.digest,
+        },
+    );
     return proof.digest;
 }
 
@@ -98,13 +130,16 @@ fn prove(allocator: std.mem.Allocator, io: std.Io, pins: Pins, request: wire.Req
 /// returns; nothing in user mode ends that sooner.
 fn watch(io: std.Io) void {
     const born = std.Io.Timestamp.now(io, .awake);
-    while (true) : (io.sleep(.fromMilliseconds(tick_ms), .awake) catch {}) switch (window.state.load(.seq_cst)) {
-        .starting => if (born.untilNow(io, .awake).toMilliseconds() >= ready_ms.load(.seq_cst) and window.unready()) end(exits.unready),
-        .waiting => if (age(io) >= commit_ms and window.expire()) end(exits.expired),
-        .committing => if (age(io) >= @as(u64, commit_ms) + drain_ms and window.abandon()) end(exits.unsettled),
-        .settled => if (age(io) >= @as(u64, commit_ms) + drain_ms) end(exits.drained),
-        .expired, .abandoned => {},
-    };
+    while (true) : (io.sleep(.fromMilliseconds(tick_ms), .awake) catch {}) {
+        switch (window.state.load(.seq_cst)) {
+            .starting => if (born.untilNow(io, .awake).toMilliseconds() >= ready_ms.load(.seq_cst) and
+                window.unready()) end(exits.unready),
+            .waiting => if (age(io) >= commit_ms and window.expire()) end(exits.expired),
+            .committing => if (age(io) >= @as(u64, commit_ms) + drain_ms and window.abandon()) end(exits.unsettled),
+            .settled => if (age(io) >= @as(u64, commit_ms) + drain_ms) end(exits.drained),
+            .expired, .abandoned => {},
+        }
+    }
 }
 const tick_ms = 10;
 
@@ -141,9 +176,16 @@ const Pins = struct {
         errdefer source.close(io);
         const source_guard = try guard(io, source_root);
         errdefer source_guard.close(io);
-        const same_root = (try source_root.stat(io)).inode == (try target_root.stat(io)).inode and std.mem.eql(u8, request.source.path, request.target.path);
+        const same_root = (try source_root.stat(io)).inode == (try target_root.stat(io)).inode and
+            std.mem.eql(u8, request.source.path, request.target.path);
         const target_guard = if (same_root) null else try guard(io, target_root);
-        return .{ .source_root = source_root, .target_root = target_root, .source = source, .source_guard = source_guard, .target_guard = target_guard };
+        return .{
+            .source_root = source_root,
+            .target_root = target_root,
+            .source = source,
+            .source_guard = source_guard,
+            .target_guard = target_guard,
+        };
     }
 
     fn close(self: *Pins, io: std.Io) void {

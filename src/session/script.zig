@@ -7,6 +7,7 @@
 //! copy. A line that does not parse prints `error: <why>` and the script
 //! carries on, the same as a command that parses but cannot be carried out.
 const std = @import("std");
+
 const commands = @import("commands.zig");
 const session = @import("session.zig");
 

@@ -6,8 +6,9 @@
 //! one through `--load-state`'s path (RA8EMU-769). The parsed options are
 //! the session's own type (src/session/state_options.zig).
 const std = @import("std");
-const world_flags = @import("world_flags.zig");
+
 const state_options = @import("ra8_session").state_options;
+const world_flags = @import("world_flags.zig");
 
 pub const At = state_options.At;
 pub const Options = state_options.Options;

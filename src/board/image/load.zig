@@ -3,8 +3,8 @@
 //! hands it. The value's slices point into the ELF bytes and into the
 //! `Loaded` that holds them, so both outlive the load.
 const elf = @import("elf.zig");
-const pages = @import("pages.zig");
 const loaded_image = @import("ra8_chip").core.loaded_image;
+const pages = @import("pages.zig");
 
 /// Load segments with file bytes one image may carry.
 pub const capacity: usize = 32;

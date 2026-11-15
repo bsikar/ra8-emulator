@@ -119,14 +119,21 @@ pub const Style = struct {
     pub fn decode(word: u32) Style {
         const low = word >> control2.format_low_shift & control2.format_low_mask;
         const high: u32 = if (word & control2.format_high != 0) 0x4 else 0;
+        const write_alpha: u2 = @intCast(word >> control2.write_alpha_shift & control2.write_alpha_mask);
         return .{
             .format = @fromBackingInt(@intCast(@as(u3, @intCast(low | high)))),
-            .write_alpha = @fromBackingInt(@intCast(@as(u2, @intCast(word >> control2.write_alpha_shift & control2.write_alpha_mask)))),
+            .write_alpha = @fromBackingInt(write_alpha),
             .blend_alpha = word & control2.use_acb != 0,
             .src = .{ .is_alpha = word & control2.src_factor != 0, .invert = word & control2.src_invert != 0 },
             .dst = .{ .is_alpha = word & control2.dst_factor != 0, .invert = word & control2.dst_invert != 0 },
-            .alpha_src = .{ .is_alpha = word & control2.alpha_src_factor != 0, .invert = word & control2.alpha_src_invert != 0 },
-            .alpha_dst = .{ .is_alpha = word & control2.alpha_dst_factor != 0, .invert = word & control2.alpha_dst_invert != 0 },
+            .alpha_src = .{
+                .is_alpha = word & control2.alpha_src_factor != 0,
+                .invert = word & control2.alpha_src_invert != 0,
+            },
+            .alpha_dst = .{
+                .is_alpha = word & control2.alpha_dst_factor != 0,
+                .invert = word & control2.alpha_dst_invert != 0,
+            },
             .patterned = word & control2.pattern_enable != 0,
             .textured = word & control2.texture_enable != 0,
         };

@@ -12,13 +12,15 @@
 //!
 //! The wrapper decodes the instruction a second time when it runs, because
 //! a group's decode hands back a bare function with nothing to close over.
-const op = @import("../../op.zig");
-const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
-const mpu_check = @import("../../mpu_check.zig");
-const lazy = @import("../../fpu/lazy.zig");
-const fp_mem = @import("mem.zig");
+const regs = @import("../../regs.zig");
+
 const cpacr = @import("../../fpu/cpacr.zig");
+const Cpu = @import("../../cpu.zig").Cpu;
+const fp_mem = @import("mem.zig");
+const Instr = @import("../../instr.zig").Instr;
+const lazy = @import("../../fpu/lazy.zig");
+const mpu_check = @import("../../mpu_check.zig");
+const op = @import("../../op.zig");
 const sysreg = @import("../../sysreg.zig");
 
 /// The same group, with ExecuteFPCheck() ahead of every instruction it runs.
@@ -47,7 +49,7 @@ pub fn gatedFpMemory(comptime inner: op.Group) op.Group {
 
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
             const inactive = cpu.fp.context.fpccr.aspen == 1 and
-                cpu.regs.control & @import("../../regs.zig").control_bits.fpca == 0;
+                cpu.regs.control & regs.control_bits.fpca == 0;
             if (!(fp_mem.isInactiveFpcxtNs(instr) and inactive)) try check(cpu);
             return inner.decode(instr).?(cpu, instr);
         }
@@ -76,7 +78,9 @@ pub fn check(cpu: *Cpu) op.Error!void {
 /// Non-secure instruction cannot read Secure values (RA8EMU-165).
 fn hideSecure(cpu: *Cpu) void {
     const n: usize = if (cpu.fp.context.fpccr.ts == 1) 32 else 16;
-    for (0..n) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+    for (0..n) |i| {
+        cpu.fp.bank.writeS(@intCast(i), 0);
+    }
     cpu.fp.fpscr = @TypeOf(cpu.fp.fpscr).fromBits(0);
 }
 

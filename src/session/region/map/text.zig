@@ -3,10 +3,10 @@
 //! percent) with the sections that run there underneath, then the stack
 //! reservation, then any section that fits no region. The numbers are
 //! region_map.zig's; this file only lays them out.
-const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
-const sections = @import("../../sections.zig");
 const region_map = @import("map.zig");
+const sections = @import("../../sections.zig");
 
 /// The map of `image` over `regions`, as text.
 pub fn render(writer: anytype, image: elf.Image, regions: []const region_map.Region) !void {
@@ -45,18 +45,29 @@ fn sectionsIn(writer: anytype, image: elf.Image, regions: []const region_map.Reg
 
 fn runLine(writer: anytype, found: sections.Section) !void {
     if (found.stored() and found.lma != found.vma) {
-        try writer.print("  {s: <30} run  0x{x:0>8}  load 0x{x:0>8}  {d: >8}\n", .{ found.name, found.vma, found.lma, found.size });
+        try writer.print(
+            "  {s: <30} run  0x{x:0>8}  load 0x{x:0>8}  {d: >8}\n",
+            .{ found.name, found.vma, found.lma, found.size },
+        );
     } else {
-        try writer.print("  {s: <30} run  0x{x:0>8}                   {d: >8}\n", .{ found.name, found.vma, found.size });
+        try writer.print(
+            "  {s: <30} run  0x{x:0>8}                   {d: >8}\n",
+            .{ found.name, found.vma, found.size },
+        );
     }
 }
 
 fn storedLine(writer: anytype, found: sections.Section) !void {
-    try writer.print("  {s: <30} load 0x{x:0>8}  (runs at 0x{x:0>8})  {d: >8}\n", .{ found.name, found.lma, found.vma, found.size });
+    try writer.print(
+        "  {s: <30} load 0x{x:0>8}  (runs at 0x{x:0>8})  {d: >8}\n",
+        .{ found.name, found.lma, found.vma, found.size },
+    );
 }
 
 fn stackLine(writer: anytype, map: region_map.Map) !void {
-    const stack = map.stack orelse return writer.writeAll("stack    not found (no g_ra8_ls_stack_top / g_ra8_ls_stack_size)\n");
+    const stack = map.stack orelse return writer.writeAll(
+        "stack    not found (no g_ra8_ls_stack_top / g_ra8_ls_stack_size)\n",
+    );
     const where = if (stack.region) |index| map.regions[index].name else "no region";
     try writer.print("stack    0x{x:0>8}-0x{x:0>8}  {d: >8} bytes in {s}\n", .{
         stack.base, stack.base +% stack.size -% 1, stack.size, where,

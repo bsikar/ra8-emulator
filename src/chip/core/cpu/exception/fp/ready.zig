@@ -10,13 +10,13 @@
 //! DEMCR.MON_EN is set and the DebugMonitor's SHPR3 priority would
 //! preempt. SHCSR and SHPR1 are read as the running state sees them; their
 //! Secure/Non-secure banking is the TrustZone lane's.
-const memmap = @import("../../../memmap.zig");
-const fault_route = @import("../../../../periph/fault/route.zig");
-const Fpccr = @import("../../fpu/context.zig").Fpccr;
 const active = @import("../active.zig");
+const Cpu = @import("../../cpu.zig").Cpu;
 const dispatch = @import("../dispatch.zig");
 const fault = @import("../fault.zig");
-const Cpu = @import("../../cpu.zig").Cpu;
+const fault_route = @import("../../../../periph/fault/route.zig");
+const Fpccr = @import("../../fpu/context.zig").Fpccr;
+const memmap = @import("../../../memmap.zig");
 
 const mon_en: u32 = 1 << 16;
 

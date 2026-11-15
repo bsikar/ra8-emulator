@@ -1,8 +1,8 @@
 //! What a debugger sees of the NPU (RA8EMU-948): every word a read answers
 //! is computed from state and changes nothing, so a peek of one is the read
 //! without the traffic count a guest read earns.
-const npu = @import("npu.zig");
 const lanes = @import("../lanes.zig");
+const npu = @import("npu.zig");
 
 /// The registry's peek for the NPU block.
 pub fn thunk(context: *anyopaque, address: u32, width: u3) u32 {

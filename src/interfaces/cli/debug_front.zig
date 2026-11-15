@@ -25,10 +25,11 @@
 //! interrupt waits forever here. Bringing the run loop under the session is
 //! the next step for this front end.
 const std = @import("std");
+
 const cli = @import("cli.zig");
 const cpu_choice = @import("ra8_chip").core.cpu.choice;
-const zig_debug_front = @import("zig/debug_front.zig");
 const script = @import("ra8_session").script;
+const zig_debug_front = @import("zig/debug_front.zig");
 
 pub const usage =
     \\usage: ra8_emulator <firmware.elf> [--cpu1 IMAGE.elf] --debug-script FILE
@@ -81,7 +82,9 @@ const max_args = 16;
 pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
     for (argv) |arg| {
         if (isDebugFlag(arg)) break;
-    } else return null;
+    } else {
+        return null;
+    }
     var rest_buffer: [max_args][]const u8 = undefined;
     var rest: std.ArrayList([]const u8) = .initBuffer(&rest_buffer);
     var cpu: ?cpu_choice.Choice = .zig;
@@ -124,7 +127,9 @@ fn plain(argv: []const []const u8) ?error{BadUsage}!Request {
 }
 
 fn isDebugFlag(arg: []const u8) bool {
-    return std.mem.eql(u8, arg, flags.script) or std.mem.eql(u8, arg, flags.interactive) or std.mem.eql(u8, arg, flags.gdb);
+    return std.mem.eql(u8, arg, flags.script) or
+        std.mem.eql(u8, arg, flags.interactive) or
+        std.mem.eql(u8, arg, flags.gdb);
 }
 
 /// A command line the run parser refused. The debugger flags are not run

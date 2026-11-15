@@ -17,6 +17,11 @@
             .url = "git+https://codeberg.org/ziglang/translate-c#875969d3493e245e01bf5d7860f792d8f3eb9ef5",
             .hash = "translate_c-0.0.0-Q_BUWoFOBwAhz77Zd15HCVuhTKzdUKc94kezmCeJ7IC_",
         },
+        .zlinter = .{
+            .url = "https://github.com/KurtWagner/zlinter/archive/625c00333d1c28fb102bd7f83e38bc40ba0be137.tar.gz",
+            .hash = "zlinter-0.0.1-OjQ08ftpFgDQ3g8eA9mvbFIp_JMCkR91eyYGKXEGCiJc",
+            .lazy = true,
+        },
     },
     .paths = .{ "build.zig", "build_tests.zig", "build.zig.zon", "src", "tools", "tests", "docs" },
 }

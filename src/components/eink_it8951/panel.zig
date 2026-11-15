@@ -1,72 +1,19 @@
-//! The IT8951 e-paper controller on the SPI line: the word protocol a panel
-//! answers, and the difference between a panel that is awake and one the
-//! firmware put to sleep.
+//! IT8951 SPI word protocol: MSB-first words follow command/data/read preambles.
+//! Reads clock a dummy word before their value. Preambles self-frame transactions.
 //!
-//! The driver clocks bytes through SPDR and the controller assembles them
-//! into 16-bit words MSB first. Every transaction opens with a preamble
-//! word: command follows, data follows, or the host is about to read. A read
-//! burst is four bytes, a dummy word and then the value, which is what the
-//! driver's read_data16 takes. There is no chip select in this tree, so the
-//! panel self-frames off those preambles, which is what dev does too.
-//!
-//! Ported from board_periph_eink.c on dev, with five things that model does
-//! not do.
-//!
-//! A COMMAND NEEDS AN AWAKE PANEL. dev declares SYS_RUN and SLEEP in its own
-//! command enum and implements neither, so an image that puts the panel into
-//! deep sleep and then loads and refreshes gets a full report there and a
-//! blank panel on the bench. Here SLEEP stops the controller answering:
-//! every command but SYS_RUN is refused and counted until the firmware wakes
-//! it back up.
-//!
-//! A REGISTER KEEPS WHAT WAS WRITTEN. dev latches the address of a REG_WR
-//! and throws the value away, and answers zero to every register read, so a
-//! driver that programs a register and reads it back to confirm reads zero
-//! forever and cannot tell a dead bus from a working one. Here a written
-//! register reads back, and LUTAFSR stays the controller's own: a write to
-//! it is refused and counted, and a read of it is always the idle status the
-//! display poll is waiting for.
-//!
-//! A LOAD IS BOUNDED BY THE RECTANGLE IT DECLARED. dev counts pixels for
-//! every data word after the geometry and never looks at the width and
-//! height it just took, so a stream longer than its own target area reads as
-//! a clean load there and overruns the area on silicon. Here the rectangle
-//! is latched and a word past it moves no pixels and is counted.
-//!
-//! THE DEVICE-INFO BLOCK ENDS. dev increments its cursor on every read burst
-//! for as long as the host keeps clocking and answers zeros past the end of
-//! the forty-byte block, so a driver draining too far is told it is still
-//! reading device information. Here the block is twenty words and a read
-//! past it is counted.
-//!
-//! A DATA WORD NEEDS A COMMAND IN FLIGHT. dev's data path falls through
-//! every branch when no command has arrived, so a stray write preamble in
-//! the middle of a transaction is swallowed in silence. Here it is counted,
-//! which is how a framing slip shows up in the report at all.
-//!
-//! KEPT FROM DEV DELIBERATELY: the self-framing itself, the dummy word ahead
-//! of every value, the 1530 mV power-on VCOM (a modelled controller value,
-//! not any real panel's), and the pixels-per-
-//! word decode, which is why a load at 4 bpp accounts four pixels to a word
-//! and not two.
-//!
-//! THE PANEL IS ON SPI_B CHANNEL 0, where the epaper app's k_ep_spi_channel
-//! puts it. The card is on SCI0 in Simple-SPI mode, not on SPI_B, so
-//! nothing else shares the line and no chip select is needed.
-//!
-//! NOT MODELLED, AND NOT GUESSED: physical waveform transformations (a
-//! refresh copies the requested area from the input buffer to the glass),
-//! the image-buffer address, the panel's own busy timing (HRDY is driven
-//! ready and stays there), and every register besides LUTAFSR, which are
-//! shadowed and never interpreted.
-const std = @import("std");
-const proto = @import("wire.zig");
+//! SLEEP refuses every command except SYS_RUN. Registers retain writes;
+//! LUTAFSR is read-only and reports idle. Loads stop at their declared rectangle,
+//! the device-info block stops at twenty words, and stray data words are refused.
+//! Each refusal is counted in the panel report.
+
 pub const busy = @import("busy.zig");
 pub const image = @import("image.zig");
+const proto = @import("wire.zig");
 pub const refresh = @import("refresh.zig");
+pub const snapshot = @import("snapshot.zig");
 const spi = @import("ra8_chip").periph.spi;
 pub const wire = @import("wire.zig");
-pub const snapshot = @import("snapshot.zig");
+
 /// The LUT busy model, re-exported so a caller reaches it through the
 /// panel rather than by a second import.
 pub const lut = busy;
@@ -74,6 +21,7 @@ pub const lut = busy;
 /// header.
 pub const line_channel: usize = 0;
 pub const hrdy = @import("hrdy.zig");
+
 /// How many host registers the model keeps. Small on purpose: the driver
 /// touches a handful, and one nothing ever wrote reads zero anyway.
 pub const register_slots: usize = 8;
@@ -331,7 +279,13 @@ pub const Panel = struct {
         refresh.notify(self.refresh_log_hook, self.display_args, word);
     }
     pub fn latestRefresh(self: *const Panel) refresh.Event {
-        return .{ .x = self.display_args[proto.arg.display_x], .y = self.display_args[proto.arg.display_y], .width = self.display_args[proto.arg.display_width], .height = self.display_args[proto.arg.display_height], .waveform = self.last_waveform };
+        return .{
+            .x = self.display_args[proto.arg.display_x],
+            .y = self.display_args[proto.arg.display_y],
+            .width = self.display_args[proto.arg.display_width],
+            .height = self.display_args[proto.arg.display_height],
+            .waveform = self.last_waveform,
+        };
     }
     /// What the next read burst carries. A refused command answers zero: the
     /// panel is asleep and is not driving the line at all.

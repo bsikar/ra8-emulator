@@ -1,15 +1,19 @@
 //! A native peer borrows the original Linux gates and leases through WSL.
-const std = @import("std");
+const file_api = @import("file.zig");
+const peer_api = @import("peer.zig");
+
 const builtin = @import("builtin");
-const wire = @import("wire.zig");
-const verify = @import("verify.zig");
-const provider = @import("provider.zig");
+const std = @import("std");
+
+const Admission = @import("deadline.zig").Admission;
+const Context = @import("context.zig").Context;
+const deadline = @import("deadline.zig");
 const intent = @import("intent.zig");
 const name = @import("../name.zig");
-const Context = @import("context.zig").Context;
+const provider = @import("provider.zig");
 const Proxy = @import("proxy.zig").Proxy;
-const Admission = @import("deadline.zig").Admission;
-const deadline = @import("deadline.zig");
+const verify = @import("verify.zig");
+const wire = @import("wire.zig");
 
 pub fn move(context: Context, from: []const u8, to: []const u8, purpose: []const u8) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
@@ -37,9 +41,10 @@ fn admit(io: std.Io, peer: provider.Provider) !Admission {
 fn prepare(context: Context, peer: provider.Provider, admission: Admission) !Proxy {
     const base = context.source;
     try provider.check(base.io, peer);
-    const source_root = try @import("file.zig").here(base.dir);
-    const target_root = try @import("file.zig").here(context.target.dir);
-    if (source_root.device_major != target_root.device_major or source_root.device_minor != target_root.device_minor) return error.CrossDevice;
+    const source_root = try file_api.here(base.dir);
+    const target_root = try file_api.here(context.target.dir);
+    if (source_root.device_major != target_root.device_major or
+        source_root.device_minor != target_root.device_minor) return error.CrossDevice;
     var child = try Proxy.spawn(context, peer.executable, peer.bounds.reap, admission);
     errdefer child.close();
     try child.fits();
@@ -97,12 +102,18 @@ fn finish(context: Context, record: intent.Record, verdict: deadline.Deadline) !
     try context.target.checkMarked();
     try Context.owned(context.target, record.to);
     try verdict.live(context.source.io);
-    try @import("file.zig").syncDir(context.target.dir);
-    try @import("file.zig").syncDir(context.source.dir);
+    try file_api.syncDir(context.target.dir);
+    try file_api.syncDir(context.source.dir);
     try intent.cleanup(context, record, true, verdict);
 }
 
-fn exchange(context: Context, peer: provider.Provider, record: intent.Record, child: *Proxy, admission: Admission) !void {
+fn exchange(
+    context: Context,
+    peer: provider.Provider,
+    record: intent.Record,
+    child: *Proxy,
+    admission: Admission,
+) !void {
     if (builtin.os.tag != .linux) return error.OperationUnsupported;
     const base = context.source;
     const allocator = base.allocator;
@@ -112,20 +123,31 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record, ch
         child.close();
         // Nothing was committed, so no COMMIT can arrive and nothing has
         // moved: the intent is cancelled whatever became of the child.
-        if (!flagged and admission.open(io)) intent.cancel(context, record, admission.phase(io, peer.bounds.settle)) catch {};
+        if (!flagged and
+            admission.open(io)) intent.cancel(context, record, admission.phase(io, peer.bounds.settle)) catch {};
     }
     try intent.scope(context, record, record.from, record.to);
     try context.validate(record.from);
-    const sent: verify.Sent = .{ .nonce = record.nonce, .operation = name.newId(io), .proof = try prove(context, record) };
+    const sent: verify.Sent = .{
+        .nonce = record.nonce,
+        .operation = name.newId(io),
+        .proof = try prove(context, record),
+    };
     try send(context, peer, record, sent, child);
-    const ready = wire.read(wire.Reply, allocator, io, child.child.stdout.?, admission.phase(io, peer.bounds.ready)) catch |err| return if (err == error.DeadlineExceeded) error.NativePeerTimeout else err;
+    const ready = wire.read(
+        wire.Reply,
+        allocator,
+        io,
+        child.child.stdout.?,
+        admission.phase(io, peer.bounds.ready),
+    ) catch |err| return if (err == error.DeadlineExceeded) error.NativePeerTimeout else err;
     defer ready.deinit();
     // The peer opened its window before it wrote this reply, so this bound
     // ends no earlier than the peer's own unless the admission ends first,
     // and then the caller only gives up sooner.
     const drained = admission.phase(io, @as(u64, peer.bounds.commit) + peer.bounds.drain);
     try verify.reply(sent, ready.value, .bound);
-    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = ready.value });
+    try reportReply(peer, child, ready.value);
     try context.recheck(record.from, record.source, record.source_root, record.target_root);
     // COMMIT goes out only while the admission still covers the commit and
     // drain phases both: a COMMIT written later could outlive the reply
@@ -133,15 +155,24 @@ fn exchange(context: Context, peer: provider.Provider, record: intent.Record, ch
     if (drained.left(io) == null) return error.NativePeerTimeout;
     try intent.commit(context, record);
     flagged = true;
-    child.commit(allocator, .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .commit = true }) catch |err| return publish(context, record, admission, admission.phase(io, peer.bounds.settle), try lost(context, record, err));
+    child.commit(
+        allocator,
+        .{
+            .version = wire.version,
+            .nonce = sent.nonce,
+            .operation = sent.operation,
+            .proof = sent.proof,
+            .commit = true,
+        },
+    ) catch |err| return publishLost(context, record, admission, admission.phase(io, peer.bounds.settle), err);
     const done = wire.read(wire.Reply, allocator, io, child.child.stdout.?, drained) catch |err| {
         child.close();
-        return publish(context, record, admission, admission.phase(io, peer.bounds.settle), try lost(context, record, err));
+        return publishLost(context, record, admission, admission.phase(io, peer.bounds.settle), err);
     };
     defer done.deinit();
     try verify.reply(sent, done.value, .done);
     try verify.pair(ready.value, done.value);
-    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = done.value });
+    try reportReply(peer, child, done.value);
     const term = child.reap();
     // The settle phase owns every verdict published after the reap.
     const verdict = admission.phase(io, peer.bounds.settle);
@@ -158,11 +189,24 @@ fn prove(context: Context, record: intent.Record) !wire.Proof {
     const proof = try intent.boundProof(base.allocator, base.io, base.dir, source_dir, record.from);
     defer proof.deinit();
     const current = proof.record.value;
-    if (!std.mem.eql(u8, &current.nonce, &record.nonce) or !current.source.same(record.source) or !current.source_root.same(record.source_root) or !current.target_root.same(record.target_root) or !current.anchor.same(record.anchor) or !current.marker.same(record.marker)) return error.IdentityConflict;
-    if (!std.mem.eql(u8, current.to, record.to) or !std.mem.eql(u8, current.from_path, record.from_path) or !std.mem.eql(u8, current.to_path, record.to_path)) return error.IdentityConflict;
-    const file = @import("file.zig");
+    if (!std.mem.eql(u8, &current.nonce, &record.nonce) or
+        !current.source.same(record.source) or
+        !current.source_root.same(record.source_root) or
+        !current.target_root.same(record.target_root) or
+        !current.anchor.same(record.anchor) or
+        !current.marker.same(record.marker)) return error.IdentityConflict;
+    if (!std.mem.eql(u8, current.to, record.to) or
+        !std.mem.eql(u8, current.from_path, record.from_path) or
+        !std.mem.eql(u8, current.to_path, record.to_path)) return error.IdentityConflict;
+    const file = file_api;
     var anchor_buffer: name.Buffer = undefined;
-    if (!record.anchor.same(try file.state(base.dir, try intent.leaf(&anchor_buffer, name.classify(record.from).id))) or !record.marker.same(try file.state(source_dir, intent.note))) return error.IdentityConflict;
+    if (!record.anchor.same(
+        try file.state(
+            base.dir,
+            try intent.leaf(&anchor_buffer, name.classify(record.from).id),
+        ),
+    ) or
+        !record.marker.same(try file.state(source_dir, intent.note))) return error.IdentityConflict;
     return proof.digest;
 }
 
@@ -185,8 +229,37 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
     defer allocator.free(source);
     const target = try rootPath(allocator, windows_peer, context.target.path);
     defer allocator.free(target);
-    const request: wire.Request = .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .source = .{ .path = source, .marker = try Context.marker(base) }, .target = .{ .path = target, .marker = try Context.marker(context.target) }, .from = record.from, .to = record.to, .ready_ms = peer.bounds.ready, .commit_ms = peer.bounds.commit, .drain_ms = peer.bounds.drain };
-    if (peer.observer) |observer| try observer.report(observer.context, .{ .proxy_pid = 0, .reply = .{ .version = wire.version, .nonce = sent.nonce, .operation = sent.operation, .proof = sent.proof, .phase = .starting, .pid = 0, .birth = 0, .source_inode = 0, .source_root = 0, .target_root = 0 } });
+    const request: wire.Request = .{
+        .version = wire.version,
+        .nonce = sent.nonce,
+        .operation = sent.operation,
+        .proof = sent.proof,
+        .source = .{ .path = source, .marker = try Context.marker(base) },
+        .target = .{ .path = target, .marker = try Context.marker(context.target) },
+        .from = record.from,
+        .to = record.to,
+        .ready_ms = peer.bounds.ready,
+        .commit_ms = peer.bounds.commit,
+        .drain_ms = peer.bounds.drain,
+    };
+    if (peer.observer) |observer| try observer.report(
+        observer.context,
+        .{
+            .proxy_pid = 0,
+            .reply = .{
+                .version = wire.version,
+                .nonce = sent.nonce,
+                .operation = sent.operation,
+                .proof = sent.proof,
+                .phase = .starting,
+                .pid = 0,
+                .birth = 0,
+                .source_inode = 0,
+                .source_root = 0,
+                .target_root = 0,
+            },
+        },
+    );
     try wire.write(allocator, io, child.child.stdin.?, request);
 }
 
@@ -194,10 +267,16 @@ fn send(context: Context, peer: provider.Provider, record: intent.Record, sent: 
 /// Success may outlive reap: the verified arrival, checked by complete,
 /// settles that result even when the proxy is still draining. A watchdog
 /// drain exit is also allowed only for a success reply and verified arrival.
-pub fn outcome(context: Context, record: intent.Record, status: wire.Status, term: ?std.process.Child.Term, verdict: deadline.Deadline) !void {
+pub fn outcome(
+    context: Context,
+    record: intent.Record,
+    status: wire.Status,
+    term: ?std.process.Child.Term,
+    verdict: deadline.Deadline,
+) !void {
     try context.source.checkMarked();
     try context.target.checkMarked();
-    const exits = @import("peer.zig").exits;
+    const exits = peer_api.exits;
     if (term) |ended| {
         const code = switch (ended) {
             .exited => |code| code,
@@ -214,7 +293,13 @@ pub fn outcome(context: Context, record: intent.Record, status: wire.Status, ter
 /// No verdict, arrival or cancellation, is published once the admission
 /// has ended. The intent stays for recovery, which is an admission of its
 /// own.
-pub fn publish(context: Context, record: intent.Record, admission: Admission, verdict: deadline.Deadline, status: wire.Status) !void {
+pub fn publish(
+    context: Context,
+    record: intent.Record,
+    admission: Admission,
+    verdict: deadline.Deadline,
+    status: wire.Status,
+) !void {
     if (!admission.open(context.source.io)) return error.NativeMoveUnknown;
     return complete(context, record, status, verdict);
 }
@@ -229,4 +314,19 @@ fn lost(context: Context, record: intent.Record, err: anyerror) !wire.Status {
     context.target.checkMarked() catch return unknown;
     if (intent.arrived(context, record) catch return unknown) return .success;
     return unknown;
+}
+
+fn reportReply(peer: provider.Provider, child: *Proxy, reply: wire.Reply) !void {
+    const observer = peer.observer orelse return;
+    try observer.report(observer.context, .{ .proxy_pid = child.child.id.?, .reply = reply });
+}
+
+fn publishLost(
+    context: Context,
+    record: intent.Record,
+    admission: Admission,
+    verdict: deadline.Deadline,
+    err: anyerror,
+) !void {
+    return publish(context, record, admission, verdict, try lost(context, record, err));
 }

@@ -13,7 +13,6 @@
 //! frame, so the interrupted sp is past the frame plus that pad. A handler
 //! always runs on the Main stack, so a Main-stack frame starts at the CFA
 //! the handler's own row gave; a Process-stack frame starts at PSP.
-const std = @import("std");
 
 pub const field = struct {
     pub const spsel: u32 = 1 << 2;

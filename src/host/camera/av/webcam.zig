@@ -4,15 +4,16 @@
 //! Webcam reads as YUYV. macOS has no device paths, so `webcam:PATH`
 //! is refused; a bare `webcam` is device 0. A read with no new frame since
 //! the last one is a failed read, so the source holds the last picture.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const consent = @import("../webcam/consent.zig");
-const permission = @import("permission.zig");
-const objc = @import("objc.zig");
 const delegate = @import("delegate.zig");
 const frame = @import("frame.zig");
-const session = @import("session.zig");
 const negotiate = @import("../v4l2/negotiate.zig");
+const objc = @import("objc.zig");
+const permission = @import("permission.zig");
+const session = @import("session.zig");
 const source = @import("../webcam/input.zig");
 
 /// Everything the open needs from the Mac, gathered up front.
@@ -32,7 +33,14 @@ pub fn index(arg: []const u8) ?u32 {
 /// The layout the Mailbox hands Webcam.
 pub fn agreed() negotiate.Agreed {
     const row = session.width * 2;
-    return .{ .width = session.width, .height = session.height, .pixelformat = frame.pixelformat(.uyvy), .bytesperline = row, .sizeimage = row * session.height, .streaming = true };
+    return .{
+        .width = session.width,
+        .height = session.height,
+        .pixelformat = frame.pixelformat(.uyvy),
+        .bytesperline = row,
+        .sizeimage = row * session.height,
+        .streaming = true,
+    };
 }
 
 const AvCapture = struct {
@@ -62,7 +70,14 @@ const AvCapture = struct {
 };
 
 /// Asks (unless allowed), checks the permission and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, host: Host, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
+pub fn openWith(
+    allocator: std.mem.Allocator,
+    host: Host,
+    arg: []const u8,
+    grant: consent.Grant,
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
+) !*source.Webcam {
     const n = try preflight(arg, grant, reader, writer);
     return openPrepared(allocator, host, n, writer);
 }
@@ -82,7 +97,12 @@ pub fn openPrepared(allocator: std.mem.Allocator, host: Host, n: u32, writer: *s
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;
     try permission.gate(host.permission, writer);
     const cap = try allocator.create(AvCapture);
-    cap.* = .{ .allocator = allocator, .box = frame.Mailbox.init(allocator, .uyvy, session.width, session.height) catch |err| {
+    cap.* = .{ .allocator = allocator, .box = frame.Mailbox.init(
+        allocator,
+        .uyvy,
+        session.width,
+        session.height,
+    ) catch |err| {
         allocator.destroy(cap);
         return err;
     } };
@@ -132,7 +152,10 @@ pub fn system() ?Host {
             .height_key = height_key.*,
             .scaling_key = scaling_key.*,
             .aspect_fill = aspect_fill.*,
-            .queue_create = sys.lookup(@FieldType(session.Symbols, "queue_create"), "dispatch_queue_create") orelse return null,
+            .queue_create = sys.lookup(
+                @FieldType(session.Symbols, "queue_create"),
+                "dispatch_queue_create",
+            ) orelse return null,
         },
         .permission = permission.host(),
     };

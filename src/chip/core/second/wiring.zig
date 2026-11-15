@@ -3,11 +3,11 @@
 //! the bus CPU1's stores reach, the divider that sizes its turns, the
 //! reboot latch and the CPU1 control page that release it, the slot the
 //! board routes CPU1's events through, and two hooks back into the board.
-const registry = @import("../../periph/registry.zig");
-const cpu_ctrl = @import("../../periph/cpu_ctrl.zig");
-const reboot = @import("../reboot.zig");
-const Guest = @import("../cpu/memory/guest/guest.zig").Guest;
 const CoreWindows = @import("../windows.zig").CoreWindows;
+const cpu_ctrl = @import("../../periph/cpu_ctrl.zig");
+const Guest = @import("../cpu/memory/guest/guest.zig").Guest;
+const reboot = @import("../reboot.zig");
+const registry = @import("../../periph/registry.zig");
 
 pub const Wiring = struct {
     /// The shared peripheral bus CPU1's stores fall through to.

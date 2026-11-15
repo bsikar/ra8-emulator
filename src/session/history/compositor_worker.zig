@@ -4,13 +4,14 @@
 //!
 //! Operates strictly on value copies; never touches the guest or session.
 const std = @import("std");
+
 const glcdc_mod = @import("ra8_chip").periph.glcdc;
-const mix = glcdc_mod.mix;
-const Store = @import("ra8_chip").core.cpu.memory.store.Store;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const frame_types = @import("frame_types.zig");
+
 const frame_crop = @import("frame_crop.zig");
 const frame_queue = @import("frame_queue.zig");
+const frame_types = @import("frame_types.zig");
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const Store = @import("ra8_chip").core.cpu.memory.store.Store;
 
 pub const Task = frame_queue.Task;
 pub const Queue = frame_queue.Queue;

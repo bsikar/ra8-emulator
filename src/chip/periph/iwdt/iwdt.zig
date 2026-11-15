@@ -31,13 +31,13 @@
 //! the register. `counts_per_tick` below is an emulator-time choice in the
 //! same spirit as wdt.zig's, not a silicon number. IWDTCSTPR.SLCSTP halts
 //! the counter in Sleep, and Sleep is not modelled, so it rides too.
+const event_queue = @import("../time/event_queue.zig");
 const iwdt_ofs0 = @import("ofs0.zig");
 const iwdt_refresh = @import("refresh.zig");
 const iwdt_status = @import("status.zig");
+pub const option_memory = @import("option_memory.zig");
 const periph = @import("../registry.zig");
 const wdt_clock = @import("../wdt/clock.zig");
-const event_queue = @import("../time/event_queue.zig");
-pub const option_memory = @import("option_memory.zig");
 
 pub const ofs0 = iwdt_ofs0;
 pub const refresh = iwdt_refresh;
@@ -160,7 +160,9 @@ pub const Iwdt = struct {
     /// follows the time base rather than the number of boundaries.
     pub fn tickFor(self: *Iwdt, elapsed_ns: u64) void {
         var n = wdt_clock.ticksIn(&self.carry_ns, elapsed_ns);
-        while (n > 0) : (n -= 1) self.tick();
+        while (n > 0) : (n -= 1) {
+            self.tick();
+        }
     }
 
     /// One run-loop chunk of counting. The counter cannot be stopped by

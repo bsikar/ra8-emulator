@@ -7,13 +7,14 @@
 //! session that records into a persistent history but has no such hook
 //! stops recording rather than mixing two programs into one history.
 const std = @import("std");
+
 const api = @import("api.zig");
 const apply = @import("apply.zig");
-const line = @import("line.zig");
-const replay_feeder = @import("history/replay_feeder.zig");
+const async_traffic = @import("history/async_traffic.zig");
 const branch_mod = @import("history/branch.zig");
 const history_root = @import("history/root.zig");
-const async_traffic = @import("history/async_traffic.zig");
+const line = @import("line.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
 
 const Session = api.Session;
 const Core = api.Core;

@@ -35,7 +35,8 @@ fn status(sys: anytype, out: Writer) !void {
     );
     if (sys.undetected != 0) {
         try out.print(
-            "GLCDC status: {d} frame(s) landed with VPOS detection disarmed (DTCTEN.VPOSDTC clear, nothing to wait on)\n",
+            "GLCDC status: {d} frame(s) landed with VPOS detection disarmed (DTCTEN.VPOSDTC " ++
+                "clear, nothing to wait on)\n",
             .{sys.undetected},
         );
     }

@@ -7,6 +7,7 @@
 //! Events use the `RPCEvt` endpoint. Proto3 drops zero scalars and empty
 //! bytes, so an all-default body is a present, zero-length submessage.
 const std = @import("std");
+
 const frame = @import("frame.zig");
 
 pub const Error = error{NoRoom} || frame.Error;
@@ -43,12 +44,16 @@ pub const Writer = struct {
     }
 
     pub fn slice(self: *Writer, values: []const u8) Error!void {
-        for (values) |value| try self.byte(value);
+        for (values) |value| {
+            try self.byte(value);
+        }
     }
 
     pub fn varint(self: *Writer, value: u64) Error!void {
         var rest = value;
-        while (rest >= 0x80) : (rest >>= 7) try self.byte(@as(u8, @truncate(rest)) | 0x80);
+        while (rest >= 0x80) : (rest >>= 7) {
+            try self.byte(@as(u8, @truncate(rest)) | 0x80);
+        }
         try self.byte(@truncate(rest));
     }
 

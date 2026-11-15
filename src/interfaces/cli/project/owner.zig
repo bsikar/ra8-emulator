@@ -1,8 +1,9 @@
 //! The application loads verified project bytes into Session and supplies host paths.
 const std = @import("std");
+
 const dap = @import("ra8_dap");
-const session = @import("ra8_session");
 const Project = @import("ra8_host").project.Project;
+const session = @import("ra8_session");
 
 pub const Owner = struct {
     project: *Project,
@@ -19,10 +20,18 @@ pub const Owner = struct {
         if (!std.mem.eql(u8, self.project.parsed.?.value.target, "ra8d2")) return error.UnsupportedProjectDebugTarget;
         const bytes = try self.project.load(receipt);
         defer self.project.allocator.free(bytes);
-        self.harness = try session.harness.open(self.project.allocator, self.project.base.io, .{ .elf_bytes = bytes, .history_frames = 0 });
+        self.harness = try session.harness.open(
+            self.project.allocator,
+            self.project.base.io,
+            .{ .elf_bytes = bytes, .history_frames = 0 },
+        );
         const h = &self.harness.?;
         h.session().history = null;
-        return .{ .session = h.session(), .images = .{ h.image(), null }, .sources = .{ .context = self.project, .pathFn = path, .checkFn = check } };
+        return .{
+            .session = h.session(),
+            .images = .{ h.image(), null },
+            .sources = .{ .context = self.project, .pathFn = path, .checkFn = check },
+        };
     }
 
     fn path(context: *anyopaque, name: []const u8, to_client: bool, into: []u8) anyerror![]const u8 {

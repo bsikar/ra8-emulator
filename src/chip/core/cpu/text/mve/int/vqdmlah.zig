@@ -11,7 +11,15 @@ pub fn print(instr: Instr, out: *text.Text) void {
 
 pub fn printPredicated(instr: Instr, out: *text.Text, suffix: []const u8) void {
     const form = ops.formOf(instr) orelse return;
-    const mnemonic: []const u8 = if (form.scalar_addend) (if (form.round) "vqrdmlash" else "vqdmlash") else if (form.round) "vqrdmlah" else "vqdmlah";
+    const mnemonic: []const u8 = if (form.scalar_addend)
+        (if (form.round)
+            "vqrdmlash"
+        else
+            "vqdmlash")
+    else if (form.round)
+        "vqrdmlah"
+    else
+        "vqdmlah";
     const qda: u3 = @intCast(instr.hw2 >> 13);
     const qn: u3 = @intCast(instr.hw1 >> 1 & 7);
     const rm = text.names[instr.hw2 & 15];

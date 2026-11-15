@@ -15,8 +15,8 @@
 //! registers in oscsf.zig and subclock.zig: a store with PRC0 locked is
 //! dropped and counted. Reads are never gated. Nothing here stabilises: no
 //! OSCSF bit follows the LOCO in this model.
-const periph = @import("registry.zig");
 const lanes = @import("lanes.zig");
+const periph = @import("registry.zig");
 const prcr = @import("prcr.zig");
 
 pub const address: u32 = 0x4001_E400;

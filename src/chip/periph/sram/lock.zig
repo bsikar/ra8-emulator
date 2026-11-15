@@ -32,7 +32,6 @@
 //! non-secure copies are tracked separately and either one open is enough,
 //! because TrustZone partitioning is not modelled here and the bare-metal
 //! build drives the secure alias.
-const std = @import("std");
 
 /// Where the two protection registers and the registers they guard sit
 /// (ra8_sram_regs.h window table).

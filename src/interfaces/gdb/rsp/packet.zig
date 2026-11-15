@@ -25,7 +25,9 @@ const flip: u8 = 0x20;
 /// The payload's byte sum mod 256, the value the two hex digits carry.
 pub fn checksum(payload: []const u8) u8 {
     var sum: u8 = 0;
-    for (payload) |byte| sum +%= byte;
+    for (payload) |byte| {
+        sum +%= byte;
+    }
     return sum;
 }
 

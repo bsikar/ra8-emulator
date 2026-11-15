@@ -72,9 +72,21 @@ const loads = [_]V{
     ld("ldrsb.w r1, [r0, r2, lsl #2] sign-extends", 0xF910, 0x1022, 1, 0x2000_0204, 0xFFFF_FFA9),
     ld("ldrsb.w r1, [r0, r2] keeps a positive byte", 0xF910, 0x1002, 6, 0x2000_0204, 0x65),
     ld("ldrsh.w r1, [r0, r2, lsl #2] sign-extends", 0xF930, 0x1022, 1, 0x2000_0204, 0xFFFF_C3A9),
-    vec("ldrsh.w keeps a positive half", .{ .hw1 = 0xF930, .hw2 = 0x1022, .at = 0x2000_0204, .lit = 0x1234_5678 }, .{ .rt = 0x5678 }),
-    vec("ldr.w pc branches to the Thumb target", .{ .hw1 = 0xF850, .hw2 = 0xF022, .at = 0x2000_0204, .lit = 0x2000_0301 }, .{ .rt = 0x2000_0300 }),
-    vec("ldr.w sp loads sp", .{ .hw1 = 0xF850, .hw2 = 0xD022, .at = 0x2000_0204, .lit = 0x2000_0300 }, .{ .rt = 0x2000_0300 }),
+    vec(
+        "ldrsh.w keeps a positive half",
+        .{ .hw1 = 0xF930, .hw2 = 0x1022, .at = 0x2000_0204, .lit = 0x1234_5678 },
+        .{ .rt = 0x5678 },
+    ),
+    vec(
+        "ldr.w pc branches to the Thumb target",
+        .{ .hw1 = 0xF850, .hw2 = 0xF022, .at = 0x2000_0204, .lit = 0x2000_0301 },
+        .{ .rt = 0x2000_0300 },
+    ),
+    vec(
+        "ldr.w sp loads sp",
+        .{ .hw1 = 0xF850, .hw2 = 0xD022, .at = 0x2000_0204, .lit = 0x2000_0300 },
+        .{ .rt = 0x2000_0300 },
+    ),
     vec("ldr.w past RAM faults and keeps rt", .{ .hw1 = 0xF850, .hw2 = 0x1002, .rm = 0x1000 }, .{ .fault = .unmapped }),
     vec("ldrh.w past RAM faults and keeps rt", .{ .hw1 = 0xF830, .hw2 = 0x1032, .rm = 0x200 }, .{ .fault = .unmapped }),
 };
@@ -86,7 +98,11 @@ const stores = [_]V{
     st("strh.w r1, [r0, r2, lsl #1] writes the high half", 0xF820, 0x1012, 3, 0x2000_0204, 0x2000_0204, 0x3344_C3A9),
     st("str.w unaligned goes through as bytes", 0xF840, 0x1002, 1, 0, 0x2000_0200, 0x2233_4400),
     st("str.w with a negative rm wraps below rn", 0xF840, 0x1022, 0xFFFF_FFFF, 0, 0x2000_01FC, src),
-    vec("str.w sp stores sp", .{ .hw1 = 0xF840, .hw2 = 0xD022, .probe = 0x2000_0204 }, .{ .rt = fill & ~@as(u32, 3), .mem = fill & ~@as(u32, 3) }),
+    vec(
+        "str.w sp stores sp",
+        .{ .hw1 = 0xF840, .hw2 = 0xD022, .probe = 0x2000_0204 },
+        .{ .rt = fill & ~@as(u32, 3), .mem = fill & ~@as(u32, 3) },
+    ),
     vec("str.w past RAM faults", .{ .hw1 = 0xF840, .hw2 = 0x1002, .rm = 0x1000 }, .{ .fault = .unmapped }),
 };
 

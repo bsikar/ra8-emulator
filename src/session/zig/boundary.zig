@@ -1,11 +1,12 @@
 //! Board callbacks and a standalone single-core adapter for the saved grid.
 //! Stops and budget returns preserve progress without closing the interval.
+const chip = @import("ra8_chip");
+const stop_machine = @import("../stop_machine.zig");
+const watch_bus = @import("../watch/bus.zig");
 const zig_core = @import("core.zig");
 const zig_cycles = @import("cycles.zig");
 const zig_drive = @import("drive.zig");
-const stop_machine = @import("../stop_machine.zig");
-const watch_bus = @import("../watch/bus.zig");
-const chip = @import("ra8_chip");
+
 const scheduler = chip.core.scheduler;
 
 /// Instructions between boundaries when the board names none.
@@ -60,7 +61,14 @@ pub fn observe(edge: Boundary) void {
 }
 
 /// As zig_drive.runClocked, passing `edge` after every chunk.
-pub fn run(core: zig_core.ZigCore, machine: *stop_machine.Machine, count: u64, watch: ?*watch_bus.WatchBus, clock: ?*zig_cycles.Clock, edge: Boundary) Error!zig_drive.Ended {
+pub fn run(
+    core: zig_core.ZigCore,
+    machine: *stop_machine.Machine,
+    count: u64,
+    watch: ?*watch_bus.WatchBus,
+    clock: ?*zig_cycles.Clock,
+    edge: Boundary,
+) Error!zig_drive.Ended {
     var local: scheduler.State = .{};
     const saved = edge.saved orelse &local;
     if (edge.cut) |cut| cut.instruction = &core.cpu.slots;

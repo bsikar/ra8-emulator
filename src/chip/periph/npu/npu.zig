@@ -55,14 +55,17 @@
 //! STATUS.state never reads running and STATUS.reset never reads asserted;
 //! and a guest address is 32 bits here, so a BASEPn with anything in its
 //! high word is refused rather than truncated into a plausible pointer.
+const peek = @import("peek.zig");
+
 const std = @import("std");
+
 const Bounded = @import("../../core/bounded.zig").Bounded;
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
-const periph = @import("../registry.zig");
-const lanes = @import("../lanes.zig");
 pub const cmd = @import("cmd.zig");
-pub const vela = @import("vela/vela.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
+const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 pub const snapshot = @import("snapshot.zig");
+pub const vela = @import("vela/vela.zig");
 
 /// The window, from ra8_npu_regs.h on dev.
 pub const win_base: u32 = 0x4014_0000;
@@ -295,7 +298,9 @@ pub const Npu = struct {
             const take = @min(left, @as(u32, cmd.limits.chunk_bytes));
             const slice = buffer[0..take];
             memory.read(source + done, slice) catch return cut(done, check);
-            for (slice) |*byte| byte.* = program.transform(byte.*);
+            for (slice) |*byte| {
+                byte.* = program.transform(byte.*);
+            }
             memory.write(destination + done, slice) catch return cut(done, check);
             check.fold(slice);
             done += take;
@@ -357,7 +362,7 @@ pub const Npu = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
-            .peekFn = @import("peek.zig").thunk,
+            .peekFn = peek.thunk,
         };
     }
 };

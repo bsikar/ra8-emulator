@@ -5,9 +5,9 @@
 //! We print DSB option 0b1100 as the Armv8-R `dfb` alias, so this
 //! does too: the text has to match it for the parity checks. ISB names
 //! only `sy` and prints every other option in hex.
+const barrier = @import("../ops/barrier.zig");
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const barrier = @import("../ops/barrier.zig");
 
 /// Option names for DSB and DMB, indexed by the option; null prints `#n`.
 /// We leave the load-only options (oshld, nshld, ishld, ld) as

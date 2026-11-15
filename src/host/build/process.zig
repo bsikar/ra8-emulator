@@ -1,7 +1,9 @@
 //! A build process tree, owned and polled by exactly one worker.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const windows = @import("../win32.zig");
+
 pub const supported = builtin.os.tag == .windows or builtin.os.tag == .linux or builtin.os.tag == .macos;
 const on_windows = builtin.os.tag == .windows;
 const darwin = struct {
@@ -17,7 +19,9 @@ const darwin = struct {
         var ids: [1024]std.posix.pid_t = undefined;
         // PROC_PGRP_ONLY returns bytes; a full buffer cannot establish completeness.
         const size = proc_listpids(2, @intCast(group), &ids, @sizeOf(@TypeOf(ids)));
-        if (size <= 0 or size >= @sizeOf(@TypeOf(ids)) or @mod(size, @sizeOf(std.posix.pid_t)) != 0) return error.ProcessGroupInspectionFailed;
+        if (size <= 0 or
+            size >= @sizeOf(@TypeOf(ids)) or
+            @mod(size, @sizeOf(std.posix.pid_t)) != 0) return error.ProcessGroupInspectionFailed;
         for (ids[0..@intCast(@divExact(size, @sizeOf(std.posix.pid_t)))]) |id| if (id != group) return false;
         return true;
     }
@@ -34,7 +38,20 @@ pub const Process = struct {
         if (!supported) return error.UnsupportedPlatform;
         const job: ?windows.HANDLE = if (on_windows) try makeJob() else null;
         errdefer if (on_windows) if (job) |handle| std.os.windows.CloseHandle(handle);
-        var child = try std.process.spawn(io, .{ .argv = argv, .cwd = if (builtin.os.tag == .macos and cwd.handle == std.Io.Dir.cwd().handle) .inherit else .{ .dir = cwd }, .stdin = .ignore, .stdout = .pipe, .stderr = .pipe, .pgid = if (on_windows) null else 0, .start_suspended = on_windows, .create_no_window = true });
+        var child = try std.process.spawn(
+            io,
+            .{
+                .argv = argv,
+                .cwd = if (builtin.os.tag == .macos and
+                    cwd.handle == std.Io.Dir.cwd().handle) .inherit else .{ .dir = cwd },
+                .stdin = .ignore,
+                .stdout = .pipe,
+                .stderr = .pipe,
+                .pgid = if (on_windows) null else 0,
+                .start_suspended = on_windows,
+                .create_no_window = true,
+            },
+        );
         errdefer child.kill(io);
         if (on_windows) {
             if (!windows.AssignProcessToJobObject(job.?, child.id.?).toBool()) return error.JobAssignmentFailed;
@@ -55,7 +72,13 @@ pub const Process = struct {
             };
         } else if (builtin.os.tag == .linux) {
             var info = std.mem.zeroes(std.os.linux.siginfo_t);
-            const rc = std.os.linux.waitid(.PID, id, &info, std.os.linux.W.EXITED | std.os.linux.W.NOHANG | std.os.linux.W.NOWAIT, null);
+            const rc = std.os.linux.waitid(
+                .PID,
+                id,
+                &info,
+                std.os.linux.W.EXITED | std.os.linux.W.NOHANG | std.os.linux.W.NOWAIT,
+                null,
+            );
             return switch (std.os.linux.errno(rc)) {
                 .SUCCESS => info.code != 0,
                 .INTR => false,
@@ -89,7 +112,9 @@ pub const Process = struct {
             error.ProcessNotFound => {},
             // Darwin filters zombies from group signalling and reports EPERM
             // for an otherwise empty group. Do not hide a live-member denial.
-            error.PermissionDenied => if (builtin.os.tag != .macos or !try self.exited() or !try darwin.onlyRoot(self.child.id.?)) return err,
+            error.PermissionDenied => if (builtin.os.tag != .macos or
+                !try self.exited() or
+                !try darwin.onlyRoot(self.child.id.?)) return err,
             else => return err,
         };
         self.tree_stopped = true;
@@ -128,6 +153,11 @@ fn makeJob() !windows.HANDLE {
     errdefer std.os.windows.CloseHandle(job);
     var limits: windows.JobLimits = .{};
     limits.basic.flags = 0x2000; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
-    if (!windows.SetInformationJobObject(job, 9, &limits, @sizeOf(windows.JobLimits)).toBool()) return error.JobLimitsFailed;
+    if (!windows.SetInformationJobObject(
+        job,
+        9,
+        &limits,
+        @sizeOf(windows.JobLimits),
+    ).toBool()) return error.JobLimitsFailed;
     return job;
 }

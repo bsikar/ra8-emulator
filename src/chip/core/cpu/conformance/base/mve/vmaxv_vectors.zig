@@ -60,18 +60,42 @@ const wide_forms = [_]V{
     vec("vmaxv.s16 r3, q1", .{ .hw1 = 0xEEE6, .hw2 = 0x3F02, .qm = halves, .rda = 0x8000 }, .{ .rda = 0x7FFF }),
     vec("vminv.u16 r3, q1", .{ .hw1 = 0xFEE6, .hw2 = 0x3F82, .qm = halves, .rda = 0xFFFF }, .{ .rda = 0 }),
     vec("vmaxav.s16 takes |-32768|", .{ .hw1 = 0xEEE4, .hw2 = 0x0F02, .qm = halves }, .{ .rda = 0x8000 }),
-    vec("vmaxv.s32 lr, q1", .{ .hw1 = 0xEEEA, .hw2 = 0xEF02, .qm = words, .rda = 0x8000_0000 }, .{ .rda = 0x7FFF_FFFF }),
+    vec(
+        "vmaxv.s32 lr, q1",
+        .{ .hw1 = 0xEEEA, .hw2 = 0xEF02, .qm = words, .rda = 0x8000_0000 },
+        .{ .rda = 0x7FFF_FFFF },
+    ),
     vec("vminv.s32 lr, q1", .{ .hw1 = 0xEEEA, .hw2 = 0xEF82, .qm = words }, .{ .rda = 0x8000_0000 }),
     vec("vmaxv.u32 r0, q1", .{ .hw1 = 0xFEEA, .hw2 = 0x0F02, .qm = words }, .{ .rda = 0xFFFF_FFFF }),
     vec("vmaxav.s32 takes |-2^31|", .{ .hw1 = 0xEEE8, .hw2 = 0x0F02, .qm = words }, .{ .rda = 0x8000_0000 }),
-    vec("vminav.s32 finds the smallest magnitude", .{ .hw1 = 0xEEE8, .hw2 = 0x0F82, .qm = words, .rda = 0xFFFF_FFFF }, .{ .rda = 1 }),
+    vec(
+        "vminav.s32 finds the smallest magnitude",
+        .{ .hw1 = 0xEEE8, .hw2 = 0x0F82, .qm = words, .rda = 0xFFFF_FFFF },
+        .{ .rda = 1 },
+    ),
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0x0001 folds byte 0 only", .{ .hw1 = 0xEEE2, .hw2 = 0x0F02, .rda = 0x80, .vpr = 0x0088_0001 }, .{ .rda = 5, .vpr = 0x0000_0001 }),
-    vec("no active lanes extends rda", .{ .hw1 = 0xEEE2, .hw2 = 0x0F02, .rda = 0x1234_5680, .vpr = 0x0088_0000 }, .{ .rda = 0xFFFF_FF80 }),
-    vec("the loop tail folds word 0 only", .{ .hw1 = 0xFEEA, .hw2 = 0x0F02, .qm = words, .ltpsize = 2, .lr = 1 }, .{ .rda = 0x8000_0000 }),
-    vec("eci a0a1 folds beats 2 and 3", .{ .hw1 = 0xFEEA, .hw2 = 0x0F82, .qm = words, .rda = 0xFFFF_FFFF, .it = 0x20 }, .{ .rda = 1 }),
+    vec(
+        "vpt p0 0x0001 folds byte 0 only",
+        .{ .hw1 = 0xEEE2, .hw2 = 0x0F02, .rda = 0x80, .vpr = 0x0088_0001 },
+        .{ .rda = 5, .vpr = 0x0000_0001 },
+    ),
+    vec(
+        "no active lanes extends rda",
+        .{ .hw1 = 0xEEE2, .hw2 = 0x0F02, .rda = 0x1234_5680, .vpr = 0x0088_0000 },
+        .{ .rda = 0xFFFF_FF80 },
+    ),
+    vec(
+        "the loop tail folds word 0 only",
+        .{ .hw1 = 0xFEEA, .hw2 = 0x0F02, .qm = words, .ltpsize = 2, .lr = 1 },
+        .{ .rda = 0x8000_0000 },
+    ),
+    vec(
+        "eci a0a1 folds beats 2 and 3",
+        .{ .hw1 = 0xFEEA, .hw2 = 0x0F82, .qm = words, .rda = 0xFFFF_FFFF, .it = 0x20 },
+        .{ .rda = 1 },
+    ),
 };
 
 const unclaimed = [_]V{

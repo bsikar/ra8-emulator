@@ -4,8 +4,9 @@
 //! The check peeks at the connection without waiting. An interrupt byte is
 //! taken; anything else is left for the packet reader once the run stops.
 const std = @import("std");
-const packet = @import("packet.zig");
+
 const debug_session = @import("ra8_session").session;
+const packet = @import("packet.zig");
 const sock_ready = @import("ra8_host").sock.ready;
 
 /// Instructions per run chunk under gdb: small enough that an interrupt

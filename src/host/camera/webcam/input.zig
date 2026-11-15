@@ -8,10 +8,11 @@
 //! padded past width * 2. A failed read keeps the last frame, says so once
 //! and never stops the run; before the first frame the capture is black.
 const std = @import("std");
-const decoded = @import("../decoded_image.zig");
-const raw = @import("../pipe/frame.zig");
+
 const abi = @import("../v4l2/abi.zig");
+const decoded = @import("../decoded_image.zig");
 const negotiate = @import("../v4l2/negotiate.zig");
+const raw = @import("../pipe/frame.zig");
 
 /// One frame's bytes from the device: true when `out` was filled.
 pub const Capture = struct {
@@ -41,7 +42,12 @@ pub const Webcam = struct {
     frames: u64 = 0,
     failed: bool = false,
 
-    pub fn open(allocator: std.mem.Allocator, capture: Capture, agreed: negotiate.Agreed, device_path: []const u8) OpenError!*Webcam {
+    pub fn open(
+        allocator: std.mem.Allocator,
+        capture: Capture,
+        agreed: negotiate.Agreed,
+        device_path: []const u8,
+    ) OpenError!*Webcam {
         const format = rawFormat(agreed.pixelformat) orelse return error.UnsupportedFormat;
         const row = @as(usize, agreed.width) * format.bytesPerPixel();
         if (agreed.bytesperline < row or agreed.width % 2 != 0) return error.BadGeometry;
@@ -66,7 +72,10 @@ pub const Webcam = struct {
     /// Read and decode one frame, keeping the last one on a failed read.
     pub fn pull(self: *Webcam) void {
         if (!self.capture.readFn(self.capture.ctx, self.bytes)) {
-            if (!self.failed) std.debug.print("camera: webcam read failed on {s}; holding the last frame\n", .{self.device_path});
+            if (!self.failed) std.debug.print(
+                "camera: webcam read failed on {s}; holding the last frame\n",
+                .{self.device_path},
+            );
             self.failed = true;
             return;
         }

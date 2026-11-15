@@ -2,15 +2,14 @@
 //! mailbox, what the other core was supposed to hear about, and what the
 //! core's own MPU was asked to protect.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
-const ipc = @import("ra8_chip").periph.ipc;
-const sync = @import("ra8_chip").periph.ipc.sync;
-const ipc_attr = @import("ra8_chip").periph.ipc.attr;
-const cpscu = @import("ra8_chip").periph.cpscu;
 const cpu_ctrl = @import("ra8_chip").periph.cpu_ctrl;
+const ipc = @import("ra8_chip").periph.ipc;
+const ipc_attr = @import("ra8_chip").periph.ipc.attr;
 const mpu = @import("ra8_chip").periph.mpu;
 const sau = @import("ra8_chip").periph.sau;
 const second_core = @import("ra8_chip").core.second.core;
+const sync = @import("ra8_chip").periph.ipc.sync;
+const Writer = @import("../report.zig").Writer;
 
 /// What CPU0 did with the second-core release handshake. ACT going up means
 /// the handshake completed, never by itself that a second core is fetching:
@@ -186,8 +185,8 @@ fn chipAttribution(board: *Board, out: Writer) !void {
     const unit = &board.chip_attribution;
     if (unit.quiet()) return;
     try out.print(
-        "CPSCU attribution: BUSSAR 0x{X:0>8}/0x{X:0>8}/0x{X:0>8}, " ++
-            "MMPUSAR 0x{X:0>8}/0x{X:0>8}, CPUSAR 0x{X:0>8}\n",
+        "CPSCU attribution: BUSSAR 0x{X:0>8}/0x{X:0>8}/0x{X:0>8}, MMPUSAR " ++
+            "0x{X:0>8}/0x{X:0>8}, CPUSAR 0x{X:0>8}\n",
         .{
             unit.wordOf(.bussara),
             unit.wordOf(.bussarb),

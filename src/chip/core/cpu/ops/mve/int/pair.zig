@@ -5,12 +5,13 @@
 //! below. VQADD and VQSUB set FPSCR.QC when an active lane saturates;
 //! lanes the VPT block masks off neither change nor raise QC. The lane
 //! semantics are in src/chip/core/cpu/mve/int/int.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("int.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.qreg.Size;
 const Pairwise = mve.int.Pairwise;
 

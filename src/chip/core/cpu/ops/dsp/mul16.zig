@@ -7,9 +7,9 @@
 //!
 //! Left unclaimed: SP or PC in Rd, Rn or Rm and Ra = SP (UNPREDICTABLE), and
 //! nonzero hw2[7:6] (0xFB10) or hw2[7:5] (0xFB30).
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 const xpsr_bits = @import("../../regs.zig").xpsr_bits;
 
 pub const encodings = struct {

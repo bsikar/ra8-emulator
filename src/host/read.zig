@@ -7,10 +7,11 @@
 //! pipe's reader (pipe_windows.zig): PeekNamedPipe for a pipe, and a plain
 //! read for a file, which never waits. An interactive Windows console is
 //! neither, and goes through console.zig (RA8EMU-723).
-const std = @import("std");
 const builtin = @import("builtin");
-const pipe_windows = @import("camera/pipe/windows.zig");
+const std = @import("std");
+
 const host_console = @import("console.zig");
+const pipe_windows = @import("camera/pipe/windows.zig");
 
 pub const Handle = std.posix.fd_t;
 const is_windows = builtin.os.tag == .windows;

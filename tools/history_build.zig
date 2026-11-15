@@ -1,5 +1,7 @@
 //! Provenance for frozen roots. Hash actual source bytes, including dirty
 //! edits, rather than assigning an independent model version number.
+const builtin = @import("builtin");
+
 const std = @import("std");
 
 pub fn options(b: *std.Build) *std.Build.Step.Options {
@@ -7,7 +9,14 @@ pub fn options(b: *std.Build) *std.Build.Step.Options {
     b.graph.poisonCache();
     const opts = b.addOptions();
     var commit: [20]u8 = @splat(0);
-    switch (b.runFallible(&.{ "git", "-C", b.root.joinString(b.allocator, ".") catch @panic("OOM"), "rev-parse", "HEAD" }, .{ .stderr_behavior = .ignore })) {
+    switch (b.runFallible(
+        &.{
+            "git",                                                   "-C",
+            b.root.joinString(b.allocator, ".") catch @panic("OOM"), "rev-parse",
+            "HEAD",
+        },
+        .{ .stderr_behavior = .ignore },
+    )) {
         .success => |out| {
             const text = std.mem.trim(u8, out, "\r\n ");
             if (text.len == 40) _ = std.fmt.hexToBytes(&commit, text) catch @panic("invalid git commit");
@@ -39,7 +48,7 @@ fn fingerprint(b: *std.Build) ![]const u8 {
     }
     std.mem.sort([]const u8, names.items, {}, less);
     var hash = std.crypto.hash.Blake3.init(.{});
-    hash.update(@import("builtin").zig_version_string);
+    hash.update(builtin.zig_version_string);
     for (names.items) |path| {
         const bytes = try dir.readFileAlloc(io, path, gpa, .unlimited);
         hash.update(path);

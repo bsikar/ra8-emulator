@@ -12,15 +12,14 @@
 //! reads as a verdict on the report rather than as one more block's account
 //! of itself.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
-const report = @import("../report.zig");
-const report_timing = @import("timing.zig");
-const pacing = @import("ra8_session").run.pacing;
-const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
-const idle = @import("ra8_chip").core.idle;
-const report_part = @import("part.zig");
-const clocks = @import("ra8_chip").periph.clocks;
 const bus_fault = @import("ra8_chip").periph.bus_fault;
+const clocks = @import("ra8_chip").periph.clocks;
+const pacing = @import("ra8_session").run.pacing;
+const report = @import("../report.zig");
+const report_part = @import("part.zig");
+const report_timing = @import("timing.zig");
+const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
+const Writer = @import("../report.zig").Writer;
 
 /// One line for the BusFaults a run raised, and nothing when it raised none.
 pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {
@@ -34,7 +33,14 @@ pub fn busErrors(out: Writer, tally: bus_fault.Tally) !void {
 /// on the Zig core, so a line says they are not
 /// reported. The
 /// BusFaults a `--bus-errors` run raised close it.
-pub fn zigCore(out: Writer, board: *Board, policy: ?*const RunPolicy, timebase: clocks.Clocks, retired: u64, bus_errors: bus_fault.Tally) !void {
+pub fn zigCore(
+    out: Writer,
+    board: *Board,
+    policy: ?*const RunPolicy,
+    timebase: clocks.Clocks,
+    retired: u64,
+    bus_errors: bus_fault.Tally,
+) !void {
     try report_part.print(out, board.part);
     try report.bus(board, out);
     try report_timing.clock(out, timebase);

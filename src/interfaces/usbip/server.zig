@@ -3,8 +3,9 @@
 //! Transport-free: any Io reader and writer will do, so the listener that
 //! owns the socket stays a thin shell around `serve`.
 const std = @import("std");
-const wire = @import("wire.zig");
+
 const exp = @import("exported.zig");
+const wire = @import("wire.zig");
 
 /// What one answered operation request did.
 pub const Served = union(enum) {
@@ -47,9 +48,11 @@ pub fn answer(reader: *std.Io.Reader, writer: *std.Io.Writer, exports: []const e
 /// hangs up (null). usbip lists, then reconnects to import, so a listing
 /// alone ends with null.
 pub fn serve(reader: *std.Io.Reader, writer: *std.Io.Writer, exports: []const exp.Export) !?*const exp.Export {
-    while (try answer(reader, writer, exports)) |served| switch (served) {
-        .imported => |item| return item,
-        .listed, .refused => {},
-    };
+    while (try answer(reader, writer, exports)) |served| {
+        switch (served) {
+            .imported => |item| return item,
+            .listed, .refused => {},
+        }
+    }
     return null;
 }

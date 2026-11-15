@@ -5,6 +5,7 @@ const bus = @import("ra8_chip").core.cpu.bus;
 const zig_core = @import("zig/core.zig");
 
 pub const Cortex = @import("ra8_chip").core.cpu.cortex.Cortex;
+
 /// Only memory can fail: the Zig core's register file always answers.
 pub const Error = bus.Error;
 

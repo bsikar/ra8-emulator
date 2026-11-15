@@ -28,8 +28,8 @@
 //! reported, never matched against anything. The bits above MAU are left as
 //! written rather than read back as zero: ra8_rmac_regs.h names the field's
 //! extent, not what silicon does with the rest of the word.
-const lanes = @import("../lanes.zig");
 const eth_mode = @import("mode.zig");
+const lanes = @import("../lanes.zig");
 
 /// Where the pair sits inside the RMAC window (ra8_rmac_regs.h:175).
 pub const off = struct {

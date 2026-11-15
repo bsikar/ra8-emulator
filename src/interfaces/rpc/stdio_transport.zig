@@ -1,8 +1,9 @@
 //! The RPC byte transport over stdin/stdout (RA8EMU-194). Windows reads and
 //! writes the pipes through Win32 (RA8EMU-827); the link is always a pipe pair,
 //! so readiness there is PeekNamedPipe's byte count.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const rpc = @import("ra8_rpc_wire");
 const win32 = @import("ra8_host").win32;
 
@@ -29,7 +30,9 @@ pub const Stdio = struct {
     fn send(ctx: *anyopaque, bytes: []const u8) rpc.Transport.Error!void {
         const self = from(ctx);
         var at: usize = 0;
-        while (at < bytes.len) at += try arm.write(self.output, bytes[at..]);
+        while (at < bytes.len) {
+            at += try arm.write(self.output, bytes[at..]);
+        }
     }
     fn receive(ctx: *anyopaque, into: []u8) rpc.Transport.Error!usize {
         const self = from(ctx);

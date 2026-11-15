@@ -1,21 +1,15 @@
 //! Text for MVE widening loads/narrowing stores, per DDI0553 B5.
+const qreg = @import("../../../mve/qreg.zig");
+
 const Instr = @import("../../../instr.zig").Instr;
 const ops = @import("../../../ops/mve/vldr/wide.zig");
 const text = @import("../../text.zig");
 
-fn letter(size: @import("../../../mve/qreg.zig").Size) []const u8 {
+fn letter(size: qreg.Size) []const u8 {
     return switch (size) {
         .byte => "b",
         .half => "h",
         .word => "w",
-    };
-}
-
-fn width(size: @import("../../../mve/qreg.zig").Size) []const u8 {
-    return switch (size) {
-        .byte => "8",
-        .half => "16",
-        .word => "32",
     };
 }
 
@@ -31,7 +25,15 @@ pub fn printPredicated(instr: Instr, out: *text.Text, pred: []const u8) void {
     const root = if (load) "vldr" else "vstr";
     const dtype = if (load) blk: {
         const sign = if (instr.hw1 >> 12 & 1 == 1) "u" else "s";
-        break :blk if (f.element == .half) (if (sign[0] == 'u') ".u16" else ".s16") else if (sign[0] == 'u') ".u32" else ".s32";
+        break :blk if (f.element == .half)
+            (if (sign[0] == 'u')
+                ".u16"
+            else
+                ".s16")
+        else if (sign[0] == 'u')
+            ".u32"
+        else
+            ".s32";
     } else if (f.element == .half) ".16" else ".32";
     const imm: u32 = @as(u32, @intCast(instr.hw2 & 0x7f)) * (@as(u32, 1) << @intCast(@backingInt(f.memory)));
     const add = instr.hw1 >> 7 & 1 == 1;

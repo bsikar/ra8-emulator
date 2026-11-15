@@ -2,10 +2,11 @@
 //! Arm DDI0553B.y D1.2.183–187: word-only ISER/ISPR W1S and ICER/ICPR
 //! W1C, sharing state across Security views and masking NS by ITNS.
 const std = @import("std");
-const bus = @import("bus.zig");
+
 const alias = @import("../../periph/scs_alias.zig");
-const nvic = @import("../../periph/nvic/nvic.zig");
+const bus = @import("bus.zig");
 const memmap = @import("../memmap.zig");
+const nvic = @import("../../periph/nvic/nvic.zig");
 
 const span: u32 = 0x40;
 const Command = struct { state: u32, word: u32, clear: bool };

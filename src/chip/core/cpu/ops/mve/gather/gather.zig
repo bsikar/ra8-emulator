@@ -11,13 +11,15 @@
 //! 64-bit VLDRD/VSTRD, in mve_gather64.zig) and the size combinations
 //! gather.valid rejects stay unclaimed.
 const std = @import("std");
-const op = @import("../../../op.zig");
-const Cpu = @import("../../../cpu.zig").Cpu;
-const Instr = @import("../../../instr.zig").Instr;
+
 const alignment = @import("../../../alignment.zig");
+const Cpu = @import("../../../cpu.zig").Cpu;
+pub const imm = @import("imm.zig");
+const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
-pub const imm = @import("imm.zig");
+const op = @import("../../../op.zig");
+
 const gather = mve.gather;
 const contiguous = mve.contiguous;
 const Size = mve.qreg.Size;
@@ -83,12 +85,26 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
         var buf: [4]u8 = .{ 0, 0, 0, 0 };
         if (f.store) {
             const raw = mve.qreg.elem(value, f.esize, e);
-            std.mem.writeInt(u32, &buf, contiguous.element(.{ .value = raw, .msize = f.msize, .signed = false, .store = true }), .little);
+            std.mem.writeInt(
+                u32,
+                &buf,
+                contiguous.element(
+                    .{ .value = raw, .msize = f.msize, .signed = false, .store = true },
+                ),
+                .little,
+            );
             try cpu.bus.write(at, buf[0..len]);
         } else {
             try cpu.bus.read(at, buf[0..len]);
             const raw = std.mem.readInt(u32, &buf, .little);
-            out = mve.qreg.setElem(out, f.esize, e, contiguous.element(.{ .value = raw, .msize = f.msize, .signed = f.signed, .store = false }));
+            out = mve.qreg.setElem(
+                out,
+                f.esize,
+                e,
+                contiguous.element(
+                    .{ .value = raw, .msize = f.msize, .signed = f.signed, .store = false },
+                ),
+            );
         }
     }
     if (!f.store) mve_beats.keep(cpu, qd, out);

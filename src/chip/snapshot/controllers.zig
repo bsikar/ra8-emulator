@@ -7,8 +7,9 @@
 //! sparse parts (the option MRAM cells and the xSPI flash sectors) need a
 //! variable-length encoding and are a separate section.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -25,7 +26,9 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, board: anytype) !void {
-    inline for (parts) |name| try fields.writeExcept(writer, @field(board, name), none);
+    inline for (parts) |name| {
+        try fields.writeExcept(writer, @field(board, name), none);
+    }
 }
 
 /// All or nothing: every part is read over a copy of itself, and the board
@@ -39,13 +42,17 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
         try fields.readOver(&cursor, &copies[i], none);
     }
     if (!cursor.done()) return Error.BadValue;
-    inline for (parts, 0..) |name, i| @field(board, name) = copies[i];
+    inline for (parts, 0..) |name, i| {
+        @field(board, name) = copies[i];
+    }
 }
 
 /// The types of `parts` in `Board`, as a tuple.
 fn Copies(comptime Board: type) type {
     const Child = @typeInfo(Board).pointer.child;
     var types: [parts.len]type = undefined;
-    for (parts, 0..) |name, i| types[i] = @FieldType(Child, name);
+    for (parts, 0..) |name, i| {
+        types[i] = @FieldType(Child, name);
+    }
     return @Tuple(&types);
 }

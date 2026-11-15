@@ -435,3 +435,33 @@ try session.tapWidgetPart(allocator, .cpu0, 1_700_000_000, "chrome.bars.pager", 
 
 `Options.device` defaults to `ra8p1`; `settle_window_ns` defaults to 50 ms.
 Frames are native panel-resolution grayscale bytes owned by the caller.
+
+Backend code-quality checks run with `zig build lint -j1`; their regression
+tests run with `zig build lint-test -j1`. They require Python 3.12 or newer
+(`-Dpython=PATH` selects an interpreter). The immutable zlinter package is
+resolved only by lint commands, so ordinary builds need no linter download.
+
+The lint scope is `src/`, `tools/`, and `build.zig`.
+The backend rules enforce named imports, a blank line after each import
+group, alphabetical import chunks, braces on loops and multiline branches,
+unused declarations, swallowed errors, and a 120-column limit. Columns count
+Unicode code points, including comments and literals. GUI/render source and
+the GUI smoke helper are excluded; third-party packages are outside the scope.
+
+The custom complexity rule limits each function to a branch score of 15 and
+nesting depth of 3. Each `if`, loop, `switch`, or `catch` adds one plus its
+branch nesting; else-if chains stay flat. Each boolean operator sequence
+adds one. Switch arms do not count individually, and nested functions are
+measured independently. This is a documented branch metric, not an exact
+implementation of Detekt or Sonar cognitive complexity. The separate gate
+continues to enforce 400-line files and 80-line functions.
+
+The style rules have no baseline allowances. Remaining legacy complexity
+and ignored-error findings are counted in `tools/lint/baseline.json`. Fingerprints
+include source and diagnostic text: moving code cannot hide a finding,
+duplicating it uses another allowance, and increasing a complexity score
+fails. Syntax and analysis errors cannot be baselined. A changed finding,
+including an improved score still above the limit, requires reviewing its
+new fingerprint. After removing findings, run
+`zig build lint -- --prune-baseline`; this command refuses new debt.
+`--update-baseline` accepts debt and requires explicit review of the diff.

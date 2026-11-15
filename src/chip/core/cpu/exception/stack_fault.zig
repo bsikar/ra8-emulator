@@ -5,6 +5,8 @@
 //! stacking or unstacking error; any other failed bus access is the
 //! corresponding BusFault. Neither fault makes MMFAR or BFAR valid.
 
+const regs = @import("../regs.zig");
+
 const Cpu = @import("../cpu.zig").Cpu;
 const status = @import("../../../periph/fault/status.zig");
 
@@ -23,7 +25,7 @@ pub fn beginEntry(cpu: *Cpu, number: u9) void {
 pub fn beginReturn(cpu: *Cpu, thread: bool) void {
     const outer = if (thread) null else cpu.active.returningTo();
     const boosted = cpu.regs.faultmask != 0 or if (outer) |entry| entry.number == 2 or entry.number == 3 else false;
-    if (cpu.mpu) |check| check.arm(!thread or cpu.regs.control & @import("../regs.zig").control_bits.npriv == 0, boosted);
+    if (cpu.mpu) |check| check.arm(!thread or cpu.regs.control & regs.control_bits.npriv == 0, boosted);
 }
 
 pub fn end(cpu: *Cpu) void {

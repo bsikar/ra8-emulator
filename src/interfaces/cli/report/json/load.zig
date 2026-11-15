@@ -7,10 +7,10 @@
 //! its id (the thread's control block or the exception number; null for
 //! `before` and `idle`), its name where one can be read, its instructions
 //! and its share in permille, so a core's shares add up to exactly 1000.
-const rtos_report = @import("ra8_session").rtos.report;
-const rtos_load = @import("ra8_session").rtos.load;
-const names = @import("ra8_session").rtos.names;
 const json = @import("json.zig");
+const names = @import("ra8_session").rtos.names;
+const rtos_load = @import("ra8_session").rtos.load;
+const rtos_report = @import("ra8_session").rtos.report;
 
 /// The traced cores the load is read from.
 pub const Load = struct {
@@ -46,7 +46,9 @@ fn core(j: anytype, key: []const u8, side: ?rtos_report.Side) !void {
     try j.open(key, '{');
     try j.field("instructions", made.total);
     try j.open("owners", '[');
-    for (made.rows(), 0..) |slot, index| try owner(j, slot, made.shares[index], one.memory);
+    for (made.rows(), 0..) |slot, index| {
+        try owner(j, slot, made.shares[index], one.memory);
+    }
     try j.close(']');
     try j.open("other", '{');
     try j.field("instructions", made.other);

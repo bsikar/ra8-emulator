@@ -13,11 +13,11 @@
 //!
 //!   BFAR 0xE000_ED38 (DDI0553 D1.2.6)
 
-const memmap = @import("../core/memmap.zig");
-const status = @import("fault/status.zig");
 const fault_route = @import("fault/route.zig");
 const fault_take = @import("fault/take.zig");
+const memmap = @import("../core/memmap.zig");
 const nvic = @import("nvic/nvic.zig");
+const status = @import("fault/status.zig");
 
 pub const bfar: u32 = 0xE000_ED38;
 

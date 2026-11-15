@@ -5,9 +5,10 @@
 //! after it then walk the window across both cores instead of replaying
 //! from a checkpoint each time.
 const std = @import("std");
+
 const back_mod = @import("back.zig");
-const rebuild = @import("../history/window_rebuild.zig");
 const engine = @import("../history/window_engine.zig");
+const rebuild = @import("../history/window_rebuild.zig");
 const trail = @import("../history/trail.zig");
 const transport_mod = @import("transport.zig");
 
@@ -46,12 +47,24 @@ fn startOf(base: engine.Position, cursor: engine.Position, chunk: u64, target_sl
             null;
     }
     if (cursor.phase == .cpu0 and cursor.o > target_slots) {
-        const start_pos: engine.Position = .{ .branch = cursor.branch, .r = cursor.r, .phase = .cpu0, .o = @intCast(cursor.o - target_slots), .gap = .retired };
+        const start_pos: engine.Position = .{
+            .branch = cursor.branch,
+            .r = cursor.r,
+            .phase = .cpu0,
+            .o = @intCast(cursor.o - target_slots),
+            .gap = .retired,
+        };
         return if ((engine.Position.order(base, start_pos) orelse .gt) == .lt) start_pos else null;
     }
     if (cursor.r > base.r) {
         const tail_o: u32 = if (chunk > target_slots) @intCast(chunk - target_slots) else 0;
-        const start_pos: engine.Position = .{ .branch = cursor.branch, .r = cursor.r - 1, .phase = .cpu0, .o = tail_o, .gap = .retired };
+        const start_pos: engine.Position = .{
+            .branch = cursor.branch,
+            .r = cursor.r - 1,
+            .phase = .cpu0,
+            .o = tail_o,
+            .gap = .retired,
+        };
         return if ((engine.Position.order(base, start_pos) orelse .gt) == .lt) start_pos else null;
     }
     return null;

@@ -1,7 +1,10 @@
 //! The shape of an FPU conformance vector: the operands as encoded, the FPSCR
 //! controls that change the answer (rounding mode, FZ, DN), and what the
 //! pseudocode produces, the result bits and the cumulative flags raised.
+const select = @import("select/select.zig");
+
 const fpscr_mod = @import("fpscr.zig");
+
 const Fpscr = fpscr_mod.Fpscr;
 const RMode = fpscr_mod.RMode;
 const Rounding = @import("rounding.zig").Rounding;
@@ -169,7 +172,7 @@ pub fn Select(comptime B: type) type {
         a: B,
         b: B,
         nzcv: u4,
-        condition: @import("select/select.zig").Cond,
+        condition: select.Cond,
     };
 }
 

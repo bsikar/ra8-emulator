@@ -5,17 +5,17 @@
 //! other: this controller is the host half of that loop. Whether a device is
 //! on the other end is a board fact, so it is set here. The device jack has
 //! a scripted host on it, the way a PC would be, stepped once per boundary.
-const std = @import("std");
+
 const Bounded = @import("ra8_chip").core.bounded.Bounded;
 const periph = @import("ra8_chip").periph.registry;
-const usbfs = @import("ra8_chip").periph.usbfs;
-const usbhs = @import("ra8_chip").periph.usbhs;
+pub const plug = @import("plug.zig");
+pub const traffic = @import("traffic.zig");
 const usb_echo = @import("ra8_components").usb.echo;
 const usb_echo_far = @import("ra8_components").usb.echo.far;
 const usb_loop_cable = @import("ra8_components").usb.loop_cable;
 const usb_stick = @import("ra8_components").usb.stick;
-pub const plug = @import("plug.zig");
-pub const traffic = @import("traffic.zig");
+const usbfs = @import("ra8_chip").periph.usbfs;
+const usbhs = @import("ra8_chip").periph.usbhs;
 
 pub const Due = Bounded(u16, 1);
 

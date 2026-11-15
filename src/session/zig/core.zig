@@ -4,8 +4,8 @@
 //!
 //! It owns nothing. The front end builds the `Cpu` on the board's bus and
 //! hands this a pointer to it, so the session can drive either core.
-const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const bus = @import("ra8_chip").core.cpu.bus;
+const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const debug_read = @import("../debug_read.zig");
 const dispatch = @import("ra8_chip").core.cpu.exception.dispatch;
 
@@ -50,7 +50,41 @@ pub const ZigCore = struct {
             .fpscr => self.cpu.fp.fpscr.bits(),
             .msplim => r.msplim,
             .psplim => r.psplim,
-            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)],
+            .s0,
+            .s1,
+            .s2,
+            .s3,
+            .s4,
+            .s5,
+            .s6,
+            .s7,
+            .s8,
+            .s9,
+            .s10,
+            .s11,
+            .s12,
+            .s13,
+            .s14,
+            .s15,
+            .s16,
+            .s17,
+            .s18,
+            .s19,
+            .s20,
+            .s21,
+            .s22,
+            .s23,
+            .s24,
+            .s25,
+            .s26,
+            .s27,
+            .s28,
+            .s29,
+            .s30,
+            .s31,
+            => self.cpu.fp.bank.s[
+                single(which)
+            ],
             .vpr => @bitCast(self.cpu.fp.vpr),
         };
     }
@@ -73,7 +107,41 @@ pub const ZigCore = struct {
             // Bits 2:0 of a stack limit are RES0, as MSR writes them.
             .msplim => r.msplim = value & ~@as(u32, 7),
             .psplim => r.psplim = value & ~@as(u32, 7),
-            .s0, .s1, .s2, .s3, .s4, .s5, .s6, .s7, .s8, .s9, .s10, .s11, .s12, .s13, .s14, .s15, .s16, .s17, .s18, .s19, .s20, .s21, .s22, .s23, .s24, .s25, .s26, .s27, .s28, .s29, .s30, .s31 => self.cpu.fp.bank.s[single(which)] = value,
+            .s0,
+            .s1,
+            .s2,
+            .s3,
+            .s4,
+            .s5,
+            .s6,
+            .s7,
+            .s8,
+            .s9,
+            .s10,
+            .s11,
+            .s12,
+            .s13,
+            .s14,
+            .s15,
+            .s16,
+            .s17,
+            .s18,
+            .s19,
+            .s20,
+            .s21,
+            .s22,
+            .s23,
+            .s24,
+            .s25,
+            .s26,
+            .s27,
+            .s28,
+            .s29,
+            .s30,
+            .s31,
+            => self.cpu.fp.bank.s[
+                single(which)
+            ] = value,
             .vpr => self.cpu.fp.vpr = @bitCast(value),
         }
     }

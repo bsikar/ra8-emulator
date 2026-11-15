@@ -6,8 +6,8 @@
 //! the drawing engine and the e-ink panel in json_drw.zig (RA8EMU-371). Every key is
 //! always present; lists hold only the entries the firmware programmed.
 const Board = @import("ra8_board").board.Board;
-const out = @import("out.zig");
 const json_drw = @import("../drw.zig");
+const out = @import("out.zig");
 
 /// The whole `graphics` object, keyed inside the document.
 pub fn section(j: anytype, board: *Board) !void {

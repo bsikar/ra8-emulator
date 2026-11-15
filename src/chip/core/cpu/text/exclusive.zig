@@ -5,13 +5,14 @@
 //! A store prints its status register first (`strex r2, r0, [r1]`). Only
 //! the word forms take an offset: a zero one is dropped, others use the
 //! decimal-below-ten rule (`#4`, `#0x3fc`).
+const exclusive = @import("../ops/exclusive.zig");
 const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
-const exclusive = @import("../ops/exclusive.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
-    if (instr.size == 4 and instr.hw1 == exclusive.encodings.clrex_hw1 and instr.hw2 == exclusive.encodings.clrex_hw2)
+    if (instr.size == 4 and instr.hw1 == exclusive.encodings.clrex_hw1 and instr.hw2 == exclusive.encodings.clrex_hw2) {
         return out.put("clrex", .{});
+    }
     const a = exclusive.access(instr) orelse return;
     out.put("{s} ", .{mnemonic(instr, a.load)});
     if (!a.load) {

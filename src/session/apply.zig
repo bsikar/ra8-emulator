@@ -7,8 +7,8 @@
 //! so a fork that would only fail at the action refuses before the line,
 //! the log or branches.bin change.
 const api = @import("api.zig");
-const fork_router_mod = @import("history/fork_router.zig");
 const elf = @import("ra8_board").image.elf;
+const fork_router_mod = @import("history/fork_router.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 
@@ -67,7 +67,10 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
             const loader = self.loader orelse return api.Error.NoLoader;
             try loader.loadFn(loader.context, ld.core, ld.image);
             self.dirty();
-            const tree_address = if (elf.Image.init(ld.image)) |parsed| symbols.addressOf(parsed, widget_tree.symbol) else |_| null;
+            const tree_address = if (elf.Image.init(ld.image)) |parsed|
+                symbols.addressOf(parsed, widget_tree.symbol)
+            else |_|
+                null;
             self.widget_tree_addresses[@backingInt(ld.core)] = tree_address;
             self.publish(.{ .core = ld.core, .kind = .loaded });
         },

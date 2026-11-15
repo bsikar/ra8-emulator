@@ -3,7 +3,9 @@
 //! through the history bridge, the panel scan that decodes a segment, and
 //! the restore of the nearest checkpoint a decode and a pause start from.
 const std = @import("std");
+
 const session = @import("ra8_session");
+
 const harness = session.harness;
 const history_bridge = @import("history_bridge.zig");
 const nav_hooks = @import("session/nav_hooks.zig");
@@ -59,7 +61,9 @@ fn restoreNearest(context: *anyopaque, target: Position) anyerror!void {
         best = c;
     }
     const chosen = best orelse return error.NoRestorePoint;
-    try plane.restoreBase(.{ .checkpoint = .{ .id = chosen.id, .object = chosen.object, .position = chosen.position } });
+    try plane.restoreBase(
+        .{ .checkpoint = .{ .id = chosen.id, .object = chosen.object, .position = chosen.position } },
+    );
 }
 
 /// Reads the committed log's picture records into the index.

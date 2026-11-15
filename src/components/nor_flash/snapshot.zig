@@ -7,8 +7,9 @@
 //! every half before it changes anything: `read` gives a `Staged` part, and
 //! `install` puts the flash built from it in place.
 const fields = @import("ra8_snapshot").fields;
-const sparse = @import("ra8_snapshot").sparse;
 const flash = @import("flash.zig");
+const sparse = @import("ra8_snapshot").sparse;
+
 const Flash = flash.Flash;
 
 const sector_len = flash.part.sector_len;
@@ -53,7 +54,12 @@ pub const Staged = struct {
         if (self.sectors.count > 0) {
             try built.resize(built.capacity);
             var i: u32 = 0;
-            while (i < self.sectors.count) : (i += 1) try built.loadSector(self.sectors.number(i), self.sectors.value(i));
+            while (i < self.sectors.count) : (i += 1) {
+                try built.loadSector(
+                    self.sectors.number(i),
+                    self.sectors.value(i),
+                );
+            }
         } else if (built.capacity > 0) {
             const sectors = built.capacity / sector_len;
             const bits = try built.allocator.alloc(u8, (sectors + 7) / 8);

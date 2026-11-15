@@ -5,24 +5,33 @@
 //!
 //! The descriptors are the bytes the firmware answered GET_DESCRIPTOR with,
 //! so a host sees the same vendor, product and class it would on silicon.
-const std = @import("std");
-const wire = @import("wire.zig");
-/// The operation phase built on these exports.
-pub const server = @import("server.zig");
-/// The loopback socket that runs `server` for usbip hosts.
-pub const listen = @import("listen.zig");
 /// The board device the bridge exports.
 pub const board = @import("board.zig");
-/// `--usbip PORT`: the live bridge on the board's USB tick.
-pub const run = @import("run.zig");
-/// Bulk URBs on the FS device's pipes.
-pub const urb = @import("urb.zig");
+
 /// Endpoint 0 control URBs through the DCP.
 pub const control = @import("control.zig");
+
+/// The loopback socket that runs `server` for usbip hosts.
+pub const listen = @import("listen.zig");
+
+/// `--usbip PORT`: the live bridge on the board's USB tick.
+pub const run = @import("run.zig");
+
+/// The operation phase built on these exports.
+const std = @import("std");
+
+pub const server = @import("server.zig");
+
+/// Bulk URBs on the FS device's pipes.
+pub const urb = @import("urb.zig");
+
 /// The imported connection's SUBMIT/UNLINK traffic.
 pub const session = @import("session.zig");
+const wire = @import("wire.zig");
+
 /// The host taken away: recorded commands fed back with replies muted.
 pub const replay = @import("replay.zig");
+
 /// The live bridge a run polls at each board boundary.
 pub const bridge = @import("bridge.zig");
 

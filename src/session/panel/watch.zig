@@ -14,11 +14,12 @@
 //! for the firmware, which is why the model leaves it to a viewer to ask.
 //! An e-ink panel reports its own refreshes and needs none of this.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
-const Sources = @import("../event/sources.zig").Sources;
-const session_display = @import("../display.zig");
-const panel_diff = @import("diff.zig");
 const frame_tap = @import("ra8_board").frame_tap;
+const panel_diff = @import("diff.zig");
+const session_display = @import("../display.zig");
+const Sources = @import("../event/sources.zig").Sources;
 
 pub const Watch = struct {
     allocator: std.mem.Allocator,
@@ -74,7 +75,9 @@ pub const Watch = struct {
     pub fn picture(self: *const Watch, allocator: std.mem.Allocator) !?session_display.Frame {
         if (self.viewers == 0 or self.width == 0) return null;
         const pixels = try allocator.alloc(u8, self.kept.len);
-        for (self.kept, pixels) |argb, *gray| gray.* = session_display.grayscale(argb);
+        for (self.kept, pixels) |argb, *gray| {
+            gray.* = session_display.grayscale(argb);
+        }
         return .{ .width = self.width, .height = self.height, .pixels = pixels, .virtual_ns = self.changed_ns };
     }
 
@@ -112,7 +115,10 @@ pub const Watch = struct {
 
     fn onFrame(context: *anyopaque, when_ns: u64) void {
         const self: *Watch = @ptrCast(@alignCast(context));
-        self.scan(when_ns) catch |err| std.debug.print("session: the panel watch lost a frame: {s}\n", .{@errorName(err)});
+        self.scan(when_ns) catch |err| std.debug.print(
+            "session: the panel watch lost a frame: {s}\n",
+            .{@errorName(err)},
+        );
     }
 
     /// Scan the panel as the firmware has it now, and publish what changed.
@@ -145,7 +151,10 @@ pub const Watch = struct {
     /// the picture already kept.
     fn take(self: *Watch, width: u32, height: u32) ?panel_diff.Rect {
         const same_shape = self.width == width and self.height == height;
-        const dirty = if (same_shape) panel_diff.box(self.kept, self.scratch, width) orelse return null else panel_diff.whole(width, height);
+        const dirty = if (same_shape)
+            panel_diff.box(self.kept, self.scratch, width) orelse return null
+        else
+            panel_diff.whole(width, height);
         std.mem.swap([]u32, &self.kept, &self.scratch);
         self.width = width;
         self.height = height;

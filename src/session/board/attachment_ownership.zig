@@ -1,8 +1,9 @@
 //! Object identity is ownership evidence; slots and callback shapes are not.
-const c = @import("ra8_components");
 const Board = @import("ra8_board").board.Board;
-const Plugs = @import("plug.zig").Plugs;
+const c = @import("ra8_components");
 const nodes = @import("attachment_nodes.zig");
+const Plugs = @import("plug.zig").Plugs;
+
 const codec = c.catalog_snapshot;
 const Endpoint = c.endpoint.Endpoint;
 

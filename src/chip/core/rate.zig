@@ -15,6 +15,8 @@
 //! rather than guessing a ratio, and a turn is never shorter than one
 //! instruction, so a slow CPU1 is slowed down and never starved.
 
+const std = @import("std");
+
 const div = @import("../periph/sysclk/div.zig");
 
 /// CPU1's turn, in instructions, for one CPU0 round of `round` instructions
@@ -23,5 +25,5 @@ pub fn turn(round: u32, sckdivcr2: u32) u32 {
     const div0 = div.ratio(div.codeAt(sckdivcr2, div.shift2.cpuclk0)) orelse return round;
     const div1 = div.ratio(div.codeAt(sckdivcr2, div.shift2.cpuclk1)) orelse return round;
     const share = @as(u64, round) * div0 / div1;
-    return @intCast(@max(@min(share, @as(u64, @import("std").math.maxInt(u32))), 1));
+    return @intCast(@max(@min(share, @as(u64, std.math.maxInt(u32))), 1));
 }

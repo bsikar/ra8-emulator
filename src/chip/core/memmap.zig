@@ -35,7 +35,6 @@
 //! 0x3000_0000, but the core's tightly coupled memory is reached over the
 //! CPU's private port and nothing in the tree or the corpus asks for it
 //! there, so mapping it would be following the arithmetic past the evidence.
-const std = @import("std");
 
 pub const Region = struct {
     name: []const u8,

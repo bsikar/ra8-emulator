@@ -10,16 +10,17 @@
 //! can still read the cause. SFAR is written only for the causes that
 //! report an address, together with SFARVALID.
 const std = @import("std");
-const bus = @import("../bus.zig");
-const memmap = @import("../../memmap.zig");
-const fault_route = @import("../../../periph/fault/route.zig");
-const status = @import("../../../periph/fault/status.zig");
-const secure_fault = @import("../../../periph/secure_fault.zig");
-const fault = @import("fault.zig");
+
 const active = @import("active.zig");
-const dispatch = @import("dispatch.zig");
-const target = @import("target.zig");
+const bus = @import("../bus.zig");
 const Cpu = @import("../cpu.zig").Cpu;
+const dispatch = @import("dispatch.zig");
+const fault = @import("fault.zig");
+const fault_route = @import("../../../periph/fault/route.zig");
+const memmap = @import("../../memmap.zig");
+const secure_fault = @import("../../../periph/secure_fault.zig");
+const status = @import("../../../periph/fault/status.zig");
+const target = @import("target.zig");
 
 pub const Error = fault.Error;
 pub const Cause = secure_fault.Cause;

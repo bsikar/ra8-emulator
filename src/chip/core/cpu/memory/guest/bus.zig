@@ -1,7 +1,7 @@
 //! The Zig core's memory bus over a memory.Guest (RA8EMU-534).
 const bus = @import("../../bus.zig");
-const MemoryBus = @import("../bus.zig").MemoryBus;
 const Guest = @import("guest.zig").Guest;
+const MemoryBus = @import("../bus.zig").MemoryBus;
 
 pub const GuestBus = union(enum) {
     store: MemoryBus,

@@ -11,10 +11,10 @@
 //! pointer that will not load, and a word that will not read each say so,
 //! because a zero printed in their place would read like a real value and
 //! this exists to settle exactly the questions a wrong value confuses.
-const std = @import("std");
+
+const Bus = @import("ra8_chip").periph.registry.Bus;
 const elf = @import("ra8_board").image.elf;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const Bus = @import("ra8_chip").periph.registry.Bus;
 const place = @import("place/place.zig");
 const symbols = @import("symbols.zig");
 
@@ -31,7 +31,9 @@ pub const limit: usize = 8;
 
 /// Print every asked place in order, nothing when none was asked.
 pub fn printAll(out: anytype, core: Guest, registers: ?*Bus, image: elf.Image, asks: []const Ask) !void {
-    for (asks) |ask| try print(out, core, registers, image, ask.spec, ask.words);
+    for (asks) |ask| {
+        try print(out, core, registers, image, ask.spec, ask.words);
+    }
 }
 
 /// Print the dump, or nothing at all when no place was asked for.

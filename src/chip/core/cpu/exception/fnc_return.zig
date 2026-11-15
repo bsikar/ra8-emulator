@@ -13,6 +13,7 @@
 const bus = @import("../bus.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const regs = @import("../regs.zig");
+
 const xpsr_bits = regs.xpsr_bits;
 const control_bits = regs.control_bits;
 
@@ -33,10 +34,11 @@ pub fn from(cpu: *Cpu) Error!void {
     cpu.banked.switchTo(&cpu.regs, .secure);
     if (process) cpu.regs.setPsp(frame +% 8) else cpu.regs.setMsp(frame +% 8);
     cpu.regs.xpsr = (cpu.regs.xpsr & ~xpsr_bits.ipsr) | exception;
-    if (retpsr & retpsr_sfpa != 0)
-        cpu.regs.control |= control_bits.sfpa
-    else
+    if (retpsr & retpsr_sfpa != 0) {
+        cpu.regs.control |= control_bits.sfpa;
+    } else {
         cpu.regs.control &= ~control_bits.sfpa;
+    }
     const thumb = xpsr_bits.thumb;
     cpu.regs.xpsr = if (target & 1 != 0) cpu.regs.xpsr | thumb else cpu.regs.xpsr & ~thumb;
     cpu.regs.pc = target & ~@as(u32, 1);

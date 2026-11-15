@@ -59,8 +59,9 @@
 const std = @import("std");
 
 const Guest = @import("../core/cpu/memory/guest/guest.zig").Guest;
-const TimeBase = @import("time/timebase.zig").TimeBase;
 const periph = @import("registry.zig");
+const TimeBase = @import("time/timebase.zig").TimeBase;
+
 /// The pixel sources the CEU captures from (RA8EMU-505).
 pub const camera = struct {
     pub const frame_source = @import("camera/frame_source.zig");

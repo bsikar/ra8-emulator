@@ -2,11 +2,12 @@
 //! requirements it implies and every configuration's time, in one object
 //! an agent can parse. sweep_table.zig prints the same rows for a person.
 const json = @import("../report/json/json.zig");
-const workload = @import("ra8_board").sizing.workload;
 const sweep = @import("ra8_board").sizing.sweep;
+const workload = @import("ra8_board").sizing.workload;
 
-pub const caveat = "sizes and byte counts are exact; timing is as good as the memory timing parameters, " ++
-    "which come from the candidate parts' datasheets until RA8P1 silicon exists";
+pub const caveat = "sizes and byte counts are exact; timing is as good as the memory timing " ++
+    "parameters, which come from the candidate parts' datasheets until RA8P1 silicon " ++
+    "exists";
 
 /// What the rows were measured on: the synthetic workload, or a guest
 /// image run once per configuration (sweep_elf.zig).
@@ -33,7 +34,9 @@ pub fn document(out: anytype, source: Source, target_ns: ?u64, rows: []const swe
     try j.field("slowest_config_meeting_target", if (target_ns == null) null else summary.slowest_meeting);
     try j.close('}');
     try j.open("configs", '[');
-    for (rows, 0..) |row, index| try config(&j, index, row, source == .elf);
+    for (rows, 0..) |row, index| {
+        try config(&j, index, row, source == .elf);
+    }
     try j.close(']');
     try j.close('}');
     try out.writeByte('\n');

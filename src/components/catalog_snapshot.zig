@@ -1,23 +1,32 @@
 //! Closed catalog payloads. Addresses, allocators and callbacks are wiring.
 const std = @import("std");
-const chip = @import("ra8_chip");
-const fields = @import("ra8_snapshot").fields;
-const catalog = @import("catalog.zig");
-const parts = @import("parts.zig");
-const endpoint = @import("endpoint.zig");
-const Imu = @import("imu_lsm6dso/lsm6dso.zig").Imu;
-const Gauge = @import("gauge_max17048/max17048.zig").Gauge;
-const Panel = @import("eink_it8951/panel.zig").Panel;
-const Modem = @import("modem_at/modem.zig").Modem;
-const C6 = @import("esp32c6_hosted/hosted.zig").C6;
+
 const Button = @import("button/button.zig").Button;
-const Led = @import("led/led.zig").Led;
-const panel_snapshot = @import("eink_it8951/snapshot.zig");
+const C6 = @import("esp32c6_hosted/hosted.zig").C6;
 const c6_snapshot = @import("esp32c6_hosted/snapshot.zig");
+const catalog = @import("catalog.zig");
+const chip = @import("ra8_chip");
+const endpoint = @import("endpoint.zig");
+const fields = @import("ra8_snapshot").fields;
+const Gauge = @import("gauge_max17048/max17048.zig").Gauge;
+const Imu = @import("imu_lsm6dso/lsm6dso.zig").Imu;
+const Led = @import("led/led.zig").Led;
+const Modem = @import("modem_at/modem.zig").Modem;
 const modem_snapshot = @import("modem_at/snapshot.zig");
+const Panel = @import("eink_it8951/panel.zig").Panel;
+const panel_snapshot = @import("eink_it8951/snapshot.zig");
+const parts = @import("parts.zig");
 
 pub const Tag = enum { imu, gauge, panel, modem, c6, button, led };
-pub const names = .{ parts.imu_name, parts.gauge_name, parts.panel_name, parts.modem_name, parts.c6_name, parts.button_name, parts.led_name };
+pub const names = .{
+    parts.imu_name,
+    parts.gauge_name,
+    parts.panel_name,
+    parts.modem_name,
+    parts.c6_name,
+    parts.button_name,
+    parts.led_name,
+};
 
 pub fn name(tag: Tag) []const u8 {
     return switch (tag) {
@@ -76,9 +85,16 @@ pub fn context(device: catalog.Device) *anyopaque {
 pub fn sameCallbacks(a: catalog.Device, b: catalog.Device) bool {
     if (std.meta.activeTag(a) != std.meta.activeTag(b)) return false;
     return switch (a) {
-        .i2c => |p| p.writeFn == b.i2c.writeFn and p.readFn == b.i2c.readFn and p.stopFn == b.i2c.stopFn and p.ackFn == b.i2c.ackFn and p.stretchFn == b.i2c.stretchFn,
+        .i2c => |p| p.writeFn == b.i2c.writeFn and
+            p.readFn == b.i2c.readFn and
+            p.stopFn == b.i2c.stopFn and
+            p.ackFn == b.i2c.ackFn and
+            p.stretchFn == b.i2c.stretchFn,
         .spi => |p| p.exchangeFn == b.spi.exchangeFn,
-        .uart => |p| p.feedFn == b.uart.feedFn and p.connectFn == b.uart.connectFn and p.tickFn == b.uart.tickFn and p.spi_only == b.uart.spi_only,
+        .uart => |p| p.feedFn == b.uart.feedFn and
+            p.connectFn == b.uart.connectFn and
+            p.tickFn == b.uart.tickFn and
+            p.spi_only == b.uart.spi_only,
         .gpio => |p| p.connectFn == b.gpio.connectFn and p.heardFn == b.gpio.heardFn,
     };
 }
@@ -111,7 +127,9 @@ pub fn readPayload(tag: Tag, state: *anyopaque, pins: *chip.periph.gpio.Gpio, cu
         },
         .gauge => {
             const value = try fields.read(Gauge, cursor);
-            if ((value.pointer > value.registers.len - 2 and value.pointer != 0xfe) or value.battery.soc_pct > 100) return error.BadValue;
+            if ((value.pointer > value.registers.len - 2 and
+                value.pointer != 0xfe) or
+                value.battery.soc_pct > 100) return error.BadValue;
             cast(Gauge, state).* = value;
         },
         .panel => try panel_snapshot.readPayload(cast(Panel, state), cursor),

@@ -18,8 +18,8 @@
 //!
 //! This file is the register bank and the question the router asks of it.
 //! Raising an event into CPU1's own link table is a later slice.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const base: u32 = 0x4000_6040;
 pub const words: usize = 32;

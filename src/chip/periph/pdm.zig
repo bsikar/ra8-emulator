@@ -56,7 +56,7 @@
 //! are, so only the three fields dev's own masks name are interpreted,
 //! PDDRCR.DATRE, PDDSR.NUM and PDDRR's 20-bit data field. The rest of the
 //! window is shadowed so a read-modify-write survives, and never read.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 
 /// PDM-IF geometry (ra8_pdm_regs.h, and dev's own k_pdm_* window).
@@ -182,7 +182,9 @@ pub const Channel = struct {
             return 0;
         }
         const sample = self.fifo[0];
-        for (1..self.filled) |index| self.fifo[index - 1] = self.fifo[index];
+        for (1..self.filled) |index| {
+            self.fifo[index - 1] = self.fifo[index];
+        }
         self.filled -= 1;
         self.read +%= 1;
         self.last = sample;
@@ -221,7 +223,9 @@ pub const Pdm = struct {
     /// The chunk boundary: every live channel takes another window of
     /// microphone input.
     pub fn tick(self: *Pdm) void {
-        for (&self.channels) |*unit| unit.produce(samples_per_tick);
+        for (&self.channels) |*unit| {
+            unit.produce(samples_per_tick);
+        }
     }
 
     pub fn read(self: *Pdm, address: u32, width: u3) u32 {

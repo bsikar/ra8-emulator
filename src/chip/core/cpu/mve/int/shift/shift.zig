@@ -7,9 +7,11 @@
 //! the lowest bit kept; saturating forms clamp to the lane range and report
 //! it for FPSCR.QC. VQSHLU reads signed lanes and saturates them unsigned.
 const std = @import("std");
-const qreg = @import("../../qreg.zig");
+
 const int = @import("../int.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// How the shifted lane is finished. `saturate_unsigned` clamps to the

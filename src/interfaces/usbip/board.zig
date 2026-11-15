@@ -3,9 +3,8 @@
 //! Its descriptors are read off the scripted host that enumerates that jack
 //! when no cable is in, so the bridge shows a host exactly what the
 //! firmware answered and never a copy kept by hand.
-const usbfs = @import("ra8_chip").periph.usbfs;
-const wire = @import("wire.zig");
 const exp = @import("exported.zig");
+const usbfs = @import("ra8_chip").periph.usbfs;
 
 /// Where the FS jack sits on the emulated bus: one root port, full speed.
 pub const fs_place = exp.Place{

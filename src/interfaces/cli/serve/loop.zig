@@ -1,10 +1,11 @@
 //! The answer loop the serve front runs on one connected peer (RA8EMU-736).
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const served = @import("ra8_rpc").session.server;
-const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
+const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 const win32 = @import("ra8_host").win32;
 
 /// How long an idle server waits on its peer before checking again.
@@ -25,7 +26,14 @@ pub fn answerStdio(io: std.Io, context: *served.Context, buffers: Buffers) !void
 }
 
 /// Answer frames on `wire` until the peer behind `fd` closes or a stop is asked.
-pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
+pub fn answer(
+    io: std.Io,
+    context: *served.Context,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+    buffers: Buffers,
+) !void {
     var host = served.Host.init(wire, buffers.rx, context);
     defer host.deinit();
     while (true) {

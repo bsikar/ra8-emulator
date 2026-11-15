@@ -3,6 +3,7 @@
 //! deletion, and only to rule a directory out. Liveness is the OS lock on
 //! `owner.lock`, never anything written here.
 const std = @import("std");
+
 const layout = @import("layout.zig");
 const machine = @import("machine.zig");
 const metadata = @import("metadata.zig");
@@ -35,7 +36,12 @@ pub const Self = struct {
 pub fn write(io: std.Io, dir: std.Io.Dir, record: Record) !void {
     if (!lineSafe(record.host) or !lineSafe(record.boot) or record.host.len == 0) return error.BadOwner;
     var buffer: [max_bytes]u8 = undefined;
-    const text = try std.fmt.bufPrint(&buffer, layout.owner_magic ++ "\nhost={s}\npid={d}\nboot={s}\nstarted={d}\n", .{ record.host, record.pid, record.boot, record.started_s });
+    const text = try std.fmt.bufPrint(
+        &buffer,
+        layout.owner_magic ++
+            "\nhost={s}\npid={d}\nboot={s}\nstarted={d}\n",
+        .{ record.host, record.pid, record.boot, record.started_s },
+    );
     try metadata.ensure(io, dir, layout.files.owner, text);
 }
 

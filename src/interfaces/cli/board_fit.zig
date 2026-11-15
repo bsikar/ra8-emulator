@@ -4,20 +4,20 @@
 //! it). Each piece refuses on its own terms and says so; this only puts them
 //! in order.
 const std = @import("std");
-const usbip_export = @import("ra8_usbip").exported;
-const rtc_start = @import("ra8_session").rtc.start;
-const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
+
+const Board = @import("ra8_board").board.Board;
+const camera_source = @import("camera_source.zig");
 const cli = @import("cli.zig");
 const host_sock = @import("ra8_host").sock;
 const host_worker = @import("ra8_host").worker;
-const camera_source = @import("camera_source.zig");
-const Board = @import("ra8_board").board.Board;
-const usb_disk_option = @import("usb_disk_option.zig");
 const pacing = @import("ra8_session").run.pacing;
 const profile = @import("ra8_board").profile;
 const request = @import("ra8_components").request;
-const tape = @import("ra8_components").esp_tape;
+const rtc_start = @import("ra8_session").rtc.start;
+const RunPolicy = @import("ra8_session").run.policy.RunPolicy;
 const tape_dir = @import("ra8_host").tape_dir;
+const usb_disk_option = @import("usb_disk_option.zig");
+const usbip_export = @import("ra8_usbip").exported;
 
 /// A replay that met a request it has no recording for fails the run.
 pub fn tapeVerdict(board: *const Board, code: u8) u8 {
@@ -67,9 +67,22 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     board.c6.useIo(io);
     board.c6.useNet(.of(host_sock));
     board.c6.useWorker(.of(host_worker));
-    if (options.net_tape) |spec| board.c6.useTape(.init(spec.mode, .of(tape_dir, try tape_dir.open(io, spec.dir, spec.mode == .record))));
+    if (options.net_tape) |spec| board.c6.useTape(
+        .init(
+            spec.mode,
+            .of(tape_dir, try tape_dir.open(io, spec.dir, spec.mode == .record)),
+        ),
+    );
     board.capture.source = try camera_source.open(allocator, io, options.camera, &board.wire.sensor.format);
-    try cli.card.setup.prepare(board, io, options.trace_sd, options.sd_path, options.sd_size_mb, options.sd_new, options.sd_label);
+    try cli.card.setup.prepare(
+        board,
+        io,
+        options.trace_sd,
+        options.sd_path,
+        options.sd_size_mb,
+        options.sd_new,
+        options.sd_label,
+    );
     try cli.card.setup.prepareSdhi(board, io, options.sdhi);
     queueTouches(board, options);
     if (options.touch_in) |path| board.touch_input.source = try cli.host.bytes.open(io, "--touch @", path);

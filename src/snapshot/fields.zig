@@ -22,14 +22,18 @@ pub fn write(writer: *std.Io.Writer, value: anytype) std.Io.Writer.Error!void {
         .int => try writer.writeInt(Whole(T), value, .little),
         .bool => try writer.writeByte(@intFromBool(value)),
         .@"enum" => try write(writer, @backingInt(value)),
-        .array => |a| if (a.child == u8) try writer.writeAll(&value) else for (value) |item| try write(writer, item),
+        .array => |a| if (a.child == u8) try writer.writeAll(&value) else for (value) |item| {
+            try write(writer, item);
+        },
         .optional => if (value) |inner| {
             try writer.writeByte(1);
             try write(writer, inner);
         } else try writer.writeByte(0),
         .@"struct" => |s| if (s.layout == .@"packed") {
             try write(writer, @as(s.backing_integer.?, @bitCast(value)));
-        } else inline for (s.field_names) |name| try write(writer, @field(value, name)),
+        } else inline for (s.field_names) |name| {
+            try write(writer, @field(value, name));
+        },
         .@"union" => |u| {
             const Tag = u.tag_type orelse @compileError("a snapshot cannot hold untagged " ++ @typeName(T));
             try write(writer, @as(Tag, value));
@@ -79,7 +83,9 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
                 @memcpy(&out, try cursor.take(a.len));
                 return out;
             }
-            for (&out) |*item| item.* = try read(a.child, cursor);
+            for (&out) |*item| {
+                item.* = try read(a.child, cursor);
+            }
             return out;
         },
         .optional => |o| return switch (try read(u8, cursor)) {
@@ -90,7 +96,9 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
         .@"struct" => |s| {
             if (s.layout == .@"packed") return @bitCast(try read(s.backing_integer.?, cursor));
             var out: T = undefined;
-            inline for (s.field_names, s.field_types) |name, F| @field(out, name) = try read(F, cursor);
+            inline for (s.field_names, s.field_types) |name, F| {
+                @field(out, name) = try read(F, cursor);
+            }
             return out;
         },
         .@"union" => |u| {
@@ -112,7 +120,8 @@ pub fn read(comptime T: type, cursor: *Cursor) Error!T {
 /// (RA8EMU-681): "channels.listener" leaves out `listener` in every element
 /// of `channels`.
 pub fn writeExcept(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) std.Io.Writer.Error!void {
-    comptime if (!skipsResolve(@TypeOf(value), skip)) @compileError("snapshot skip path does not resolve in " ++ @typeName(@TypeOf(value)));
+    comptime if (!skipsResolve(@TypeOf(value), skip)) @compileError("snapshot skip path does not resolve in " ++
+        @typeName(@TypeOf(value)));
     inline for (@typeInfo(@TypeOf(value)).@"struct".field_names) |name| {
         if (comptime named(name, skip)) continue;
         const inner = comptime below(name, skip);
@@ -124,7 +133,9 @@ pub fn writeExcept(writer: *std.Io.Writer, value: anytype, comptime skip: anytyp
 
 fn writeInner(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) std.Io.Writer.Error!void {
     switch (@typeInfo(@TypeOf(value))) {
-        .array => for (value) |item| try writeInner(writer, item, skip),
+        .array => for (value) |item| {
+            try writeInner(writer, item, skip);
+        },
         .@"struct" => try writeExcept(writer, value, skip),
         else => @compileError("a skip path runs through structs and arrays only"),
     }
@@ -133,7 +144,8 @@ fn writeInner(writer: *std.Io.Writer, value: anytype, comptime skip: anytype) st
 /// Reads what `writeExcept` wrote over `out`; the skipped fields keep
 /// whatever `out` already held.
 pub fn readOver(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
-    comptime if (!skipsResolve(@TypeOf(out.*), skip)) @compileError("snapshot skip path does not resolve in " ++ @typeName(@TypeOf(out.*)));
+    comptime if (!skipsResolve(@TypeOf(out.*), skip)) @compileError("snapshot skip path does not resolve in " ++
+        @typeName(@TypeOf(out.*)));
     const info = @typeInfo(@TypeOf(out.*)).@"struct";
     inline for (info.field_names, info.field_types) |name, T| {
         if (comptime named(name, skip)) continue;
@@ -184,7 +196,9 @@ fn pathResolves(comptime T: type, comptime path: []const u8) bool {
 
 fn readInner(cursor: *Cursor, out: anytype, comptime skip: anytype) Error!void {
     switch (@typeInfo(@TypeOf(out.*))) {
-        .array => for (out) |*item| try readInner(cursor, item, skip),
+        .array => for (out) |*item| {
+            try readInner(cursor, item, skip);
+        },
         .@"struct" => try readOver(cursor, out, skip),
         else => @compileError("a skip path runs through structs and arrays only"),
     }

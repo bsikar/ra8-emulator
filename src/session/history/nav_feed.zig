@@ -10,6 +10,7 @@
 //! order the run reaches it in, so a seek back over a stretch first skipped
 //! by a restore fills it in and never lists a boundary twice.
 const std = @import("std");
+
 const api = @import("../api.zig");
 const line = @import("../line.zig");
 const nav_index = @import("nav_index.zig");

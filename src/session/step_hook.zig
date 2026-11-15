@@ -4,35 +4,44 @@
 //! the machine a run is driven by and how the last run ended, and routes the
 //! firmware's stores to the debug units (FPB, DWT, ITM, DCB). The Zig core
 //! feeds it through watch.bus.zig and zig.drive.zig.
-const stop_machine = @import("stop_machine.zig");
 const breakpoint = @import("breakpoint.zig");
-const fpb = @import("fpb.zig");
-/// Re-exported for tests/session/cycle_count_test.zig; src/root.zig is full.
-pub const cycle_count = @import("cycle_count.zig");
-/// Re-exported for tests/session/zig/core_test.zig, for the same reason.
-pub const zig = @import("zig/zig.zig");
+
 /// Re-exported for tests/session/zig/drive_test.zig, for the same reason.
 /// Re-exported for tests/session/core_view_test.zig, for the same reason.
 pub const core_view = @import("core_view.zig");
+
+/// Re-exported for tests/session/cycle_count_test.zig; src/root.zig is full.
+pub const cycle_count = @import("cycle_count.zig");
+
 /// A debugger read split over peripheral windows (RA8EMU-948).
 pub const debug_read = @import("debug_read.zig");
-/// Tagged call-stack samples and their fold (RA8EMU-952).
-pub const stack = @import("stack/stack.zig");
+const fpb = @import("fpb.zig");
+
 /// One call stack for a sample, CFI first, else the frame records (RA8EMU-956).
 /// Stacks sampled every Nth retired instruction (RA8EMU-953).
 /// Re-exported for tests/session/zig/session_test.zig, for the same reason.
 /// Re-exported for tests/session/report_test.zig, for the same reason.
 pub const report = @import("report.zig");
-/// Re-exported for tests/session/zig/script_test.zig, for the same reason.
-/// Re-exported for tests/session/watch/bus_test.zig, for the same reason.
-pub const watch = @import("watch/watch.zig");
+
+/// Tagged call-stack samples and their fold (RA8EMU-952).
+pub const stack = @import("stack/stack.zig");
+
 /// `--watch` matched through the stop machine's watch table (RA8EMU-58).
 /// Re-exported for tests/session/rtos/trace_test.zig (RA8EMU-222).
 pub const rtos = @import("rtos/rtos.zig");
+const stop_machine = @import("stop_machine.zig");
+
+/// Re-exported for tests/session/zig/script_test.zig, for the same reason.
+/// Re-exported for tests/session/watch/bus_test.zig, for the same reason.
+pub const watch = @import("watch/watch.zig");
+
+/// Re-exported for tests/session/zig/core_test.zig, for the same reason.
+pub const zig = @import("zig/zig.zig");
+
 /// `--trace-rtos`: the tracer and its report (RA8EMU-221).
+const dcb = @import("ra8_chip").periph.dcb;
 const dwt = @import("ra8_chip").periph.dwt;
 const itm = @import("ra8_chip").periph.itm;
-const dcb = @import("ra8_chip").periph.dcb;
 
 /// The machine a run is driven by, and how the last run ended.
 pub const Driver = struct {
@@ -66,7 +75,8 @@ pub const Driver = struct {
         } else if (inside(address, dwt.base, dwt.limits.end)) {
             // A DWT_CTRL store lands after this hook, so NUMCOMP is put
             // back over it before the next instruction reads it.
-            if (!self.machine.dwt.write(address - dwt.base, value) and address - dwt.base < 4) self.machine.dwt.changed = true;
+            if (!self.machine.dwt.write(address - dwt.base, value) and
+                address - dwt.base < 4) self.machine.dwt.changed = true;
         } else if (inside(address, dcb.demcr_address, 4)) {
             if (traceEnabled(address, value, width)) |on| self.machine.dwt.trcena = on;
         } else if (address == dcb.dfsr_address) {

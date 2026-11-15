@@ -7,11 +7,12 @@
 //! (S=1), VFMA (T=0) and VFMAS (T=1). Rm of SP or PC is CONSTRAINED
 //! UNPREDICTABLE and left unclaimed. The semantics are in
 //! src/chip/core/cpu/mve/float/scalar/scalar.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.float.Size;
 
 pub const group: op.Group = .{ .name = "mve_float_scalar", .decode = decode, .oracle = false };

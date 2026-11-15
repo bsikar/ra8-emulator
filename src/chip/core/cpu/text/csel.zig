@@ -4,8 +4,8 @@
 //! both the zero register, CSINC and CSINV print as CSET and CSETM. An alias
 //! carries the inverted condition. Register 0b1111 in Rn or Rm prints `zr`.
 //! the reference disassembler had no Armv8.1-M, so these are tested against the Arm ARM.
-const Instr = @import("../instr.zig").Instr;
 const csel = @import("../../csel.zig");
+const Instr = @import("../instr.zig").Instr;
 const text = @import("text.zig");
 
 const zr = csel.encoding.zero_register;
@@ -21,7 +21,16 @@ pub fn print(instr: Instr, out: *text.Text) void {
         if (f.kind == .inc) return out.put("cset {s}, {s}", .{ rd, inverted });
         if (f.kind == .inv) return out.put("csetm {s}, {s}", .{ rd, inverted });
     }
-    out.put("{s} {s}, {s}, {s}, {s}", .{ mnemonic(f.kind), rd, name(f.then_source), name(f.else_source), text.conds[f.condition] });
+    out.put(
+        "{s} {s}, {s}, {s}, {s}",
+        .{
+            mnemonic(f.kind),
+            rd,
+            name(f.then_source),
+            name(f.else_source),
+            text.conds[f.condition],
+        },
+    );
 }
 
 fn name(r: u4) []const u8 {

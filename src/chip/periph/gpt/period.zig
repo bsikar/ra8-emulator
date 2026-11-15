@@ -54,7 +54,6 @@
 //! NOT MODELLED, AND NOT GUESSED: GTPDBR (+0x6C), the double buffer, which
 //! stays shadow storage the way buffer.zig leaves the compare side's
 //! double buffering alone.
-const std = @import("std");
 
 /// Where the live register and its buffer sit in a channel
 /// (ra8_gpt_regs.h lines 79..80).

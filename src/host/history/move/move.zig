@@ -1,8 +1,9 @@
 //! Non-overwriting moves of validated immediate children. Linux filesystems
 //! may reject RENAME_NOREPLACE with EINVAL; report that capability failure
 //! instead of invoking the standard backend's programmer-bug panic.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const name = @import("../root.zig").name;
 
 pub fn preserve(io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.Io.Dir, to: []const u8) !void {
@@ -14,7 +15,15 @@ pub fn preserve(io: std.Io, from_dir: std.Io.Dir, from: []const u8, to_dir: std.
     @memcpy(source[0..from.len], from);
     @memcpy(target[0..to.len], to);
     while (true) {
-        const status = std.os.linux.errno(std.os.linux.renameat2(from_dir.handle, source[0..from.len :0], to_dir.handle, target[0..to.len :0], .{ .NOREPLACE = true }));
+        const status = std.os.linux.errno(
+            std.os.linux.renameat2(
+                from_dir.handle,
+                source[0..from.len :0],
+                to_dir.handle,
+                target[0..to.len :0],
+                .{ .NOREPLACE = true },
+            ),
+        );
         switch (status) {
             .SUCCESS => return,
             .INTR => continue,

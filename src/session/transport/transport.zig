@@ -1,37 +1,30 @@
-//! The session's control plane (time-travel design section 3): one
-//! single-threaded transport that fronts the Session's data plane for the
-//! GUI, CLI, GDB and RPC alike.
+//! Single-threaded Session transport shared by GUI, CLI, GDB and RPC.
 //!
-//! `command` validates and queues a job without running a core and hands
-//! back a ticket; `pump` drives that job in bounded slices and never sleeps;
-//! `report` carries phase, position, progress and epoch; `finish` is the
-//! blocking helper a CLI or GDB loop calls with an injected wall and poll.
-//! The newest command preempts the running job the way a Cancel would, so a
-//! preempted job's ticket goes dead and its waiter gets Cancelled. Pause
-//! stops at the gap the current slice ends on, so pause then play is
-//! byte-identical to never pausing. A play's speed only changes scheduling:
-//! it maps onto the run budget and never touches guest state.
+//! command validates and queues a ticket without running a core. pump drives
+//! bounded slices without sleeping; report returns phase, position, progress
+//! and epoch. finish is the blocking helper with injected wall/poll callbacks.
+//! A newer command cancels the previous ticket. Pause takes effect at a slice
+//! gap, and play speed changes scheduling without changing guest state.
 //!
-//! Seek and run-to are part of the command language. A seek's target text
-//! is parsed at the door, so a malformed one is InvalidArgs, not a silent
-//! refusal. With no history bridge bound a seek stays NotReady; with one
-//! bound the transport plans it from the committed log's facts and
-//! executes it: restore the chosen base's checkpoint object, then run
-//! forward until the landing position, reached in the position's own
-//! order (round, then phase, offset, gap), never before it within the
-//! target's round. A run-to lands where a breakpoint would, which is its
-//! own stop-ordering case, and stays NotReady.
+//! Seek parses its target before queueing, then restores a committed checkpoint
+//! and replays to the target in round/phase/offset/gap order. Without a history
+//! bridge it returns NotReady. Run-to remains NotReady.
+
+const bridge_mod = @import("bridge.zig");
+const canonical_step = @import("../history/canonical_step.zig");
+const trail = @import("../history/trail.zig");
 
 const std = @import("std");
+
 const api = @import("../api.zig");
+const back_mod = @import("back.zig");
 const command_mod = @import("command.zig");
 const debug_session = @import("../session.zig");
-const seek_engine = @import("../history/seek_engine.zig");
 const play_mod = @import("play.zig");
-const seek_mod = @import("seek.zig");
-const back_mod = @import("back.zig");
-const reverse_mod = @import("reverse.zig");
 const report_mod = @import("report.zig");
+const reverse_mod = @import("reverse.zig");
+const seek_engine = @import("../history/seek_engine.zig");
+const seek_mod = @import("seek.zig");
 
 pub const Command = command_mod.Command;
 pub const Direction = command_mod.Direction;
@@ -50,24 +43,7 @@ pub const Hook = seek_mod.Hook;
 /// One blocking `finish` pump is at most this much host time between polls.
 const finish_slice_ns: u64 = 50_000_000;
 
-/// The committed-log bridge the application binds (RA8EMU-1196, unit 17):
-/// how the transport reads the served history. Null keeps the seek
-/// refusal; bound, a seek plans from the bridge's facts and executes
-/// through it.
-pub const Bridge = struct {
-    context: *anyopaque,
-    /// The committed log's facts for planning, gathered fresh per call.
-    /// The bridge owns the returned memory until the next call.
-    facts: *const fn (*anyopaque) anyerror!seek_engine.Facts,
-    /// Put the machine back at a checkpoint's saved state. The name is
-    /// the checkpoint record's 128-bit digest as its 32-hex object name.
-    restore: *const fn (*anyopaque, object: []const u8) anyerror!void,
-    /// Returns the committed log's raw bytes, when available.
-    logBytes: ?*const fn (*anyopaque) anyerror![]const u8 = null,
-    /// Reads one object of the history's object space by its 32-hex name;
-    /// the caller owns the bytes. Null when the bridge cannot.
-    readObject: ?*const fn (*anyopaque, allocator: std.mem.Allocator, name: []const u8) anyerror![]u8 = null,
-};
+pub const Bridge = bridge_mod.Bridge;
 
 pub const Job = struct {
     ticket: Ticket,
@@ -158,7 +134,15 @@ pub const Transport = struct {
         self.cancel();
         self.epoch += 1;
         const ticket = self.issue();
-        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = step.core, .kind = .step, .prior_budget = prior, .left = step.count, .dir = step.dir };
+        self.job = .{
+            .ticket = ticket,
+            .epoch = self.epoch,
+            .core = step.core,
+            .kind = .step,
+            .prior_budget = prior,
+            .left = step.count,
+            .dir = step.dir,
+        };
         return ticket;
     }
 
@@ -170,7 +154,14 @@ pub const Transport = struct {
         self.cancel();
         self.epoch += 1;
         const ticket = self.issue();
-        self.job = .{ .ticket = ticket, .epoch = self.epoch, .core = advance.core, .kind = .advance, .prior_budget = prior, .target_ns = target };
+        self.job = .{
+            .ticket = ticket,
+            .epoch = self.epoch,
+            .core = advance.core,
+            .kind = .advance,
+            .prior_budget = prior,
+            .target_ns = target,
+        };
         return ticket;
     }
 
@@ -290,8 +281,8 @@ pub const Transport = struct {
         if (job.dir == .back) return back_mod.slice(self, job);
         if (self.session.window) |w| {
             if (w.cursor() < w.count()) {
-                const canonical = @import("../history/canonical_step.zig");
-                const tc: @import("../history/trail.zig").Core = if (job.core == .cpu0) .cpu0 else .cpu1;
+                const canonical = canonical_step;
+                const tc: trail.Core = if (job.core == .cpu0) .cpu0 else .cpu1;
                 if (canonical.stepForward(w, tc)) |_| {
                     job.left -= 1;
                     return if (job.left == 0) .{ .stop = .stepped } else null;

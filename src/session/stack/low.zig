@@ -1,9 +1,9 @@
 //! How deep a core's main stack went (RA8EMU-816): the lowest MSP since
 //! reset against the reservation the image's linker symbols name. A low
 //! mark under the reservation's base overflowed it by the difference.
-const zig_core = @import("../zig/core.zig");
-const region_map = @import("../region/map/map.zig");
 const never_low = @import("ra8_chip").core.cpu.regs.never_low;
+const region_map = @import("../region/map/map.zig");
+const zig_core = @import("../zig/core.zig");
 
 pub const Report = struct {
     marks: zig_core.StackMarks,

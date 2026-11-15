@@ -2,6 +2,7 @@
 //! opens the image it runs. A failure is printed with the path and which
 //! half failed, reading or parsing.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 
 /// Read the image off disk and parse it, saying which of the two failed.

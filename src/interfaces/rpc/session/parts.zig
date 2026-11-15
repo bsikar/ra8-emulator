@@ -6,21 +6,24 @@
 //! use, so the two syntaxes cannot drift. A spec that does not parse is
 //! `bad_args`; one the board cannot honour is `refused`. list_parts
 //! (RA8EMU-791) answers in the same syntax plug takes.
+const session = @import("ra8_session");
+
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
-const endpoint = @import("ra8_components").endpoint;
-const request = @import("ra8_components").request;
-const fault_spec = @import("ra8_components").fault.spec;
+
 const board_lib = @import("ra8_board");
 const chip_gpio = @import("ra8_chip").periph.gpio;
+const endpoint = @import("ra8_components").endpoint;
+const fault_spec = @import("ra8_components").fault.spec;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const request = @import("ra8_components").request;
+const rpc = @import("ra8_rpc_wire");
 
 const Context = handlers.Context;
 const Ack = rpc.Outcome(proto.Ack);
 const ack: Ack = .{ .ok = .{ .accepted = 1 } };
 
-fn core(of: proto.Core) @import("ra8_session").api.Core {
+fn core(of: proto.Core) session.api.Core {
     return @fromBackingInt(@intCast(@backingInt(of)));
 }
 
@@ -77,7 +80,9 @@ pub fn listParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.PartLis
 /// the board only through this answer, so the pane draws what the board has
 /// and carries no board knowledge of its own.
 pub fn boardParts(context: *Context, _: proto.CoreOnly) rpc.Outcome(proto.BoardParts) {
-    const profile = if (context.board_profile) |given| given.* else board_lib.profile.parse(board_lib.profile.ek_ra8d2) catch |err| {
+    const profile = if (context.board_profile) |given| given.* else board_lib.profile.parse(
+        board_lib.profile.ek_ra8d2,
+    ) catch |err| {
         std.debug.print("serve: {s}\n", .{@errorName(err)});
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     };

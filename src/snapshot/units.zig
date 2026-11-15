@@ -5,8 +5,9 @@
 //! copy first and stores them only once the whole payload has read cleanly, so
 //! a bad file leaves every unit as it was and a good load preserves the hook.
 const std = @import("std");
-const file = @import("file.zig");
+
 const fields = @import("fields.zig");
+const file = @import("file.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -18,7 +19,9 @@ pub fn save(writer: anytype, kind: file.Kind, units: anytype) !void {
 }
 
 fn body(writer: anytype, units: anytype) !void {
-    inline for (units) |unit| try fields.writeExcept(writer, unit.*, wiring(@TypeOf(unit.*)));
+    inline for (units) |unit| {
+        try fields.writeExcept(writer, unit.*, wiring(@TypeOf(unit.*)));
+    }
 }
 
 pub fn load(bytes: []const u8, kind: file.Kind, units: anytype) Error!void {
@@ -30,7 +33,9 @@ pub fn load(bytes: []const u8, kind: file.Kind, units: anytype) Error!void {
         try fields.readOver(&cursor, &copies[i], wiring(@TypeOf(unit.*)));
     }
     if (!cursor.done()) return Error.BadValue;
-    inline for (units, 0..) |unit, i| unit.* = copies[i];
+    inline for (units, 0..) |unit, i| {
+        unit.* = copies[i];
+    }
 }
 
 fn wiring(comptime T: type) []const []const u8 {
@@ -41,6 +46,8 @@ fn wiring(comptime T: type) []const []const u8 {
 fn Copies(comptime Units: type) type {
     const info = @typeInfo(Units).@"struct";
     var types: [info.field_types.len]type = undefined;
-    for (info.field_types, 0..) |F, i| types[i] = @typeInfo(F).pointer.child;
+    for (info.field_types, 0..) |F, i| {
+        types[i] = @typeInfo(F).pointer.child;
+    }
     return @Tuple(&types);
 }

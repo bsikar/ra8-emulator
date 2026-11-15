@@ -14,9 +14,9 @@
 //! Here the scan decodes each pixel to ARGB8888 through the format and the
 //! layer's palette, hashes the decoded colours, and refuses the cases that
 //! are not a picture.
-const std = @import("std");
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
+
 const clut = @import("clut.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
 
 /// FNV-1a-32, the same basis and prime dev's framebuffer hash uses, so a
 /// witness from either tree is comparable on the formats that carry colour

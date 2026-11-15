@@ -33,12 +33,12 @@
 //! The encodings below were taken from arm-none-eabi-as 13.3.rel1 assembling
 //! each mnemonic for armv8.1-m.main and reading back the halfwords, not from
 //! memory of the manual.
-const std = @import("std");
 
 /// CLRM, the other Armv8.1-M gap the CMSE entry stub hits. Reached from here
 /// because src/root.zig is at its 400-line limit (RA8EMU-63).
 pub const clrm = @import("clrm.zig");
 pub const fp_context = @import("fp_context.zig");
+
 /// TT from the board's SAU rather than the CPU model's (RA8EMU-348).
 pub const tt = @import("tt.zig");
 

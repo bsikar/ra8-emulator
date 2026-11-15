@@ -3,12 +3,14 @@
 //! closed terminal or a supervisor stop ends it like the others). An empty host or
 //! `localhost` binds 127.0.0.1; any other host must be an IP literal. The
 //! bound address goes to stderr, and a Unix socket path is removed on exit.
-const std = @import("std");
+
 const builtin = @import("builtin");
+const served = @import("ra8_rpc").session.server;
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
+const std = @import("std");
 const win32 = @import("ra8_host").win32;
-const served = @import("ra8_rpc").session.server;
+
 const Connection = @import("ra8_rpc").ws_transport.Connection;
 const loop = @import("loop.zig");
 

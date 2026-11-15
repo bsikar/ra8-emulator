@@ -41,8 +41,9 @@ pub fn covers(start: u32, end: u32) bool {
 /// The line holding `address`, or null outside the tracked ranges.
 pub fn line(address: u32) ?usize {
     inline for (ranges) |range| {
-        if (address >= range.base and address < range.end)
+        if (address >= range.base and address < range.end) {
             return range.first + ((address - range.base) >> line_shift);
+        }
     }
     return null;
 }

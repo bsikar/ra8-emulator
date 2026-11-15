@@ -4,6 +4,7 @@
 //! `file_ops.StateStore`. Paths are confined (RA8EMU-1175): only bare file
 //! names pass validation before any storage hook runs.
 const std = @import("std");
+
 const file_ops = @import("../file_ops.zig");
 const session_state = @import("../board/state.zig");
 

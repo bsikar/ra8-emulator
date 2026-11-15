@@ -73,7 +73,11 @@ const one: u64 = 0x3F80_0000;
 const two: u64 = 0x4000_0000;
 
 fn pick(name: []const u8, hw1: u16, flags: u32, take_n: bool) V {
-    return vec(name, .{ .hw1 = hw1, .hw2 = two_ops, .n = one, .m = two, .xpsr = xpsr_thumb | flags }, .{ .dst = if (take_n) one else two });
+    return vec(
+        name,
+        .{ .hw1 = hw1, .hw2 = two_ops, .n = one, .m = two, .xpsr = xpsr_thumb | flags },
+        .{ .dst = if (take_n) one else two },
+    );
 }
 
 fn round(name: []const u8, hw1: u16, hw2: u16, value: u64, expect: u64, fpscr: u32) V {
@@ -96,11 +100,27 @@ const select = [_]V{
 const maxmin = [_]V{
     vec("vmaxnm.f32 1, 2", .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = one, .m = two }, .{ .dst = two }),
     vec("vminnm.f32 1, 2", .{ .hw1 = 0xFE80, .hw2 = min_op, .n = one, .m = two }, .{ .dst = one }),
-    vec("vmaxnm.f32 quiet nan returns the number", .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = 0x7FC0_0000, .m = one }, .{ .dst = one }),
-    vec("vminnm.f32 quiet nan returns the number", .{ .hw1 = 0xFE80, .hw2 = min_op, .n = one, .m = 0x7FC0_0000 }, .{ .dst = one }),
-    vec("vmaxnm.f32 signalling nan is quieted", .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = 0x7F80_0001, .m = one }, .{ .dst = 0x7FC0_0001, .fpscr = raised(ioc) }),
+    vec(
+        "vmaxnm.f32 quiet nan returns the number",
+        .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = 0x7FC0_0000, .m = one },
+        .{ .dst = one },
+    ),
+    vec(
+        "vminnm.f32 quiet nan returns the number",
+        .{ .hw1 = 0xFE80, .hw2 = min_op, .n = one, .m = 0x7FC0_0000 },
+        .{ .dst = one },
+    ),
+    vec(
+        "vmaxnm.f32 signalling nan is quieted",
+        .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = 0x7F80_0001, .m = one },
+        .{ .dst = 0x7FC0_0001, .fpscr = raised(ioc) },
+    ),
     vec("vmaxnm.f32 +0, -0 is +0", .{ .hw1 = 0xFE80, .hw2 = two_ops, .n = 0x8000_0000, .m = 0 }, .{ .dst = 0 }),
-    vec("vminnm.f32 +0, -0 is -0", .{ .hw1 = 0xFE80, .hw2 = min_op, .n = 0, .m = 0x8000_0000 }, .{ .dst = 0x8000_0000 }),
+    vec(
+        "vminnm.f32 +0, -0 is -0",
+        .{ .hw1 = 0xFE80, .hw2 = min_op, .n = 0, .m = 0x8000_0000 },
+        .{ .dst = 0x8000_0000 },
+    ),
 };
 
 const rint = [_]V{
@@ -112,7 +132,11 @@ const rint = [_]V{
     round("vrintm.f32 -2.1 rounds down", 0xFEBB, one_op, 0xC006_6666, 0xC040_0000, fpscr_reset),
     round("vrintz.f32 -2.7 toward zero", 0xEEB6, one_op_n, 0xC02C_CCCD, 0xC000_0000, fpscr_reset),
     round("vrintr.f32 3.5 in rn", 0xEEB6, one_op, 0x4060_0000, 0x4080_0000, fpscr_reset),
-    vec("vrintr.f32 3.5 in rz", .{ .hw1 = 0xEEB6, .hw2 = one_op, .m = 0x4060_0000, .fpscr = 0x00C4_0000 }, .{ .dst = 0x4040_0000, .fpscr = 0x00C4_0000 }),
+    vec(
+        "vrintr.f32 3.5 in rz",
+        .{ .hw1 = 0xEEB6, .hw2 = one_op, .m = 0x4060_0000, .fpscr = 0x00C4_0000 },
+        .{ .dst = 0x4040_0000, .fpscr = 0x00C4_0000 },
+    ),
     round("vrintx.f32 2.5 raises ixc", 0xEEB7, one_op, 0x4020_0000, 0x4000_0000, raised(ixc)),
     round("vrintx.f32 3.0 is exact", 0xEEB7, one_op, 0x4040_0000, 0x4040_0000, fpscr_reset),
     round("vrintn.f32 quiets a signalling nan", 0xFEB9, one_op, 0x7F80_0001, 0x7FC0_0001, raised(ioc)),
@@ -128,13 +152,51 @@ const cvt = [_]V{
 };
 
 const wide = [_]V{
-    vec("vselge.f64 d0, d1, d2", .{ .hw1 = 0xFE21, .hw2 = 0x0B02, .double = true, .dst_wide = true, .n = 0x3FF0_0000_0000_0000, .m = 0x4000_0000_0000_0000 }, .{ .dst = 0x3FF0_0000_0000_0000 }),
-    vec("vmaxnm.f64 d0, d1, d2", .{ .hw1 = 0xFE81, .hw2 = 0x0B02, .double = true, .dst_wide = true, .n = 0x3FF0_0000_0000_0000, .m = 0x4000_0000_0000_0000 }, .{ .dst = 0x4000_0000_0000_0000 }),
-    vec("vrintn.f64 d0, d2 ties to even", .{ .hw1 = 0xFEB9, .hw2 = 0x0B42, .double = true, .dst_wide = true, .m = 0x4004_0000_0000_0000 }, .{ .dst = 0x4000_0000_0000_0000 }),
-    vec("vcvta.s32.f64 s0, d2", .{ .hw1 = 0xFEBC, .hw2 = 0x0BC2, .double = true, .m = 0xC004_0000_0000_0000 }, .{ .dst = 0xFFFF_FFFD, .fpscr = raised(ixc) }),
+    vec(
+        "vselge.f64 d0, d1, d2",
+        .{
+            .hw1 = 0xFE21,
+            .hw2 = 0x0B02,
+            .double = true,
+            .dst_wide = true,
+            .n = 0x3FF0_0000_0000_0000,
+            .m = 0x4000_0000_0000_0000,
+        },
+        .{ .dst = 0x3FF0_0000_0000_0000 },
+    ),
+    vec(
+        "vmaxnm.f64 d0, d1, d2",
+        .{
+            .hw1 = 0xFE81,
+            .hw2 = 0x0B02,
+            .double = true,
+            .dst_wide = true,
+            .n = 0x3FF0_0000_0000_0000,
+            .m = 0x4000_0000_0000_0000,
+        },
+        .{ .dst = 0x4000_0000_0000_0000 },
+    ),
+    vec(
+        "vrintn.f64 d0, d2 ties to even",
+        .{ .hw1 = 0xFEB9, .hw2 = 0x0B42, .double = true, .dst_wide = true, .m = 0x4004_0000_0000_0000 },
+        .{ .dst = 0x4000_0000_0000_0000 },
+    ),
+    vec(
+        "vcvta.s32.f64 s0, d2",
+        .{ .hw1 = 0xFEBC, .hw2 = 0x0BC2, .double = true, .m = 0xC004_0000_0000_0000 },
+        .{ .dst = 0xFFFF_FFFD, .fpscr = raised(ixc) },
+    ),
     vec("vrinta.f16 2.5 ties away", .{ .hw1 = 0xFEB8, .hw2 = 0x0941, .m = 0x4100 }, .{ .dst = 0x4200 }),
-    vec("vseleq.f16 with z set", .{ .hw1 = 0xFE00, .hw2 = 0x0981, .n = 0x3C00, .m = 0x4000, .xpsr = xpsr_thumb | z_flag }, .{ .dst = 0x3C00 }),
-    vec("vcvta.s32.f16 writes a full word", .{ .hw1 = 0xFEBC, .hw2 = 0x09C1, .m = 0xC100 }, .{ .dst = 0xFFFF_FFFD, .fpscr = raised(ixc) }),
+    vec(
+        "vseleq.f16 with z set",
+        .{ .hw1 = 0xFE00, .hw2 = 0x0981, .n = 0x3C00, .m = 0x4000, .xpsr = xpsr_thumb | z_flag },
+        .{ .dst = 0x3C00 },
+    ),
+    vec(
+        "vcvta.s32.f16 writes a full word",
+        .{ .hw1 = 0xFEBC, .hw2 = 0x09C1, .m = 0xC100 },
+        .{ .dst = 0xFFFF_FFFD, .fpscr = raised(ixc) },
+    ),
 };
 
 const unclaimed = [_]V{

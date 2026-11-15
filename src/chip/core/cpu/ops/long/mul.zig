@@ -4,9 +4,9 @@
 //! SP or PC in any register field, or RdHi == RdLo, is UNPREDICTABLE and left
 //! unclaimed. UMAAL and the DSP SMLAL<x><y>/SMLALD/SMLSLD forms have other
 //! hw2[7:4] values and stay out too.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

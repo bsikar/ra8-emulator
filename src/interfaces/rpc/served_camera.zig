@@ -6,11 +6,12 @@
 //! in the past forks through the session's fork router (`changeCamera`)
 //! before it reaches `install`.
 const std = @import("std");
+
 const board_camera = @import("ra8_session").board.camera;
 const recorded_camera = @import("ra8_session").board.recorded_camera;
-const source_spec = @import("ra8_host").camera.source_spec;
-const source_open = @import("ra8_host").camera.source_open;
 const served_setup = @import("served_setup.zig");
+const source_open = @import("ra8_host").camera.source_open;
+const source_spec = @import("ra8_host").camera.source_spec;
 
 fn recording(self: *served_setup.Served) bool {
     return self.history != null or self.ram_history != null;

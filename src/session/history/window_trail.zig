@@ -1,19 +1,18 @@
-//! Bounded reverse window trail buffer and exact undo/redo engine (Section 2.5).
-//!
-//! Reuses the existing write observer and trail machinery from `trail.zig`.
-//! Memory writes are tracked without a parallel observer. Undo swaps pre/post
-//! in-place and redo swaps back, invalidating code caches on every restored range.
-//! Accounting is in honest bytes (headers + payload), evicting oldest slots
-//! first when exceeding budget.
+//! Byte-bounded reverse trail using trail.zig's existing write observer (section 2.5).
+//! Undo swaps byte/register pre/post state; redo swaps back. Restored ranges
+//! invalidate code caches. Accounting includes headers and payloads;
+//! oldest slots are evicted first when the budget is exceeded.
+const payload_mod = @import("window_payload.zig");
 const std = @import("std");
+
 const Allocator = std.mem.Allocator;
-const store_mod = @import("ra8_chip").core.cpu.memory.store;
-const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
-const trail_mod = @import("trail.zig");
-const slot_mod = @import("window_slot.zig");
 const digest_mod = @import("window_digest.zig");
+const Initiator = @import("ra8_chip").core.cpu.memory.initiator.Initiator;
 const micro_mod = @import("micro_checkpoint.zig");
+const slot_mod = @import("window_slot.zig");
+const store_mod = @import("ra8_chip").core.cpu.memory.store;
+const trail_mod = @import("trail.zig");
 
 pub const Position = slot_mod.Position;
 pub const Core = slot_mod.Core;
@@ -22,20 +21,8 @@ pub const WindowSlot = slot_mod.WindowSlot;
 pub const RegDiff = slot_mod.RegDiff;
 pub const ArchState = slot_mod.ArchState;
 
-pub const ByteSwapRecord = struct {
-    base: u32,
-    offset: u64,
-    part: ?u16,
-    initiator: Initiator = .none,
-    data: []u8,
-};
-
-pub const SlotPayload = struct {
-    slot: WindowSlot,
-    diffs: []RegDiff,
-    byte_records: []ByteSwapRecord,
-    micro_bytes: []u8 = &.{},
-};
+pub const ByteSwapRecord = payload_mod.ByteSwapRecord;
+pub const SlotPayload = payload_mod.SlotPayload;
 
 pub const WindowTrail = struct {
     allocator: Allocator,
@@ -98,13 +85,15 @@ pub const WindowTrail = struct {
         var has_part: bool = false;
         var has_barrier: bool = false;
 
-        for (new_records) |r| switch (r) {
-            .bytes => |b| {
-                byte_count += 1;
-                if (b.part != null) has_part = true;
-            },
-            .barrier => has_barrier = true,
-        };
+        for (new_records) |r| {
+            switch (r) {
+                .bytes => |b| {
+                    byte_count += 1;
+                    if (b.part != null) has_part = true;
+                },
+                .barrier => has_barrier = true,
+            }
+        }
 
         const resolved_kind: SlotKind = if (has_barrier)
             .barrier
@@ -118,20 +107,22 @@ pub const WindowTrail = struct {
 
         var total_payload_bytes: usize = 0;
         var b_idx: usize = 0;
-        for (new_records) |r| switch (r) {
-            .bytes => |b| {
-                byte_records[b_idx] = .{
-                    .base = b.base,
-                    .offset = b.offset,
-                    .part = b.part,
-                    .initiator = b.initiator,
-                    .data = b.pre,
-                };
-                total_payload_bytes += b.pre.len;
-                b_idx += 1;
-            },
-            .barrier => {},
-        };
+        for (new_records) |r| {
+            switch (r) {
+                .bytes => |b| {
+                    byte_records[b_idx] = .{
+                        .base = b.base,
+                        .offset = b.offset,
+                        .part = b.part,
+                        .initiator = b.initiator,
+                        .data = b.pre,
+                    };
+                    total_payload_bytes += b.pre.len;
+                    b_idx += 1;
+                },
+                .barrier => {},
+            }
+        }
         return .{
             .records = byte_records,
             .payload_bytes = total_payload_bytes,
@@ -262,7 +253,10 @@ pub const WindowTrail = struct {
         if (payload.slot.kind == .complex) {
             const re_exec = re_exec_fn orelse return error.RequiresReExecution;
             if (@TypeOf(board) == @TypeOf(null)) return error.RequiresReExecution;
-            const b = if (@typeInfo(@TypeOf(board)) == .optional) (board orelse return error.RequiresReExecution) else board;
+            const b = if (@typeInfo(@TypeOf(board)) == .optional)
+                (board orelse return error.RequiresReExecution)
+            else
+                board;
             _ = b;
             try re_exec();
             const target = if (peer) |p| (if (payload.slot.core == .cpu0) cpu else p) else cpu;
@@ -378,7 +372,9 @@ pub const WindowTrail = struct {
     }
 
     fn freePayload(self: *WindowTrail, p: SlotPayload) void {
-        for (p.byte_records) |r| self.recording.allocator.free(r.data);
+        for (p.byte_records) |r| {
+            self.recording.allocator.free(r.data);
+        }
         if (p.byte_records.len > 0) self.allocator.free(p.byte_records);
         if (p.diffs.len > 0) self.allocator.free(p.diffs);
         if (p.micro_bytes.len > 0) self.allocator.free(p.micro_bytes);

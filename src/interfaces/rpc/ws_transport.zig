@@ -1,12 +1,13 @@
 //! Auto-detecting RPC byte transport over connected TCP/Unix sockets and WebSockets (RA8EMU-1241).
 //! Transparently detects HTTP GET `Upgrade: websocket` vs raw TCP RPC greetings.
-const std = @import("std");
+
 const builtin = @import("builtin");
 const rpc = @import("ra8_rpc_wire");
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
-const ws_handshake = @import("ws_handshake.zig");
+const std = @import("std");
 const ws_frame = @import("ws_frame.zig");
+const ws_handshake = @import("ws_handshake.zig");
 
 pub const State = enum {
     detect,
@@ -308,7 +309,11 @@ pub const Connection = struct {
 
     fn compactRx(self: *Connection) void {
         if (self.rx_start > 0 and self.rx_len > 0) {
-            std.mem.copyForwards(u8, self.rx_buf[0..self.rx_len], self.rx_buf[self.rx_start .. self.rx_start + self.rx_len]);
+            std.mem.copyForwards(
+                u8,
+                self.rx_buf[0..self.rx_len],
+                self.rx_buf[self.rx_start .. self.rx_start + self.rx_len],
+            );
             self.rx_start = 0;
         } else if (self.rx_len == 0) {
             self.rx_start = 0;

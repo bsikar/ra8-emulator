@@ -5,41 +5,71 @@
 //! (--listen). Frames are the only thing written to stdout; complaints go
 //! to stderr.
 const std = @import("std");
-const host = @import("ra8_host");
-const served_setup = @import("ra8_rpc").served_setup;
-const served_camera = @import("ra8_rpc").served_camera;
-const source_spec = @import("ra8_host").camera.source_spec;
-const loop = @import("loop.zig");
-const listen = @import("listen.zig");
+
 const card_setup = @import("../card/setup.zig");
-const card_apps = @import("ra8_rpc").card_apps;
-const txm_debug = @import("ra8_session").txm.debug;
-const session_api = @import("ra8_session").api;
 const elf = @import("ra8_board").image.elf;
+const host = @import("ra8_host");
+const listen = @import("listen.zig");
+const loop = @import("loop.zig");
+const served_camera = @import("ra8_rpc").served_camera;
+const served_setup = @import("ra8_rpc").served_setup;
+const session_api = @import("ra8_session").api;
+const source_spec = @import("ra8_host").camera.source_spec;
+const txm_debug = @import("ra8_session").txm.debug;
 const usbip_run = @import("ra8_usbip").exported.run;
 const Workbench = @import("workbench.zig").Workbench;
 
 pub const usage =
-    \\usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
-    \\       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] [--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
-    \\       --profile-folded samples each core's call stacks for `ctl folded`
-    \\       --cpu1 brings CPU1 up from its own image, parked until it is run
-    \\       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the SDHI card, as for a run
-    \\       --allow-state-files lets snapshot and restore run on a non-loopback listener
-    \\       --workspace DIR enables rooted workbench file operations for connected clients
-    \\       --build-zig ABSOLUTE_PATH enables backend Zig builds in that workspace (trusted projects only)
-    \\       --history DIR puts the session's persistent history in DIR; --history off keeps it RAM only
-    \\       --kept preserves the session on disk after exit (with --history DIR)
-    \\       --checkpoint-every N writes a closed-round checkpoint every N rounds (default 64)
-    \\       --history-budget BYTES caps the served session's history share (with --history DIR; minimum 128 MiB)
-    \\       --frame-hz N caps the frame tap at N captures per host second (0 captures every change; default 60)
-    \\       --ram-budget BYTES caps the RAM-only history's share (with --history off; minimum 128 MiB)
-    \\       --camera-source KIND[:ARG] and --allow-webcam select the served session's camera source
-    \\
-;
+    "usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio " ++
+    "<firmware.elf>\n" ++
+    "       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] " ++
+    "[--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>\n" ++
+    "       --profile-folded samples each core's call stacks for `ctl folded`\n" ++
+    "       --cpu1 brings CPU1 up from its own image, parked until it is run\n" ++
+    "       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the " ++
+    "SDHI card, as for a run\n" ++
+    "       --allow-state-files lets snapshot and restore run on a non-loopback " ++
+    "listener\n" ++
+    "       --workspace DIR enables rooted workbench file operations for connected " ++
+    "clients\n" ++
+    "       --build-zig ABSOLUTE_PATH enables backend Zig builds in that workspace " ++
+    "(trusted projects only)\n" ++
+    "       --history DIR puts the session's persistent history in DIR; --history " ++
+    "off keeps it RAM only\n" ++
+    "       --kept preserves the session on disk after exit (with --history DIR)\n" ++
+    "       --checkpoint-every N writes a closed-round checkpoint every N rounds " ++
+    "(default 64)\n" ++
+    "       --history-budget BYTES caps the served session's history share (with " ++
+    "--history DIR; minimum 128 MiB)\n" ++
+    "       --frame-hz N caps the frame tap at N captures per host second (0 " ++
+    "captures every change; default 60)\n" ++
+    "       --ram-budget BYTES caps the RAM-only history's share (with --history " ++
+    "off; minimum 128 MiB)\n" ++
+    "       --camera-source KIND[:ARG] and --allow-webcam select the served " ++
+    "session's camera source\n";
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { build_zig: ?[]const u8 = null, where: Where, elf: []const u8, folded: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false, workspace: ?[]const u8 = null };
+const Asked = struct {
+    build_zig: ?[]const u8 = null,
+    where: Where,
+    elf: []const u8,
+    folded: bool = false,
+    cpu1: ?[]const u8 = null,
+    sdhi: card_setup.Sdhi = .{},
+    allow_state_files: bool = false,
+    history: ?[]const u8 = null,
+    history_off: bool = false,
+    checkpoint_every: u32 = 64,
+    history_budget: ?u64 = null,
+    ram_budget: ?u64 = null,
+    kept: bool = false,
+    reopen: ?[]const u8 = null,
+    frame_hz: ?u32 = null,
+    usbip: ?u16 = null,
+    camera: ?source_spec.Spec = null,
+    allow_webcam: bool = false,
+    workspace: ?[]const u8 = null,
+};
 
 /// Samples taken one every this many instructions under --profile-folded.
 pub const fold_every: u32 = 1000;
@@ -129,7 +159,11 @@ fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep
     } else if (std.mem.eql(u8, argv[idx], "--app") and valued) {
         at.* += 1;
         flags.sdhi.addApp(argv[at.*]) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--history") and flags.history_root == null and !flags.history_off and valued) {
+    } else if (std.mem.eql(u8, argv[idx], "--history") and
+        flags.history_root == null and
+        !flags.history_off and
+        valued)
+    {
         at.* += 1;
         if (std.mem.eql(u8, argv[at.*], "off")) flags.history_off = true else flags.history_root = argv[at.*];
     } else if (std.mem.eql(u8, argv[idx], "--kept") and !flags.kept) {
@@ -220,12 +254,27 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     defer bridges.deinit();
     var setup: served_setup.Served = undefined;
     const history_opts: ?served_setup.HistoryOpts = if (asked.history) |root|
-        .{ .root = root, .checkpoint_every = asked.checkpoint_every, .budget = asked.history_budget, .kept = asked.kept, .reopen = asked.reopen, .frame_hz = asked.frame_hz }
+        .{
+            .root = root,
+            .checkpoint_every = asked.checkpoint_every,
+            .budget = asked.history_budget,
+            .kept = asked.kept,
+            .reopen = asked.reopen,
+            .frame_hz = asked.frame_hz,
+        }
     else if (asked.history_off)
         .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget, .frame_hz = asked.frame_hz }
     else
         null;
-    setup.openInputs(allocator, io, asked.elf, null, history_opts, if (asked.cpu1) |path| .{ .path = path } else null, .{ .card = asked.sdhi }) catch |err| {
+    setup.openInputs(
+        allocator,
+        io,
+        asked.elf,
+        null,
+        history_opts,
+        if (asked.cpu1) |path| .{ .path = path } else null,
+        .{ .card = asked.sdhi },
+    ) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
         return 1;
     };
@@ -238,39 +287,16 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     defer workbench.close();
     workbench.bind(&setup.context);
     defer workbench.unbind(&setup.context);
-    if (asked.camera) |cam| {
-        served_camera.set(&setup, cam) catch |err| {
-            std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-    }
-    if (asked.usbip) |port| {
-        usbip_run.install(&setup.owner.board().usb, bridges.allocator(), io, port) catch |err| {
-            std.debug.print("serve: cannot export the FS device: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-        setup.attachUsbip() catch |err| {
-            std.debug.print("serve: cannot record the USB/IP bridge: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-    }
+    if (!attachDevices(&setup, asked, bridges.allocator(), io)) return 1;
     var armer = BreakArmer{ .session = setup.context.session };
-    if (setup.context.modules) |table|
+    if (setup.context.modules) |table| {
         table.armer = .{ .ctx = &armer, .arm = BreakArmer.arm, .drop = BreakArmer.drop };
+    }
     if (asked.folded) setup.sampleStacks(fold_every) catch |err| {
         std.debug.print("serve: cannot sample stacks: {s}\n", .{@errorName(err)});
         return 1;
     };
-    // Snapshot and restore stay off a non-loopback TCP listener unless the
-    // operator asked for them there (RA8EMU-1175): a network peer could
-    // otherwise overwrite or read files as the serving user.
-    switch (asked.where) {
-        .listen => |spec| if (!listen.allowsState(spec, asked.allow_state_files)) {
-            setup.context.state = null;
-            std.debug.print("serve: snapshot and restore are off on a non-loopback listener; pass --allow-state-files to keep them\n", .{});
-        },
-        .stdio => {},
-    }
+    restrictStateFiles(&setup, asked);
     const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx };
     const context = &setup.context;
     const done = switch (asked.where) {
@@ -286,4 +312,41 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         return 1;
     };
     return 0;
+}
+
+fn attachDevices(setup: *served_setup.Served, asked: Asked, allocator: std.mem.Allocator, io: std.Io) bool {
+    if (asked.camera) |cam| {
+        served_camera.set(setup, cam) catch |err| {
+            std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});
+            return false;
+        };
+    }
+    if (asked.usbip) |port| {
+        usbip_run.install(&setup.owner.board().usb, allocator, io, port) catch |err| {
+            std.debug.print("serve: cannot export the FS device: {s}\n", .{@errorName(err)});
+            return false;
+        };
+        setup.attachUsbip() catch |err| {
+            std.debug.print("serve: cannot record the USB/IP bridge: {s}\n", .{@errorName(err)});
+            return false;
+        };
+    }
+    return true;
+}
+
+fn restrictStateFiles(setup: *served_setup.Served, asked: Asked) void {
+    // Snapshot and restore stay off a non-loopback TCP listener unless the
+    // operator asked for them there (RA8EMU-1175): a network peer could
+    // otherwise overwrite or read files as the serving user.
+    switch (asked.where) {
+        .listen => |spec| if (!listen.allowsState(spec, asked.allow_state_files)) {
+            setup.context.state = null;
+            std.debug.print(
+                "serve: snapshot and restore are off on a non-loopback listener; pass " ++
+                    "--allow-state-files to keep them\n",
+                .{},
+            );
+        },
+        .stdio => {},
+    }
 }

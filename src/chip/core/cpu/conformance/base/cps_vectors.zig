@@ -38,7 +38,11 @@ pub const all = [_]V{
     vec("cpsid if", .{ .hw1 = 0xB673 }, .{ .primask = 1, .faultmask = 1 }),
     vec("cpsie if", .{ .hw1 = 0xB663, .primask = 1, .faultmask = 1 }, .{}),
     vec("unprivileged Thread mode is a NOP", .{ .hw1 = 0xB673, .npriv = true }, .{}),
-    vec("Handler mode is privileged whatever nPRIV says", .{ .hw1 = 0xB672, .ipsr = 5, .npriv = true }, .{ .primask = 1 }),
+    vec(
+        "Handler mode is privileged whatever nPRIV says",
+        .{ .hw1 = 0xB672, .ipsr = 5, .npriv = true },
+        .{ .primask = 1 },
+    ),
     vec("cpsid if in HardFault sets only PRIMASK", .{ .hw1 = 0xB673, .ipsr = 3 }, .{ .primask = 1 }),
     vec("cpsid f in NMI leaves FAULTMASK", .{ .hw1 = 0xB671, .ipsr = 2 }, .{}),
     vec("cpsie f in HardFault clears FAULTMASK", .{ .hw1 = 0xB661, .faultmask = 1, .ipsr = 3 }, .{}),

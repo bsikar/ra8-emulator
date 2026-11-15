@@ -3,7 +3,7 @@
 //! gives sign a, an exponent of NOT(b), then b repeated, then cd, and a
 //! fraction that starts with efgh. Every value is (-1)^a * (16 + efgh) / 16
 //! * 2^(NOT(b):cd - 3), so 0x70 is 1.0 and 0x00 is 2.0.
-const std = @import("std");
+
 const Format = @import("format.zig").Format;
 
 pub fn expandImm(comptime fmt: Format, imm8: u8) fmt.Bits() {

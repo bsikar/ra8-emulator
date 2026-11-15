@@ -1,8 +1,8 @@
 //! CPU1 startup ownership, before the history root is frozen.
 const Cpu1 = @import("ra8_session").cpu1.bringup.Cpu1;
 const file_ops = @import("ra8_session").file_ops;
-const session_files = @import("ra8_host").session_files;
 const Served = @import("served_setup.zig").Served;
+const session_files = @import("ra8_host").session_files;
 
 pub const Image = union(enum) { path: []const u8, bytes: []const u8 };
 

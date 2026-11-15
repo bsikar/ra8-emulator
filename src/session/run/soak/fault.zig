@@ -8,8 +8,8 @@
 //! escalated to. A handler that clears its fault inside the same stretch
 //! hides it from the soak; the report's faults line has the same view.
 const fault_status = @import("ra8_chip").periph.fault.status;
-const memmap = @import("ra8_chip").core.memmap;
 const Kind = @import("soak.zig").Kind;
+const memmap = @import("ra8_chip").core.memmap;
 
 /// SFSR, the SecureFault status word (DDI0553 D1.2.226).
 pub const sfsr_address: u32 = 0xE000_EDE4;

@@ -1,6 +1,8 @@
 //! Pure source-path composition and comparison, independent of the debugger host.
 const std = @import("std");
+
 const File = @import("header.zig").File;
+
 pub const max_bytes = 4096;
 
 pub fn absolute(path: []const u8) bool {
@@ -30,11 +32,18 @@ pub fn write(out: anytype, file: File) !void {
         const base = if (absolute(file.directory) or drive(file.directory)) "" else file.compilation_directory;
         if (base.len != 0) {
             try out.writeAll(base);
-            if ((file.directory.len != 0 or file.name.len != 0) and !separator(base[base.len - 1], windows) and !(drive(base) and base.len == 2)) try out.writeByte('/');
+            if ((file.directory.len != 0 or
+                file.name.len != 0) and
+                !separator(base[base.len - 1], windows) and
+                !(drive(base) and
+                    base.len == 2)) try out.writeByte('/');
         }
         if (file.directory.len != 0) {
             try out.writeAll(file.directory);
-            if (file.name.len != 0 and !separator(file.directory[file.directory.len - 1], windows) and !(drive(file.directory) and file.directory.len == 2)) try out.writeByte('/');
+            if (file.name.len != 0 and
+                !separator(file.directory[file.directory.len - 1], windows) and
+                !(drive(file.directory) and
+                    file.directory.len == 2)) try out.writeByte('/');
         }
     }
     try out.writeAll(file.name);
@@ -42,7 +51,10 @@ pub fn write(out: anytype, file: File) !void {
 
 pub fn named(file: File, wanted: []const u8) bool {
     if (wanted.len == 0 or file.name.len == 0) return false;
-    const windows = windowsPath(file.compilation_directory) or windowsPath(file.directory) or windowsPath(file.name) or windowsPath(wanted);
+    const windows = windowsPath(file.compilation_directory) or
+        windowsPath(file.directory) or
+        windowsPath(file.name) or
+        windowsPath(wanted);
     var wanted_buffer: [max_bytes]u8 = undefined;
     const query = normalize(wanted, windows, &wanted_buffer) catch return false;
     if (query.len == 0) return false;
@@ -78,7 +90,10 @@ fn normalize(path: []const u8, windows: bool, into: []u8) ![]const u8 {
         }
     }
     const root_len = used;
-    const protected: usize = if (windows and root_len == 2) 2 else if (windows and path.len >= 2 and path[1] == ':') 1 else 0;
+    const protected: usize = if (windows and
+        root_len == 2) 2 else if (windows and
+        path.len >= 2 and
+        path[1] == ':') 1 else 0;
     var starts: [max_bytes / 2 + 1]usize = undefined;
     var count: usize = 0;
     var parts = std.mem.tokenizeAny(u8, path, if (windows) "/\\" else "/");

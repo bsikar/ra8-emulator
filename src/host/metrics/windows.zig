@@ -1,7 +1,9 @@
 //! Win32 process counters and Toolhelp thread inventory, without heap buffers.
 const std = @import("std");
+
 const w = std.os.windows;
 const Raw = @import("metrics.zig").Raw;
+
 const Memory = extern struct {
     cb: u32 = @sizeOf(Memory),
     faults: u32 = 0,
@@ -67,5 +69,13 @@ pub fn read() !Raw {
     while (more) : (more = Thread32Next(snapshot, &entry).toBool()) {
         if (entry.owner == pid) threads += 1;
     }
-    return .{ .cpu_ns = (kernel +| user) *| 100, .cores = GetActiveProcessorCount(0xffff), .footprint = memory.private, .peak_footprint = memory.peak_pagefile, .rss = memory.working, .vsz = vm.virtual, .threads = threads };
+    return .{
+        .cpu_ns = (kernel +| user) *| 100,
+        .cores = GetActiveProcessorCount(0xffff),
+        .footprint = memory.private,
+        .peak_footprint = memory.peak_pagefile,
+        .rss = memory.working,
+        .vsz = vm.virtual,
+        .threads = threads,
+    };
 }

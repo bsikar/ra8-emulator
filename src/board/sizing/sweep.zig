@@ -5,9 +5,10 @@
 //! takes the longer of its compute and its memory traffic, and the stall is
 //! what memory adds on top of compute.
 const std = @import("std");
+
 const external = @import("../external/memory.zig");
-const workload = @import("workload.zig");
 const matrix = @import("matrix.zig");
+const workload = @import("workload.zig");
 
 /// Free space a size must leave over the workload's high-water mark
 /// (the RA8FW-666 target).
@@ -92,7 +93,9 @@ pub fn summarize(rows: []const Row) Summary {
 pub fn fitSize(high: u64, max: u64) ?u64 {
     const want = high + (high * headroom_percent + 99) / 100;
     var size: u64 = workload.mib;
-    while (size < want and size <= max) size *= 2;
+    while (size < want and size <= max) {
+        size *= 2;
+    }
     return if (size <= max) size else null;
 }
 

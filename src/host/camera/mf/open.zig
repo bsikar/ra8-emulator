@@ -5,6 +5,7 @@
 //! back from what the reader settled on. The DLL calls sit behind `Calls`
 //! so the whole sequence runs against fakes on any host.
 const builtin = @import("builtin");
+
 const abi = @import("abi.zig");
 const com = @import("com.zig");
 
@@ -50,12 +51,20 @@ pub fn open(calls: Calls, index: u32, width: u32, height: u32) Error!Reader {
         com.release(activator);
     }
     var source: ?*anyopaque = null;
-    if (!abi.succeeded(com.activate(activator, &abi.iid_media_source, &source)) or source == null) return error.ActivateFailed;
+    if (!abi.succeeded(com.activate(activator, &abi.iid_media_source, &source)) or
+        source == null) return error.ActivateFailed;
     const reader = makeReader(calls, source.?);
     com.release(source.?);
     const opened = try reader;
     errdefer com.release(opened);
-    var result = Reader{ .calls = calls, .reader = opened, .activator = activator, .subtype = .yuy2, .width = width, .height = height };
+    var result = Reader{
+        .calls = calls,
+        .reader = opened,
+        .activator = activator,
+        .subtype = .yuy2,
+        .width = width,
+        .height = height,
+    };
     try agree(calls, &result);
     return result;
 }
@@ -65,7 +74,9 @@ fn device(calls: Calls, index: u32) Error!*anyopaque {
     var attributes: ?*anyopaque = null;
     if (!abi.succeeded(calls.create_attributes(&attributes)) or attributes == null) return error.NoDevice;
     defer com.release(attributes.?);
-    if (!abi.succeeded(com.setGuid(attributes.?, &abi.devsource_source_type, &abi.devsource_vidcap))) return error.NoDevice;
+    if (!abi.succeeded(
+        com.setGuid(attributes.?, &abi.devsource_source_type, &abi.devsource_vidcap),
+    )) return error.NoDevice;
     var list: ?[*]?*anyopaque = null;
     var count: u32 = 0;
     if (!abi.succeeded(calls.enum_devices(attributes.?, &list, &count)) or list == null) return error.NoDevice;
@@ -94,7 +105,8 @@ fn agree(calls: Calls, result: *Reader) Error!void {
         if (!ask(calls, result.*, subtype)) continue;
         result.subtype = subtype;
         var current: ?*anyopaque = null;
-        if (!abi.succeeded(com.getCurrentMediaType(result.reader, abi.first_video_stream, &current)) or current == null) return;
+        if (!abi.succeeded(com.getCurrentMediaType(result.reader, abi.first_video_stream, &current)) or
+            current == null) return;
         defer com.release(current.?);
         var packed_size: u64 = 0;
         if (!abi.succeeded(com.getUint64(current.?, &abi.mt_frame_size, &packed_size))) return;
@@ -128,7 +140,15 @@ pub fn system() ?Calls {
 
 const Live = if (builtin.os.tag == .windows) struct {
     const api = abi.api;
-    const calls = Calls{ .startup = startup, .shutdown = shutdown, .create_attributes = attributes, .create_media_type = mediaType, .enum_devices = devices, .create_reader = reader, .free = free };
+    const calls = Calls{
+        .startup = startup,
+        .shutdown = shutdown,
+        .create_attributes = attributes,
+        .create_media_type = mediaType,
+        .enum_devices = devices,
+        .create_reader = reader,
+        .free = free,
+    };
     fn startup() abi.HRESULT {
         return api.MFStartup(abi.version, abi.startup_lite);
     }

@@ -8,10 +8,11 @@
 //! PC as Rt or Rt2, LDRD with Rt = Rt2, and writeback with Rn equal to Rt or
 //! Rt2. Every access goes through the bus.
 const std = @import("std");
-const op = @import("../op.zig");
+
 const alignment = @import("../alignment.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1[15:9] = 0b1110100 with bit 6 set.

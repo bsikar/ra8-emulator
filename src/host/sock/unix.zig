@@ -2,13 +2,13 @@
 //! Windows routes AF_UNIX through Winsock2 (afunix.sys) rather than Zig's
 //! raw \Device\Afd\Endpoint open, which exits AddressFamilyUnsupported on
 //! Windows releases without AFD AF_UNIX support. POSIX delegates to std.Io.net.
-const std = @import("std");
 const builtin = @import("builtin");
+const sock_common = @import("sock.zig");
 const sock_path = @import("path.zig");
 const sock_ready = @import("ready.zig");
-const sock_common = @import("sock.zig");
-const win_sock = @import("windows.zig");
+const std = @import("std");
 const win32 = @import("../win32.zig");
+const win_sock = @import("windows.zig");
 
 const on_windows = builtin.os.tag == .windows;
 
@@ -203,7 +203,10 @@ fn resolvePath(io: std.Io, raw: []const u8, scratch: *[std.fs.max_path_bytes]u8)
     const resolved = try sock_path.unix(io, raw, scratch);
     const is_abstract = !on_windows and resolved.len > 0 and resolved[0] == 0;
     if (is_abstract) return resolved;
-    const candidate = if (on_windows and resolved.len > max_path_len and !std.fs.path.isAbsolute(raw) and raw.len <= max_path_len)
+    const candidate = if (on_windows and
+        resolved.len > max_path_len and
+        !std.fs.path.isAbsolute(raw) and
+        raw.len <= max_path_len)
         raw
     else
         resolved;
@@ -270,7 +273,11 @@ fn isLiveListenerWindows(io: std.Io, addr: *const win.SockaddrUn) bool {
 }
 
 fn waitWinConnect(io: std.Io, s: Handle, timeout_ms: i64) !void {
-    const timeout = (std.Io.Timeout{ .duration = .{ .raw = .fromMilliseconds(timeout_ms), .clock = .awake } }).toDeadline(io);
+    const timeout = (std.Io.Timeout{
+        .duration = .{ .raw = .fromMilliseconds(timeout_ms), .clock = .awake },
+    }).toDeadline(
+        io,
+    );
     while (true) {
         const remaining = timeout.toDurationFromNow(io).?.raw.toMilliseconds();
         if (remaining <= 0) return error.TimedOut;

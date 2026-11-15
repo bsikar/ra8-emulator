@@ -5,7 +5,7 @@
 //! puts the pointer down first and then payload bytes, a read serves from
 //! wherever the pointer stands, and a STOP ends the transfer so the next one
 //! names its own register.
-const std = @import("std");
+
 const bus = @import("ra8_chip").periph.riic.bus;
 
 pub const address: u7 = 0x43;

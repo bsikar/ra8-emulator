@@ -2,9 +2,10 @@
 //! VPT (RA8EMU-25). Each element's result sets or clears every P0 bit of
 //! the bytes it spans. EQ and NE compare the raw bits, CS and HI compare
 //! unsigned, and GE, LT, GT and LE compare signed.
-const qreg = @import("../qreg.zig");
 const int = @import("../int/int.zig");
+const qreg = @import("../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 /// The condition, numbered as the encoding builds it: signed (hw2 bit 12),

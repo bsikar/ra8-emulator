@@ -5,9 +5,10 @@
 //! so they are wiring: not written, and a load keeps the ones the board
 //! already has. Host stdin and touch inputs are run options, not state.
 const std = @import("std");
-const sci = @import("sci.zig");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
+const sci = @import("sci.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -22,7 +23,9 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, unit: *const sci.Sci) !void {
-    for (unit.channels) |channel| try fields.writeExcept(writer, channel, channel_wiring);
+    for (unit.channels) |channel| {
+        try fields.writeExcept(writer, channel, channel_wiring);
+    }
     try fields.writeExcept(writer, unit.line, line_wiring);
 }
 
@@ -32,7 +35,9 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
     const section = try file.Reader.find(bytes, .serial) orelse return Error.Missing;
     var cursor: fields.Cursor = .{ .bytes = section.payload };
     var copy = board.serial;
-    for (&copy.channels) |*channel| try fields.readOver(&cursor, channel, channel_wiring);
+    for (&copy.channels) |*channel| {
+        try fields.readOver(&cursor, channel, channel_wiring);
+    }
     try fields.readOver(&cursor, &copy.line, line_wiring);
     if (!cursor.done() or !fits(&copy)) return Error.BadValue;
     board.serial = copy;

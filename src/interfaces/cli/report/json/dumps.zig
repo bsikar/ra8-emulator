@@ -5,19 +5,20 @@
 //! nothing measured. The `--dump-sd` block and the `--watch` log follow
 //! (RA8EMU-391, json_sd.zig and json_watched.zig).
 const std = @import("std");
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const elf = @import("ra8_board").image.elf;
+
+const Board = @import("ra8_board").board.Board;
 const cli = @import("../../cli.zig");
-const symbols = @import("ra8_session").symbols;
-const registers = @import("ra8_session").registers;
-const mem_dump = @import("ra8_session").mem_dump;
-const place = @import("ra8_session").place;
-const report_dumps = @import("../dumps.zig");
-const watchpoint = @import("ra8_session").watchpoint;
+const elf = @import("ra8_board").image.elf;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+pub const json_regs = @import("regs.zig");
 pub const json_sd = @import("sd.zig");
 pub const json_watched = @import("watched.zig");
-pub const json_regs = @import("regs.zig");
-const Board = @import("ra8_board").board.Board;
+const mem_dump = @import("ra8_session").mem_dump;
+const place = @import("ra8_session").place;
+const registers = @import("ra8_session").registers;
+const report_dumps = @import("../dumps.zig");
+const symbols = @import("ra8_session").symbols;
+const watchpoint = @import("ra8_session").watchpoint;
 
 /// What the dumps read from: the registers and memory as the run left them,
 /// the image and the flags that asked. A `--cpu zig` run hands over its own
@@ -94,7 +95,9 @@ fn memory(j: anytype, core: Guest, image: elf.Image, asks: []const mem_dump.Ask)
     try placeObject(j, "memory", core, image, asks[0].spec, asks[0].words);
     if (asks.len < 2) return;
     try j.open("memory_places", '[');
-    for (asks) |ask| try placeObject(j, null, core, image, ask.spec, ask.words);
+    for (asks) |ask| {
+        try placeObject(j, null, core, image, ask.spec, ask.words);
+    }
     try j.close(']');
 }
 

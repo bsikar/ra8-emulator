@@ -22,8 +22,9 @@
 //! no activation function, IFM2 broadcast as minmax.zig reads it.
 //! Anything else is error.OperatorNotModelled.
 const std = @import("std");
-const dma = @import("dma.zig");
+
 const addr = @import("addr.zig");
+const dma = @import("dma.zig");
 const minmax = @import("minmax.zig");
 const round = @import("round.zig");
 
@@ -85,7 +86,18 @@ fn supported(inputs: Inputs) Error!round.Rounding {
 }
 
 /// One output element from the two zero-point-adjusted operands.
-pub fn element(mode: u16, operands: Operands, a: i32, b: i32, scale: u32, shift: u6, rounding: round.Rounding, ofm_zero_point: i32, low: i32, high: i32) i32 {
+pub fn element(
+    mode: u16,
+    operands: Operands,
+    a: i32,
+    b: i32,
+    scale: u32,
+    shift: u6,
+    rounding: round.Rounding,
+    ofm_zero_point: i32,
+    low: i32,
+    high: i32,
+) i32 {
     const left = operands.scaled(a, true);
     const right = operands.scaled(b, false);
     const raw = if (mode == mode_sub) left - right else left + right;
@@ -99,7 +111,11 @@ pub fn run(memory: anytype, regions: *const dma.Regions, mode: u16, inputs: Inpu
     const rounding = try supported(inputs);
     const maps = inputs.maps;
     const q = inputs.quant;
-    const operands = Operands.decode(maps.ifm.precision, q.opa_scale, q.opb_scale) orelse return error.OperatorNotModelled;
+    const operands = Operands.decode(
+        maps.ifm.precision,
+        q.opa_scale,
+        q.opb_scale,
+    ) orelse return error.OperatorNotModelled;
     const f = addr.ifmFormat(maps.ifm.precision).?;
     const zp_a = minmax.signExtend(maps.ifm.zero_point, f);
     const zp_b = minmax.signExtend(maps.ifm2.zero_point, f);

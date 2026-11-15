@@ -9,8 +9,9 @@
 //! is stamped by the next instruction to retire, and one still held when
 //! the run ends is stamped with the pc the run stopped at.
 const std = @import("std");
-const bus = @import("ra8_chip").core.cpu.bus;
+
 const boot = @import("ra8_chip").core.cpu.boot;
+const bus = @import("ra8_chip").core.cpu.bus;
 const cpu = @import("ra8_chip").core.cpu.cpu;
 const elf = @import("ra8_board").image.elf;
 const Source = @import("ra8_chip").core.cpu.exception.source.Source;
@@ -48,7 +49,13 @@ pub const Recorder = struct {
     }
 
     pub fn wrap(self: *Recorder) boot.Wrap {
-        return .{ .context = self, .busFn = busThunk, .sourceFn = sourceThunk, .retiredFn = retiredThunk, .regsFn = regsThunk };
+        return .{
+            .context = self,
+            .busFn = busThunk,
+            .sourceFn = sourceThunk,
+            .retiredFn = retiredThunk,
+            .regsFn = regsThunk,
+        };
     }
 
     /// The retire listener the run takes, chained in front of `next`.
@@ -60,20 +67,32 @@ pub const Recorder = struct {
 
     pub fn onBus(self: *Recorder, under: bus.Bus) bus.Bus {
         self.inner = if (self.next) |w| w.busFn(w.context, under) else under;
-        return .{ .ctx = self, .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat }, .lines = self.inner.lines, .register_state = self.inner.register_state };
+        return .{
+            .ctx = self,
+            .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat },
+            .lines = self.inner.lines,
+            .register_state = self.inner.register_state,
+        };
     }
 
     /// A store reached the bus: hold it when it starts in the window.
     pub fn stored(self: *Recorder, address: u32, bytes: []const u8) void {
         if (address < self.watched.address or address > self.watched.end()) return;
         if (self.count == limits.held) self.retired(if (self.regs) |r| r.pc else 0);
-        self.held[self.count] = .{ .lr = if (self.regs) |r| r.lr else 0, .address = address, .width = width(bytes.len), .value = value(bytes) };
+        self.held[self.count] = .{
+            .lr = if (self.regs) |r| r.lr else 0,
+            .address = address,
+            .width = width(bytes.len),
+            .value = value(bytes),
+        };
         self.count += 1;
     }
 
     /// The instruction at `pc` retired: everything held is its.
     pub fn retired(self: *Recorder, pc: u32) void {
-        for (self.held[0..self.count]) |one| self.watched.record(pc, one.lr, one.address, one.width, one.value);
+        for (self.held[0..self.count]) |one| {
+            self.watched.record(pc, one.lr, one.address, one.width, one.value);
+        }
         self.count = 0;
     }
 

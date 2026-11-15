@@ -33,7 +33,7 @@
 //! either: that needs an ICU event number nothing here establishes. ST is
 //! register state only, the same line dev draws, so the GPT counter model,
 //! when it lands, is what has to read it.
-const std = @import("std");
+
 const periph = @import("registry.zig");
 
 /// POEG geometry. The Non-secure alias is folded onto this base by the bus.

@@ -48,9 +48,9 @@
 //! this board has no bus arbiter and no bus-initiator MPU to refuse on behalf of,
 //! and a refusal invented out of a register value would be a register file
 //! pretending to be a decision.
+const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-const lanes = @import("../lanes.zig");
 
 /// SRAMSAR, SRAMSABAR0..3 and SRAMESAR, in windows of their own.
 pub const sram = @import("sram.zig");

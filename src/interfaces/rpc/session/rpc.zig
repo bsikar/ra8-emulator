@@ -21,76 +21,58 @@ pub const app_codes = struct {
     pub const history: u16 = 0x0103;
 };
 
-pub const Method = enum(u16) {
-    load = 0x0100,
-    run = 0x0101,
-    pause = 0x0102,
-    step = 0x0103,
-    set_speed = 0x0104,
-    read_register = 0x0105,
-    write_register = 0x0106,
-    read_memory = 0x0107,
-    write_memory = 0x0108,
-    set_breakpoint = 0x0109,
-    clear_breakpoint = 0x010a,
-    set_watchpoint = 0x010b,
-    clear_watchpoint = 0x010c,
-    subscribe = 0x010d,
-    unsubscribe = 0x010e,
-    now = 0x010f,
-    interrupt = 0x0110,
-    set_run_budget = 0x0111,
-    remove_point = 0x0112,
-    plug = 0x0113,
-    unplug = 0x0114,
-    set_fault = 0x0115,
-    clear_fault = 0x0116,
-    advance = 0x0117,
-    snapshot = 0x0118,
-    restore = 0x0119,
-    list_parts = 0x011a,
-    set_camera_source = 0x011b,
-    map = 0x011c,
-    stack = 0x011d,
-    rtc = 0x011e,
-    input = 0x011f,
-    backtrace = 0x0120,
-    periph = 0x0121,
-    folded = 0x0122,
-    set_breakpoint_name = 0x0123,
-    load_begin = 0x0124,
-    load_chunk = 0x0125,
-    load_end = 0x0126,
-    board_parts = 0x0127,
-    source_line = 0x0128,
-    locals = 0x0129,
-    locals_at = 0x012A,
-    advance_async = 0x012B,
-    seek = 0x012C,
-    rcont = 0x012D,
-    metrics = 0x012E,
-    branch_list = 0x0130,
-    branch_switch = 0x0131,
-    branch_delete = 0x0132,
-    branch_confirm_fork = 0x0133,
-    branch_cancel_fork = 0x0134,
-    branch_status = 0x0135,
-    console_input = 0x0136,
-    skip_bkpt = 0x0137,
-    play = 0x0138,
-    nav_query = 0x0139,
-    marker_set = 0x013A,
-    frame_status = 0x013B,
-    diff = 0x013C,
-    set_var = 0x013D,
+pub const Method = @import("method.zig").Method;
+
+pub const Topic = enum(u16) {
+    stop = 0x0100,
+    uart = 0x0101,
+    speed = 0x0102,
+    lcd_dirty = 0x0103,
+    trace = 0x0104,
+    session = 0x0105,
+    transport = 0x0106,
 };
-pub const Topic = enum(u16) { stop = 0x0100, uart = 0x0101, speed = 0x0102, lcd_dirty = 0x0103, trace = 0x0104, session = 0x0105, transport = 0x0106 };
 pub const Core = enum(u8) { cpu0, cpu1 };
-pub const Register = enum(u8) { pc, sp, lr, r0, r1, r2, r3, r12, xpsr, primask, psp, r4, r5, r6, r7, r8, r9, r10, r11, msp, basepri, faultmask, control, fpscr, msplim, psplim, s0, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, s16, s17, s18, s19, s20, s21, s22, s23, s24, s25, s26, s27, s28, s29, s30, s31, vpr };
+pub const Register = @import("register.zig").Register;
+
 pub const RunMode = enum(u8) { run, cont, step, next, finish };
-pub const StopReason = enum(u8) { stepped, breakpoint, watchpoint, halt_requested, unit_break, unit_watch, count, core_fault, replay_failed };
+pub const StopReason = enum(u8) {
+    stepped,
+    breakpoint,
+    watchpoint,
+    halt_requested,
+    unit_break,
+    unit_watch,
+    count,
+    core_fault,
+    replay_failed,
+};
 pub const Access = enum(u8) { read, write, access };
-pub const EventKind = enum(u8) { loaded, paused, stopped, register_written, memory_written, breakpoint_set, breakpoint_cleared, watchpoint_set, watchpoint_cleared, speed_changed, input_scheduled, fault_set, fault_cleared, plugged, unplugged, led_changed, module_loaded, module_unloaded, module_faulted, rtos_switch, rtos_idle, isr_enter, isr_leave };
+pub const EventKind = enum(u8) {
+    loaded,
+    paused,
+    stopped,
+    register_written,
+    memory_written,
+    breakpoint_set,
+    breakpoint_cleared,
+    watchpoint_set,
+    watchpoint_cleared,
+    speed_changed,
+    input_scheduled,
+    fault_set,
+    fault_cleared,
+    plugged,
+    unplugged,
+    led_changed,
+    module_loaded,
+    module_unloaded,
+    module_faulted,
+    rtos_switch,
+    rtos_idle,
+    isr_enter,
+    isr_leave,
+};
 
 pub const Load = struct {
     core: Core,
@@ -253,7 +235,12 @@ pub const PeriphText = struct {
 pub const all_threads: u32 = 0xFFFF_FFFF;
 /// A core's sampled call stacks folded over the virtual-time window
 /// [from_ns, to_ns), for one thread or all of them (RA8EMU-833).
-pub const FoldedAsk = struct { core: Core, thread: u32 = all_threads, from_ns: u64 = 0, to_ns: u64 = 0xFFFF_FFFF_FFFF_FFFF };
+pub const FoldedAsk = struct {
+    core: Core,
+    thread: u32 = all_threads,
+    from_ns: u64 = 0,
+    to_ns: u64 = 0xFFFF_FFFF_FFFF_FFFF,
+};
 /// One `frames;... count` row per distinct stack, as --profile-folded.
 pub const FoldedText = struct {
     text: []const u8,
@@ -274,12 +261,13 @@ pub const StackReport = struct {
     overflow: u32,
 };
 pub const Backtrace = @import("backtrace_wire.zig").Backtrace;
-pub const StackFrame = @import("backtrace_wire.zig").StackFrame;
-pub const backtrace_frames = @import("backtrace_wire.zig").backtrace_frames;
-pub const frame_name_cap = @import("backtrace_wire.zig").frame_name_cap;
-pub const frame_file_cap = @import("backtrace_wire.zig").frame_file_cap;
-pub const frame_bytes = @import("backtrace_wire.zig").frame_bytes;
 pub const backtrace_bytes = @import("backtrace_wire.zig").backtrace_bytes;
+pub const backtrace_frames = @import("backtrace_wire.zig").backtrace_frames;
+pub const frame_bytes = @import("backtrace_wire.zig").frame_bytes;
+pub const frame_file_cap = @import("backtrace_wire.zig").frame_file_cap;
+pub const frame_name_cap = @import("backtrace_wire.zig").frame_name_cap;
+pub const StackFrame = @import("backtrace_wire.zig").StackFrame;
+
 /// The source place of a core's pc (RA8EMU-1125): the file and line the pc
 /// belongs to, looked up in the image's .debug_line. `found` is 0 and the
 /// path empty when there is no image or the line table does not cover the
@@ -364,10 +352,11 @@ pub const ScheduleInput = struct {
     button: u8 = 0,
 };
 pub const SessionEvent = struct { core: Core, kind: EventKind, address: u32 };
-pub const TraceEvent = @import("trace_wire.zig").TraceEvent;
 pub const Trace = @import("trace_wire.zig").Trace;
+pub const TraceEvent = @import("trace_wire.zig").TraceEvent;
 
 pub const branch_wire = @import("branch_wire.zig");
+
 pub const BranchItem = branch_wire.BranchItem;
 pub const BranchList = branch_wire.BranchList;
 pub const BranchSwitch = branch_wire.BranchSwitch;
@@ -376,6 +365,7 @@ pub const BranchConfirmFork = branch_wire.BranchConfirmFork;
 pub const BranchCancelFork = branch_wire.BranchCancelFork;
 pub const ForkStatus = branch_wire.ForkStatus;
 pub const nav_wire = @import("nav_wire.zig");
+
 pub const Direction = nav_wire.Direction;
 pub const PlayArgs = nav_wire.PlayArgs;
 pub const NavQueryKind = nav_wire.NavQueryKind;
@@ -384,17 +374,15 @@ pub const NavQueryResult = nav_wire.NavQueryResult;
 pub const MarkerSetArgs = nav_wire.MarkerSetArgs;
 pub const FrameStatusResult = nav_wire.FrameStatusResult;
 pub const diff_wire = @import("diff_wire.zig");
+
 pub const DiffWire = diff_wire.DiffWire;
 pub const DiffArgs = diff_wire.DiffArgs;
 pub const metrics_wire = @import("metrics_wire.zig");
+
 pub const MetricsReport = metrics_wire.MetricsReport;
 /// Calls a client can hold unanswered at once before freeing slots.
 pub const pending_slots = 32;
 pub const Client = rpc.Client(pending_slots, max_payload);
 pub const Error = rpc.Error;
-pub fn encode(comptime T: type, value: T, out: []u8) ![]u8 {
-    return rpc.codec.encode(T, value, out);
-}
-pub fn decode(comptime T: type, bytes: []const u8) !T {
-    return rpc.codec.decode(T, bytes);
-}
+pub const encode = rpc.codec.encode;
+pub const decode = rpc.codec.decode;

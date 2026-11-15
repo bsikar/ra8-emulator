@@ -18,7 +18,10 @@ pub fn sections(board: *Board, out: Writer) !void {
                 .{ board.protection.unlocks, board.protection.bad_key },
             );
         } else {
-            try out.print("SYSC-PRCR: unlocks={d}, groups 0x{X:0>4}\n", .{ board.protection.unlocks, board.protection.groups });
+            try out.print(
+                "SYSC-PRCR: unlocks={d}, groups 0x{X:0>4}\n",
+                .{ board.protection.unlocks, board.protection.groups },
+            );
         }
     }
     try controlFile(board, out);

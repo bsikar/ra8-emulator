@@ -11,10 +11,10 @@
 //! two equal destination core registers are UNPREDICTABLE and stay
 //! unclaimed. VMOV.F16 (the Sn <-> Rt form with hw2 bits 11:8 = 1001)
 //! moves only the low halfword: Rt or Sn gets Zeros(16):value.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fp_regs = @import("regs.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const group: op.Group = .{ .name = "fp_move", .decode = decode, .oracle = false };
 

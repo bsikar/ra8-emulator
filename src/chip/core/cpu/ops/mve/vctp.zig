@@ -2,11 +2,11 @@
 //! elements of the given size set, ANDed with the predicate in force, over
 //! the beats this instruction runs; VPT then advances like any MVE
 //! instruction. The arithmetic is mve/tail.zig's vctp.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-const tail = @import("../../mve/all.zig").tail;
 const mve_beats = @import("beats.zig");
+const op = @import("../../op.zig");
+const tail = @import("../../mve/all.zig").tail;
 
 pub const encodings = struct {
     /// 0xF0sn 0xE801: s the element size, n Rn.

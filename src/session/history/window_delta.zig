@@ -13,6 +13,7 @@
 //! clock sections, because such a slot touched the board and is restored
 //! through the board's sections rather than by the core-only fast path.
 const std = @import("std");
+
 const file = @import("ra8_board").snapshot.run.file;
 
 const Allocator = std.mem.Allocator;
@@ -60,7 +61,9 @@ pub const Delta = struct {
         var at: usize = 0;
         for (self.runs) |run| {
             const span = image.items[run.offset..][0..run.len];
-            for (span, self.xor[at..][0..run.len]) |*byte, x| byte.* ^= x;
+            for (span, self.xor[at..][0..run.len]) |*byte, x| {
+                byte.* ^= x;
+            }
             at += run.len;
         }
     }
@@ -106,7 +109,9 @@ pub fn encodeRuns(allocator: Allocator, pre: []const u8, post: []const u8, base:
     var at: usize = 0;
     for (runs.items) |run| {
         const from = run.offset - base;
-        for (xor[at..][0..run.len], pre[from..][0..run.len], post[from..][0..run.len]) |*x, a, b| x.* = a ^ b;
+        for (xor[at..][0..run.len], pre[from..][0..run.len], post[from..][0..run.len]) |*x, a, b| {
+            x.* = a ^ b;
+        }
         at += run.len;
     }
     const owned = try runs.toOwnedSlice(allocator);

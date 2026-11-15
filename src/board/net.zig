@@ -4,12 +4,12 @@
 //! Which ports exist and where their PHYs answer is a board fact, so the
 //! wiring lives here rather than in the port model: the PHYs and the far end
 //! of the wire are board parts (src/components/eth_phy) this connects.
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const eth = @import("ra8_chip").periph.eth;
-const eth_queue = @import("ra8_chip").periph.eth.queue;
-const eth_phy = @import("ra8_components").eth_phy;
 const eth_peer = @import("ra8_components").eth_peer;
+const eth_phy = @import("ra8_components").eth_phy;
+const eth_queue = @import("ra8_chip").periph.eth.queue;
 const gateway = @import("ra8_chip").periph.eth.gateway;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const pdctr = @import("ra8_chip").periph.pdctr;
 const periph = @import("ra8_chip").periph.registry;
 const regs = @import("ra8_chip").periph.eth.regs;
@@ -62,10 +62,16 @@ pub const Rswitch = struct {
             try bus.add(port.macBlock());
         }
         for (&self.agents) |*agent| {
-            for (agent.blocks()) |block| try bus.add(block);
+            for (agent.blocks()) |block| {
+                try bus.add(block);
+            }
         }
-        for (self.forward.blocks()) |block| try bus.add(block);
-        for (self.open_regs.blocks()) |block| try bus.add(block);
+        for (self.forward.blocks()) |block| {
+            try bus.add(block);
+        }
+        for (self.open_regs.blocks()) |block| {
+            try bus.add(block);
+        }
         try bus.add(self.coma.block());
         try bus.add(self.gateway.modeBlock());
         try bus.add(self.gateway.arirmBlock());

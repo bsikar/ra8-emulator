@@ -7,9 +7,10 @@
 //! A write that bypassed the H1-H6 observation hooks fails immediately with
 //! `error.UnhookedWrite`.
 const std = @import("std");
+
 const Allocator = std.mem.Allocator;
-const store_mod = @import("ra8_chip").core.cpu.memory.store;
 const memmap = @import("ra8_chip").core.memmap;
+const store_mod = @import("ra8_chip").core.cpu.memory.store;
 const trail_mod = @import("trail.zig");
 
 pub const page_size: usize = 4096;
@@ -102,16 +103,18 @@ pub const ShadowOracle = struct {
         var ranges: std.ArrayList(MemoryRange) = .empty;
         defer ranges.deinit(self.allocator);
 
-        for (records) |r| switch (r) {
-            .bytes => |b| {
-                ranges.append(self.allocator, .{
-                    .base = b.base,
-                    .offset = b.offset,
-                    .len = b.pre.len,
-                }) catch return error.UnhookedWrite;
-            },
-            .barrier => {},
-        };
+        for (records) |r| {
+            switch (r) {
+                .bytes => |b| {
+                    ranges.append(self.allocator, .{
+                        .base = b.base,
+                        .offset = b.offset,
+                        .len = b.pre.len,
+                    }) catch return error.UnhookedWrite;
+                },
+                .barrier => {},
+            }
+        }
         try self.verifySlot(ranges.items);
     }
 };

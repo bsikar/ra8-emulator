@@ -9,7 +9,8 @@ const dtc = @import("ra8_chip").periph.dtc;
 pub fn section(unit: *const dtc.Dtc, out: anytype) !void {
     if (unit.quiet()) return;
     try out.print(
-        "DTC1 (CPU1): {d} activation(s), {d} unit(s) / {d} byte(s) moved, {d} descriptor(s) finished, DTCVBR 0x{X:0>8}\n",
+        "DTC1 (CPU1): {d} activation(s), {d} unit(s) / {d} byte(s) moved, {d} " ++
+            "descriptor(s) finished, DTCVBR 0x{X:0>8}\n",
         .{ unit.activations, unit.units, unit.bytes, unit.completions, unit.dtcvbr },
     );
     if (unit.suppressed != 0) {

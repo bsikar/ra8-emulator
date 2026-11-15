@@ -2,8 +2,8 @@
 //! in the spelling the parity digests pin. The byte reversals carry `.w`; RBIT and CLZ
 //! have no narrow form and print bare: `rev.w r0, r1`, `clz r0, r1`.
 const Instr = @import("../instr.zig").Instr;
-const text = @import("text.zig");
 const misc_wide = @import("../ops/misc_wide.zig");
+const text = @import("text.zig");
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = misc_wide.Fields.of(instr) orelse return;

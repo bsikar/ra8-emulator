@@ -16,10 +16,11 @@
 //! trip could change (FP state, banked registers, the exclusive monitor,
 //! active exceptions) is the watch's to check, as for a fixed trip.
 const std = @import("std");
+
 const bus = @import("../bus.zig");
-const td = @import("../trip_decode.zig");
 const cb = @import("bound.zig");
 const Regs = @import("../regs.zig").Regs;
+const td = @import("../trip_decode.zig");
 
 pub const max_steps: usize = 64;
 
@@ -80,7 +81,9 @@ pub const Recorder = struct {
         if (self.broken or self.heads == 0 or regs.xpsr != self.xpsr) return .refuse;
         const now = all(regs);
         var deltas: [16]i64 = undefined;
-        for (&deltas, now, self.head) |*d, a, b| d.* = signed(a -% b);
+        for (&deltas, now, self.head) |*d, a, b| {
+            d.* = signed(a -% b);
+        }
         var moved: [cb.max_words]cb.Word = undefined;
         for (self.words[0..self.used], 0..) |*one, k| {
             const value = word(memory, one.address) orelse return .refuse;
@@ -111,7 +114,9 @@ pub const Recorder = struct {
     /// `atHead` just saw. SP, LR and PC never move (counted_bound refuses).
     pub fn apply(self: *Recorder, regs: *Regs, memory: bus.Bus, trips: u64) bus.Error!void {
         const n: u32 = @truncate(trips);
-        for (0..13) |r| regs.low[r] +%= unsigned(self.deltas[r]) *% n;
+        for (0..13) |r| {
+            regs.low[r] +%= unsigned(self.deltas[r]) *% n;
+        }
         for (self.words[0..self.used]) |*one| {
             one.at_head +%= unsigned(one.delta) *% n;
             var bytes: [4]u8 = undefined;
@@ -124,7 +129,9 @@ pub const Recorder = struct {
 
 fn all(regs: *const Regs) [16]u32 {
     var out: [16]u32 = undefined;
-    for (&out, 0..) |*one, r| one.* = regs.get(@intCast(r));
+    for (&out, 0..) |*one, r| {
+        one.* = regs.get(@intCast(r));
+    }
     return out;
 }
 

@@ -2,9 +2,11 @@
 //! before reuse. Linux synchronizes the containing directory after publication.
 //! Windows uses a no-replace write-through move, then flushes the final file's
 //! data and metadata. Neither platform bypasses the storage device's contract.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const history = @import("ra8_host").history;
+
 const storage = history.storage;
 const reuse = @import("ra8_session").history_object_reuse;
 
@@ -27,7 +29,13 @@ pub const Options = struct {
     probe: ?history.move.probe.Probe = null,
 };
 
-pub fn putSession(gpa: std.mem.Allocator, session: *history.session.Session, name: []const u8, kind: reuse.Kind, bytes: []const u8) !void {
+pub fn putSession(
+    gpa: std.mem.Allocator,
+    session: *history.session.Session,
+    name: []const u8,
+    kind: reuse.Kind,
+    bytes: []const u8,
+) !void {
     const store = storage.Store.from(session);
     var syncer: SessionDirSync = .{ .session = session };
     var gen: RandomTemp = .{ .io = session.base.io };
@@ -43,11 +51,26 @@ pub fn put(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind:
     return putWith(gpa, store, name, kind, bytes, .{});
 }
 
-pub fn putWith(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind: reuse.Kind, bytes: []const u8, options: Options) !void {
+pub fn putWith(
+    gpa: std.mem.Allocator,
+    store: storage.Store,
+    name: []const u8,
+    kind: reuse.Kind,
+    bytes: []const u8,
+    options: Options,
+) !void {
     return putFull(gpa, store, name, kind, bytes, options, null);
 }
 
-fn putFull(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind: reuse.Kind, bytes: []const u8, options: Options, check: ?*SessionIdentity) !void {
+fn putFull(
+    gpa: std.mem.Allocator,
+    store: storage.Store,
+    name: []const u8,
+    kind: reuse.Kind,
+    bytes: []const u8,
+    options: Options,
+    check: ?*SessionIdentity,
+) !void {
     _ = try history.paths.leaf(.objects, name);
     var temp_buf: [history.name.limits.component]u8 = undefined;
     var opened = try createTemp(store, name, &temp_buf, options.temp_gen, check);
@@ -85,11 +108,24 @@ fn putFull(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind:
     try existingWith(gpa, store, name, kind, bytes, options.dir_sync);
 }
 
-pub fn existing(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind: reuse.Kind, bytes: []const u8) !void {
+pub fn existing(
+    gpa: std.mem.Allocator,
+    store: storage.Store,
+    name: []const u8,
+    kind: reuse.Kind,
+    bytes: []const u8,
+) !void {
     return existingWith(gpa, store, name, kind, bytes, null);
 }
 
-pub fn existingWith(gpa: std.mem.Allocator, store: storage.Store, name: []const u8, kind: reuse.Kind, bytes: []const u8, dir_sync: ?DirSync) !void {
+pub fn existingWith(
+    gpa: std.mem.Allocator,
+    store: storage.Store,
+    name: []const u8,
+    kind: reuse.Kind,
+    bytes: []const u8,
+    dir_sync: ?DirSync,
+) !void {
     const file = try store.vtable.open(store.context, .objects, name, .update);
     defer file.vtable.close(file.context);
     if (try file.vtable.length(file.context) != bytes.len) return error.ObjectConflict;
@@ -119,7 +155,13 @@ const OpenedTemp = struct {
     file: ?storage.ByteFile,
 };
 
-fn createTemp(store: storage.Store, final: []const u8, buf: *[history.name.limits.component]u8, temp_gen: ?TempGen, check: ?*SessionIdentity) !OpenedTemp {
+fn createTemp(
+    store: storage.Store,
+    final: []const u8,
+    buf: *[history.name.limits.component]u8,
+    temp_gen: ?TempGen,
+    check: ?*SessionIdentity,
+) !OpenedTemp {
     var fallback: FallbackTemp = .{};
     var attempt: usize = 0;
     while (attempt < max_attempts) : (attempt += 1) {
@@ -128,7 +170,8 @@ fn createTemp(store: storage.Store, final: []const u8, buf: *[history.name.limit
         else
             try fallback.next(buf);
         _ = try history.paths.leaf(.objects, candidate);
-        if (!std.mem.startsWith(u8, candidate, prefix) or std.ascii.eqlIgnoreCase(candidate, final)) return error.BadName;
+        if (!std.mem.startsWith(u8, candidate, prefix) or
+            std.ascii.eqlIgnoreCase(candidate, final)) return error.BadName;
         const file = store.vtable.open(store.context, .objects, candidate, .create) catch |err| switch (err) {
             error.PathAlreadyExists => continue,
             else => return err,
@@ -161,7 +204,13 @@ fn cleanupTemp(store: storage.Store, temp_name: []const u8, check: ?*SessionIden
     try store.vtable.remove(store.context, .objects, temp_name);
 }
 
-fn reachObjectsProbe(probe: history.move.probe.Probe, phase: history.move.probe.Phase, check: ?*SessionIdentity, from: []const u8, to: []const u8) !void {
+fn reachObjectsProbe(
+    probe: history.move.probe.Probe,
+    phase: history.move.probe.Phase,
+    check: ?*SessionIdentity,
+    from: []const u8,
+    to: []const u8,
+) !void {
     if (check) |c| {
         var dir = try history.paths.area(c.session, .objects);
         defer dir.close(c.session.base.io);
