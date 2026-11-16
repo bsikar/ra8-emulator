@@ -278,29 +278,38 @@ fn reclaimPosix(io: std.Io, path: []const u8) error{AddressInUse}!void {
     dir.deleteFile(io, path) catch return error.AddressInUse;
 }
 
-/// Only definite stale endpoints permit reclamation. Pending connects and
-/// permission/resource errors leave the path alone, including full backlogs.
+/// Only definite stale endpoints permit reclamation. Darwin refuses stream
+/// connections when a live backlog fills, so confirm refusal with a datagram
+/// probe: a live stream endpoint reports PROTOTYPE regardless of backlog.
 fn stalePosix(path: []const u8, kind: std.Io.File.Kind) bool {
-    const fd = std.c.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0);
-    if (fd < 0) return false;
-    defer _ = std.c.close(fd);
-    const flags = std.c.fcntl(fd, std.c.F.GETFL);
-    if (flags < 0) return false;
-    const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
-    if (std.c.fcntl(fd, std.c.F.SETFL, flags | nonblock) < 0) return false;
-    var addr: std.posix.sockaddr.un = .{ .family = std.posix.AF.UNIX, .path = @splat(0) };
-    if (path.len >= addr.path.len) return false;
-    @memcpy(addr.path[0..path.len], path);
-    const len: std.posix.socklen_t = @intCast(@offsetOf(std.posix.sockaddr.un, "path") + path.len + 1);
-    const rc = std.c.connect(fd, @ptrCast(&addr), len);
-    if (rc == 0) return false;
-    // Darwin returns NOTSOCK for regular files. std's Unix connect treats it
-    // as a programmer bug, including when a socket becomes a file mid-probe.
-    return switch (std.posix.errno(rc)) {
+    const stream = probePosix(path, std.posix.SOCK.STREAM) orelse return false;
+    return switch (stream) {
         .NOTSOCK => kind == .file,
-        .CONNREFUSED => true,
+        .CONNREFUSED => switch (probePosix(path, std.posix.SOCK.DGRAM) orelse return false) {
+            .NOTSOCK => kind == .file,
+            .CONNREFUSED => true,
+            else => false,
+        },
         else => false,
     };
+}
+
+/// Read the kernel result directly: Darwin's NOTSOCK can describe a pathname
+/// changing type, rather than a bad descriptor. Setup failures are inconclusive.
+fn probePosix(path: []const u8, socket_type: u32) ?std.posix.E {
+    const fd = std.c.socket(std.posix.AF.UNIX, socket_type, 0);
+    if (fd < 0) return null;
+    defer _ = std.c.close(fd);
+    const flags = std.c.fcntl(fd, std.c.F.GETFL);
+    if (flags < 0) return null;
+    const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
+    if (std.c.fcntl(fd, std.c.F.SETFL, flags | nonblock) < 0) return null;
+    if (std.c.fcntl(fd, std.c.F.SETFD, @as(c_int, std.c.FD_CLOEXEC)) < 0) return null;
+    var addr: std.posix.sockaddr.un = .{ .family = std.posix.AF.UNIX, .path = @splat(0) };
+    if (path.len >= addr.path.len) return null;
+    @memcpy(addr.path[0..path.len], path);
+    const len: std.posix.socklen_t = @intCast(@offsetOf(std.posix.sockaddr.un, "path") + path.len + 1);
+    return std.posix.errno(std.c.connect(fd, @ptrCast(&addr), len));
 }
 
 fn isLiveListenerWindows(io: std.Io, addr: *const win.SockaddrUn) bool {
