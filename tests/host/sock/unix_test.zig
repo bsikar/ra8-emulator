@@ -275,3 +275,63 @@ test "unix sendAll surfaces BrokenPipe when peer closes before write" {
     }
     try std.testing.expect(saw_broken);
 }
+
+test "unix.Listener.bind preserves a live listener whose connection backlog is full" {
+    if (on_windows) return error.SkipZigTest;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testSocketPath(std.testing.allocator, &tmp.sub_path, "full.sock");
+    defer std.testing.allocator.free(path);
+    const address = try std.Io.net.UnixAddress.init(path);
+    var listener = try address.listen(io, .{ .kernel_backlog = 1 });
+    defer listener.deinit(io);
+    defer std.Io.Dir.cwd().deleteFile(io, path) catch {};
+    var native: std.posix.sockaddr.un = .{ .path = @splat(0) };
+    @memcpy(native.path[0..path.len], path);
+    const length: std.posix.socklen_t = @intCast(@offsetOf(std.posix.sockaddr.un, "path") + path.len + 1);
+    var clients: [8]sock_unix.Handle = undefined;
+    var count: usize = 0;
+    defer for (clients[0..count]) |fd| ra8.host.sock.close(fd);
+    var pending = false;
+    for (&clients) |*fd| {
+        const opened = std.posix.system.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0);
+        try std.testing.expectEqual(std.posix.E.SUCCESS, std.posix.errno(opened));
+        fd.* = @intCast(opened);
+        count += 1;
+        const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
+        try std.testing.expect(std.c.fcntl(fd.*, std.c.F.SETFL, nonblock) == 0);
+        const result = std.posix.errno(std.posix.system.connect(fd.*, @ptrCast(&native), length));
+        const full = result == .AGAIN or result == .INPROGRESS or
+            (builtin.os.tag == .macos and result == .CONNREFUSED);
+        try std.testing.expect(result == .SUCCESS or full);
+        pending = pending or full;
+    }
+    try std.testing.expect(pending);
+    const before = try std.Io.Dir.cwd().statFile(io, path, .{});
+    try std.testing.expectError(error.AddressInUse, sock_unix.Listener.bind(io, path));
+    const after = try std.Io.Dir.cwd().statFile(io, path, .{});
+    try std.testing.expectEqual(before.inode, after.inode);
+}
+
+test "unix.Listener.bind preserves a different Unix socket protocol at the same path" {
+    if (on_windows) return error.SkipZigTest;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const path = try testSocketPath(std.testing.allocator, &tmp.sub_path, "dgram.sock");
+    defer std.testing.allocator.free(path);
+    const fd = std.posix.system.socket(std.posix.AF.UNIX, std.posix.SOCK.DGRAM, 0);
+    if (std.posix.errno(fd) != .SUCCESS) return error.SocketUnavailable;
+    defer ra8.host.sock.close(@intCast(fd));
+    var address: std.posix.sockaddr.un = .{ .path = @splat(0) };
+    @memcpy(address.path[0..path.len], path);
+    const length: std.posix.socklen_t = @intCast(@offsetOf(std.posix.sockaddr.un, "path") + path.len + 1);
+    try std.testing.expectEqual(std.posix.E.SUCCESS, std.posix.errno(std.posix.system.bind(@intCast(fd), @ptrCast(&address), length)));
+    defer std.Io.Dir.cwd().deleteFile(io, path) catch {};
+    const before = try std.Io.Dir.cwd().statFile(io, path, .{ .follow_symlinks = false });
+    try std.testing.expectError(error.AddressInUse, sock_unix.Listener.bind(io, path));
+    const after = try std.Io.Dir.cwd().statFile(io, path, .{ .follow_symlinks = false });
+    try std.testing.expectEqual(before.inode, after.inode);
+    try std.testing.expectEqual(before.kind, after.kind);
+}
