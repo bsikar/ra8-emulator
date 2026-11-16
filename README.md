@@ -615,6 +615,11 @@ multi-board operation evidence. Fixture/loopback tests establish only backend
 routing, stale-selection rejection and connection cleanup. No physical flash,
 reset, NPU execution or real multi-board qualification is claimed here.
 
+Managed Zig setup uses `ra8_emulator toolchain setup HOST TARGET --cache-root ABS --download`,
+or `--archive ABS --offline` for an offline kit. `toolchain doctor HOST TARGET --cache-root ABS --offline`
+checks an installation. Builds select it with `project build ... --toolchain-cache ABS` or
+`serve --workspace DIR --build-toolchain-cache ABS`; builds never install or download a compiler.
+
 Runnable images and their source are in [examples/](examples/). Build them with
 `make -C examples`, or use `IMAGES='gpio/blink'` to select one. Firmware examples
 use `make -C examples firmware APP=uart FW=/path/to/ra8-firmware ARM_BIN=/path/to/arm-gnu/bin`.

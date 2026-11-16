@@ -33,7 +33,7 @@ def command(argv, cwd, environment, output, case, deadline):
         child = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
                                  stdout=out, stderr=err, start_new_session=os.name != "nt")
         try:
-            child.wait(timeout=max(0.001, min(180, deadline-time.monotonic())))
+            child.wait(timeout=max(0.001, deadline - time.monotonic()))
         except subprocess.TimeoutExpired:
             forced = True
             if os.name == "nt":

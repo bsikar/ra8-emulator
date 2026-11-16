@@ -9,6 +9,7 @@ const request = @import("request.zig");
 const source = @import("source.zig");
 const Store = @import("store.zig").Store;
 const store_file = @import("store.zig");
+const tool_digest = @import("../toolchain/digest.zig");
 
 pub const Job = struct {
     arena: std.heap.ArenaAllocator,
@@ -17,6 +18,8 @@ pub const Job = struct {
     compiler: []const u8,
     recipe: request.Recipe,
     id: u64,
+    expected_version: ?[]const u8 = null,
+    admission: ?request.Admission = null,
     thread: ?std.Thread = null,
     cancel: std.atomic.Value(bool) = .init(false),
     done: std.atomic.Value(bool) = .init(false),
@@ -64,20 +67,31 @@ pub const Job = struct {
         self.done.store(true, .release);
     }
 
+    fn verifyCompiler(self: *Job, allocator: std.mem.Allocator, record: *Record) !void {
+        if (self.admission) |admission| try admission.check(admission.context);
+        const compiler_file = try std.Io.Dir.openFileAbsolute(self.io, self.compiler, .{ .follow_symlinks = false });
+        defer compiler_file.close(self.io);
+        if ((try compiler_file.stat(self.io)).kind != .file) return error.InvalidCompiler;
+        const compiler_digest = try tool_digest.file(self.io, compiler_file, 512_000_000);
+        record.compiler_sha256 = try allocator.dupe(u8, &compiler_digest);
+    }
+
     fn perform(self: *Job, record: *Record, store: *?Store) !void {
         const allocator = self.arena.allocator();
-        const budget: request.Budget = .{
-            .io = self.io,
-            .cancel = &self.cancel,
-            .deadline = std.Io.Clock.awake.now(self.io).nanoseconds + @as(i96, self.recipe.timeout_ms) * 1_000_000,
-        };
-        try budget.check();
+        if (self.cancel.load(.acquire)) return error.BuildCanceled;
         store.* = try Store.open(self.root, self.io);
         const saved = &store.*.?;
         record.directory = try allocator.dupe(u8, &saved.relative);
         record.host = try store_file.hostname(allocator);
         var root_buffer: [4096]u8 = undefined;
         const root_path = root_buffer[0..try self.root.realPath(self.io, &root_buffer)];
+        try self.verifyCompiler(allocator, record);
+        const budget: request.Budget = .{
+            .io = self.io,
+            .cancel = &self.cancel,
+            .deadline = std.Io.Clock.awake.now(self.io).nanoseconds + @as(i96, self.recipe.timeout_ms) * 1_000_000,
+        };
+        try budget.check();
         var version: std.ArrayList(u8) = .empty;
         defer version.deinit(std.heap.page_allocator);
         if (try execute.run(
@@ -89,6 +103,9 @@ pub const Job = struct {
             &record.cleanup,
         ) != 0) return error.CompilerVersionFailed;
         record.compiler_version = try allocator.dupe(u8, std.mem.trim(u8, version.items, "\r\n "));
+        if (self.expected_version) |expected| {
+            if (!std.mem.eql(u8, record.compiler_version, expected)) return error.CompilerVersionMismatch;
+        }
         const revision = try source.revision(self.root, budget);
         record.source_sha256 = try allocator.dupe(u8, &revision);
         const prefix = try std.fmt.allocPrint(allocator, "{s}/out", .{saved.relative});
@@ -109,6 +126,7 @@ pub const Job = struct {
             .stdout = stdout,
             .stderr = stderr,
         };
+        try budget.check();
         record.exit_code = try execute.run(argv.items, self.root, budget, &output, null, &record.cleanup);
         if (record.exit_code != 0) return error.CompilerFailed;
         const after = try source.revision(self.root, budget);
@@ -134,6 +152,7 @@ const Record = struct {
     platform: []const u8 = @tagName(builtin.os.tag) ++ "-" ++ @tagName(builtin.cpu.arch),
     compiler: []const u8,
     compiler_version: []const u8 = "",
+    compiler_sha256: []const u8 = "",
     step: []const u8,
     options: []const []const u8,
     argv: []const []const u8 = &.{},

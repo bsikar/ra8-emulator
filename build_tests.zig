@@ -32,6 +32,7 @@ pub fn compile(b: *std.Build, name: []const u8, root: []const u8, target: std.Bu
 /// guest images built from Zig source ride along (RA8EMU-955).
 fn testPaths(b: *std.Build, tests: *std.Build.Step.Compile, exe: *std.Build.Step.Compile, move_peer: *std.Build.Step.Compile, lifecycle_peer: *std.Build.Step.Compile) void {
     const paths = b.addOptions();
+    paths.addOption([]const u8, "compiler", b.graph.zig_exe);
     paths.addOptionPath("emulator", exe.getEmittedBin());
     paths.addOptionPath("host_move_peer", move_peer.getEmittedBin());
     paths.addOptionPath("host_lifecycle_peer", lifecycle_peer.getEmittedBin());
