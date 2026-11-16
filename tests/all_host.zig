@@ -27,6 +27,7 @@ test {
     _ = @import("interfaces/rpc/workspace_watch_test.zig");
     _ = @import("interfaces/rpc/workspace_test.zig");
     _ = @import("interfaces/cli/serve/main_test.zig");
+    _ = @import("interfaces/cli/serve/flags_test.zig");
     _ = @import("interfaces/cli/dap_test.zig");
     _ = @import("session/harness/metrics_test.zig");
     _ = @import("interfaces/gui/device_metrics_pane_test.zig");

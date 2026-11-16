@@ -9,6 +9,7 @@ pub const ParsedFlags = struct {
     targets: ?[]const u8 = null,
     artifacts_root: ?[]const u8 = null,
     build_zig: ?[]const u8 = null,
+    build_toolchain_cache: ?[]const u8 = null,
     workspace: ?[]const u8 = null,
     folded: bool = false,
     allow_state: bool = false,
@@ -32,7 +33,8 @@ const FlagStep = enum { taken, stop, bad };
 
 pub fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
     inline for (.{
-        parseTargets, parseAccess, parseInputs, parseCardHistory, parseCapture, parseHistory, parseCameraBudget,
+        parseTargets, parseBuildCache, parseAccess,       parseInputs, parseCardHistory,
+        parseCapture, parseHistory,    parseCameraBudget,
     }) |parseOne| {
         const step = parseOne(flags, argv, at);
         if (step != .stop) return step;
@@ -146,5 +148,14 @@ fn parseTargets(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagS
     at.* += 1;
     if (argv[at.*].len == 0) return .bad;
     flags.targets = argv[at.*];
+    return .taken;
+}
+
+fn parseBuildCache(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
+    if (!std.mem.eql(u8, argv[at.*], "--build-toolchain-cache")) return .stop;
+    if (flags.build_toolchain_cache != null or at.* + 1 >= argv.len) return .bad;
+    at.* += 1;
+    host.build.Runner.validateCompiler(argv[at.*]) catch return .bad;
+    flags.build_toolchain_cache = argv[at.*];
     return .taken;
 }

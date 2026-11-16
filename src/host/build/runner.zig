@@ -15,6 +15,9 @@ pub const Runner = struct {
     compiler: []const u8,
     next_id: u64 = 1,
     job: ?*Job = null,
+    expected_version: ?[]const u8 = null,
+    /// Admission runs before every spawn; managed toolchains never trust a stale path.
+    admission: ?request.Admission = null,
 
     pub fn init(io: std.Io, root: std.Io.Dir, compiler: []const u8) !Runner {
         if (!process.supported) return error.UnsupportedPlatform;
@@ -48,6 +51,8 @@ pub const Runner = struct {
             .compiler = compiler,
             .recipe = recipe,
             .id = self.next_id,
+            .expected_version = self.expected_version,
+            .admission = self.admission,
         };
         job.thread = try std.Thread.spawn(.{}, Job.run, .{job});
         self.clear();

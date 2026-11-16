@@ -1,0 +1,184 @@
+name: managed-toolchain-provisioning
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  provisioning:
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+
+      - name: Install verified Zig 0.17.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $qualification = if ($IsWindows) {
+            Join-Path $env:LOCALAPPDATA ('ra8-provision-' + $env:GITHUB_RUN_ID + '-' + $env:GITHUB_RUN_ATTEMPT)
+          } else { $env:RUNNER_TEMP }
+          "RA8_PROVISION_ROOT=$qualification" | Add-Content -Path $env:GITHUB_ENV
+          $platform = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $expected = @{
+            'x86_64-windows' = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+            'x86_64-linux' = '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+            'aarch64-macos' = 'b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a'
+            'x86_64-macos' = '4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6'
+          }[$platform]
+          $archive = Join-Path $env:RUNNER_TEMP "provision-zig.$extension"
+          curl -fsSL --retry 3 -o $archive "https://ziglang.org/download/0.17.0/zig-$platform-0.17.0.$extension"
+          if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Zig SHA256 mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'provision-zig'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          tar -xf $archive -C $destination
+          if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' }
+          Join-Path $destination "zig-$platform-0.17.0" | Add-Content -Path $env:GITHUB_PATH
+
+      - name: Toolchain provisioning and ownership unit tests
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          zig build ra8_host_tests -j1 '-Dtest-filter=host.toolchain'
+          if ($LASTEXITCODE -ne 0) { throw 'Toolchain unit tests failed' }
+
+      - name: Build emulator
+        shell: pwsh
+        run: |
+          zig build -j1 -Doptimize=ReleaseFast
+          if ($LASTEXITCODE -ne 0) { throw 'Emulator build failed' }
+
+      - name: Baseline installation and managed CLI builds
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          $hostName = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          python -B tools/provision_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --host $hostName --phase baseline --archive "$env:RUNNER_TEMP/provision-zig.$extension" --output "$env:RA8_PROVISION_ROOT/provision-evidence" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Managed provisioning acceptance failed' }
+
+      - name: Managed RPC and explicit compiler override builds
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          $hostName = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          python -B tools/provision_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --host $hostName --phase rpc --prior-evidence "$env:RA8_PROVISION_ROOT/provision-evidence" --output "$env:RA8_PROVISION_ROOT/provision-rpc-evidence" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Managed RPC and override acceptance failed' }
+
+      - name: Integrity concurrency and interrupted installation
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          $hostName = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          python -B tools/provision_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --host $hostName --phase integrity --prior-evidence "$env:RA8_PROVISION_ROOT/provision-evidence" --archive "$env:RUNNER_TEMP/provision-zig.$extension" --output "$env:RA8_PROVISION_ROOT/provision-integrity-evidence" --timeout 600
+          if ($LASTEXITCODE -ne 0) { throw 'Managed integrity and interrupted setup acceptance failed' }
+
+      - name: Explicit production download and installation
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $hostName = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $result = & "zig-out/bin/ra8_emulator$suffix" toolchain setup $hostName ra8d2 --cache-root "$env:RA8_PROVISION_ROOT/download-managed-cache" --download
+          if ($LASTEXITCODE -ne 0) { throw 'Production download/setup failed' }
+          $result | Set-Content "$env:RA8_PROVISION_ROOT/provision-evidence/download-setup.json"
+          if (-not ($result | ConvertFrom-Json).compiler.network_used) { throw 'Expected explicit network use' }
+
+      - name: Offline builds in a Linux network namespace
+        if: runner.os == 'Linux'
+        shell: bash
+        timeout-minutes: 12
+        run: |
+          sudo unshare --net -- runuser -u "$(id -un)" -- "$(command -v python)" -B tools/provision_smoke/run.py \
+            --emulator "$PWD/zig-out/bin/ra8_emulator" --host x86_64-linux \
+            --offline-replay "$RA8_PROVISION_ROOT/provision-evidence" \
+            --output "$RA8_PROVISION_ROOT/provision-offline-evidence" --timeout 600
+
+      - name: Offline builds with Windows compiler networking blocked
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 12
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $backend = (Resolve-Path 'zig-out/bin/ra8_emulator.exe').Path
+          $cache = Join-Path $env:RA8_PROVISION_ROOT 'provision-evidence/managed private cache with spaces'
+          $doctor = & $backend toolchain doctor x86_64-windows ra8d2 --cache-root $cache --offline
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot identify admitted compiler' }
+          $compiler = (Resolve-Path ($doctor | ConvertFrom-Json).compiler.compiler_path).Path
+          $python = (Get-Command python).Source
+          $profiles = Get-NetFirewallProfile
+          $rules = @()
+          try {
+            Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
+            foreach ($program in @($backend, $compiler, $python)) {
+              $name = 'ra8-offline-' + [guid]::NewGuid().ToString('N')
+              New-NetFirewallRule -Name $name -DisplayName $name -Direction Outbound -Action Block -Program $program -Profile Any | Out-Null
+              $rules += $name
+            }
+            Get-NetFirewallRule -Name $rules | Format-List Name,Enabled,Direction,Action
+            python -B tools/provision_smoke/run.py --emulator $backend --host x86_64-windows --offline-replay "$env:RA8_PROVISION_ROOT/provision-evidence" --output "$env:RA8_PROVISION_ROOT/provision-offline-evidence" --timeout 600
+            if ($LASTEXITCODE -ne 0) { throw 'Network-blocked offline replay failed' }
+          } finally {
+            foreach ($name in $rules) { Remove-NetFirewallRule -Name $name }
+            foreach ($profile in $profiles) { Set-NetFirewallProfile -Profile $profile.Name -Enabled $profile.Enabled }
+          }
+
+      - name: Preserve provisioning evidence
+        if: always() && env.RA8_PROVISION_ROOT != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: managed-provisioning-${{ matrix.os }}
+          include-hidden-files: true
+          path: |
+            ${{ env.RA8_PROVISION_ROOT }}/provision-evidence/**/*.json
+            ${{ env.RA8_PROVISION_ROOT }}/provision-evidence/**/*.jsonl
+            ${{ env.RA8_PROVISION_ROOT }}/provision-evidence/**/*.log
+            ${{ env.RA8_PROVISION_ROOT }}/provision-evidence/**/*.elf
+            ${{ env.RA8_PROVISION_ROOT }}/provision-rpc-evidence/**/*.json
+            ${{ env.RA8_PROVISION_ROOT }}/provision-rpc-evidence/**/*.jsonl
+            ${{ env.RA8_PROVISION_ROOT }}/provision-rpc-evidence/**/*.log
+            ${{ env.RA8_PROVISION_ROOT }}/provision-rpc-evidence/**/*.elf
+            ${{ env.RA8_PROVISION_ROOT }}/provision-integrity-evidence/**/*.json
+            ${{ env.RA8_PROVISION_ROOT }}/provision-integrity-evidence/**/*.jsonl
+            ${{ env.RA8_PROVISION_ROOT }}/provision-integrity-evidence/**/*.log
+            ${{ env.RA8_PROVISION_ROOT }}/provision-integrity-evidence/**/*.elf
+            ${{ env.RA8_PROVISION_ROOT }}/provision-offline-evidence/**/*.json
+            ${{ env.RA8_PROVISION_ROOT }}/provision-offline-evidence/**/*.jsonl
+            ${{ env.RA8_PROVISION_ROOT }}/provision-offline-evidence/**/*.log
+            ${{ env.RA8_PROVISION_ROOT }}/provision-offline-evidence/**/*.elf
+          if-no-files-found: warn
+          retention-days: 14

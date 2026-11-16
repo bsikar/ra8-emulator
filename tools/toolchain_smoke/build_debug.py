@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import time
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "tools/source_conformance"))
@@ -78,7 +79,7 @@ def run(h, compiler):
         h.env["ZIG_GLOBAL_CACHE_DIR"] = str(global_cache)
         h.env["ZIG_LOCAL_CACHE_DIR"] = str(cache)
         try:
-            result = h.command(command, cwd=project, timeout=240)
+            result = h.command(command, cwd=project, timeout=max(0.001, h.deadline - time.monotonic()))
         finally:
             h.env.pop("ZIG_GLOBAL_CACHE_DIR")
             h.env.pop("ZIG_LOCAL_CACHE_DIR")

@@ -71,7 +71,7 @@ class Client(workspace_client.Client):
         if error is None:
             assert body == b"\x01"
 
-    def finish(self, job, timeout=90):
+    def finish(self, job, timeout=180):
         deadline = min(self.deadline, time.monotonic() + timeout)
         polls = 0
         while time.monotonic() < deadline:

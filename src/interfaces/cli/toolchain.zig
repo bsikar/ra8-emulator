@@ -2,6 +2,7 @@
 const std = @import("std");
 
 const plan = @import("ra8_host").toolchain.plan;
+const setup = @import("toolchain_setup.zig");
 
 const usage = "usage: ra8_emulator toolchain plan HOST TARGET [--project-zig PATH] " ++
     "[--backend-zig PATH] [--cache-root PATH] [--offline]\n";
@@ -33,6 +34,7 @@ pub fn parse(argv: []const []const u8) !plan.Request {
 }
 
 pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+    if (argv.len >= 3 and !std.mem.eql(u8, argv[2], "plan")) return setup.run(allocator, io, argv);
     const request = parse(argv) catch {
         try std.Io.File.stderr().writeStreamingAll(io, usage);
         return 2;

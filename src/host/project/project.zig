@@ -5,14 +5,22 @@ const build = @import("../build/root.zig");
 const config = @import("config.zig");
 const files = @import("files.zig");
 const handoff = @import("handoff.zig");
+const planning = @import("../toolchain/plan.zig");
+const provision = @import("../toolchain/provision.zig");
 const receipt = @import("receipt.zig");
 const sources = @import("sources.zig");
 const Workspace = @import("../workspace/workspace.zig").Workspace;
+
+const Selected = struct { path: []const u8, version: []const u8 };
 
 pub const Project = struct {
     allocator: std.mem.Allocator,
     base: *Workspace,
     backend_compiler: []const u8,
+    toolchain_cache: ?[]const u8 = null,
+    managed: ?provision.Result = null,
+    override_path: ?[]u8 = null,
+    admitted_fresh: bool = false,
     parsed: ?std.json.Parsed(config.Config) = null,
     workspace: ?Workspace = null,
     runner: ?build.Runner = null,
@@ -37,11 +45,11 @@ pub const Project = struct {
         errdefer self.allocator.free(root_path);
         const config_name = try self.allocator.dupe(u8, name);
         errdefer self.allocator.free(config_name);
-        const compiler = parsed.value.compiler orelse if (self.backend_compiler.len != 0)
-            self.backend_compiler
-        else
-            return error.CompilerRequired;
-        const runner = try build.Runner.init(self.base.io, dir, compiler);
+        const selected = try self.chooseCompiler(parsed.value);
+        errdefer self.releaseCompiler();
+        var runner = try build.Runner.init(self.base.io, dir, selected.path);
+        runner.expected_version = selected.version;
+        if (self.managed != null) runner.admission = .{ .context = self, .check = checkManaged };
         self.parsed = parsed;
         self.workspace = .{ .dir = dir, .io = self.base.io };
         self.root_path = root_path;
@@ -64,6 +72,59 @@ pub const Project = struct {
         self.latest_recipe = null;
         self.latest_id = 0;
         self.bound_source = null;
+        self.releaseCompiler();
+    }
+
+    fn chooseCompiler(self: *Project, value: config.Config) !Selected {
+        const selected = try planning.make(self.allocator, .{
+            .host = try provision.nativeHost(),
+            .target = value.target,
+            .project_zig = value.compiler,
+            .backend_zig = if (self.backend_compiler.len == 0) null else self.backend_compiler,
+            .cache_root = self.toolchain_cache,
+            .offline = true,
+        });
+        defer if (selected.compiler_source == .managed_required and selected.compiler_path.len != 0) {
+            self.allocator.free(selected.compiler_path);
+        };
+        if (selected.compiler_source == .managed_required) {
+            const cache = self.toolchain_cache orelse return error.ManagedCacheRequired;
+            try provision.separate(self.base.io, self.base.dir, cache);
+            self.managed = try provision.admit(self.allocator, self.base.io, cache, selected.pinned_baseline);
+            self.admitted_fresh = true;
+            return .{ .path = self.managed.?.compiler_path, .version = selected.pinned_baseline.version };
+        }
+        var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
+        const resolved = if (std.Io.Dir.cwd().realPathFile(self.base.io, selected.compiler_path, &path_buffer)) |n|
+            path_buffer[0..n]
+        else |_|
+            selected.compiler_path;
+        self.override_path = try self.allocator.dupe(u8, resolved);
+        return .{ .path = self.override_path.?, .version = selected.pinned_baseline.version };
+    }
+
+    fn releaseCompiler(self: *Project) void {
+        if (self.managed) |held| self.allocator.free(held.compiler_path);
+        if (self.override_path) |path| self.allocator.free(path);
+        self.managed = null;
+        self.override_path = null;
+        self.admitted_fresh = false;
+    }
+
+    fn checkManaged(context: *anyopaque) !void {
+        const self: *Project = @ptrCast(@alignCast(context));
+        if (@atomicRmw(bool, &self.admitted_fresh, .Xchg, false, .acq_rel)) return;
+        const result = try provision.resolve(std.heap.page_allocator, self.base.io, .{
+            .host = try provision.nativeHost(),
+            .target = self.parsed.?.value.target,
+            .project_zig = self.parsed.?.value.compiler,
+            .backend_zig = if (self.backend_compiler.len == 0) null else self.backend_compiler,
+            .cache_root = self.toolchain_cache,
+            .offline = true,
+        });
+        defer std.heap.page_allocator.free(result.compiler_path);
+        if (!std.mem.eql(u8, result.compiler_path, self.managed.?.compiler_path) or
+            !std.mem.eql(u8, &result.compiler_sha256, &self.managed.?.compiler_sha256)) return error.CompilerChanged;
     }
 
     pub fn start(self: *Project, name: []const u8) !u64 {

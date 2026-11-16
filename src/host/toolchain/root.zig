@@ -1,4 +1,10 @@
+pub const archive = @import("archive.zig");
 pub const artifact = @import("artifact.zig");
+pub const digest = @import("digest.zig");
+pub const ownership = @import("ownership.zig");
+pub const paths = @import("paths.zig");
 pub const plan = @import("plan.zig");
 pub const policy = @import("policy.zig");
+pub const provision = @import("provision.zig");
 pub const target = @import("target.zig");
+pub const tree = @import("tree.zig");
