@@ -9,4 +9,5 @@ test {
     _ = @import("afd_test.zig");
     _ = @import("path_test.zig");
     _ = @import("unix_test.zig");
+    _ = @import("posix_connect_test.zig");
 }

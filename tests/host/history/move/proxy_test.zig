@@ -54,15 +54,30 @@ fn becomes(pid: i32, letter: u8) bool {
 
 test "the running child's executable digest is a capability, not a path claim" {
     if (builtin.os.tag != .linux) return error.SkipZigTest;
-    var child = try start(&.{"/bin/cat"});
+    // System cat may be a symlink or share its inode with other applets.
+    // The provider requires a regular, single-link executable capability.
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    var buffer: [std.fs.max_path_bytes]u8 = undefined;
+    const source = buffer[0..try std.Io.Dir.cwd().realPathFile(io, "/bin/cat", &buffer)];
+    try std.Io.Dir.cwd().copyFile(source, temp.dir, "cat", io, .{ .replace = false });
+    const executable = buffer[0..try temp.dir.realPathFile(io, "cat", &buffer)];
+    var child = try Proxy.own(io, try std.process.spawn(io, .{
+        .exe = .{ .explicit = .{ .dir = .cwd(), .path = executable } },
+        // Preserve applet dispatch when cat names a multicall executable.
+        .argv = &.{"cat"},
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    }), 300, null);
+    defer child.close();
     try child.fits();
-    const expected = try move.provider.digest(io, "/bin/cat");
-    try child.verifyExecutable("/bin/cat", expected);
+    const expected = try move.provider.digest(io, executable);
+    try child.verifyExecutable(executable, expected);
     var wrong: [32]u8 = expected;
     wrong[0] ^= 0xff;
-    try std.testing.expectError(error.PeerDigestMismatch, child.verifyExecutable("/bin/cat", wrong));
+    try std.testing.expectError(error.PeerDigestMismatch, child.verifyExecutable(executable, wrong));
     try std.testing.expect(child.reap().?.success());
-    child.close();
 }
 
 test "a child that ends with its input is reaped inside the bound unsignalled" {
