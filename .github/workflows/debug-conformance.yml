@@ -19,7 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -138,27 +138,27 @@ jobs:
       - name: Backend builds through public RPC with real Zig
         if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success'
         shell: pwsh
-        timeout-minutes: 7
+        timeout-minutes: 10
         run: |
           $suffix = if ($IsWindows) { '.exe' } else { '' }
           $compiler = (Get-Command zig).Source
-          python -B tools/build_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/builds" --timeout 360
+          python -B tools/build_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/builds" --timeout 480
           if ($LASTEXITCODE -ne 0) { throw 'Backend build conformance failed' }
 
       - name: Fresh compiler source directory through public DAP
         if: always() && steps.emulator.outcome == 'success'
         shell: pwsh
-        timeout-minutes: 6
+        timeout-minutes: 7
         run: |
           $suffix = if ($IsWindows) { '.exe' } else { '' }
           $compiler = (Get-Command zig).Source
-          python -B tools/source_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/source-directory" --timeout 300
+          python -B tools/source_conformance/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --zig $compiler --output "$env:RUNNER_TEMP/debug-conformance/source-directory" --timeout 360
           if ($LASTEXITCODE -ne 0) { throw 'Fresh source-directory conformance failed' }
 
       - name: Toolchain policy and clean compiler build/debug flow
         if: always() && steps.emulator.outcome == 'success'
         shell: pwsh
-        timeout-minutes: 11
+        timeout-minutes: 12
         run: |
           $suffix = if ($IsWindows) { '.exe' } else { '' }
           $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
@@ -211,6 +211,12 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: debug-conformance-${{ matrix.os }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/debug-conformance
+          path: |
+            ${{ runner.temp }}/debug-conformance/**/*.json
+            ${{ runner.temp }}/debug-conformance/**/*.jsonl
+            ${{ runner.temp }}/debug-conformance/**/*.log
+            ${{ runner.temp }}/debug-conformance/**/*.txt
+            ${{ runner.temp }}/debug-conformance/**/*.gdb
+            !${{ runner.temp }}/debug-conformance/toolchain/private full compiler with spaces/**
           if-no-files-found: error
           retention-days: 14

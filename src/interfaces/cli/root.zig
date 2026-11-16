@@ -16,6 +16,7 @@ pub const session_ctl = @import("session_ctl.zig");
 pub const target_bindings = @import("serve/targets.zig");
 pub const target_ctl = @import("ctl/targets.zig");
 pub const toolchain = @import("toolchain.zig");
+pub const toolchain_setup = @import("toolchain_setup.zig");
 pub const usb_disk_option = @import("usb_disk_option.zig");
 
 pub const ctl_write = ctl.write;

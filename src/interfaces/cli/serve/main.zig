@@ -37,6 +37,7 @@ pub const usage =
     "clients\n" ++
     "       --build-zig ABSOLUTE_PATH enables backend Zig builds in that workspace " ++
     "(trusted projects only)\n" ++
+    "       --build-toolchain-cache ABS uses a verified managed compiler, without downloading\n" ++
     "       --history DIR puts the session's persistent history in DIR; --history " ++
     "off keeps it RAM only\n" ++
     "       --kept preserves the session on disk after exit (with --history DIR)\n" ++
@@ -56,6 +57,7 @@ const Asked = struct {
     targets: ?[]const u8 = null,
     artifacts_root: ?[]const u8 = null,
     build_zig: ?[]const u8 = null,
+    build_toolchain_cache: ?[]const u8 = null,
     where: Where,
     elf: []const u8,
     folded: bool = false,
@@ -97,6 +99,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
     asked.folded = flags.folded;
     asked.workspace = flags.workspace;
     asked.build_zig = flags.build_zig;
+    asked.build_toolchain_cache = flags.build_toolchain_cache;
     asked.artifacts_root = flags.artifacts_root;
     asked.allow_state_files = flags.allow_state;
     asked.history = flags.history_root;
@@ -134,7 +137,7 @@ fn parseTail(argv: []const []const u8, at: usize) ?Asked {
 /// Whether the history options make sense together.
 fn consistent(asked: Asked) bool {
     if (asked.targets != null and asked.artifacts_root != null) return false;
-    if (asked.build_zig != null and asked.workspace == null) return false;
+    if ((asked.build_zig != null or asked.build_toolchain_cache != null) and asked.workspace == null) return false;
     // A cap means nothing without a persistent history to cap.
     if (asked.history_budget != null and asked.history == null) return false;
     // Kept means nothing without a persistent history.
@@ -188,7 +191,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         owner.close() catch |err| std.log.err("serve: artifact cleanup failed: {s}", .{@errorName(err)});
     } else setup.deinit();
     var workbench: Workbench = .{};
-    workbench.open(io, asked.workspace, asked.build_zig) catch |err| {
+    workbench.openWithCache(io, asked.workspace, asked.build_zig, asked.build_toolchain_cache) catch |err| {
         std.debug.print("serve: cannot open workbench: {s}\n", .{@errorName(err)});
         return 1;
     };

@@ -3,6 +3,8 @@ const std = @import("std");
 
 const path = @import("../workspace/path.zig");
 
+pub const Admission = struct { context: *anyopaque, check: *const fn (*anyopaque) anyerror!void };
+
 pub const Request = struct {
     step: []const u8,
     options: []const u8,

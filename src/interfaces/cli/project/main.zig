@@ -6,8 +6,9 @@ const host = @import("ra8_host");
 const listener = @import("../root.zig").dap;
 pub const Owner = @import("owner.zig").Owner;
 
-pub const usage = "usage: ra8_emulator project build ROOT CONFIG RECIPE [--zig ABSOLUTE_PATH]\n" ++
-    "       ra8_emulator project dap PORT ROOT CONFIG [--zig ABSOLUTE_PATH]\n";
+pub const usage = "usage: ra8_emulator project build ROOT CONFIG RECIPE " ++
+    "[--zig ABSOLUTE_PATH] [--toolchain-cache ABSOLUTE_PATH]\n" ++
+    "       ra8_emulator project dap PORT ROOT CONFIG [--zig ABSOLUTE_PATH] [--toolchain-cache ABSOLUTE_PATH]\n";
 
 pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
     perform(allocator, io, argv) catch |err| {
@@ -18,17 +19,29 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
 }
 
 fn perform(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !void {
-    if (argv.len != 6 and argv.len != 8) return error.BadArguments;
+    if (argv.len < 6 or argv.len > 10 or argv.len % 2 != 0) return error.BadArguments;
     const build = std.mem.eql(u8, argv[2], "build");
     if (!build and !std.mem.eql(u8, argv[2], "dap")) return error.BadArguments;
-    var compiler: []const u8 = "";
-    if (argv.len == 8) {
-        if (!std.mem.eql(u8, argv[6], "--zig")) return error.BadArguments;
-        compiler = argv[7];
+    var compiler: ?[]const u8 = null;
+    var cache: ?[]const u8 = null;
+    var at: usize = 6;
+    while (at < argv.len) : (at += 2) {
+        if (std.mem.eql(u8, argv[at], "--zig") and compiler == null) {
+            try host.build.Runner.validateCompiler(argv[at + 1]);
+            compiler = argv[at + 1];
+        } else if (std.mem.eql(u8, argv[at], "--toolchain-cache") and cache == null) {
+            try host.build.Runner.validateCompiler(argv[at + 1]);
+            cache = argv[at + 1];
+        } else return error.BadArguments;
     }
     var base = try host.workspace.Workspace.open(io, argv[if (build) 3 else 4]);
     defer base.close();
-    var project: host.project.Project = .{ .allocator = allocator, .base = &base, .backend_compiler = compiler };
+    var project: host.project.Project = .{
+        .allocator = allocator,
+        .base = &base,
+        .backend_compiler = compiler orelse "",
+        .toolchain_cache = cache,
+    };
     defer project.close();
     try project.open(argv[if (build) 4 else 5]);
     if (build) return buildProject(&project, argv[5]);
