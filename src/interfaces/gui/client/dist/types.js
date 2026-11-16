@@ -33,7 +33,7 @@ export var ErrorCode;
     ErrorCode[ErrorCode["AppTooLong"] = 258] = "AppTooLong";
     ErrorCode[ErrorCode["AppHistory"] = 259] = "AppHistory";
 })(ErrorCode || (ErrorCode = {}));
-/** All 59 Session RPC Opcodes (Method in rpc.zig) */
+/** All 62 Session RPC Opcodes (Method in rpc.zig) */
 export var Method;
 (function (Method) {
     Method[Method["Load"] = 256] = "Load";
@@ -83,7 +83,7 @@ export var Method;
     Method[Method["Seek"] = 300] = "Seek";
     Method[Method["Rcont"] = 301] = "Rcont";
     Method[Method["Metrics"] = 302] = "Metrics";
-    // 0x012F skipped
+    Method[Method["Disasm"] = 303] = "Disasm";
     Method[Method["BranchList"] = 304] = "BranchList";
     Method[Method["BranchSwitch"] = 305] = "BranchSwitch";
     Method[Method["BranchDelete"] = 306] = "BranchDelete";
@@ -97,7 +97,15 @@ export var Method;
     Method[Method["MarkerSet"] = 314] = "MarkerSet";
     Method[Method["FrameStatus"] = 315] = "FrameStatus";
     Method[Method["Diff"] = 316] = "Diff";
+    Method[Method["SetVar"] = 317] = "SetVar";
+    Method[Method["UndoWrite"] = 318] = "UndoWrite";
+    Method[Method["ResetImage"] = 319] = "ResetImage";
 })(Method || (Method = {}));
+export const CAP_TRANSPORT = 1 << 15;
+export const CAP_WORKSPACE = 1 << 16;
+export const CAP_BUILD = 1 << 17;
+export const CAP_PROJECT = 1 << 18;
+export const CAP_RECOVERY = 1 << 19;
 /** Opcode is an alias for Method */
 export { Method as Opcode };
 /** All 7 Event Topics (Topic in rpc.zig) */
@@ -235,6 +243,7 @@ export var EventKind;
     EventKind[EventKind["RtosIdle"] = 20] = "RtosIdle";
     EventKind[EventKind["IsrEnter"] = 21] = "IsrEnter";
     EventKind[EventKind["IsrLeave"] = 22] = "IsrLeave";
+    EventKind[EventKind["Rewound"] = 23] = "Rewound";
 })(EventKind || (EventKind = {}));
 /** Input kind (InputKind in rpc.zig) */
 export var InputKind;
@@ -250,4 +259,41 @@ export var ResultTag;
     ResultTag[ResultTag["Ok"] = 0] = "Ok";
     ResultTag[ResultTag["Err"] = 1] = "Err";
 })(ResultTag || (ResultTag = {}));
+/** Why a time-travel history branch forked (ForkReason in record.zig) */
+export var ForkReason;
+(function (ForkReason) {
+    ForkReason[ForkReason["Base"] = 0] = "Base";
+    ForkReason[ForkReason["Writes"] = 1] = "Writes";
+    ForkReason[ForkReason["Taps"] = 2] = "Taps";
+    ForkReason[ForkReason["Buttons"] = 3] = "Buttons";
+    ForkReason[ForkReason["Keystrokes"] = 4] = "Keystrokes";
+    ForkReason[ForkReason["PlugUnplugFault"] = 5] = "PlugUnplugFault";
+    ForkReason[ForkReason["CameraChange"] = 6] = "CameraChange";
+    ForkReason[ForkReason["SkipBkpt"] = 7] = "SkipBkpt";
+    ForkReason[ForkReason["Load"] = 8] = "Load";
+})(ForkReason || (ForkReason = {}));
+/** Playback direction (Direction in nav_wire.zig) */
+export var Direction;
+(function (Direction) {
+    Direction[Direction["Fwd"] = 0] = "Fwd";
+    Direction[Direction["Back"] = 1] = "Back";
+})(Direction || (Direction = {}));
+/** Navigation query kind (NavQueryKind in nav_wire.zig) */
+export var NavQueryKind;
+(function (NavQueryKind) {
+    NavQueryKind[NavQueryKind["Frame"] = 0] = "Frame";
+    NavQueryKind[NavQueryKind["Iteration"] = 1] = "Iteration";
+    NavQueryKind[NavQueryKind["Marker"] = 2] = "Marker";
+    NavQueryKind[NavQueryKind["Rtos"] = 3] = "Rtos";
+    NavQueryKind[NavQueryKind["Isr"] = 4] = "Isr";
+})(NavQueryKind || (NavQueryKind = {}));
+/** Storage location kind for a DWARF local variable (where_kinds in locals_wire.zig) */
+export var LocalWhereKind;
+(function (LocalWhereKind) {
+    LocalWhereKind[LocalWhereKind["None"] = 0] = "None";
+    LocalWhereKind[LocalWhereKind["Frame"] = 1] = "Frame";
+    LocalWhereKind[LocalWhereKind["RegisterIndirect"] = 2] = "RegisterIndirect";
+    LocalWhereKind[LocalWhereKind["InRegister"] = 3] = "InRegister";
+    LocalWhereKind[LocalWhereKind["Address"] = 4] = "Address";
+})(LocalWhereKind || (LocalWhereKind = {}));
 //# sourceMappingURL=types.js.map

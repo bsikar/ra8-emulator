@@ -1,0 +1,22 @@
+:host {
+  display: block;
+  height: 100vh;
+  font-size: 12px;
+}
+
+.ob-brand-badge {
+  font-size: 12px;
+}
+
+.ob-palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ob-palette-item {
+  width: 100%;
+  justify-content: space-between;
+}
