@@ -2,19 +2,19 @@
 //! Windows routes AF_UNIX through Winsock2 (afunix.sys) rather than Zig's
 //! raw \Device\Afd\Endpoint open, which exits AddressFamilyUnsupported on
 //! Windows releases without AFD AF_UNIX support. POSIX delegates to std.Io.net.
-const std = @import("std");
 const builtin = @import("builtin");
+const sock_common = @import("sock.zig");
 const sock_path = @import("path.zig");
 const sock_ready = @import("ready.zig");
-const sock_common = @import("sock.zig");
-const win_sock = @import("windows.zig");
+const std = @import("std");
 const win32 = @import("../win32.zig");
+const win_sock = @import("windows.zig");
 
 const on_windows = builtin.os.tag == .windows;
 
 pub const Handle = sock_ready.Handle;
 pub const Ready = sock_ready.Ready;
-pub const max_path_len: usize = 107;
+pub const max_path_len: usize = if (on_windows) 107 else @sizeOf(@FieldType(std.posix.sockaddr.un, "path")) - 1;
 
 const backlog: c_int = 128;
 const connect_timeout_ms: i64 = 5000;
@@ -203,7 +203,10 @@ fn resolvePath(io: std.Io, raw: []const u8, scratch: *[std.fs.max_path_bytes]u8)
     const resolved = try sock_path.unix(io, raw, scratch);
     const is_abstract = !on_windows and resolved.len > 0 and resolved[0] == 0;
     if (is_abstract) return resolved;
-    const candidate = if (on_windows and resolved.len > max_path_len and !std.fs.path.isAbsolute(raw) and raw.len <= max_path_len)
+    const candidate = if (on_windows and
+        resolved.len > max_path_len and
+        !std.fs.path.isAbsolute(raw) and
+        raw.len <= max_path_len)
         raw
     else
         resolved;
@@ -243,17 +246,60 @@ fn tryBindWindows(addr: *const win.SockaddrUn) !Handle {
 
 fn bindPosix(io: std.Io, path: []const u8) !std.Io.net.Server {
     const address = try std.Io.net.UnixAddress.init(path);
+    if (!address.isAbstract()) {
+        // Darwin can bind through a dangling symlink instead of returning EADDRINUSE.
+        if (std.Io.Dir.cwd().statFile(io, path, .{ .follow_symlinks = false })) |stat| {
+            if (stat.kind == .sym_link) return error.AddressInUse;
+        } else |err| switch (err) {
+            error.FileNotFound => {},
+            else => return err,
+        }
+    }
     return address.listen(io, .{}) catch |err| switch (err) {
         error.AddressInUse => {
             if (address.isAbstract()) return error.AddressInUse;
-            if (address.connect(io)) |probe| {
-                probe.close(io);
-                return error.AddressInUse;
-            } else |_| {}
-            std.Io.Dir.cwd().deleteFile(io, path) catch return error.AddressInUse;
+            try reclaimPosix(io, path);
             return address.listen(io, .{});
         },
         else => return err,
+    };
+}
+
+fn reclaimPosix(io: std.Io, path: []const u8) error{AddressInUse}!void {
+    const dir = std.Io.Dir.cwd();
+    const before = dir.statFile(io, path, .{ .follow_symlinks = false }) catch return error.AddressInUse;
+    if (before.kind != .file and before.kind != .unix_domain_socket) return error.AddressInUse;
+    if (!stalePosix(path, before.kind)) return error.AddressInUse;
+    const after = dir.statFile(io, path, .{ .follow_symlinks = false }) catch return error.AddressInUse;
+    if (before.inode != after.inode or before.kind != after.kind or
+        before.ctime.nanoseconds != after.ctime.nanoseconds) return error.AddressInUse;
+    // POSIX has no conditional unlink. The parent directory must be trusted;
+    // this recheck rejects replacements observed during the probe.
+    dir.deleteFile(io, path) catch return error.AddressInUse;
+}
+
+/// Only definite stale endpoints permit reclamation. Pending connects and
+/// permission/resource errors leave the path alone, including full backlogs.
+fn stalePosix(path: []const u8, kind: std.Io.File.Kind) bool {
+    const fd = std.c.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0);
+    if (fd < 0) return false;
+    defer _ = std.c.close(fd);
+    const flags = std.c.fcntl(fd, std.c.F.GETFL);
+    if (flags < 0) return false;
+    const nonblock: c_int = @bitCast(std.c.O{ .NONBLOCK = true });
+    if (std.c.fcntl(fd, std.c.F.SETFL, flags | nonblock) < 0) return false;
+    var addr: std.posix.sockaddr.un = .{ .family = std.posix.AF.UNIX, .path = @splat(0) };
+    if (path.len >= addr.path.len) return false;
+    @memcpy(addr.path[0..path.len], path);
+    const len: std.posix.socklen_t = @intCast(@offsetOf(std.posix.sockaddr.un, "path") + path.len + 1);
+    const rc = std.c.connect(fd, @ptrCast(&addr), len);
+    if (rc == 0) return false;
+    // Darwin returns NOTSOCK for regular files. std's Unix connect treats it
+    // as a programmer bug, including when a socket becomes a file mid-probe.
+    return switch (std.posix.errno(rc)) {
+        .NOTSOCK => kind == .file,
+        .CONNREFUSED => true,
+        else => false,
     };
 }
 
@@ -270,7 +316,11 @@ fn isLiveListenerWindows(io: std.Io, addr: *const win.SockaddrUn) bool {
 }
 
 fn waitWinConnect(io: std.Io, s: Handle, timeout_ms: i64) !void {
-    const timeout = (std.Io.Timeout{ .duration = .{ .raw = .fromMilliseconds(timeout_ms), .clock = .awake } }).toDeadline(io);
+    const timeout = (std.Io.Timeout{
+        .duration = .{ .raw = .fromMilliseconds(timeout_ms), .clock = .awake },
+    }).toDeadline(
+        io,
+    );
     while (true) {
         const remaining = timeout.toDurationFromNow(io).?.raw.toMilliseconds();
         if (remaining <= 0) return error.TimedOut;

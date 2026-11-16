@@ -14,12 +14,12 @@
 //! code location at 4). When that pair changes to a new fault, the Watcher
 //! publishes `module_faulted` for the loaded module whose code holds the
 //! location.
-const txm = @import("modules.zig");
-const txm_debug = @import("debug.zig");
 const rtos_hook = @import("../rtos/hook.zig");
 const stream_mod = @import("../event/stream.zig");
-const zig_boundary = @import("../zig/boundary.zig");
 const timebase = @import("ra8_chip").periph.timebase;
+const txm = @import("modules.zig");
+const txm_debug = @import("debug.zig");
+const zig_boundary = @import("../zig/boundary.zig");
 
 /// Modules a Watcher follows; a longer list is cut short.
 pub const most = 16;

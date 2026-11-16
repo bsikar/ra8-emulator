@@ -38,7 +38,6 @@
 //! mode out of any store and flipped the status bits, so an image that never
 //! clears the sleep request reaches operation mode in the emulator and hangs
 //! on silicon, which is the masked pass this file ends.
-const std = @import("std");
 
 /// Bit 2 of the control register: GSLPR on the global machine, CSLPR on the
 /// channel. Bit 2 of the status register reports it back.

@@ -11,11 +11,12 @@
 //! as gdb expects: `T05` for a break or a step, `T05watch:` and friends
 //! for a watch, `T02` for an interrupt and `T0b` when the core faulted.
 const std = @import("std");
+
 const debug_session = @import("ra8_session").session;
-const watch_table = @import("ra8_session").watch.table;
-const zig_drive = @import("ra8_session").zig.drive;
 const session_api = @import("ra8_session").api;
 const transport_mod = @import("ra8_session").transport;
+const watch_table = @import("ra8_session").watch.table;
+const zig_drive = @import("ra8_session").zig.drive;
 
 pub const Error = error{NoSpace};
 
@@ -65,7 +66,10 @@ pub fn handles(request: []const u8) bool {
 pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     if (std.mem.eql(u8, request, "vCont?")) return copy(out, vcont_actions);
     if (std.mem.startsWith(u8, request, "vCont;")) return vcont(target, request["vCont;".len..], out);
-    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (!target.session.hasCore(.cpu1)) "m1" else "m1,2");
+    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (!target.session.hasCore(.cpu1))
+        "m1"
+    else
+        "m1,2");
     if (std.mem.eql(u8, request, "qsThreadInfo")) return copy(out, "l");
     if (std.mem.eql(u8, request, "qC")) return print(out, "QC{d}", .{thread(target)});
     return switch (request[0]) {
@@ -136,7 +140,12 @@ fn resume_(target: *Target, command: session_api.Run, out: []u8) Error![]const u
     while (command == .cont and ended == .count) {
         const poll = target.poll orelse break;
         if (poll.check(poll.context)) {
-            const stopped = target.session.interrupt(target.session.currentCore()) catch return copy(out, request_error);
+            const stopped = target.session.interrupt(
+                target.session.currentCore(),
+            ) catch return copy(
+                out,
+                request_error,
+            );
             ended = .{ .stop = stopped };
             break;
         }
@@ -191,7 +200,10 @@ fn transportReverse(target: *Target, plane: *transport_mod.Transport, step: bool
 /// gdb names a watch by what it was set to catch, so the kind comes from
 /// the table when the watch is still there.
 fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
-    const kind = (target.session.watchKind(target.session.currentCore(), hit.id) catch null) orelse switch (hit.access) {
+    const kind = (target.session.watchKind(
+        target.session.currentCore(),
+        hit.id,
+    ) catch null) orelse switch (hit.access) {
         .read => watch_table.Kind.read,
         .write => watch_table.Kind.write,
     };
@@ -245,7 +257,12 @@ fn copy(out: []u8, text: []const u8) Error![]const u8 {
 /// polling the socket between slices (design section 3's gdb adapter). A
 /// poll hit settles as a halt request, so the reply is the same T02 the
 /// budget loop produced.
-fn transportResume(target: *Target, plane: *transport_mod.Transport, command: session_api.Run, out: []u8) Error![]const u8 {
+fn transportResume(
+    target: *Target,
+    plane: *transport_mod.Transport,
+    command: session_api.Run,
+    out: []u8,
+) Error![]const u8 {
     const asked: transport_mod.Command = switch (command) {
         .cont => .{ .cont = .{} },
         .step => .{ .step = .{ .core = target.session.currentCore() } },
@@ -296,7 +313,12 @@ pub fn pumpTick(target: *Target, out: []u8) Error![]const u8 {
     if (ended == .count) {
         const poll = target.poll orelse return out[0..0];
         if (poll.check(poll.context)) {
-            const stopped = target.session.interrupt(target.session.currentCore()) catch return copy(out, request_error);
+            const stopped = target.session.interrupt(
+                target.session.currentCore(),
+            ) catch return copy(
+                out,
+                request_error,
+            );
             target.pending = false;
             target.last = .{ .stop = stopped };
             target.back = 0;

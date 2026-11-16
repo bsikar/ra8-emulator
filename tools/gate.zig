@@ -79,7 +79,9 @@ pub const Scanner = struct {
 
 fn indentOf(line: []const u8) usize {
     var i: usize = 0;
-    while (i < line.len and line[i] == ' ') i += 1;
+    while (i < line.len and line[i] == ' ') {
+        i += 1;
+    }
     return i;
 }
 
@@ -99,7 +101,9 @@ pub fn declaredName(line: []const u8) ?[]const u8 {
             std.mem.eql(u8, word, "noinline") or std.mem.eql(u8, word, "export") or
             std.mem.eql(u8, word, "threadlocal");
         if (!qualifier) return null;
-    } else return null;
+    } else {
+        return null;
+    }
 
     const after = words.rest();
     const open = std.mem.indexOfScalar(u8, after, '(') orelse return null;
@@ -140,7 +144,10 @@ pub fn main(init: std.process.Init) !void {
 fn isFetched(path: []const u8) bool {
     var parts = std.mem.tokenizeAny(u8, path, "/\\");
     while (parts.next()) |part| {
-        if (part[0] == '.' or std.mem.eql(u8, part, "zig-out") or std.mem.eql(u8, part, "zig-pkg") or std.mem.eql(u8, part, "node_modules")) return true;
+        if (part[0] == '.' or
+            std.mem.eql(u8, part, "zig-out") or
+            std.mem.eql(u8, part, "zig-pkg") or
+            std.mem.eql(u8, part, "node_modules")) return true;
     }
     return false;
 }
@@ -193,7 +200,10 @@ const Run = struct {
         if (line == 0) {
             try self.out.print("{s}: {s} is {d} lines, over the {d}-line limit\n", .{ path, what, lines, max });
         } else {
-            try self.out.print("{s}:{d}: {s} is {d} lines, over the {d}-line limit\n", .{ path, line, what, lines, max });
+            try self.out.print(
+                "{s}:{d}: {s} is {d} lines, over the {d}-line limit\n",
+                .{ path, line, what, lines, max },
+            );
         }
     }
 

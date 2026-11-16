@@ -14,39 +14,55 @@
 //! followed by one 32-bit payload word. The other two modes are not emitted.
 const std = @import("std");
 
-/// What NPU_OP_DMA_START copies, kept beside the walk so root.zig stays one line.
-pub const dma = @import("dma.zig");
-/// The loop that runs a stream's register sets and DMA against memory.
-pub const run = @import("run.zig");
-/// What each cmd1 register set does to the register state.
-pub const regs = @import("regs.zig");
-/// How the NPU model hands a non-stand-in stream to the runner.
-pub const hook = @import("hook.zig");
-/// The IFM, IFM2 and OFM shape, precision and region registers.
-pub const fm = @import("fm.zig");
-/// The scale, activation and stride registers.
-pub const quant = @import("quant.zig");
 /// Element addresses and storage formats.
 pub const addr = @import("addr.zig");
+
+/// What NPU_OP_DMA_START copies, kept beside the walk so root.zig stays one line.
+pub const dma = @import("dma.zig");
+
+/// The IFM, IFM2 and OFM shape, precision and region registers.
+pub const fm = @import("fm.zig");
+
+/// How the NPU model hands a non-stand-in stream to the runner.
+pub const hook = @import("hook.zig");
+
 /// Elementwise MIN and MAX.
 pub const minmax = @import("minmax.zig");
+
 /// MAX pooling.
 pub const pool = @import("pool.zig");
+
+/// The scale, activation and stride registers.
+pub const quant = @import("quant.zig");
+
+/// What each cmd1 register set does to the register state.
+pub const regs = @import("regs.zig");
+
+/// The loop that runs a stream's register sets and DMA against memory.
+pub const run = @import("run.zig");
+
 /// The per-channel scale-and-bias records a convolution reads.
 pub const bias = @import("bias.zig");
+
 /// The compressed weight stream a convolution reads.
 pub const weights = @import("weights.zig");
+
 /// The order a decoded weight stream walks the OHWI volume in.
 pub const order = @import("order.zig");
+
 /// OFM output scaling under the three rounding modes.
 pub const round = @import("round.zig");
+
 /// The int8 convolution datapath.
 pub const conv = @import("conv.zig");
+
 /// NPU_OP_CONV: the registers turned into a datapath call.
 pub const convop = @import("convop.zig");
+
 /// Elementwise MUL (NPU_OP_ELEMENTWISE mode 0).
-pub const mul = @import("mul.zig");
 pub const addsub = @import("addsub.zig");
+pub const mul = @import("mul.zig");
+
 /// AVERAGE pooling without padding.
 pub const avgpool = @import("avgpool.zig");
 

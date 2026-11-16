@@ -1,7 +1,8 @@
 //! Navigation and reverse play commands for `ctl` (Slice 22.4).
 const std = @import("std");
-const proto = @import("ra8_rpc").session.rpc;
+
 const Client = @import("client.zig").Client;
+const proto = @import("ra8_rpc").session.rpc;
 
 pub const PlayCmd = struct {
     dir: proto.Direction = .fwd,
@@ -75,15 +76,27 @@ pub fn parseNav(args: []const []const u8) !NavQuery {
         if (std.mem.eql(u8, args[0], "iter")) proto.NavQueryKind.iteration else return error.BadArguments;
     var query: NavQuery = .{ .kind = kind };
     if (args.len == 2) {
-        if (kind == .marker) query.name = args[1] else query.index = std.fmt.parseInt(u64, args[1], 10) catch return error.BadArguments;
+        if (kind == .marker) {
+            query.name = args[1];
+        } else {
+            query.index = std.fmt.parseInt(u64, args[1], 10) catch return error.BadArguments;
+        }
     }
     return query;
 }
 
 pub fn runNav(client: *Client, w: anytype, json: bool, query: NavQuery) !void {
-    const got = try client.call(proto.NavQueryResult, proto.NavQueryArgs, .nav_query, .{ .kind = query.kind, .index = query.index, .name = query.name });
+    const got = try client.call(
+        proto.NavQueryResult,
+        proto.NavQueryArgs,
+        .nav_query,
+        .{ .kind = query.kind, .index = query.index, .name = query.name },
+    );
     if (json) {
-        try w.print("{{\"found\":{d},\"count\":{d},\"branch\":{d},\"r\":{d},\"o\":{d}}}\n", .{ got.found, got.count, got.branch, got.r, got.o });
+        try w.print(
+            "{{\"found\":{d},\"count\":{d},\"branch\":{d},\"r\":{d},\"o\":{d}}}\n",
+            .{ got.found, got.count, got.branch, got.r, got.o },
+        );
     } else if (got.found == 0) {
         try w.print("none ({d} indexed)\n", .{got.count});
     } else {
@@ -94,9 +107,15 @@ pub fn runNav(client: *Client, w: anytype, json: bool, query: NavQuery) !void {
 pub fn runFrameStatus(client: *Client, w: anytype, json: bool) !void {
     const got = try client.call(proto.FrameStatusResult, proto.CoreOnly, .frame_status, .{ .core = .cpu0 });
     if (json) {
-        try w.print("{{\"ram_bytes\":{d},\"disk_bytes\":{d},\"queue_bytes\":{d},\"frames\":{d},\"decoded_segments\":{d}}}\n", .{ got.ram_bytes, got.disk_bytes, got.queue_bytes, got.frames, got.decoded_segments });
+        try w.print(
+            "{{\"ram_bytes\":{d},\"disk_bytes\":{d},\"queue_bytes\":{d},\"frames\":{d},\"decoded_segments\":{d}}}\n",
+            .{ got.ram_bytes, got.disk_bytes, got.queue_bytes, got.frames, got.decoded_segments },
+        );
     } else {
-        try w.print("frames {d}; cache ram {d} B, disk {d} B; queue {d} B; {d} segment(s) decoded\n", .{ got.frames, got.ram_bytes, got.disk_bytes, got.queue_bytes, got.decoded_segments });
+        try w.print(
+            "frames {d}; cache ram {d} B, disk {d} B; queue {d} B; {d} segment(s) decoded\n",
+            .{ got.frames, got.ram_bytes, got.disk_bytes, got.queue_bytes, got.decoded_segments },
+        );
     }
 }
 
@@ -107,7 +126,12 @@ pub const MarkerSet = struct {
 };
 
 pub fn runMarkerSet(client: *Client, w: anytype, json: bool, cmd: MarkerSet) !void {
-    const armed = try client.call(proto.NavQueryResult, proto.MarkerSetArgs, .marker_set, .{ .name = cmd.name, .place = cmd.place });
+    const armed = try client.call(
+        proto.NavQueryResult,
+        proto.MarkerSetArgs,
+        .marker_set,
+        .{ .name = cmd.name, .place = cmd.place },
+    );
     if (json) {
         try w.print("{{\"marker\":{f},\"arrivals\":{d}}}\n", .{ std.json.fmt(cmd.name, .{}), armed.count });
     } else {

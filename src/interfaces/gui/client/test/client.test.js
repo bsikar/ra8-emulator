@@ -94,6 +94,7 @@ import {
   CAP_WORKSPACE,
   CAP_BUILD,
   CAP_PROJECT,
+  CAP_RECOVERY,
   encodePartSpec,
   encodeStatePath,
   exportTimeTravelTarball,
@@ -135,9 +136,9 @@ console.log('=== RA8 TypeScript RPC Client Test Suite ===\n');
 /* -------------------------------------------------------------------------- */
 console.log('--- Test Group 1: Enum & Schema Completeness ---');
 
-runTest('all Method opcodes are defined from 0x0100 through 0x013E', () => {
+runTest('all Method opcodes are defined from 0x0100 through 0x013F', () => {
   const methodValues = Object.values(Method).filter(v => typeof v === 'number');
-  assert.equal(methodValues.length, 62, 'Expected all 62 Method opcodes across 0x0100..0x013E');
+  assert.equal(methodValues.length, 64, 'Expected all 64 Method opcodes across 0x0100..0x013F');
   assert.equal(Method.Load, 0x0100);
   assert.equal(Method.Run, 0x0101);
   assert.equal(Method.Pause, 0x0102);
@@ -185,6 +186,7 @@ runTest('all Method opcodes are defined from 0x0100 through 0x013E', () => {
   assert.equal(Method.Seek, 0x012C);
   assert.equal(Method.Rcont, 0x012D);
   assert.equal(Method.Metrics, 0x012E);
+  assert.equal(Method.Disasm, 0x012F);
   assert.equal(Method.BranchList, 0x0130);
   assert.equal(Method.BranchSwitch, 0x0131);
   assert.equal(Method.BranchDelete, 0x0132);
@@ -199,11 +201,13 @@ runTest('all Method opcodes are defined from 0x0100 through 0x013E', () => {
   assert.equal(Method.FrameStatus, 0x013B);
   assert.equal(Method.Diff, 0x013C);
   assert.equal(Method.SetVar, 0x013D);
-  assert.equal(Method.Disasm, 0x013E);
+  assert.equal(Method.UndoWrite, 0x013E);
+  assert.equal(Method.ResetImage, 0x013F);
   assert.equal(CAP_TRANSPORT, 1 << 15);
   assert.equal(CAP_WORKSPACE, 1 << 16);
   assert.equal(CAP_BUILD, 1 << 17);
   assert.equal(CAP_PROJECT, 1 << 18);
+  assert.equal(CAP_RECOVERY, 1 << 19);
 });
 
 runTest('all 7 Topic event codes are defined from 0x0100 through 0x0106', () => {

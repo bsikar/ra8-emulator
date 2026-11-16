@@ -8,12 +8,12 @@
 //! hashes it: GR1 when GR1.FLMRD is set, GR2 otherwise. An overlay over a
 //! background image, which is the whole reason there are two layers, has
 //! never been in a witness from that tree at all.
-const std = @import("std");
-const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
-const clut = @import("clut.zig");
-const scan = @import("scan.zig");
+
 const blend = @import("blend.zig");
+const clut = @import("clut.zig");
+const Guest = @import("../../core/cpu/memory/guest/guest.zig").Guest;
 const output = @import("out.zig");
+const scan = @import("scan.zig");
 
 /// How many layers stack on the panel.
 pub const layers: u32 = 2;
@@ -90,7 +90,9 @@ pub const Mixer = struct {
         at: u32,
     ) void {
         var rects: [layers]blend.Rect = undefined;
-        for (planes, 0..) |plane, index| rects[index] = plane.stage.rect();
+        for (planes, 0..) |plane, index| {
+            rects[index] = plane.stage.rect();
+        }
         var column: u32 = 0;
         while (column < panel.width) : (column += 1) {
             var colour = blend.opaqueColour(panel.background);
@@ -187,7 +189,9 @@ pub fn compose(source: Source, into: []u32) Result {
     var scratch = source;
     var fold = scan.Fold{};
     var rects: [layers]blend.Rect = undefined;
-    for (scratch.planes[0..scratch.count], 0..) |*plane, index| rects[index] = plane.stage.rect();
+    for (scratch.planes[0..scratch.count], 0..) |*plane, index| {
+        rects[index] = plane.stage.rect();
+    }
     const apply_stage = !scratch.stage.passthrough() or scratch.stage.capture != null;
     const base_colour = blend.opaqueColour(scratch.background);
     var lines: [layers][scan.limits.chunk]u8 = undefined;

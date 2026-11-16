@@ -1,6 +1,7 @@
 //! Session control register, memory, and variable write commands.
-const std = @import("std");
 const rpc_session = @import("ra8_rpc").session;
+const std = @import("std");
+
 const proto = rpc_session.rpc;
 const set_var_wire = rpc_session.set_var_wire;
 const Client = @import("client.zig").Client;
@@ -15,6 +16,8 @@ pub const WriteCommand = union(enum) {
     console: []const u8,
     /// `skip-bkpt`: step CPU0 over the BKPT it is stopped on.
     skip_bkpt,
+    undo,
+    reset_image,
 };
 
 /// The machine-changing words: write-reg (or reg NAME VALUE), write-mem
@@ -26,8 +29,21 @@ pub fn parseWord(allocator: std.mem.Allocator, name: []const u8, args: []const [
     if (eql(u8, name, "write-mem") or (eql(u8, name, "poke") and args.len == 2)) return try parseMem(allocator, args);
     if (eql(u8, name, "set")) return try parseSet(args);
     if (eql(u8, name, "console")) return if (args.len == 1) .{ .console = args[0] } else error.BadArguments;
-    if (eql(u8, name, "skip-bkpt")) return if (args.len == 0) .skip_bkpt else error.BadArguments;
+    if (try parseNoArgs(name, args)) |cmd| return cmd;
     return null;
+}
+
+fn parseNoArgs(name: []const u8, args: []const []const u8) !?WriteCommand {
+    const command: WriteCommand = if (std.mem.eql(u8, name, "skip-bkpt"))
+        .skip_bkpt
+    else if (std.mem.eql(u8, name, "undo"))
+        .undo
+    else if (std.mem.eql(u8, name, "reset-image"))
+        .reset_image
+    else
+        return null;
+    if (args.len != 0) return error.BadArguments;
+    return command;
 }
 
 /// Parse `set [--frame N] NAME=VALUE`.
@@ -86,7 +102,10 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
                 .value = reg.value,
             });
             if (json) {
-                try w.print("{{\"write_reg\":{{\"register\":\"{s}\",\"value\":{d}}}}}\n", .{ @tagName(reg.reg), reg.value });
+                try w.print(
+                    "{{\"write_reg\":{{\"register\":\"{s}\",\"value\":{d}}}}}\n",
+                    .{ @tagName(reg.reg), reg.value },
+                );
             } else {
                 try w.print("register {s} set to 0x{x:0>8}\n", .{ @tagName(reg.reg), reg.value });
             }
@@ -106,11 +125,28 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
         .set_var => |s| return try performSetVar(client, w, json, s.frame, s.name, s.value),
         .console => |text| {
             _ = try client.call(proto.Ack, intervene.ConsoleInput, .console_input, .{ .core = .cpu0, .bytes = text });
-            if (json) try w.print("{{\"console\":{d}}}\n", .{text.len}) else try w.print("console: {d} bytes typed\n", .{text.len});
+            if (json) {
+                try w.print("{{\"console\":{d}}}\n", .{text.len});
+            } else {
+                try w.print("console: {d} bytes typed\n", .{text.len});
+            }
         },
         .skip_bkpt => {
             _ = try client.call(proto.Ack, proto.CoreOnly, .skip_bkpt, .{ .core = .cpu0 });
             if (json) try w.writeAll("{\"skip_bkpt\":true}\n") else try w.writeAll("BKPT skipped\n");
+        },
+        .undo, .reset_image => {
+            if (cmd == .undo) {
+                _ = try client.call(proto.Ack, proto.CoreOnly, .undo_write, .{ .core = .cpu0 });
+            } else {
+                _ = try client.call(proto.Ack, proto.CoreOnly, .reset_image, .{ .core = .cpu0 });
+            }
+            const name = if (cmd == .undo) "undo" else "reset_image";
+            if (json) {
+                try w.print("{{\"{s}\":true}}\n", .{name});
+            } else {
+                try w.print("{s}: restored machine checkpoint\n", .{name});
+            }
         },
     }
     return 0;
@@ -137,16 +173,25 @@ fn performSetVar(client: *Client, w: anytype, json: bool, frame: u32, name: []co
             }
             try w.print(",\"size\":{d}}}}}\n", .{reply.size});
         } else if (reply.in_register != 0xff) {
-            try w.print("{s} = {s} ({s}, r{d}, {d} bytes)\n", .{ name, value, @tagName(reply.scope), reply.in_register, reply.size });
+            try w.print(
+                "{s} = {s} ({s}, r{d}, {d} bytes)\n",
+                .{ name, value, @tagName(reply.scope), reply.in_register, reply.size },
+            );
         } else {
-            try w.print("{s} = {s} ({s}, 0x{x:0>8}, {d} bytes)\n", .{ name, value, @tagName(reply.scope), reply.address, reply.size });
+            try w.print(
+                "{s} = {s} ({s}, 0x{x:0>8}, {d} bytes)\n",
+                .{ name, value, @tagName(reply.scope), reply.address, reply.size },
+            );
         }
         return 0;
     }
     if (json) {
         try w.writeAll("{\"error\":");
         try writeJsonString(w, reply.message);
-        try w.print(",\"status\":\"{s}\",\"scope\":\"{s}\",\"name\":", .{ @tagName(reply.status), @tagName(reply.scope) });
+        try w.print(
+            ",\"status\":\"{s}\",\"scope\":\"{s}\",\"name\":",
+            .{ @tagName(reply.status), @tagName(reply.scope) },
+        );
         try writeJsonString(w, name);
         try w.writeAll("}\n");
     } else {
@@ -157,13 +202,15 @@ fn performSetVar(client: *Client, w: anytype, json: bool, frame: u32, name: []co
 
 fn writeJsonString(w: anytype, text: []const u8) !void {
     try w.writeByte('"');
-    for (text) |c| switch (c) {
-        '"' => try w.writeAll("\\\""),
-        '\\' => try w.writeAll("\\\\"),
-        '\n' => try w.writeAll("\\n"),
-        '\r' => try w.writeAll("\\r"),
-        '\t' => try w.writeAll("\\t"),
-        else => if (c < 0x20) try w.print("\\u{x:0>4}", .{c}) else try w.writeByte(c),
-    };
+    for (text) |c| {
+        switch (c) {
+            '"' => try w.writeAll("\\\""),
+            '\\' => try w.writeAll("\\\\"),
+            '\n' => try w.writeAll("\\n"),
+            '\r' => try w.writeAll("\\r"),
+            '\t' => try w.writeAll("\\t"),
+            else => if (c < 0x20) try w.print("\\u{x:0>4}", .{c}) else try w.writeByte(c),
+        }
+    }
     try w.writeByte('"');
 }

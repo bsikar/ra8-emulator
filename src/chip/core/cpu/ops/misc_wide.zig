@@ -5,9 +5,9 @@
 //!
 //! Left unclaimed: two Rm copies that differ, Rd or Rm of SP or PC (all
 //! UNPREDICTABLE), and SEL, which needs the DSP GE flags.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const reverse = @import("reverse.zig");
 
 pub const encodings = struct {

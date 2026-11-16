@@ -3,14 +3,16 @@
 //! Unix hosts bind under $HOME/.config/ra8_emulator; Windows uses loopback TCP.
 //! The discovery file lists the RPC address and GDB session ports and is removed
 //! with the sockets on clean shutdown.
-const std = @import("std");
 const builtin = @import("builtin");
-const sock_ready = @import("ra8_host").sock.ready;
-pub const served = @import("session/server.zig");
-const proto = @import("session/rpc.zig");
-const ws_transport = @import("ws_transport.zig");
-const session_api = @import("ra8_session").api;
+const std = @import("std");
+
+const host_api = @import("ra8_host");
 const host_gdb = @import("host_gdb.zig");
+const proto = @import("session/rpc.zig");
+pub const served = @import("session/server.zig");
+const session_api = @import("ra8_session").api;
+const sock_ready = @import("ra8_host").sock.ready;
+const ws_transport = @import("ws_transport.zig");
 
 /// One connected client's receive buffer, as big as the primary transport's.
 const rx_size = 2 * proto.Client.Env.max_frame;
@@ -71,6 +73,7 @@ pub const Listener = struct {
         context.session_feed = null;
         context.trace_feed = null;
         context.chunks = .{};
+        context.artifact_transfer = .{};
         return context;
     }
 
@@ -83,7 +86,7 @@ pub const Listener = struct {
         try std.Io.Dir.cwd().createDirPath(io, dir);
         // Owner-only, so other users cannot reach the listener's sockets or
         // the discovery file through the directory (RA8EMU-1175).
-        @import("ra8_host").session_files.harden(io, std.Io.Dir.cwd(), dir) catch {};
+        host_api.session_files.harden(io, std.Io.Dir.cwd(), dir) catch {};
 
         if (builtin.os.tag == .windows) {
             var address = std.Io.net.IpAddress.parse("127.0.0.1", 0) catch unreachable;
@@ -168,7 +171,9 @@ pub const Listener = struct {
 
     /// Pump every session's gdb port once, before the RPC client's answer.
     pub fn pumpGdb(self: *Listener) void {
-        for (self.gdb.items) |session| session.pump();
+        for (self.gdb.items) |session| {
+            session.pump();
+        }
     }
 
     /// Accept a waiting client, then answer what a connected client has

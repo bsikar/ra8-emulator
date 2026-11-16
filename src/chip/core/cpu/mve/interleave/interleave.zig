@@ -7,6 +7,7 @@
 //! tables are the same for every element size.
 const qreg = @import("../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 const two = [2][4]u8{ .{ 0, 4, 24, 28 }, .{ 8, 12, 16, 20 } };

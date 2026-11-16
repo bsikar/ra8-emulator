@@ -5,13 +5,14 @@
 //! Qm 0, where hw1's U position selects rounding. The doubling forms raise
 //! FPSCR.QC only from lanes the VPT block leaves active. Lane semantics are
 //! in src/chip/core/cpu/mve/int/mul/mul.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("int.zig");
+const op = @import("../../../op.zig");
 const pair = @import("pair.zig");
+
 const Size = mve.qreg.Size;
 const High = mve.int.mul.High;
 

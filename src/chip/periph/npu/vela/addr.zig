@@ -7,7 +7,7 @@
 //! up to four tiles: x past WIDTH0 moves to tile 1 (then tile 3 past
 //! HEIGHT1), y past HEIGHT0 moves to tile 2. Channels are grouped in bricks
 //! of 16.
-const std = @import("std");
+
 const fm = @import("fm.zig");
 const quant = @import("quant.zig");
 

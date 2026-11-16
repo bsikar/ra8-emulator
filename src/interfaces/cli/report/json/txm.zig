@@ -5,15 +5,17 @@
 //! The key is left out when no module is loaded, so a document from a run
 //! without modules is unchanged. Each entry carries its name (null when
 //! unreadable), state, and code and data start and size.
-const txm_report = @import("ra8_session").txm.report;
 const txm = @import("ra8_session").txm.modules;
+const txm_report = @import("ra8_session").txm.report;
 
 /// The `modules` array, or nothing when `found` lists none.
 pub fn section(j: anytype, found: ?*const txm_report.Listed) !void {
     const listed = found orelse return;
     if (listed.count == 0) return;
     try j.open("modules", '[');
-    for (listed.rows(), 0..) |entry, index| try one(j, entry, listed.name(index));
+    for (listed.rows(), 0..) |entry, index| {
+        try one(j, entry, listed.name(index));
+    }
     try j.close(']');
 }
 

@@ -6,18 +6,18 @@
 //! UNKNOWN). Whether an exception may be taken at all, and the active stack,
 //! are dispatch.zig's; this is only the architectural entry sequence.
 const bus = @import("../bus.zig");
-const regs_mod = @import("../regs.zig");
-const memmap = @import("../../memmap.zig");
+const callee = @import("callee.zig");
 const Cpu = @import("../cpu.zig").Cpu;
-const frame = @import("frame.zig");
+const exc_return = @import("exc_return.zig");
 const fp_frame = @import("fp/frame.zig");
 const fp_ready = @import("fp/ready.zig");
-const exc_return = @import("exc_return.zig");
-const target = @import("target.zig");
-const callee = @import("callee.zig");
+const frame = @import("frame.zig");
+const memmap = @import("../../memmap.zig");
+const regs_mod = @import("../regs.zig");
+const stack_fault = @import("stack_fault.zig");
 const State = @import("../../banked.zig").State;
 const sysreg = @import("../sysreg.zig");
-const stack_fault = @import("stack_fault.zig");
+const target = @import("target.zig");
 
 /// EPSR.ICI/IT and B; exception entry clears each from live xPSR.
 pub const it_bits: u32 = (0x3 << 25) | (0x3F << 10) | regs_mod.xpsr_bits.bti;
@@ -99,15 +99,21 @@ pub fn takeDetailed(cpu: *Cpu, number: Number, return_address: u32) bus.Error!Re
 fn hideSecure(cpu: *Cpu, fp: bool, ts: bool) bus.Error!void {
     const r = &cpu.regs;
     var saved: callee.Callee = undefined;
-    for (&saved, 4..) |*word, i| word.* = r.low[i];
+    for (&saved, 4..) |*word, i| {
+        word.* = r.low[i];
+    }
     r.setSp(try callee.push(cpu.bus, r.sp(), saved, fp));
     scrubSecure(cpu, ts);
 }
 
 fn scrubSecure(cpu: *Cpu, ts: bool) void {
-    for (0..13) |i| cpu.regs.low[i] = 0;
+    for (0..13) |i| {
+        cpu.regs.low[i] = 0;
+    }
     if (ts and cpu.fp.context.fpccr.lspact == 0) {
-        for (0..32) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+        for (0..32) |i| {
+            cpu.fp.bank.writeS(@intCast(i), 0);
+        }
         cpu.fp.fpscr = @TypeOf(cpu.fp.fpscr).fromBits(0);
     }
 }
@@ -149,10 +155,14 @@ fn armLazy(cpu: *Cpu, at: u32, secure: bool, violated: bool) void {
 fn fpContext(cpu: *const Cpu, ts: bool) fp_frame.Fp {
     const vpr: u32 = if (cpu.profile.mve) @bitCast(cpu.fp.vpr) else 0;
     var fp: fp_frame.Fp = .{ .s = undefined, .fpscr = cpu.fp.fpscr.bits(), .vpr = vpr };
-    for (&fp.s, 0..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
+    for (&fp.s, 0..) |*s, i| {
+        s.* = cpu.fp.bank.readS(@intCast(i));
+    }
     if (ts) {
         var high: [16]u32 = undefined;
-        for (&high, 16..) |*s, i| s.* = cpu.fp.bank.readS(@intCast(i));
+        for (&high, 16..) |*s, i| {
+            s.* = cpu.fp.bank.readS(@intCast(i));
+        }
         fp.high = high;
     }
     return fp;

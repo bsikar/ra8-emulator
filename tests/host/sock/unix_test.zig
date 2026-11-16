@@ -114,6 +114,51 @@ test "unix.Listener.bind unlinks stale socket files while protecting live listen
     sock_unix.close(io, peer.socket.handle);
 }
 
+test "unix.Listener.bind preserves symlinks to files, missing paths and live sockets" {
+    if (on_windows) return error.SkipZigTest; // Windows AF_UNIX uses reparse points itself.
+    const gpa = std.testing.allocator;
+    const io = std.testing.io;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const target = try testSocketPath(gpa, &tmp.sub_path, "target");
+    defer gpa.free(target);
+    const link = try testSocketPath(gpa, &tmp.sub_path, "link");
+    defer gpa.free(link);
+    try tmp.dir.symLink(io, "target", "link", .{});
+    try std.testing.expectError(error.AddressInUse, sock_unix.Listener.bind(io, link));
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = target, .data = "keep" });
+    try std.testing.expectError(error.AddressInUse, sock_unix.Listener.bind(io, link));
+    var bytes: [4]u8 = undefined;
+    const file = try tmp.dir.openFile(io, "target", .{});
+    defer file.close(io);
+    try std.testing.expectEqual(bytes.len, try file.readPositionalAll(io, &bytes, 0));
+    try std.testing.expectEqualStrings("keep", &bytes);
+    try tmp.dir.deleteFile(io, "target");
+    var listener = try sock_unix.Listener.bind(io, target);
+    defer listener.deinit(io);
+    try std.testing.expectError(error.AddressInUse, sock_unix.Listener.bind(io, link));
+    try std.testing.expectEqual(std.Io.File.Kind.sym_link, (try tmp.dir.statFile(io, "link", .{
+        .follow_symlinks = false,
+    })).kind);
+    const client = try sock_unix.connect(io, target);
+    defer client.close(io);
+    try std.testing.expect((try sock_unix.wait(io, listener.handle(), 1000)).readable);
+}
+
+test "unix.Listener.bind preserves directories at the requested path" {
+    const io = std.testing.io;
+    const gpa = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDir(io, "directory", .default_dir);
+    const path = try testSocketPath(gpa, &tmp.sub_path, "directory");
+    defer gpa.free(path);
+    if (on_windows) try std.Io.Dir.cwd().createDir(io, path, .default_dir);
+    defer if (on_windows) std.Io.Dir.cwd().deleteDir(io, path) catch {};
+    try std.testing.expect(std.meta.isError(sock_unix.Listener.bind(io, path)));
+    try std.testing.expectEqual(std.Io.File.Kind.directory, (try std.Io.Dir.cwd().statFile(io, path, .{})).kind);
+}
+
 test "unix enforces <108-byte sun_path, rejects invalid paths, and fails missing targets" {
     const gpa = std.testing.allocator;
     const io = std.testing.io;

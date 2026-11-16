@@ -2,9 +2,9 @@
 //! four bytes, REV16 swaps the bytes within each halfword, and REVSH swaps
 //! the low halfword's bytes and sign-extends the result. No flags change.
 //! op 0b10 of the same space is unallocated on Armv8-M and stays unclaimed.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const mask: u16 = 0xFF00;

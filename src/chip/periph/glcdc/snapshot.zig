@@ -10,10 +10,11 @@
 //! stage and palette pointers are per-call arguments, never stored, so
 //! nothing needs re-pointing.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
-const fields = @import("ra8_snapshot").fields;
-const vsync = @import("vsync.zig");
+
 const clut = @import("clut.zig");
+const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
+const vsync = @import("vsync.zig");
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -30,7 +31,10 @@ pub fn save(board: anytype, writer: anytype) !void {
 fn body(writer: anytype, display: anytype) !void {
     try fields.writeExcept(writer, display, wiring);
     try fields.writeExcept(writer, display.output, host);
-    try fields.write(writer, if (display.output.vsync) |live| @as(?vsync.Saved, vsync.Saved.of(live)) else @as(?vsync.Saved, null));
+    try fields.write(
+        writer,
+        if (display.output.vsync) |live| @as(?vsync.Saved, vsync.Saved.of(live)) else @as(?vsync.Saved, null),
+    );
 }
 
 /// All or nothing: the controller changes only once the whole section read

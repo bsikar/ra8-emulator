@@ -4,13 +4,14 @@
 //! (2*esize - imm6 rightwards, imm6 - esize leftwards). imm6 000xxx is the
 //! modified-immediate space and stays with mve_modimm. The arithmetic is
 //! src/chip/core/cpu/mve/int/shift/shift.zig and src/chip/core/cpu/mve/int/insert/insert.zig; this file only decodes.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_beats = @import("beats.zig");
 const mve_int = @import("int/int.zig");
+const op = @import("../../op.zig");
 const pair = @import("int/pair.zig");
+
 const Size = mve.qreg.Size;
 const Mode = mve.int.shift.Mode;
 

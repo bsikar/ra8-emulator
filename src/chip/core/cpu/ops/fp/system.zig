@@ -12,10 +12,13 @@
 //! only VPR[15:0] and a VPR write clears its reserved top byte. FPCXT and
 //! FPSCR_nzcvqc forms are decoded; FPCXT access is Secure-only. SP as Rt,
 //! and PC for VMSR, stay unclaimed.
-const op = @import("../../op.zig");
+const regs = @import("../../regs.zig");
+
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fpu = @import("../../fpu/all.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+
 const Format = fpu.format.Format;
 const Fpscr = fpu.fpscr.Fpscr;
 const fp_regs = @import("regs.zig");
@@ -148,7 +151,7 @@ fn requireSecure(cpu: *const Cpu) op.Error!void {
 }
 
 fn fpInactive(cpu: *const Cpu) bool {
-    const control_bits = @import("../../regs.zig").control_bits;
+    const control_bits = regs.control_bits;
     return cpu.fp.context.fpccr.aspen == 1 and cpu.regs.control & control_bits.fpca == 0;
 }
 
@@ -159,7 +162,7 @@ fn contextPayload(sfpa: u1, fpscr: u32) u32 {
 fn vmrsFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
     try requireSecure(cpu);
     const inactive = fpInactive(cpu);
-    const control_bits = @import("../../regs.zig").control_bits;
+    const control_bits = regs.control_bits;
     const secure_context = cpu.regs.control & control_bits.sfpa != 0;
     const saved = if (inactive)
         contextPayload(0, cpu.fp.context.defaultFpscr().bits())
@@ -178,7 +181,7 @@ fn vmsrFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
 
 fn vmrsFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
     try requireSecure(cpu);
-    const control_bits = @import("../../regs.zig").control_bits;
+    const control_bits = regs.control_bits;
     cpu.regs.set(@intCast(instr.hw2 >> 12), contextPayload(@truncate(cpu.regs.control >> 3), cpu.fp.fpscr.bits()));
     cpu.fp.fpscr = cpu.fp.context.defaultFpscr();
     cpu.regs.control &= ~control_bits.sfpa;
@@ -190,7 +193,7 @@ fn vmsrFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn writeContext(cpu: *Cpu, payload: u32) void {
-    const control_bits = @import("../../regs.zig").control_bits;
+    const control_bits = regs.control_bits;
     const sfpa = @as(u32, @truncate(payload >> 31)) << 3;
     cpu.regs.control = (cpu.regs.control & ~control_bits.sfpa) | sfpa;
     cpu.fp.fpscr = Fpscr.fromBits(payload & 0x0FFF_FFFF);

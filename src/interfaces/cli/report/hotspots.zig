@@ -14,10 +14,10 @@
 //! Quiet when the run spread itself out. A working image touches too many
 //! addresses for any one of them to reach the floor, so it prints nothing
 //! and the reader learns that by the absence.
-const hotspots = @import("ra8_session").hotspots;
-const functions = @import("ra8_session").functions;
-const symbols = @import("ra8_session").symbols;
 const elf = @import("ra8_board").image.elf;
+const functions = @import("ra8_session").functions;
+const hotspots = @import("ra8_session").hotspots;
+const symbols = @import("ra8_session").symbols;
 const Writer = @import("../report.zig").Writer;
 
 /// Print the addresses the run kept coming back to, most sampled first.

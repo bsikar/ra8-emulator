@@ -44,28 +44,202 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 pub const all = forms ++ predicated ++ unclaimed;
 
 const forms = [_]V{
-    vec("vmaxnma.f32 negatives and a lone nan", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0xC0200000_7FC00001_80000000_BF800000, .qm = 0xFFC00001_BF800000_00000000_40200000 }, .{ .qd = 0x40200000_3F800000_00000000_40200000, .fpscr = 0x00040000 }),
-    vec("vminnma.f32 negatives and a lone nan", .{ .hw1 = 0xEE3F, .hw2 = 0x1E85, .qd = 0xC0200000_7FC00001_80000000_BF800000, .qm = 0xFFC00001_BF800000_00000000_40200000 }, .{ .qd = 0x40200000_3F800000_00000000_3F800000, .fpscr = 0x00040000 }),
-    vec("vmaxnma.f32 snan, infinities and denormals", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000 }, .{ .qd = 0x00000000_3F800000_7F800000_7FC00000, .fpscr = 0x00040081 }),
-    vec("vminnma.f32 snan, infinities and denormals", .{ .hw1 = 0xEE3F, .hw2 = 0x1E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000 }, .{ .qd = 0x00000000_00000000_7F800000_7FC00000, .fpscr = 0x00040081 }),
-    vec("vmaxnma.f32 extremes by magnitude", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x40000000_C0000000_80800000_FF7FFFFF, .qm = 0xC0000001_3FFFFFFF_00000001_7F7FFFFF }, .{ .qd = 0x40000001_40000000_00800000_7F7FFFFF, .fpscr = 0x00040080 }),
-    vec("vminnma.f32 extremes by magnitude", .{ .hw1 = 0xEE3F, .hw2 = 0x1E85, .qd = 0x40000000_C0000000_80800000_FF7FFFFF, .qm = 0xC0000001_3FFFFFFF_00000001_7F7FFFFF }, .{ .qd = 0x40000000_3FFFFFFF_00000000_7F7FFFFF, .fpscr = 0x00040080 }),
-    vec("vmaxnma.f16 negatives and a lone nan", .{ .hw1 = 0xFE3F, .hw2 = 0x0E85, .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00, .qm = 0x3C00FBFF_00027C00_7E01BC00_00004100 }, .{ .qd = 0x3C007BFF_00027C00_41003C00_00004100, .fpscr = 0x00040000 }),
-    vec("vminnma.f16 negatives and a lone nan", .{ .hw1 = 0xFE3F, .hw2 = 0x1E85, .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00, .qm = 0x3C00FBFF_00027C00_7E01BC00_00004100 }, .{ .qd = 0x3C007BFF_00017C00_41003C00_00003C00, .fpscr = 0x00040000 }),
-    vec("vmaxnma.f16 snan, quiet nans and denormals kept", .{ .hw1 = 0xFE3F, .hw2 = 0x0E85, .qd = 0xFC00BC00_80000200_C000B555_FE017C01, .qm = 0x7C003C00_00008100_40013556_7E013C00 }, .{ .qd = 0x7C003C00_00000200_40013556_7E007E00, .fpscr = 0x00040001 }),
-    vec("vminnma.f16 snan, quiet nans and denormals kept", .{ .hw1 = 0xFE3F, .hw2 = 0x1E85, .qd = 0xFC00BC00_80000200_C000B555_FE017C01, .qm = 0x7C003C00_00008100_40013556_7E013C00 }, .{ .qd = 0x7C003C00_00000100_40003555_7E007E00, .fpscr = 0x00040001 }),
-    vec("vmaxnma.f32 q7, q5", .{ .hw1 = 0xEE3F, .hw2 = 0xEE8B, .qd = 0xC0200000_7FC00001_80000000_BF800000, .qm = 0xFFC00001_BF800000_00000000_40200000 }, .{ .qd = 0x40200000_3F800000_00000000_40200000, .fpscr = 0x00040000 }),
-    vec("vminnma.f16 qd = qm takes its own magnitude", .{ .hw1 = 0xFE3F, .hw2 = 0x7E87, .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00 }, .{ .qd = 0x00000000_00000000_00000000_00000000, .fpscr = 0x00040000 }),
-    vec("fpscr fz and dn clear still flush and give the default nan", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000 }, .{ .qd = 0x00000000_3F800000_7F800000_7FC00000, .fpscr = 0x00040081 }),
-    vec("flags add to the cumulative bits already set", .{ .hw1 = 0xEE3F, .hw2 = 0x1E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000, .fpscr = 0x00040010 }, .{ .qd = 0x00000000_00000000_7F800000_7FC00000, .fpscr = 0x00040091 }),
+    vec(
+        "vmaxnma.f32 negatives and a lone nan",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0xC0200000_7FC00001_80000000_BF800000,
+            .qm = 0xFFC00001_BF800000_00000000_40200000,
+        },
+        .{ .qd = 0x40200000_3F800000_00000000_40200000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vminnma.f32 negatives and a lone nan",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x1E85,
+            .qd = 0xC0200000_7FC00001_80000000_BF800000,
+            .qm = 0xFFC00001_BF800000_00000000_40200000,
+        },
+        .{ .qd = 0x40200000_3F800000_00000000_3F800000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vmaxnma.f32 snan, infinities and denormals",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+        },
+        .{ .qd = 0x00000000_3F800000_7F800000_7FC00000, .fpscr = 0x00040081 },
+    ),
+    vec(
+        "vminnma.f32 snan, infinities and denormals",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x1E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+        },
+        .{ .qd = 0x00000000_00000000_7F800000_7FC00000, .fpscr = 0x00040081 },
+    ),
+    vec(
+        "vmaxnma.f32 extremes by magnitude",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x40000000_C0000000_80800000_FF7FFFFF,
+            .qm = 0xC0000001_3FFFFFFF_00000001_7F7FFFFF,
+        },
+        .{ .qd = 0x40000001_40000000_00800000_7F7FFFFF, .fpscr = 0x00040080 },
+    ),
+    vec(
+        "vminnma.f32 extremes by magnitude",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x1E85,
+            .qd = 0x40000000_C0000000_80800000_FF7FFFFF,
+            .qm = 0xC0000001_3FFFFFFF_00000001_7F7FFFFF,
+        },
+        .{ .qd = 0x40000000_3FFFFFFF_00000000_7F7FFFFF, .fpscr = 0x00040080 },
+    ),
+    vec(
+        "vmaxnma.f16 negatives and a lone nan",
+        .{
+            .hw1 = 0xFE3F,
+            .hw2 = 0x0E85,
+            .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00,
+            .qm = 0x3C00FBFF_00027C00_7E01BC00_00004100,
+        },
+        .{ .qd = 0x3C007BFF_00027C00_41003C00_00004100, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vminnma.f16 negatives and a lone nan",
+        .{
+            .hw1 = 0xFE3F,
+            .hw2 = 0x1E85,
+            .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00,
+            .qm = 0x3C00FBFF_00027C00_7E01BC00_00004100,
+        },
+        .{ .qd = 0x3C007BFF_00017C00_41003C00_00003C00, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vmaxnma.f16 snan, quiet nans and denormals kept",
+        .{
+            .hw1 = 0xFE3F,
+            .hw2 = 0x0E85,
+            .qd = 0xFC00BC00_80000200_C000B555_FE017C01,
+            .qm = 0x7C003C00_00008100_40013556_7E013C00,
+        },
+        .{ .qd = 0x7C003C00_00000200_40013556_7E007E00, .fpscr = 0x00040001 },
+    ),
+    vec(
+        "vminnma.f16 snan, quiet nans and denormals kept",
+        .{
+            .hw1 = 0xFE3F,
+            .hw2 = 0x1E85,
+            .qd = 0xFC00BC00_80000200_C000B555_FE017C01,
+            .qm = 0x7C003C00_00008100_40013556_7E013C00,
+        },
+        .{ .qd = 0x7C003C00_00000100_40003555_7E007E00, .fpscr = 0x00040001 },
+    ),
+    vec(
+        "vmaxnma.f32 q7, q5",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0xEE8B,
+            .qd = 0xC0200000_7FC00001_80000000_BF800000,
+            .qm = 0xFFC00001_BF800000_00000000_40200000,
+        },
+        .{ .qd = 0x40200000_3F800000_00000000_40200000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "vminnma.f16 qd = qm takes its own magnitude",
+        .{ .hw1 = 0xFE3F, .hw2 = 0x7E87, .qd = 0xBC007BFF_8001FC00_C1007E01_8000BC00 },
+        .{ .qd = 0x00000000_00000000_00000000_00000000, .fpscr = 0x00040000 },
+    ),
+    vec(
+        "fpscr fz and dn clear still flush and give the default nan",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+        },
+        .{ .qd = 0x00000000_3F800000_7F800000_7FC00000, .fpscr = 0x00040081 },
+    ),
+    vec(
+        "flags add to the cumulative bits already set",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x1E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+            .fpscr = 0x00040010,
+        },
+        .{ .qd = 0x00000000_00000000_7F800000_7FC00000, .fpscr = 0x00040091 },
+    ),
 };
 
 const predicated = [_]V{
-    vec("vpt p0 0x0f0e computes lane 0 but drops its flags", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000, .vpr = 0x00880F0E }, .{ .qd = 0x80400000_3F800000_FF800000_7FC00001, .fpscr = 0x00040080, .vpr = 0x00000F0E }),
-    vec("vpt p0 0x00f1 keeps lane 0 flags", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000, .vpr = 0x008800F1 }, .{ .qd = 0x80400000_00000001_7F800000_7F800000, .fpscr = 0x00040001, .vpr = 0x000000F1 }),
-    vec("the loop tail drops lanes 2 and 3", .{ .hw1 = 0xEE3F, .hw2 = 0x1E85, .qd = 0x7F800001_00000001_40000000_BF800000, .qm = 0x80000000_BF800000_7F800000_BF800000, .lr = 2, .fpscr = 0x00020000 }, .{ .qd = 0x7F800001_00000001_40000000_3F800000, .fpscr = 0x00020000 }),
-    vec("the f16 loop tail at ltpsize 1", .{ .hw1 = 0xFE3F, .hw2 = 0x0E85, .qd = 0xFC00BC00_80000200_C000B555_FE017C01, .qm = 0x7C003C00_00008100_40013556_7E013C00, .lr = 3, .fpscr = 0x00010000 }, .{ .qd = 0xFC00BC00_80000200_C0003556_7E007E00, .fpscr = 0x00010001 }),
-    vec("eci a0a1 keeps the done lanes and their flags", .{ .hw1 = 0xEE3F, .hw2 = 0x0E85, .qd = 0x80400000_00000001_FF800000_7F800001, .qm = 0x80000000_BF800000_7F800000_BF800000, .it = 0x20 }, .{ .qd = 0x00000000_3F800000_FF800000_7F800001, .fpscr = 0x00040080 }),
+    vec(
+        "vpt p0 0x0f0e computes lane 0 but drops its flags",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+            .vpr = 0x00880F0E,
+        },
+        .{ .qd = 0x80400000_3F800000_FF800000_7FC00001, .fpscr = 0x00040080, .vpr = 0x00000F0E },
+    ),
+    vec(
+        "vpt p0 0x00f1 keeps lane 0 flags",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+            .vpr = 0x008800F1,
+        },
+        .{ .qd = 0x80400000_00000001_7F800000_7F800000, .fpscr = 0x00040001, .vpr = 0x000000F1 },
+    ),
+    vec(
+        "the loop tail drops lanes 2 and 3",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x1E85,
+            .qd = 0x7F800001_00000001_40000000_BF800000,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+            .lr = 2,
+            .fpscr = 0x00020000,
+        },
+        .{ .qd = 0x7F800001_00000001_40000000_3F800000, .fpscr = 0x00020000 },
+    ),
+    vec(
+        "the f16 loop tail at ltpsize 1",
+        .{
+            .hw1 = 0xFE3F,
+            .hw2 = 0x0E85,
+            .qd = 0xFC00BC00_80000200_C000B555_FE017C01,
+            .qm = 0x7C003C00_00008100_40013556_7E013C00,
+            .lr = 3,
+            .fpscr = 0x00010000,
+        },
+        .{ .qd = 0xFC00BC00_80000200_C0003556_7E007E00, .fpscr = 0x00010001 },
+    ),
+    vec(
+        "eci a0a1 keeps the done lanes and their flags",
+        .{
+            .hw1 = 0xEE3F,
+            .hw2 = 0x0E85,
+            .qd = 0x80400000_00000001_FF800000_7F800001,
+            .qm = 0x80000000_BF800000_7F800000_BF800000,
+            .it = 0x20,
+        },
+        .{ .qd = 0x00000000_3F800000_FF800000_7F800001, .fpscr = 0x00040080 },
+    ),
 };
 
 const unclaimed = [_]V{

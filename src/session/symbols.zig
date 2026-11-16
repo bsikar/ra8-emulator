@@ -20,6 +20,7 @@
 //! Every read is bounds-checked against the image's own bytes, so a
 //! truncated or hostile table gives null rather than a slice out of range.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 
 /// The parsed image every lookup here reads: the board loader's ELF image.
@@ -278,7 +279,10 @@ pub const Walk = struct {
     pub fn next(self: *Walk) ?Named {
         const tab = self.found orelse return null;
         while (self.offset + @sizeOf(Symbol) <= tab.symbols.len) {
-            const entry: *align(1) const Symbol = std.mem.bytesAsValue(Symbol, tab.symbols[self.offset..][0..@sizeOf(Symbol)]);
+            const entry: *align(1) const Symbol = std.mem.bytesAsValue(
+                Symbol,
+                tab.symbols[self.offset..][0..@sizeOf(Symbol)],
+            );
             self.offset += tab.entry_size;
             const name = nameAt(tab.strings, entry.st_name) orelse continue;
             return .{ .name = name, .value = entry.st_value, .size = entry.st_size, .kind = entry.st_info & 0xF };

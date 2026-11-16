@@ -51,7 +51,6 @@
 //! encodings nobody names (2, 3 and 7..15) count in saw mode rather than
 //! being given an invented shape, and `name()` says the mode is unknown so
 //! the run does not claim to have recognised it.
-const std = @import("std");
 
 /// Where MD sits in GTCR (ra8_gpt.c, HUM Ch 22.2.5 p 904..906).
 pub const field = struct {

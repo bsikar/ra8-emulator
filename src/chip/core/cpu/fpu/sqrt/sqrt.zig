@@ -6,13 +6,15 @@
 //! IOC. Everything else is the square root, rounded once by FPRound. Under
 //! FZ a negative denormal flushes to -0 first, so it returns -0, not a NaN.
 const std = @import("std");
+
 const format = @import("../format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
-const unpack_mod = @import("../unpack.zig");
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
+const unpack_mod = @import("../unpack.zig");
 pub const vectors = @import("vectors.zig");
 
 /// The radicand is shifted until its top bit is at or just below this bit

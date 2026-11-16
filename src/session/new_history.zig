@@ -7,13 +7,15 @@
 //! session that records into a persistent history but has no such hook
 //! stops recording rather than mixing two programs into one history.
 const std = @import("std");
+
 const api = @import("api.zig");
 const apply = @import("apply.zig");
-const line = @import("line.zig");
-const replay_feeder = @import("history/replay_feeder.zig");
+const async_traffic = @import("history/async_traffic.zig");
 const branch_mod = @import("history/branch.zig");
 const history_root = @import("history/root.zig");
-const async_traffic = @import("history/async_traffic.zig");
+const line = @import("line.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
+const write_undo = @import("write_undo.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -47,6 +49,7 @@ pub fn start(self: *Session, core: Core, image: []const u8) anyerror!void {
     errdefer if (fresh) |*graph| graph.deinit();
     if (self.persistent_recorder) |rec| try rec.force();
     try apply.applyAction(self, .{ .load = .{ .core = core, .image = image } });
+    defer write_undo.loaded(self);
     resetLines(self, &fresh);
     self.root = null;
     self.image_identity = .{ null, null };

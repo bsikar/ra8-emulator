@@ -1,5 +1,6 @@
 //! Bounded DAP Content-Length framing, independent of packet boundaries.
 const std = @import("std");
+
 pub const max_body = 64 * 1024;
 pub const Decoder = struct {
     header: [1024]u8 = undefined,

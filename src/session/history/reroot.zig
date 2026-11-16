@@ -11,10 +11,11 @@
 //!    new root (Error.PinnedHistory).
 //!  - Refuses if the target checkpoint does not exist (Error.NoSuchCheckpoint).
 const std = @import("std");
+
+const branch_mod = @import("branch.zig");
+const manifest_mod = @import("manifest.zig");
 const ObjectId = @import("object_id.zig").ObjectId;
 const Position = @import("position.zig").Position;
-const manifest_mod = @import("manifest.zig");
-const branch_mod = @import("branch.zig");
 
 pub const Error = error{
     NotConfirmed,
@@ -95,8 +96,12 @@ fn collectUnreachableObjects(
 
     for (checkpoints) |cp| {
         if (!isPriorToTarget(graph, cp.position, target_pos)) {
-            for (cp.manifest.pages) |p| try kept_set.put(p.object.bytes, {});
-            for (cp.manifest.blobs) |b| try kept_set.put(b.object.bytes, {});
+            for (cp.manifest.pages) |p| {
+                try kept_set.put(p.object.bytes, {});
+            }
+            for (cp.manifest.blobs) |b| {
+                try kept_set.put(b.object.bytes, {});
+            }
             if (cp.manifest.picture) |pic| try kept_set.put(pic.bytes, {});
         }
     }

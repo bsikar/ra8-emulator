@@ -2,6 +2,15 @@
 //! tests, built as their own binary so neither half of `zig build test` needs
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
+    _ = @import("host/targets_test.zig");
+    _ = @import("interfaces/cli/ctl/targets_test.zig");
+    _ = @import("interfaces/rpc/targets_test.zig");
+    _ = @import("interfaces/rpc/targets_wire_test.zig");
+    _ = @import("interfaces/cli/serve/targets_test.zig");
+    _ = @import("interfaces/cli/artifacts/main_test.zig");
+    _ = @import("snapshot/all.zig");
+    _ = @import("interfaces/rpc/artifacts/all.zig");
+    _ = @import("interfaces/rpc/bundle/all.zig");
     _ = @import("interfaces/rpc/build_test.zig");
     _ = @import("host/build/request_test.zig");
     _ = @import("host/build/queue_test.zig");
@@ -80,19 +89,15 @@ test {
     _ = @import("interfaces/cli/ctl_end_to_end_test.zig");
     _ = @import("interfaces/cli/ctl_map_test.zig");
     _ = @import("host/profiles_test.zig");
-    _ = @import("interfaces/rpc/session/advance_transport_test.zig");
-    _ = @import("interfaces/rpc/session/seek_test.zig");
+    _ = @import("interfaces/rpc/session/session_test.zig");
     _ = @import("interfaces/rpc/host_listener_discovery_test.zig");
     _ = @import("interfaces/cli/ctl_host_test.zig");
     _ = @import("interfaces/cli/serve_stdio_test.zig");
     _ = @import("interfaces/cli/serve_parse_test.zig");
     _ = @import("interfaces/cli/map_main_test.zig");
-    _ = @import("snapshot/file_test.zig");
     _ = @import("board/snapshot/memory_test.zig");
-    _ = @import("snapshot/fields_test.zig");
     _ = @import("chip/core/cpu/snapshot_test.zig");
     _ = @import("chip/snapshot/time_test.zig");
-    _ = @import("snapshot/units_test.zig");
     _ = @import("chip/snapshot/timers_test.zig");
     _ = @import("chip/periph/sci/snapshot_test.zig");
     _ = @import("board/snapshot/sd_test.zig");
@@ -127,7 +132,6 @@ test {
     _ = @import("interfaces/render/wav_test.zig");
     _ = @import("interfaces/render/board_view_test.zig");
     _ = @import("session/debug_read_wire_test.zig");
-    _ = @import("interfaces/rpc/session/timeline_trace_test.zig");
     _ = @import("interfaces/cli/report/dma_test.zig");
     _ = @import("interfaces/cli/report/profile_test.zig");
     _ = @import("interfaces/cli/folded_guest_test.zig");
@@ -166,9 +170,7 @@ test {
     _ = @import("interfaces/cli/sweep/cli_test.zig");
     _ = @import("interfaces/cli/sweep/elf_test.zig");
     _ = @import("interfaces/cli/sweep/elf_interrupt_test.zig");
-    _ = @import("interfaces/rpc/session/rpc_test.zig");
     _ = @import("interfaces/rpc/stdio_transport_test.zig");
-    _ = @import("interfaces/rpc/session/server_test.zig");
     _ = @import("interfaces/rpc/host_listener_test.zig");
     _ = @import("interfaces/rpc/host_gdb_test.zig");
     _ = @import("interfaces/rpc/socket_transport_test.zig");
@@ -183,31 +185,8 @@ test {
     _ = @import("interfaces/rpc/session_list_parts_test.zig");
     _ = @import("interfaces/rpc/session_board_parts_test.zig");
     _ = @import("interfaces/rpc/session_board_profile_test.zig");
-    _ = @import("interfaces/rpc/session/camera_test.zig");
-    _ = @import("interfaces/rpc/session/lcd_feed_test.zig");
-    _ = @import("interfaces/rpc/session/advance_test.zig");
-    _ = @import("interfaces/rpc/session/files_test.zig");
-    _ = @import("interfaces/rpc/session/load_chunks_test.zig");
-    _ = @import("interfaces/rpc/session/stack_test.zig");
-    _ = @import("interfaces/rpc/session/rtc_test.zig");
-    _ = @import("interfaces/rpc/session/metrics_test.zig");
-    _ = @import("interfaces/rpc/session/input_test.zig");
-    _ = @import("interfaces/rpc/session/event_feed_test.zig");
-    _ = @import("interfaces/rpc/session/backtrace_test.zig");
-    _ = @import("interfaces/rpc/session/locals_test.zig");
-    _ = @import("interfaces/rpc/session/source_line_test.zig");
     _ = @import("interfaces/rpc/backtrace_wire_test.zig");
     _ = @import("interfaces/rpc/locals_wire_test.zig");
-    _ = @import("interfaces/rpc/session/periph_test.zig");
-    _ = @import("interfaces/rpc/session/folded_test.zig");
-    _ = @import("interfaces/rpc/session/branch_test.zig");
-    _ = @import("interfaces/rpc/session/branch_wire_test.zig");
-    _ = @import("interfaces/rpc/session/diff_test.zig");
-    _ = @import("interfaces/rpc/session/diff_wire_test.zig");
-    _ = @import("interfaces/rpc/session/disasm_test.zig");
-    _ = @import("interfaces/rpc/session/disasm_wire_test.zig");
-    _ = @import("interfaces/rpc/session/locals_wire_test.zig");
-    _ = @import("interfaces/rpc/session/set_var_test.zig");
     _ = @import("interfaces/rpc/served_cpu1_test.zig");
     _ = @import("interfaces/rpc/served_second_test.zig");
     _ = @import("interfaces/rpc/served_history_test.zig");
@@ -224,7 +203,6 @@ test {
     _ = @import("interfaces/rpc/pack_store_test.zig");
     _ = @import("interfaces/rpc/history_ram_test.zig");
     _ = @import("interfaces/rpc/recorder_acceptance_test.zig");
-    _ = @import("interfaces/rpc/session/nav_rpc_test.zig");
     _ = @import("interfaces/cli/nav_cli_test.zig");
     _ = @import("interfaces/cli/session_run_test.zig");
     _ = @import("interfaces/rpc/served_markers_test.zig");

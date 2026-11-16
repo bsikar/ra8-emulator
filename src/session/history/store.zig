@@ -9,6 +9,7 @@
 //! queue drops is never lost.
 
 const std = @import("std");
+
 const Allocator = std.mem.Allocator;
 const format = @import("format.zig");
 
@@ -38,7 +39,9 @@ pub const Store = struct {
     pub fn count(self: *const Store) usize {
         var n: usize = 0;
         var at: usize = 0;
-        while (at < self.held) : (n += 1) at += self.frameLen(at);
+        while (at < self.held) : (n += 1) {
+            at += self.frameLen(at);
+        }
         return n;
     }
 
@@ -47,7 +50,9 @@ pub const Store = struct {
         std.debug.assert(index < self.count());
         var at: usize = 0;
         var i: usize = 0;
-        while (i < index) : (i += 1) at += self.frameLen(at);
+        while (i < index) : (i += 1) {
+            at += self.frameLen(at);
+        }
         return self.bytes[at..][0..self.frameLen(at)];
     }
 
@@ -74,7 +79,9 @@ pub const Store = struct {
     pub fn keepFrames(self: *Store, frames: usize) void {
         var at: usize = 0;
         var i: usize = 0;
-        while (i < frames and at < self.held) : (i += 1) at += self.frameLen(at);
+        while (i < frames and at < self.held) : (i += 1) {
+            at += self.frameLen(at);
+        }
         self.held = at;
     }
 

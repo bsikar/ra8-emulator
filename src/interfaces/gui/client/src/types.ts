@@ -84,7 +84,7 @@ export enum Method {
   Seek = 0x012C,
   Rcont = 0x012D,
   Metrics = 0x012E,
-  // 0x012F skipped
+  Disasm = 0x012F,
   BranchList = 0x0130,
   BranchSwitch = 0x0131,
   BranchDelete = 0x0132,
@@ -99,13 +99,15 @@ export enum Method {
   FrameStatus = 0x013B,
   Diff = 0x013C,
   SetVar = 0x013D,
-  Disasm = 0x013E,
+  UndoWrite = 0x013E,
+  ResetImage = 0x013F,
 }
 
 export const CAP_TRANSPORT = 1 << 15;
 export const CAP_WORKSPACE = 1 << 16;
 export const CAP_BUILD = 1 << 17;
 export const CAP_PROJECT = 1 << 18;
+export const CAP_RECOVERY = 1 << 19;
 
 /** Opcode is an alias for Method */
 export { Method as Opcode };
@@ -244,6 +246,7 @@ export enum EventKind {
   RtosIdle = 20,
   IsrEnter = 21,
   IsrLeave = 22,
+  Rewound = 23,
 }
 
 /** Input kind (InputKind in rpc.zig) */

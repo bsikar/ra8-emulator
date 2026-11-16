@@ -8,8 +8,9 @@
 //! SRAM unit and bank table (chosen by part), SYRSTMSK's protection and
 //! armed-flag pointers, and the MPU guard's unit pointer. A load keeps the target's.
 const std = @import("std");
-const file = @import("ra8_snapshot").file;
+
 const fields = @import("ra8_snapshot").fields;
+const file = @import("ra8_snapshot").file;
 
 pub const Error = file.Error || fields.Error || error{Missing};
 
@@ -49,7 +50,9 @@ pub fn save(board: anytype, writer: anytype) !void {
 }
 
 fn body(writer: anytype, board: anytype) !void {
-    inline for (parts) |part| try fields.writeExcept(writer, target(board, part).*, part.skip);
+    inline for (parts) |part| {
+        try fields.writeExcept(writer, target(board, part).*, part.skip);
+    }
 }
 
 /// All or nothing: every part is read over a copy of itself, and the board
@@ -64,7 +67,9 @@ pub fn load(board: anytype, bytes: []const u8) Error!void {
         try fields.readOver(&cursor, &copies[i], part.skip);
     }
     if (!cursor.done() or !fits(&copies)) return Error.BadValue;
-    inline for (parts, 0..) |part, i| target(board, part).* = copies[i];
+    inline for (parts, 0..) |part, i| {
+        target(board, part).* = copies[i];
+    }
 }
 
 fn fits(copies: anytype) bool {
@@ -101,6 +106,8 @@ fn Pointer(comptime Board: type, comptime part: Part) type {
 /// The types of `parts`' targets in `Board`, as a tuple.
 fn Copies(comptime Board: type) type {
     var types: [parts.len]type = undefined;
-    for (parts, 0..) |part, i| types[i] = Target(Board, part);
+    for (parts, 0..) |part, i| {
+        types[i] = Target(Board, part);
+    }
     return @Tuple(&types);
 }

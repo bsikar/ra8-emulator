@@ -1,8 +1,8 @@
 //! Conformance vectors for the MVE VLD2/VLD4/VST2/VST4 beat offsets
 //! (interleave.beatOffset), worked from the Arm ARM (DDI0553) pseudocode
 //! by /workspace/tools/mve_interleave.py on the lane's box.
-const vector = @import("../../conformance/vector.zig");
 const interleave = @import("interleave.zig");
+const vector = @import("../../conformance/vector.zig");
 
 const V = vector.Vector(interleave.Beat, u32);
 
@@ -33,6 +33,19 @@ pub const vectors = [_]V{
     .{ .encoding = "VST43", .name = "beat 2", .input = .{ .regs = 4, .pat = 3, .beat = 2 }, .expect = 32 },
 };
 
-pub const claimed = [_][]const u8{ "VLD20", "VLD21", "VLD40", "VLD41", "VLD42", "VLD43", "VST20", "VST21", "VST40", "VST41", "VST42", "VST43" };
+pub const claimed = [_][]const u8{
+    "VLD20",
+    "VLD21",
+    "VLD40",
+    "VLD41",
+    "VLD42",
+    "VLD43",
+    "VST20",
+    "VST21",
+    "VST40",
+    "VST41",
+    "VST42",
+    "VST43",
+};
 
 pub const covered = vector.encodingsOf(interleave.Beat, u32, &vectors);

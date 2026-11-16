@@ -1,10 +1,13 @@
 //! The answer loop the serve front runs on one connected peer (RA8EMU-736).
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
+const Listener = @import("ra8_rpc").host_listener.Listener;
 const served = @import("ra8_rpc").session.server;
-const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
+const Service = @import("ra8_rpc").artifacts.service.Service;
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
+const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 const win32 = @import("ra8_host").win32;
 
 /// How long an idle server waits on its peer before checking again.
@@ -13,7 +16,7 @@ const idle_wait_ms = 20;
 pub const Buffers = struct {
     rx: []u8,
     tx: []u8,
-    listener: ?*@import("ra8_rpc").host_listener.Listener = null,
+    listener: ?*Listener = null,
 
     pub fn pump(self: Buffers, context: *served.Context) !void {
         if (self.listener) |listener| {
@@ -36,7 +39,14 @@ pub fn answerStdio(io: std.Io, context: *served.Context, buffers: Buffers) !void
 }
 
 /// Answer frames on `wire` until the peer behind `fd` closes or a stop is asked.
-pub fn answer(io: std.Io, context: *served.Context, wire: served.rpc_lib.Transport, fd: std.posix.fd_t, link: Link, buffers: Buffers) !void {
+pub fn answer(
+    io: std.Io,
+    context: *served.Context,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+    buffers: Buffers,
+) !void {
     var host = served.Host.init(wire, buffers.rx, context);
     defer host.deinit();
     while (true) {
@@ -90,4 +100,48 @@ fn peerGone(io: std.Io, fd: std.posix.fd_t, is_unix: bool) bool {
     var byte: [1]u8 = undefined;
     const got = if (is_unix) sock_unix.takeByte(io, fd, &byte, true) else sock_ready.takeByte(io, fd, &byte, true);
     return (got orelse return true) == 0;
+}
+
+/// Stdio remains open for a fresh greeting after importing a replacement.
+pub fn answerStdioManaged(io: std.Io, service: *Service) !void {
+    var stdio = Stdio.process();
+    try answerManaged(io, service, stdio.transport(), stdio.input, .pipe);
+}
+
+pub fn answerManaged(
+    io: std.Io,
+    service: *Service,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+) !void {
+    while (true) {
+        if (!try managedSession(io, service, wire, fd, link)) return;
+        service.activate();
+        // Socket peers reconnect after their commit reply; stdio starts a new handshake.
+        if (link != .pipe) return;
+    }
+}
+
+fn managedSession(
+    io: std.Io,
+    service: *Service,
+    wire: served.rpc_lib.Transport,
+    fd: std.posix.fd_t,
+    link: Link,
+) !bool {
+    const source = service.active;
+    var host = served.Host.init(wire, source.rx, &source.context);
+    defer host.deinit();
+    errdefer service.discardPending();
+    while (true) {
+        const polled = host.poll(source.tx) catch |err| {
+            service.discardPending();
+            if (err == error.LinkDown and try closed(io, fd, link)) return false;
+            return err;
+        };
+        if (service.pending != null) return true;
+        if (polled != .idle) continue;
+        if (stopping.load(.acquire) or try closed(io, fd, link)) return false;
+    }
 }

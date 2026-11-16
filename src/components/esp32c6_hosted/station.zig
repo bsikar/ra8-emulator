@@ -6,8 +6,8 @@
 //! "benc" at 02:03:04:05:06:07 on channel 6 with RSSI -55 dBm, and
 //! WIFI_EVENT_STA_START (2) after the station starts. Field numbers follow
 //! esp-hosted-mcu v2.12.12 common/proto/esp_hosted_rpc.proto.
-const frame = @import("frame.zig");
 const event = @import("event.zig");
+const frame = @import("frame.zig");
 const scan = @import("scan.zig");
 
 pub const Error = event.Error;

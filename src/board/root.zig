@@ -7,9 +7,6 @@
 //!
 //! The board's own files are exported by name. Each namespace below is the
 //! index file beside its directory.
-pub const image = @import("image.zig");
-pub const snapshot = @import("snapshot.zig");
-pub const sizing = @import("sizing.zig");
 pub const board = @import("board.zig");
 pub const boundary = @import("boundary.zig");
 pub const camera_install = @import("camera_install.zig");
@@ -21,12 +18,15 @@ pub const external = @import("external/external.zig");
 pub const frame_capture = @import("frame_capture.zig");
 pub const frame_tap = @import("frame_tap.zig");
 pub const i2c = @import("i2c.zig");
+pub const image = @import("image.zig");
 pub const net = @import("net.zig");
 pub const panels = @import("panels.zig");
 pub const plug = @import("plug.zig");
 pub const profile = @import("profile.zig");
 pub const quiet_due = @import("quiet_due.zig");
 pub const run_hook = @import("run_hook.zig");
+pub const sizing = @import("sizing.zig");
+pub const snapshot = @import("snapshot.zig");
 pub const switches = @import("switches.zig");
 pub const usb = @import("usb/usb.zig");
 pub const wiring = @import("wiring.zig");

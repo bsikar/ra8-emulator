@@ -12,12 +12,14 @@
 //! clear (other encodings) and a store with U set stay unclaimed.
 //! Active elements are MemA accesses and fault before reaching the bus.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
+const alignment = @import("../../../alignment.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const alignment = @import("../../../alignment.zig");
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const contiguous = mve.contiguous;
 const Size = mve.qreg.Size;
 
@@ -101,7 +103,12 @@ fn store(cpu: *Cpu, start: u32, s: Sizes, mask: u16, value: u128) op.Error!void 
         try alignment.memA(contiguous.address(start, s.memory, e), contiguous.bytes(s.memory));
         const raw = mve.qreg.elem(value, s.element, e);
         var buf: [4]u8 = undefined;
-        std.mem.writeInt(u32, &buf, contiguous.element(.{ .value = raw, .msize = s.memory, .signed = false, .store = true }), .little);
+        std.mem.writeInt(
+            u32,
+            &buf,
+            contiguous.element(.{ .value = raw, .msize = s.memory, .signed = false, .store = true }),
+            .little,
+        );
         try cpu.bus.write(contiguous.address(start, s.memory, e), buf[0..contiguous.bytes(s.memory)]);
     }
 }

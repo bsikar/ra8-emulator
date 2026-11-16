@@ -5,11 +5,12 @@
 //! 110 are left unclaimed. size 1 is F16 and size 2 is F32; sizes 0 and 3
 //! are left unclaimed. D and M would name Q8 and above, so they must be
 //! zero. The lane semantics are in src/chip/core/cpu/mve/float/rint/rint.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const Kind = mve.float.rint.Kind;
 
 pub const group: op.Group = .{ .name = "mve_float_rint", .decode = decode, .oracle = false };

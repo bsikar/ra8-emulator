@@ -5,6 +5,7 @@
 //! and beats are applied by whoever writes the result back.
 
 pub const vectors = @import("vectors.zig");
+
 pub const Op = enum { @"and", bic, orr, orn, eor };
 
 /// The result of `op` on vectors `a` (Qn) and `b` (Qm).

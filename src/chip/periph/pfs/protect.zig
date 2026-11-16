@@ -25,7 +25,6 @@
 //! RA8D2 and no firmware here programmes it. So PWPRS.PFSWE is the bit that
 //! lets a pin write land. PWPR is still modelled, because the driver writes it
 //! and reads it back, but it governs nothing until PMSAR is modelled too.
-const std = @import("std");
 
 pub const off = struct {
     /// PWPR: the non-secure write protect register.

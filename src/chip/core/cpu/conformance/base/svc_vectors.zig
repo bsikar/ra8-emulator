@@ -31,7 +31,11 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 
 pub const all = [_]V{
     vec("svc #0 raises SVCall", .{ .hw1 = 0xDF00 }, .{ .raised = 11, .pc = next }),
-    vec("svc #255 raises SVCall, NZCV kept", .{ .hw1 = 0xDFFF, .nzcv = 0xF }, .{ .raised = 11, .pc = next, .nzcv = 0xF }),
+    vec(
+        "svc #255 raises SVCall, NZCV kept",
+        .{ .hw1 = 0xDFFF, .nzcv = 0xF },
+        .{ .raised = 11, .pc = next, .nzcv = 0xF },
+    ),
     vec("udf is not svc", .{ .hw1 = 0xDE00 }, .{ .claimed = false }),
 };
 

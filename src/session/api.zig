@@ -1,54 +1,64 @@
 //! Core-addressed debugger operations shared by script, GDB and embedders.
+const chip = @import("ra8_chip");
+const device_metrics = @import("device_metrics.zig");
+const prefetch_api = @import("history/prefetch.zig");
+const session_attachments = @import("attachments.zig");
+const stream = @import("event/stream.zig");
+
 const std = @import("std");
-const debug_session = @import("session.zig");
-const stop_machine = @import("stop_machine.zig");
-const itm = @import("ra8_chip").periph.itm;
+
+const async_traffic = @import("history/async_traffic.zig");
+const board_faults = @import("board/faults/faults.zig");
+const BoardTick = @import("ra8_chip").core.tick.Tick;
 const breakpoint = @import("breakpoint.zig");
+pub const Core = @import("event/stream.zig").Core;
 const core_view = @import("core_view.zig");
+const endpoint = @import("ra8_components").endpoint;
+const event_sources = @import("event/sources.zig");
+pub const EventStream = @import("event/stream.zig").Stream;
+const fault_spec = @import("ra8_components").fault.spec;
+const gt911 = @import("ra8_components").gt911;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const history_async = @import("history/async_queue.zig");
+const history_mod = @import("history.zig");
+const history_nav_index = @import("history/nav_index.zig");
+const history_position = @import("history/position.zig");
+const history_recorder = @import("history/recorder.zig");
+const history_root = @import("history/root.zig");
+const input_script = @import("ra8_components").input_script;
+const itm = @import("ra8_chip").periph.itm;
+const replay_feeder = @import("history/replay_feeder.zig");
+const session_control = @import("control.zig");
+const session_display = @import("display.zig");
+const session_fork = @import("fork.zig");
+const session_input = @import("input.zig");
+const session_line = @import("line.zig");
+const session_points = @import("points.zig");
+const session_search = @import("search.zig");
+const session_smooth_rewind = @import("smooth_rewind.zig");
+const session_speed = @import("speed.zig");
+const session_window = @import("window.zig");
+const stop_machine = @import("stop_machine.zig");
+const tap_part = @import("tap_part.zig");
+const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
 const watch_table = @import("watch/table.zig");
+const window_engine = @import("history/window_engine.zig");
+const write_undo = @import("write_undo.zig");
 const zig_drive = @import("zig/drive.zig");
 const zig_session = @import("zig/session.zig");
-const input_script = @import("ra8_components").input_script;
-const gt911 = @import("ra8_components").gt911;
-const BoardTick = @import("ra8_chip").core.tick.Tick;
-const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
-const session_display = @import("display.zig");
-const board_faults = @import("board/faults/faults.zig");
-const endpoint = @import("ra8_components").endpoint;
-const fault_spec = @import("ra8_components").fault.spec;
-const TimeBase = @import("ra8_chip").periph.timebase.TimeBase;
-const tap_part = @import("tap_part.zig");
-const session_speed = @import("speed.zig");
-const history_mod = @import("history.zig");
-const event_sources = @import("event/sources.zig");
-const session_input = @import("input.zig");
-const session_points = @import("points.zig");
-const session_fork = @import("fork.zig");
-const session_control = @import("control.zig");
-const history_recorder = @import("history/recorder.zig");
-const history_position = @import("history/position.zig");
-const history_root = @import("history/root.zig");
-const history_async = @import("history/async_queue.zig");
-const async_traffic = @import("history/async_traffic.zig");
-const replay_feeder = @import("history/replay_feeder.zig");
-const session_line = @import("line.zig");
-const session_window = @import("window.zig");
-const window_engine = @import("history/window_engine.zig");
-const session_smooth_rewind = @import("smooth_rewind.zig");
-const history_nav_index = @import("history/nav_index.zig");
-const session_search = @import("search.zig");
-pub const Core = @import("event/stream.zig").Core;
-pub const EventStream = @import("event/stream.zig").Stream;
+
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("breaks/table.zig").Id;
+
 pub const WatchId = watch_table.Id;
 pub const Register = core_view.Cortex;
 pub const Button = input_script.Button;
 pub const Frame = session_display.Frame;
 pub const Display = session_display.Display;
 pub const Widget = @import("widget_tree.zig").Widget;
+
 pub const TapPart = tap_part.Part;
 pub const Position = history_position.Position;
 pub const AsyncSource = history_async.Source;
@@ -74,13 +84,14 @@ pub const SpeedHook = session_speed.Hook;
 pub const History = history_mod.History;
 pub const EventClock = struct { context: *anyopaque, nowFn: *const fn (*anyopaque) u64 };
 pub const Event = @import("event/stream.zig").Event;
+
 const BoardRun = struct { tick: BoardTick, guest: Guest };
 pub const Session = struct {
     live: zig_session.ZigSession,
-    metrics: ?@import("device_metrics.zig").Hook = null,
+    metrics: ?device_metrics.Hook = null,
     time_base: ?*const TimeBase = null,
     event_clock: ?EventClock = null,
-    grid: ?*const @import("ra8_chip").core.scheduler.State = null,
+    grid: ?*const chip.core.scheduler.State = null,
     loader: ?Loader = null,
     input_script: ?*input_script.Script = null,
     board_ticks: [2]?BoardRun = .{ null, null },
@@ -118,67 +129,33 @@ pub const Session = struct {
     advancing: bool = false,
     /// The first replay determinism error, until a run slice reports it.
     replay_failure: ?stop_machine.ReplayFailure = null,
-    prefetch_pool: ?*@import("history/prefetch.zig").Prefetch = null,
+    prefetch_pool: ?*prefetch_api.Prefetch = null,
     pub const deviceMetrics = @import("device_metrics.zig").read;
-    pub fn attachLoader(self: *Session, loader: Loader) void {
-        self.loader = loader;
-    }
-    pub fn attachTimeBase(self: *Session, time_base: *const TimeBase) void {
-        self.time_base = time_base;
-        self.event_sources.bind(&self.event_stream, time_base);
-    }
-    pub fn attachEventClock(self: *Session, clock: EventClock) void {
-        self.event_clock = clock;
-    }
+
+    pub const attachLoader = session_attachments.attachLoader;
+    pub const attachTimeBase = session_attachments.attachTimeBase;
+    pub const attachEventClock = session_attachments.attachEventClock;
     pub fn now(self: *const Session) Error!u64 {
         const time = self.time_base orelse return Error.NoTime;
         return time.nowAfter(if (self.grid) |grid| grid.stretch.carry else 0);
     }
-    pub fn attachInputScript(self: *Session, script: *input_script.Script) void {
-        self.input_script = script;
-    }
-    pub fn attachBoard(self: *Session, core: Core, tick: BoardTick, guest: Guest) void {
-        self.board_ticks[@backingInt(core)] = .{ .tick = tick, .guest = guest };
-    }
-    pub fn attachDisplay(self: *Session, d: session_display.Display) void {
-        self.display = d;
-    }
-    pub fn attachFaults(self: *Session, faults: *board_faults.Faults) void {
-        self.faults = faults;
-    }
-    pub fn attachForkRouter(self: *Session, router: *session_fork.ForkRouter) void {
-        self.fork_router = router;
-    }
-    pub fn attachGraphSink(self: *Session, sink: GraphSink) void {
-        self.graph_sink = sink;
-    }
-    pub fn attachNewHistory(self: *Session, hook: session_fork.fork_types.NewHistoryHook) void {
-        self.new_history = hook;
-    }
-    pub fn attachRoot(self: *Session, r: *const history_root.Root) void {
-        self.root = r;
-    }
+    pub const attachInputScript = session_attachments.attachInputScript;
+    pub const attachBoard = session_attachments.attachBoard;
+    pub const attachDisplay = session_attachments.attachDisplay;
+    pub const attachFaults = session_attachments.attachFaults;
+    pub const attachForkRouter = session_attachments.attachForkRouter;
+    pub const attachGraphSink = session_attachments.attachGraphSink;
+    pub const attachNewHistory = session_attachments.attachNewHistory;
+    pub const attachRoot = session_attachments.attachRoot;
     pub const setReplaying = session_fork.setReplaying;
     pub const failReplay = session_fork.failReplay;
     pub const outputMuted = session_fork.outputMuted;
-    pub fn attachImageIdentity(self: *Session, core: Core, id: [16]u8) void {
-        self.image_identity[@as(usize, @backingInt(core))] = id;
-    }
-    pub fn attachNet(self: *Session, hook: NetHook) void {
-        self.net_hook = hook;
-    }
-    pub fn attachConsole(self: *Session, hook: ConsoleHook) void {
-        self.console_hook = hook;
-    }
-    pub fn attachCamera(self: *Session, hook: CameraHook) void {
-        self.camera_hook = hook;
-    }
-    pub fn attachPersistentRecorder(self: *Session, rec: *history_recorder.Recorder) void {
-        self.persistent_recorder = rec;
-    }
-    pub fn attachAsyncQueue(self: *Session, queue: history_async.AsyncQueue) void {
-        self.async_traffic.queue = queue;
-    }
+    pub const attachImageIdentity = session_attachments.attachImageIdentity;
+    pub const attachNet = session_attachments.attachNet;
+    pub const attachConsole = session_attachments.attachConsole;
+    pub const attachCamera = session_attachments.attachCamera;
+    pub const attachPersistentRecorder = session_attachments.attachPersistentRecorder;
+    pub const attachAsyncQueue = session_attachments.attachAsyncQueue;
     pub fn injectAsync(self: *Session, source: history_async.Source, now_ns: u64, data: []const u8) anyerror!void {
         return async_traffic.inject(self, source, now_ns, data);
     }
@@ -211,16 +188,12 @@ pub const Session = struct {
     /// Frees what replay holds for this session (the feeder); its owner
     /// calls this at teardown.
     pub const releaseReplay = replay_feeder.release;
-
     /// Put the part on `at` into `mode` from now on, mid-run included.
     pub const setFault = session_fork.setFault;
-
     /// Let the part on `at` behave like the part again.
     pub const clearFault = session_fork.clearFault;
 
-    pub fn attachPlugs(self: *Session, hook: PlugHook) void {
-        self.plugs = hook;
-    }
+    pub const attachPlugs = session_attachments.attachPlugs;
     pub fn plug(self: *Session, core: Core, at: Endpoint, name: []const u8) anyerror!void {
         return session_fork.plug(self, core, at, name);
     }
@@ -245,12 +218,25 @@ pub const Session = struct {
     }
 
     /// Tap the center of the uniquely named widget at virtual time `at_ns`.
-    pub fn tapWidget(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8) anyerror!void {
+    pub fn tapWidget(
+        self: *Session,
+        allocator: std.mem.Allocator,
+        core: Core,
+        at_ns: u64,
+        name: []const u8,
+    ) anyerror!void {
         return session_input.tapWidget(self, allocator, core, at_ns, name);
     }
 
     /// Tap one part (cell, row, pager control, point) of a named widget.
-    pub fn tapWidgetPart(self: *Session, allocator: std.mem.Allocator, core: Core, at_ns: u64, name: []const u8, part: TapPart) anyerror!void {
+    pub fn tapWidgetPart(
+        self: *Session,
+        allocator: std.mem.Allocator,
+        core: Core,
+        at_ns: u64,
+        name: []const u8,
+        part: TapPart,
+    ) anyerror!void {
         return session_input.tapWidgetPart(self, allocator, core, at_ns, name, part);
     }
 
@@ -260,7 +246,14 @@ pub const Session = struct {
     }
 
     /// Queue a swipe; intermediate reports use the input script's cadence.
-    pub fn swipe(self: *Session, core: Core, at_ns: u64, from: gt911.Contact, to: gt911.Contact, duration_ns: u64) anyerror!void {
+    pub fn swipe(
+        self: *Session,
+        core: Core,
+        at_ns: u64,
+        from: gt911.Contact,
+        to: gt911.Contact,
+        duration_ns: u64,
+    ) anyerror!void {
         return session_input.swipe(self, core, at_ns, from, to, duration_ns);
     }
 
@@ -315,6 +308,8 @@ pub const Session = struct {
     pub fn read(self: *Session, core: Core, address: u32, into: []u8) anyerror!void {
         try (try self.view(core)).read(address, into);
     }
+    pub const undoWrite = write_undo.undoWrite;
+    pub const resetImage = write_undo.resetImage;
     pub fn write(self: *Session, core: Core, address: u32, bytes: []const u8) anyerror!void {
         return session_fork.write(self, core, address, bytes);
     }
@@ -362,7 +357,7 @@ pub const Session = struct {
         return .{ .zig = other.core };
     }
 
-    pub fn store(self: *Session) ?*@import("ra8_chip").core.cpu.memory.store.Store {
+    pub fn store(self: *Session) ?*chip.core.cpu.memory.store.Store {
         return if (self.live.store()) |s| s else if (self.history) |h| h.files.store else null;
     }
 
@@ -383,7 +378,7 @@ pub const Session = struct {
     pub fn unsubscribe(self: *Session, id: usize) void {
         session_control.unsubscribe(self, id);
     }
-    pub fn pollEvents(self: *Session, id: usize, out: []Event) ?@import("event/stream.zig").Read {
+    pub fn pollEvents(self: *Session, id: usize, out: []Event) ?stream.Read {
         return session_control.pollEvents(self, id, out);
     }
     pub fn select(self: *Session, core: Core) anyerror!void {

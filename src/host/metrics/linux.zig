@@ -1,6 +1,8 @@
 //! Process CPU, resident memory and thread counters parsed in fixed buffers.
 const std = @import("std");
+
 const Raw = @import("metrics.zig").Raw;
+
 extern "c" fn sysconf(c_int) c_long;
 pub fn read() !Raw {
     var stat_buf: [4096]u8 = undefined;

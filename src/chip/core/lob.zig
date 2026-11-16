@@ -12,7 +12,6 @@
 //! deliberately absent: predication changes how the loop body executes, not
 //! just how it counts, so stepping the counter alone would run the body wrong
 //! and look like it worked.
-const std = @import("std");
 
 pub const Kind = enum { dls, wls, le };
 

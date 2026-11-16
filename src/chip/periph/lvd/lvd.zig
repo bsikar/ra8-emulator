@@ -31,7 +31,7 @@
 //! never be observed to latch. The comparator is modelled here instead: the
 //! board presents a fixed 3.3 V rail, MON is the comparison against the
 //! programmed Vdet, and DET latches on a crossing the firmware caused.
-const std = @import("std");
+
 const periph = @import("../registry.zig");
 
 /// The three stretches of SYSC this block claims (ra8_lvd_regs.h).
@@ -47,9 +47,10 @@ pub const filter_span: u32 = 0x18;
 /// emulator, so this is the one number the whole block is measured against.
 pub const rail_millivolts: u16 = 3300;
 
+pub const field_lock = @import("field_lock.zig");
+
 /// The register fields and the Vdet table, in src/chip/periph/lvd/regs.zig.
 pub const regs = @import("regs.zig");
-pub const field_lock = @import("field_lock.zig");
 
 pub const compare = regs.compare;
 pub const control = regs.control;
@@ -179,7 +180,9 @@ pub const Lvd = struct {
 
     pub fn init() Lvd {
         var unit = Lvd{ .channels = undefined };
-        for (&unit.channels, series_of) |*channel, series| channel.* = .{ .series = series };
+        for (&unit.channels, series_of) |*channel, series| {
+            channel.* = .{ .series = series };
+        }
         return unit;
     }
 

@@ -5,15 +5,19 @@
 //! AVFoundation are loaded with dlopen at run time, so the emulator builds
 //! and cross-compiles without a macOS SDK, and the lookups sit behind
 //! `Runtime` so the mapping runs against fakes on any host.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const privacy = @import("../webcam/privacy.zig");
 
 /// AVAuthorizationStatus.
 pub const Status = enum(isize) { not_determined = 0, restricted = 1, denied = 2, authorized = 3, _ };
 
-pub const denied_message = "webcam blocked by macOS privacy settings: allow your terminal (or ra8_emulator) under System Settings > Privacy & Security > Camera, then run again";
-pub const restricted_message = "webcam restricted on this Mac: Screen Time or a device management profile blocks the camera";
+pub const denied_message = "webcam blocked by macOS privacy settings: allow your terminal (or ra8_emulator) " ++
+    "under System Settings > Privacy & Security > Camera, then run " ++
+    "again";
+pub const restricted_message = "webcam restricted on this Mac: Screen Time or a device management profile blocks" ++
+    " the camera";
 
 /// Not yet asked is not a refusal: macOS asks when capture starts.
 pub fn verdict(answer: Status) privacy.Verdict {

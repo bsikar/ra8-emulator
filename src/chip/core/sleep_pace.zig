@@ -18,6 +18,7 @@
 //! with the skip crosses the same boundary grid as one without and its
 //! output is the same.
 const std = @import("std");
+
 const Cpu = @import("cpu/cpu.zig").Cpu;
 
 /// Whether the core sleeps with nothing that could wake it at the start of

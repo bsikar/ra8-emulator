@@ -8,13 +8,15 @@
 //! is +0, or -0 when rounding towards minus infinity. Everything else is the
 //! exact sum, rounded once by FPRound.
 const format = @import("../format.zig");
+
 const Format = format.Format;
 const Real = format.Real;
 const unpack_mod = @import("../unpack.zig");
+
 const Unpacked = unpack_mod.Unpacked;
+const Fpscr = @import("../fpscr.zig").Fpscr;
 const nan = @import("../nan.zig");
 const round = @import("../round.zig");
-const Fpscr = @import("../fpscr.zig").Fpscr;
 pub const vectors = @import("vectors.zig");
 
 /// How far apart two operands' exponents may be before the smaller one only

@@ -2,15 +2,15 @@
 //! mode. The frame comes off the stack EXC_RETURN names, the registers and
 //! xPSR it held come back, and the processor resumes in the mode it names.
 const bus = @import("../bus.zig");
-const regs_mod = @import("../regs.zig");
+const callee = @import("callee.zig");
 const Cpu = @import("../cpu.zig").Cpu;
-const frame = @import("frame.zig");
+const exc_return = @import("exc_return.zig");
 const fp_frame = @import("fp/frame.zig");
 const Fpscr = @import("../fpu/fpscr.zig").Fpscr;
-const Vpr = @import("../mve/predicate.zig").Vpr;
-const exc_return = @import("exc_return.zig");
-const callee = @import("callee.zig");
+const frame = @import("frame.zig");
+const regs_mod = @import("../regs.zig");
 const stack_fault = @import("stack_fault.zig");
+const Vpr = @import("../mve/predicate.zig").Vpr;
 
 /// SecureReturn: a Non-secure handler named a Secure exception (EXC_RETURN.ES
 /// set), which the core takes as SecureFault INVER (RA8EMU-472).
@@ -42,7 +42,9 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
             error.Integrity => return error.Integrity,
             else => return stack_fault.unstackError(cpu),
         };
-        for (hidden.callee, 4..) |word, i| r.low[i] = word;
+        for (hidden.callee, 4..) |word, i| {
+            r.low[i] = word;
+        }
         at = hidden.sp;
     }
     const popped: frame.Popped = if (target.fp) blk: {
@@ -69,7 +71,9 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
     r.control = if (target.psp) r.control | spsel else r.control & ~spsel;
     const fpca = regs_mod.control_bits.fpca;
     r.control = if (target.fp) r.control | fpca else r.control & ~fpca;
-    for (0..4) |i| r.low[i] = f[i];
+    for (0..4) |i| {
+        r.low[i] = f[i];
+    }
     r.low[12] = f[frame.slot.r12];
     r.lr = f[frame.slot.lr];
     r.pc = f[frame.slot.return_address] & ~@as(u32, 1);
@@ -84,14 +88,20 @@ pub fn from(cpu: *Cpu, value: u32) Error!void {
 /// so neither clears.
 fn clearCallerSaved(cpu: *Cpu) void {
     if (cpu.fp.context.fpccr.lspact == 1) return;
-    for (0..16) |i| cpu.fp.bank.writeS(@intCast(i), 0);
+    for (0..16) |i| {
+        cpu.fp.bank.writeS(@intCast(i), 0);
+    }
     cpu.fp.fpscr = Fpscr.fromBits(0);
     cpu.fp.vpr = vprFrom(0);
 }
 
 fn restoreFp(cpu: *Cpu, fp: fp_frame.Fp) void {
-    for (fp.s, 0..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
-    if (fp.high) |high| for (high, 16..) |word, i| cpu.fp.bank.writeS(@intCast(i), word);
+    for (fp.s, 0..) |word, i| {
+        cpu.fp.bank.writeS(@intCast(i), word);
+    }
+    if (fp.high) |high| for (high, 16..) |word, i| {
+        cpu.fp.bank.writeS(@intCast(i), word);
+    };
     cpu.fp.fpscr = Fpscr.fromBits(fp.fpscr);
     if (cpu.profile.mve) cpu.fp.vpr = vprFrom(fp.vpr);
 }

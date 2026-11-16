@@ -26,7 +26,12 @@ pub const Writer = struct {
     const buffer_len = 16 * 1024;
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io, path: []const u8) !Writer {
-        const mode: Mode = if (std.mem.endsWith(u8, path, ".y4m")) .y4m else if (std.mem.endsWith(u8, path, ".mp4")) .mp4 else return error.BadVideoExtension;
+        const mode: Mode = if (std.mem.endsWith(u8, path, ".y4m"))
+            .y4m
+        else if (std.mem.endsWith(u8, path, ".mp4"))
+            .mp4
+        else
+            return error.BadVideoExtension;
         if (mode == .mp4) requireFfmpeg(allocator, io) catch |err| {
             std.debug.print("--video-out {s}: ffmpeg unavailable; use a .y4m path for built-in output\n", .{path});
             return err;
@@ -35,7 +40,15 @@ pub const Writer = struct {
     }
 
     fn requireFfmpeg(allocator: std.mem.Allocator, io: std.Io) !void {
-        const result = std.process.run(allocator, io, .{ .argv = &.{ "ffmpeg", "-version" }, .stdout_limit = .limited(16 * 1024), .stderr_limit = .limited(16 * 1024) }) catch return error.FfmpegNotFound;
+        const result = std.process.run(
+            allocator,
+            io,
+            .{
+                .argv = &.{ "ffmpeg", "-version" },
+                .stdout_limit = .limited(16 * 1024),
+                .stderr_limit = .limited(16 * 1024),
+            },
+        ) catch return error.FfmpegNotFound;
         defer allocator.free(result.stdout);
         defer allocator.free(result.stderr);
         if (result.term != .exited or result.term.exited != 0) return error.FfmpegNotFound;
@@ -49,7 +62,26 @@ pub const Writer = struct {
             self.output = .{ .file = file };
         } else {
             const child = try std.process.spawn(self.io, .{
-                .argv = &.{ "ffmpeg", "-y", "-v", "error", "-f", "yuv4mpegpipe", "-i", "-", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "12", "-movflags", "+faststart", self.path },
+                .argv = &.{
+                    "ffmpeg",
+                    "-y",
+                    "-v",
+                    "error",
+                    "-f",
+                    "yuv4mpegpipe",
+                    "-i",
+                    "-",
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-crf",
+                    "12",
+                    "-movflags",
+                    "+faststart",
+                    self.path,
+                },
                 .stdin = .pipe,
                 .stdout = .ignore,
                 .stderr = .ignore,

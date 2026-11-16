@@ -1,9 +1,9 @@
 //! SP- and PC-relative address arithmetic, 16-bit: ADD and SUB SP, SP, #imm7
 //! (T2/T1), ADD Rd, SP, #imm8 (T1) and ADR Rd, #imm8 (T1). None of them
 //! touch the flags. Stack-limit checks run at the core's instruction boundary.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// ADD/SUB SP, SP, #imm7: bits [15:8] 0xB0, bit 7 picks SUB.

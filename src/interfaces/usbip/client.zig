@@ -3,6 +3,7 @@
 //! the emulated device the way `usbip attach` does. wire.zig packs the
 //! server side; the layouts are the same and every field is big-endian.
 const std = @import("std");
+
 const wire = @import("wire.zig");
 
 /// The list, import and URB steps built on these records (slice 5b).

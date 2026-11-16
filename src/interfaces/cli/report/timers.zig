@@ -3,7 +3,6 @@
 //! here: the low-power timer that counts through standby, the interval
 //! timers, and the PWM timers.
 const gpt = @import("ra8_chip").periph.gpt;
-const gtclkcr = @import("ra8_chip").periph.gtclkcr;
 const iwdt = @import("ra8_chip").periph.iwdt;
 
 const Board = @import("ra8_board").board.Board;
@@ -84,10 +83,16 @@ fn independent(board: *Board, out: Writer) !void {
         try out.print("IWDT: {d} underflow(s) asked for an NMI, IWDTRCR.RSTIRQS clear\n", .{unit.nmis});
     }
     if (unit.bad_acks != 0) {
-        try out.print("IWDT: {d} ack(s) wrote a one at a flag and cleared nothing (IWDTSR is write-zero-to-clear)\n", .{unit.bad_acks});
+        try out.print(
+            "IWDT: {d} ack(s) wrote a one at a flag and cleared nothing (IWDTSR is write-zero-to-clear)\n",
+            .{unit.bad_acks},
+        );
     }
     if (unit.frozen_writes != 0) {
-        try out.print("IWDT: {d} store(s) carried CNTVAL bits, dropped (the counter is the hardware's)\n", .{unit.frozen_writes});
+        try out.print(
+            "IWDT: {d} store(s) carried CNTVAL bits, dropped (the counter is the hardware's)\n",
+            .{unit.frozen_writes},
+        );
     }
 }
 
@@ -177,7 +182,15 @@ fn pwm(board: *Board, out: Writer) !void {
         if (channel.quiet()) continue;
         try out.print(
             "GPT{d}: GTCNT 0x{X:0>8} of 0x{X:0>8}, counting as {s}, {d} overflow(s), running={s}\n",
-            .{ index, channel.cnt, channel.periodOrDefault(), channel.shape().name(), channel.overflows, yesno(channel.running()) },
+            .{
+                index,
+                channel.cnt,
+                channel.periodOrDefault(),
+                channel.shape().name(),
+                channel.overflows,
+
+                yesno(channel.running()),
+            },
         );
         try pwmShape(index, channel.shapes, channel.shape(), out);
         try pwmSource(index, channel.source(), out);

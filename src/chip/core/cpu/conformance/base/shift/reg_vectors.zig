@@ -60,7 +60,11 @@ pub const all = [_]V{
     vec("lsls by 1 carries out bit 31", in(lsls, 0x8000_0001, 1), .{ .rd = 2, .flags = c | v }),
     vec("lsls by 32 leaves 0 and carries bit 0", in(lsls, 1, 32), .{ .rd = 0, .flags = z | c | v }),
     vec("lsls by 33 leaves 0 and clears C", in(lsls, 0xFFFF_FFFF, 33), .{ .rd = 0, .flags = z | v }),
-    vec("lsls by 0 keeps C", .{ .hw1 = lsls, .hw2 = r0_r2, .n = 0x8000_0000, .flags = c | v }, .{ .rd = 0x8000_0000, .flags = n_bit | c | v }),
+    vec(
+        "lsls by 0 keeps C",
+        .{ .hw1 = lsls, .hw2 = r0_r2, .n = 0x8000_0000, .flags = c | v },
+        .{ .rd = 0x8000_0000, .flags = n_bit | c | v },
+    ),
     vec("lsr by 4", in(lsr, 0x80, 4), .{ .rd = 8 }),
     vec("lsrs by 1 carries out bit 0", in(lsrs, 0x8000_0001, 1), .{ .rd = 0x4000_0000, .flags = c | v }),
     vec("lsrs by 32 carries bit 31", in(lsrs, 0x8000_0000, 32), .{ .rd = 0, .flags = z | c | v }),

@@ -139,7 +139,7 @@ single-command execution limits.
 
 Rules per PR (each command gets its own window):
 
-1. Fast validation: `zig fmt --check build.zig build_tests.zig src tests tools`, `zig build gate -j1`, `zig build -j1`. For TypeScript SDK changes, run its typecheck, build, and tests.
+1. Fast validation: `zig fmt --check --exclude tests/consumer/zig-pkg build.zig build_tests.zig src tests tools`, `zig build gate -j1`, `zig build -j1`. For TypeScript SDK changes, run its typecheck, build, and tests.
 2. Targeted suites: run `zig build ra8_tests -j1 -Dtest-filter=chip.periph.crc_test` (or `ra8_host_tests` for host tests), replacing the filter with each changed file's qualified test name. Keep the suite roots so sibling fixtures remain in the module boundary. Use the corresponding `-exe` step to separate compilation from execution when needed.
 3. Build each suite separately: `zig build ra8_host_tests-exe -j1` and `zig build ra8_tests-exe -j1`. Run each installed binary directly with `bash tools/test_batch.sh zig-out/bin/NAME /tmp/NAME.log`. Do not use `-Dtest-filter` for these builds. The runner uses `ulimit -v 3000000` and an 800-second timeout. Log attempts append. Rerun interrupted suites from their start; an absent terminal marker or `CUT` is incomplete, never green.
 4. Run `zig build consumer-smoke -j1` and `bash tests/tools/test_batch_test.sh` separately. Keep the corpus golden comparisons (`tools/dualcore_corpus.sh`, `tools/modules_corpus.sh`, `tools/fault_corpus.sh`, and `tools/plug_corpus.sh`) as separate commands.
@@ -148,6 +148,20 @@ Rules per PR (each command gets its own window):
 `zig build gate` carries `zig fmt --check`, simple file and function length
 checks (longest file 400 lines, longest function 80 lines), and a terminology check
 (`tools/terms.zig`), and nothing else.
+
+Run `zig build lint -j1` and `zig build lint-test -j1` separately for every PR.
+These use pinned zlinter rules plus import-style, 120-column line-width,
+and per-function complexity rules in `tools/lint/`.
+Keep imports in named namespace declarations, followed by a blank line before
+other declarations. Namespace reexports and test-root comptime registration
+are supported. The lint scope excludes GUI/render code, tools/gui_smoke.zig, and fetched packages.
+The checked-in baseline records existing findings; new findings fail CI.
+Complexity is limited to branch score 15 and nesting depth 3; README.md
+defines the metric. An increased score changes the diagnostic fingerprint
+and fails even when the function already has an allowance.
+After fixing an existing finding, use `zig build lint -- --prune-baseline`
+to remove its allowance. `--update-baseline` accepts new debt and requires
+explicit review of the baseline diff; never use it to make a PR pass silently.
 
 ## Terminology
 

@@ -6,21 +6,26 @@
 //! served sessions that use it. The bind holds the session's lease for
 //! the run and deletes the ephemeral session on close, so no history
 //! byte lands before the lifecycle is wired.
+const history_references = @import("history_references.zig");
+const history_startup = @import("history_startup.zig");
+const history_validity = @import("history_validity.zig");
+const served_initial = @import("served_initial.zig");
+const served_media = @import("served_media.zig");
+
 const std = @import("std");
-const history = @import("ra8_host").history;
-const session_recorder = @import("ra8_session").history_recorder;
-const session_refs = @import("ra8_session").history_refs;
-const session_branch = @import("ra8_session").history_branch;
-const session_fork = @import("ra8_session").history_fork_router;
-const session_fork_types = @import("ra8_session").fork;
-const session_branches_codec = @import("ra8_session").history_branches_codec;
+
 const branches_recover = @import("ra8_session").history_branches_recover;
-const history_root = @import("ra8_session").history_root;
-const history_segments = @import("history_segments.zig");
-const object_read = @import("object_read.zig");
-const pack_store = @import("pack_store.zig");
+const history = @import("ra8_host").history;
 const history_live = @import("history_live.zig");
 const history_pending = @import("history_pending.zig");
+const history_root = @import("ra8_session").history_root;
+const history_segments = @import("history_segments.zig");
+const pack_store = @import("pack_store.zig");
+const session_branch = @import("ra8_session").history_branch;
+const session_branches_codec = @import("ra8_session").history_branches_codec;
+const session_fork = @import("ra8_session").history_fork_router;
+const session_fork_types = @import("ra8_session").fork;
+const session_recorder = @import("ra8_session").history_recorder;
 
 /// Formats the segment leaf name for a given branch and segment index.
 pub fn segmentName(buf: []u8, branch: u32, seg: u32) ![]const u8 {
@@ -78,18 +83,17 @@ pub const Bind = struct {
         /// continues past the line's recorded end.
         reopen: ?history.name.Id = null,
         board_profile: ?[]const u8 = null,
-        images: ?*@import("served_initial.zig").Images = null,
+        images: ?*served_initial.Images = null,
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
-        const bind = try allocator.create(Bind);
+        const bind = try allocate(allocator);
         errdefer allocator.destroy(bind);
-        bind.* = .{ .gpa = allocator, .pending = .init(allocator), .base = undefined, .session = undefined, .log = undefined, .sink = undefined, .storage = undefined, .objects = undefined };
         errdefer bind.pending.deinit();
         bind.base = if (opts.reopen != null)
             try history.base.Base.existingConfigured(allocator, io, path, .cache, .{ .recover = false })
         else
-            try @import("history_startup.zig").openFresh(allocator, io, path);
+            try history_startup.openFresh(allocator, io, path);
         errdefer bind.base.close();
         bind.session = if (opts.reopen) |id|
             try history.session.Session.reopenUnsettled(&bind.base, id)
@@ -101,27 +105,46 @@ pub const Bind = struct {
         } else {
             _ = bind.session.close(null, .move) catch {};
         };
+        try initialize(bind, allocator, io, opts);
+        return bind;
+    }
+
+    /// Borrow a validated import's lease until success, then take ownership without an unlock gap.
+    pub fn adopt(allocator: std.mem.Allocator, base: *history.base.Base, incoming: *history.session.Session) !*Bind {
+        const bind = try allocate(allocator);
+        errdefer allocator.destroy(bind);
+        errdefer bind.pending.deinit();
+        bind.base = base.*;
+        bind.session = incoming.*;
+        bind.session.base = &bind.base;
+        try initialize(bind, allocator, base.io, .{ .reopen = incoming.id });
+        return bind;
+    }
+
+    fn allocate(allocator: std.mem.Allocator) !*Bind {
+        const bind = try allocator.create(Bind);
+        bind.* = .{
+            .gpa = allocator,
+            .pending = .init(allocator),
+            .base = undefined,
+            .session = undefined,
+            .log = undefined,
+            .sink = undefined,
+            .storage = undefined,
+            .objects = undefined,
+        };
+        return bind;
+    }
+
+    fn initialize(bind: *Bind, allocator: std.mem.Allocator, io: std.Io, opts: Options) !void {
         errdefer if (bind.media_bytes) |bytes| allocator.free(bytes);
         errdefer if (bind.root_bytes) |bytes| allocator.free(bytes);
         try bind.readRoot(opts);
         if (opts.reopen != null) try history.rename.settle(io, bind.session.dir);
         if (opts.kept) try bind.session.keep();
-        var candidates = try history.branches_file.readCandidates(io, bind.session.dir, allocator);
-        defer candidates.deinit(allocator);
-        // A reopened log may end in a commit a crash cut short: it is cut
-        // off before anything reads the log or the recorder appends to it.
-        if (opts.reopen != null) _ = try history_segments.repair(allocator, history.storage.Store.from(&bind.session));
-        // The log is the last source: a graph rebuilt from its Branch
-        // records when neither file decodes, recorded ends raised from it.
-        const log_bytes = try history_segments.readAll(allocator, history.storage.Store.from(&bind.session));
-        defer allocator.free(log_bytes);
-        const rec = try branches_recover.recoverWithLog(allocator, candidates.current, candidates.temp, log_bytes);
-        switch (rec.action) {
-            .use_temp => history.branches_file.settle(io, bind.session.dir) catch {},
-            else => history.branches_file.cleanupTemp(io, bind.session.dir),
-        }
+        const graph = try bind.recoverGraph(allocator, opts.reopen != null);
         bind.io = io;
-        bind.graph = rec.graph;
+        bind.graph = graph;
         errdefer bind.graph.deinit();
         bind.router = session_fork.ForkRouter.init(allocator, &bind.graph);
         errdefer bind.router.deinit();
@@ -143,22 +166,13 @@ pub const Bind = struct {
         };
         bind.packs = try pack_store.PackStore.open(allocator, &bind.session);
         errdefer bind.packs.close();
-        bind.objects = .{ .context = bind, .put = &history_pending.putObject, .sync = &syncObjects, .putPacked = &history_pending.putPacked };
-        // The budget: one read at open sizes the share this history
-        // takes, and every check reads the volume fresh.
-        const volume = try history.resources.volume(allocator, io, bind.base.dir);
-        const shares = if (opts.cap) |capped|
-            try history.budget.diskCapped(volume.total, 1, capped)
-        else
-            history.budget.disk(volume.total, 1);
-        const watch = try allocator.create(VolumeWatch);
-        errdefer allocator.destroy(watch);
-        watch.* = .{ .gpa = allocator, .io = io, .dir = bind.base.dir, .store = store, .pending = &bind.pending };
-        bind.watch = watch;
-        watch.packs = bind.packs;
-        bind.disk = .{ .context = watch, .free = &freeVolume, .cap = shares.session, .floor = shares.free_floor, .relief = &relieveVolume };
-        bind.checkpoint_cap = shares.checkpoints;
-        return bind;
+        bind.objects = .{
+            .context = bind,
+            .put = &history_pending.putObject,
+            .sync = &syncObjects,
+            .putPacked = &history_pending.putPacked,
+        };
+        try bind.bindBudget(allocator, io, store, opts.cap);
     }
 
     /// End the run: the log closes first, then the session (an ephemeral
@@ -191,18 +205,75 @@ pub const Bind = struct {
         return outcome;
     }
 
+    fn bindBudget(
+        self: *Bind,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        store: history.storage.Store,
+        cap: ?u64,
+    ) !void {
+        // The budget: one read at open sizes the share this history
+        // takes, and every check reads the volume fresh.
+        const volume = try history.resources.volume(allocator, io, self.base.dir);
+        const shares = if (cap) |capped|
+            try history.budget.diskCapped(volume.total, 1, capped)
+        else
+            history.budget.disk(volume.total, 1);
+        const watch = try allocator.create(VolumeWatch);
+        errdefer allocator.destroy(watch);
+        watch.* = .{ .gpa = allocator, .io = io, .dir = self.base.dir, .store = store, .pending = &self.pending };
+        self.watch = watch;
+        watch.packs = self.packs;
+        self.disk = .{
+            .context = watch,
+            .free = &freeVolume,
+            .cap = shares.session,
+            .floor = shares.free_floor,
+            .relief = &relieveVolume,
+        };
+        self.checkpoint_cap = shares.checkpoints;
+    }
+
+    fn recoverGraph(self: *Bind, allocator: std.mem.Allocator, reopen: bool) !session_branch.BranchGraph {
+        const io = self.base.io;
+        var candidates = try history.branches_file.readCandidates(io, self.session.dir, allocator);
+        defer candidates.deinit(allocator);
+        // A reopened log may end in a commit a crash cut short: it is cut
+        // off before anything reads the log or the recorder appends to it.
+        if (reopen) _ = try history_segments.repair(allocator, history.storage.Store.from(&self.session));
+        // The log is the last source: a graph rebuilt from its Branch
+        // records when neither file decodes, recorded ends raised from it.
+        const log_bytes = try history_segments.readAll(allocator, history.storage.Store.from(&self.session));
+        defer allocator.free(log_bytes);
+        const rec = try branches_recover.recoverWithLog(allocator, candidates.current, candidates.temp, log_bytes);
+        switch (rec.action) {
+            .use_temp => history.branches_file.settle(io, self.session.dir) catch {},
+            else => history.branches_file.cleanupTemp(io, self.session.dir),
+        }
+        return rec.graph;
+    }
+
     fn readRoot(self: *Bind, opts: Options) !void {
-        if (opts.reopen != null) try @import("served_initial.zig").checkRootRename(self.base.io, self.session.dir);
-        self.root_bytes = try history.branches_file.readAlloc(self.base.io, self.session.dir, history.layout.files.root, self.gpa);
+        if (opts.reopen != null) try served_initial.checkRootRename(self.base.io, self.session.dir);
+        self.root_bytes = try history.branches_file.readAlloc(
+            self.base.io,
+            self.session.dir,
+            history.layout.files.root,
+            self.gpa,
+        );
         if (self.root_bytes) |bytes| self.root = history_root.decode(bytes) catch null;
         if (opts.reopen == null) return;
         const root = self.root orelse return error.NoRoot;
-        try @import("history_validity.zig").check(root);
+        try history_validity.check(root);
         if (opts.board_profile) |profile| {
             if (!std.mem.eql(u8, profile, root.board_profile)) return error.BoardProfileMismatch;
         }
         if (opts.images) |images| try images.check(root);
-        if (root.media) |id| self.media_bytes = try @import("served_media.zig").read(self.gpa, history.storage.Store.from(&self.session), id);
+        if (root.media) |id| self.media_bytes = try served_media.read(
+            self.gpa,
+            history.storage.Store.from(&self.session),
+            id,
+        );
     }
 
     fn saveGraph(self: *Bind) anyerror!void {
@@ -227,7 +298,14 @@ const LogSink = struct {
 /// Reads the volume fresh for every budget check; the history root's
 /// directory is the handle the read goes through. The store rides along
 /// for the relief the budget's refusal path runs.
-const VolumeWatch = struct { gpa: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, store: history.storage.Store, pending: *history_pending.Pending, packs: ?*pack_store.PackStore = null };
+const VolumeWatch = struct {
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    dir: std.Io.Dir,
+    store: history.storage.Store,
+    pending: *history_pending.Pending,
+    packs: ?*pack_store.PackStore = null,
+};
 
 /// Pending object writes stay live until the log's durable flush acknowledges them.
 fn relieveVolume(context: *anyopaque) anyerror!void {
@@ -318,76 +396,4 @@ fn syncObjects(context: *anyopaque) anyerror!void {
     try bindOf(context).packs.seal();
 }
 
-/// The host prune's referrer: names every object the committed log
-/// names. Reads the store's log segments and walks each one's committed
-/// frames through the session library's scan; a segment the walk cannot
-/// finish is a hard error, so the sweep never deletes past it.
-pub const prune_referrer: history.prune.Referrer = .{ .collect = &collectReferenced, .pictures = &collectPictures };
-
-const PruneGather = struct {
-    allocator: std.mem.Allocator,
-    names: *std.StringHashMap(void),
-    failed: ?anyerror = null,
-
-    fn add(self: *PruneGather, name: session_refs.Name) void {
-        if (self.failed != null) return;
-        const key = self.allocator.dupe(u8, &name) catch {
-            self.failed = error.OutOfMemory;
-            return;
-        };
-        const hit = self.names.getOrPut(key) catch {
-            self.allocator.free(key);
-            self.failed = error.OutOfMemory;
-            return;
-        };
-        if (hit.found_existing) self.allocator.free(key);
-    }
-};
-
-const PruneSegments = struct {
-    store: history.storage.Store,
-    gather: *PruneGather,
-    /// Name only the checkpoint pictures, not every committed object.
-    pictures_only: bool = false,
-
-    fn visit(context: *anyopaque, name: []const u8, size: u64) anyerror!void {
-        _ = size;
-        const self: *PruneSegments = @ptrCast(@alignCast(context));
-        const file = try self.store.vtable.open(self.store.context, .log, name, .read);
-        defer file.vtable.close(file.context);
-        const length: usize = @intCast(try file.vtable.length(file.context));
-        const bytes = try self.gather.allocator.alloc(u8, length);
-        defer self.gather.allocator.free(bytes);
-        var got: usize = 0;
-        while (got < bytes.len) {
-            const read = try file.vtable.read(file.context, got, bytes[got..]);
-            if (read == 0) break;
-            got += read;
-        }
-        const walked = if (self.pictures_only)
-            session_refs.scanPictureObjects(bytes[0..got], self.gather, PruneGather.add)
-        else
-            session_refs.scanCheckpointObjects(bytes[0..got], self.gather, PruneGather.add);
-        walked catch |err| {
-            self.gather.failed = err;
-        };
-    }
-};
-
-fn collectReferenced(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void {
-    return collect(store, allocator, names, false);
-}
-
-/// The checkpoint pictures' object names alone, which relief protects
-/// by name and counts.
-fn collectPictures(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void)) anyerror!void {
-    return collect(store, allocator, names, true);
-}
-
-fn collect(store: history.storage.Store, allocator: std.mem.Allocator, names: *std.StringHashMap(void), pictures_only: bool) anyerror!void {
-    var gather = PruneGather{ .allocator = allocator, .names = names };
-    var segments = PruneSegments{ .store = store, .gather = &gather, .pictures_only = pictures_only };
-    try store.vtable.list(store.context, .log, .{ .context = &segments, .visit = &PruneSegments.visit });
-    if (gather.failed) |err| return err;
-    if (!pictures_only) try history_live.addManifestObjects(store, allocator, names);
-}
+pub const prune_referrer = history_references.prune_referrer;

@@ -1,13 +1,14 @@
 //! Persistent event staging and object-before-log durability.
 const std = @import("std");
+
+const budget = @import("budget.zig");
 const commit_batch = @import("commit_batch.zig");
 const format = @import("format.zig");
 const log_mod = @import("log.zig");
-const record = @import("record.zig");
-const budget = @import("budget.zig");
-const touched_pages = @import("touched_pages.zig");
 const manifest_mod = @import("manifest.zig");
+const record = @import("record.zig");
 const segment_recover = @import("segment_recover.zig");
+const touched_pages = @import("touched_pages.zig");
 
 /// The host storage the recorder writes through, as the application
 /// fills it. Session calls these and nothing else about the host.
@@ -43,6 +44,7 @@ pub const Error = error{ OutOfMemory, WriteFailed, NoObjects } || format.Error;
 /// follows a record to an object the storage does not hold.
 pub const Objects = struct {
     pub const Kind = @import("object_reuse.zig").Kind;
+
     context: *anyopaque,
     put: *const fn (context: *anyopaque, kind: Kind, name: []const u8, bytes: []const u8) anyerror!void,
     sync: *const fn (context: *anyopaque) anyerror!void,
@@ -230,7 +232,11 @@ pub const Recorder = struct {
     pub const Mark = struct { end: usize, pending: usize, object_bytes: u64 };
 
     pub fn mark(self: *const Recorder) Mark {
-        return .{ .end = self.staging.writer.end, .pending = self.log.pending_bytes, .object_bytes = self.object_bytes };
+        return .{
+            .end = self.staging.writer.end,
+            .pending = self.log.pending_bytes,
+            .object_bytes = self.object_bytes,
+        };
     }
 
     /// Unstages every record after `to` and gives back the object bytes
@@ -364,8 +370,9 @@ pub const Recorder = struct {
         if (self.stopped or self.replaying) return;
         const bytes = self.staging.writer.buffered();
         if (self.disk) |watch| {
-            if (self.log.pending_bytes > 0)
+            if (self.log.pending_bytes > 0) {
                 _ = try self.checkDisk(watch, self.usedBytes(), self.log.pending_bytes);
+            }
         }
         if (bytes.len == 0) return;
         try self.batch.write(self.storage, self.committed_bytes, bytes);

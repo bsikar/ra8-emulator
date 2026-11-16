@@ -2,10 +2,11 @@
 //! `serve`, one call at a time. The link is a socket to a running `serve`
 //! (`--connect`) or the pipes of one ctl starts (`--host`, RA8EMU-196).
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("ra8_rpc").session.rpc;
-const Connection = @import("ra8_rpc").socket_transport.Connection;
+
 const Child = @import("ra8_rpc").child_transport.Child;
+const Connection = @import("ra8_rpc").socket_transport.Connection;
+const proto = @import("ra8_rpc").session.rpc;
+const rpc = @import("ra8_rpc_wire");
 const Spec = @import("../serve/listen.zig").Spec;
 
 /// Where the server is: a socket spec, or the argv that starts `serve --stdio`.
@@ -31,6 +32,7 @@ pub const Client = struct {
     io: std.Io,
     /// The code of the last refusal, for the error line.
     refused: u16 = 0,
+    wait_ms: i64 = answer_wait_ms,
 
     /// Reach `target` and finish the handshake. Buffers come from
     /// `allocator`, which ctl runs as an arena.
@@ -55,10 +57,12 @@ pub const Client = struct {
         }
         self.client = proto.Client.init(self.transport(), self.rx, proto.capabilities);
         try self.client.greet(self.tx);
-        while (true) switch (try self.next()) {
-            .ready => return self,
-            else => {},
-        };
+        while (true) {
+            switch (try self.next()) {
+                .ready => return self,
+                else => {},
+            }
+        }
     }
 
     pub fn close(self: *Client) void {
@@ -82,7 +86,7 @@ pub const Client = struct {
 
     /// The next frame from the server, or error.ServerSilent.
     fn next(self: *Client) !Incoming {
-        const deadline = self.nowMs() + answer_wait_ms;
+        const deadline = self.nowMs() + self.wait_ms;
         while (self.nowMs() < deadline) {
             if (try self.client.poll(self.tx)) |incoming| return incoming;
             try self.io.sleep(.fromMilliseconds(1), .awake);
@@ -93,17 +97,24 @@ pub const Client = struct {
     /// Call `method` and decode its `Reply`, skipping events on the way.
     /// A slice in the reply lives until the next call.
     pub fn call(self: *Client, comptime Reply: type, comptime Args: type, method: proto.Method, args: Args) !Reply {
-        _ = try self.client.call(Args, @backingInt(method), args, 0, self.tx);
-        while (true) switch (try self.next()) {
-            .response => |response| switch (response.result) {
-                .ok => |bytes| return try proto.decode(Reply, bytes),
-                .err => |code| {
-                    self.refused = @backingInt(code);
-                    return error.Refused;
+        return self.callCode(Reply, Args, @backingInt(method), args);
+    }
+
+    /// Extension methods share the session framing and refusal handling.
+    pub fn callCode(self: *Client, comptime Reply: type, comptime Args: type, method: u16, args: Args) !Reply {
+        _ = try self.client.call(Args, method, args, 0, self.tx);
+        while (true) {
+            switch (try self.next()) {
+                .response => |response| switch (response.result) {
+                    .ok => |bytes| return try proto.decode(Reply, bytes),
+                    .err => |code| {
+                        self.refused = @backingInt(code);
+                        return error.Refused;
+                    },
                 },
-            },
-            else => {},
-        };
+                else => {},
+            }
+        }
     }
 
     /// The next event the server sends, or null once `wait_ms` passes.
@@ -121,11 +132,13 @@ pub const Client = struct {
 
     /// The next stop event the server sends.
     pub fn stop(self: *Client) !proto.Stopped {
-        while (true) switch (try self.next()) {
-            .event => |frame| if (frame.topic == @backingInt(proto.Topic.stop)) {
-                return try proto.decode(proto.Stopped, frame.payload);
-            },
-            else => {},
-        };
+        while (true) {
+            switch (try self.next()) {
+                .event => |frame| if (frame.topic == @backingInt(proto.Topic.stop)) {
+                    return try proto.decode(proto.Stopped, frame.payload);
+                },
+                else => {},
+            }
+        }
     }
 };

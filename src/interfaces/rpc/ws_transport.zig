@@ -1,12 +1,13 @@
 //! Auto-detecting RPC byte transport over connected TCP/Unix sockets and WebSockets (RA8EMU-1241).
 //! Transparently detects HTTP GET `Upgrade: websocket` vs raw TCP RPC greetings.
-const std = @import("std");
+
 const builtin = @import("builtin");
 const rpc = @import("ra8_rpc_wire");
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
-const ws_handshake = @import("ws_handshake.zig");
+const std = @import("std");
 const ws_frame = @import("ws_frame.zig");
+const ws_handshake = @import("ws_handshake.zig");
 
 pub const State = enum {
     detect,
@@ -217,60 +218,58 @@ pub const Connection = struct {
 
     fn receiveWebsocket(self: *Connection, into: []u8) rpc.Transport.Error!usize {
         while (true) {
-            if (self.frame_remaining > 0) {
-                return self.deliverPayload(into);
-            }
-
-            self.compactRx();
-            const room = self.rx_buf.len - self.rx_len;
-            if (room > 0) {
-                const got = try self.readSocket(self.rx_buf[self.rx_len..]);
-                self.rx_len += got;
-            }
-            if (self.rx_len == 0) return 0;
-
-            const available = self.rx_buf[0..self.rx_len];
-            const hdr = (ws_frame.parseHeader(available) catch return error.BadMessage) orelse return 0;
-
+            if (self.frame_remaining > 0) return self.deliverPayload(into);
+            const hdr = (try self.nextWsHeader()) orelse return 0;
             switch (hdr.opcode) {
-                .binary => {
-                    if (self.in_fragmented_binary or !hdr.masked) return error.BadMessage;
+                .binary, .continuation => {
+                    const want_frag = hdr.opcode == .continuation;
+                    if (self.in_fragmented_binary != want_frag or !hdr.masked) return error.BadMessage;
                     self.in_fragmented_binary = !hdr.fin;
                     return self.startDataFrame(hdr, into);
                 },
-                .continuation => {
-                    if (!self.in_fragmented_binary or !hdr.masked) return error.BadMessage;
-                    self.in_fragmented_binary = !hdr.fin;
-                    return self.startDataFrame(hdr, into);
-                },
-                .ping => {
-                    const total_len = hdr.header_len + hdr.payload_len;
-                    if (available.len < total_len) return 0;
-                    var ping_payload: [125]u8 = undefined;
-                    @memcpy(ping_payload[0..hdr.payload_len], available[hdr.header_len..total_len]);
-                    if (hdr.masked) {
-                        ws_frame.unmask(ping_payload[0..hdr.payload_len], hdr.mask);
-                    }
-                    try self.sendPong(ping_payload[0..hdr.payload_len]);
-                    self.rx_start = total_len;
-                    self.rx_len -= total_len;
-                },
-                .pong => {
-                    const total_len = hdr.header_len + hdr.payload_len;
-                    if (available.len < total_len) return 0;
-                    self.rx_start = total_len;
-                    self.rx_len -= total_len;
-                },
-                .close => {
-                    var close_hdr: [10]u8 = undefined;
-                    const close_bytes = ws_frame.encodeServerHeader(&close_hdr, .close, 0);
-                    self.sendAll(close_bytes, 100) catch {};
-                    self.state = .closed;
-                    return error.LinkDown;
-                },
+                .ping => if (!(try self.handleWsPing(hdr))) return 0,
+                .pong => if (!self.consumeControlFrame(hdr)) return 0,
+                .close => return self.handleWsClose(),
                 else => return error.BadMessage,
             }
         }
+    }
+
+    fn nextWsHeader(self: *Connection) rpc.Transport.Error!?ws_frame.Header {
+        self.compactRx();
+        if (self.rx_buf.len > self.rx_len) {
+            self.rx_len += try self.readSocket(self.rx_buf[self.rx_len..]);
+        }
+        if (self.rx_len == 0) return null;
+        return ws_frame.parseHeader(self.rx_buf[0..self.rx_len]) catch return error.BadMessage;
+    }
+
+    fn consumeControlFrame(self: *Connection, hdr: ws_frame.Header) bool {
+        const total_len = hdr.header_len + hdr.payload_len;
+        if (self.rx_len < total_len) return false;
+        self.rx_start = total_len;
+        self.rx_len -= total_len;
+        return true;
+    }
+
+    fn handleWsPing(self: *Connection, hdr: ws_frame.Header) rpc.Transport.Error!bool {
+        const total_len = hdr.header_len + hdr.payload_len;
+        if (self.rx_len < total_len) return false;
+        var ping_payload: [125]u8 = undefined;
+        @memcpy(ping_payload[0..hdr.payload_len], self.rx_buf[hdr.header_len..total_len]);
+        if (hdr.masked) ws_frame.unmask(ping_payload[0..hdr.payload_len], hdr.mask);
+        try self.sendPong(ping_payload[0..hdr.payload_len]);
+        self.rx_start = total_len;
+        self.rx_len -= total_len;
+        return true;
+    }
+
+    fn handleWsClose(self: *Connection) rpc.Transport.Error!usize {
+        var close_hdr: [10]u8 = undefined;
+        const close_bytes = ws_frame.encodeServerHeader(&close_hdr, .close, 0);
+        self.sendAll(close_bytes, 100) catch {};
+        self.state = .closed;
+        return error.LinkDown;
     }
 
     fn startDataFrame(self: *Connection, hdr: ws_frame.Header, into: []u8) rpc.Transport.Error!usize {
@@ -319,7 +318,11 @@ pub const Connection = struct {
 
     fn compactRx(self: *Connection) void {
         if (self.rx_start > 0 and self.rx_len > 0) {
-            std.mem.copyForwards(u8, self.rx_buf[0..self.rx_len], self.rx_buf[self.rx_start .. self.rx_start + self.rx_len]);
+            std.mem.copyForwards(
+                u8,
+                self.rx_buf[0..self.rx_len],
+                self.rx_buf[self.rx_start .. self.rx_start + self.rx_len],
+            );
             self.rx_start = 0;
         } else if (self.rx_len == 0) {
             self.rx_start = 0;

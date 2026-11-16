@@ -3,11 +3,11 @@
 //! op 1 imm4, with imm8 = i:imm3:imm4. D would name Q8 and above, so it
 //! must be zero, and cmode 1111 with op set is UNDEFINED. The semantics
 //! are in src/chip/core/cpu/mve/modimm/modimm.zig.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_int = @import("int/int.zig");
+const op = @import("../../op.zig");
 
 pub const group: op.Group = .{ .name = "mve_modimm", .decode = decode, .oracle = false };
 

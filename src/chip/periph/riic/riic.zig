@@ -14,17 +14,18 @@
 //!
 //! ICMR3's ACKBT write protection, the one bit in the file that needs its
 //! enable in force first, is its own rule in ack.zig.
-const std = @import("std");
-const periph = @import("../registry.zig");
+
+const access = @import("../bytelanes.zig");
+pub const ack = @import("ack.zig");
 pub const bus = @import("bus.zig");
 pub const flags = @import("flags.zig");
-pub const target = @import("target.zig");
-const access = @import("../bytelanes.zig");
+const periph = @import("../registry.zig");
 pub const restart = @import("restart.zig");
-pub const stop = @import("stop.zig");
-pub const rx = @import("rx.zig");
-pub const ack = @import("ack.zig");
 const riic_reset = @import("reset.zig");
+pub const rx = @import("rx.zig");
+pub const stop = @import("stop.zig");
+pub const target = @import("target.zig");
+
 pub const reset = riic_reset;
 
 pub const win_base = flags.win_base;

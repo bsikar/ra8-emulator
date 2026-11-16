@@ -1,72 +1,24 @@
-//! IPC: the cross-core mailbox, and which core a poke is meant to wake.
+//! Cross-core IPC mailbox at 0x4002_0000, with four channel windows from
+//! +0xC0 at stride 0x20. IPC0 channels 0/1 receive CPU1 -> CPU0; IPC1
+//! channels 2/3 receive CPU0 -> CPU1. Events are delivered at chunk boundaries.
 //!
-//! The IPC unit sits at 0x4002_0000 and carries four channel windows from
-//! 0xC0 up, 0x20 apart: IPC0 channels 0 and 1 run CPU1 -> CPU0, IPC1
-//! channels 2 and 3 run CPU0 -> CPU1. A channel is a pending-IRQ byte plus a
-//! four-stage message FIFO. The sender pushes a word into TXD and pokes
-//! ISET; the receiver takes the interrupt, reads STA to see which line was
-//! set, drains RXD while STA.RDY is up, and acknowledges through CLR. That
-//! handshake is what the dual-core examples replace their done-flag polls
-//! with, so it is what a headless run can check.
+//! Each channel has a pending-IRQ byte and a four-word FIFO. TXD/ISET send;
+//! STA/RXD/CLR receive and acknowledge. FIFO overflow/underflow latch
+//! FERR/RERR and increment the corresponding dropped-access counters.
+//! TXD/RXD require word accesses; rejected widths leave the FIFO unchanged.
 //!
-//! Ported from board_periph_ipc.c on dev, with three things that model does
-//! not do.
-//!
-//! A POKE WAKES THE RECEIVER, NOT THE SENDER. dev raises the event on
-//! whichever engine performed the ISET store, for every channel, so a CPU0
-//! write to an IPC1 channel raises ELC_EVENT_IPC_IRQ1 on CPU0 itself: the
-//! core that sent the message takes the interrupt announcing it. Here the
-//! receiving side decides. IPC0 channels raise into this board's event path,
-//! because their receiver is the core this build runs; an IPC1 poke is
-//! counted as addressed to a core that is not here and raises nothing, which
-//! is what the run should say rather than a wake that went the wrong way.
-//!
-//! THE SEMAPHORES TAKE THE LOCK. dev answers zero to every read below the
-//! first channel window and drops every write there, so a driver that
-//! claims a semaphore and reads it back to see whether it won reads zero
-//! forever and can spin without end. Here IPCSEMn and the two NMI
-//! doorbells are a model of their own in sync.zig: a read of a
-//! semaphore takes the lock as a side effect and hands back the value from
-//! before it, the way HUM Ch 3.2.3 p 210 specifies, so the second claimant
-//! is told it lost. What is left of the region below 0xC0 is still shadow.
-//!
-//! A DROPPED MESSAGE IS COUNTED. dev latches FERR on a write into a full
-//! FIFO and RERR on a read of an empty one, and its end-of-run line prints
-//! only pushes and pops, so a run that overran the four stages reads exactly
-//! like one that did not. The latches are kept, and the words the FIFO could
-//! not take and the reads that found nothing are counted and reported.
-//!
-//! THE MESSAGE PORTS ARE WORD PORTS. TXD and RXD carry one 32-bit message,
-//! not a bag of independently addressable bits the way STA, ISET and CLR do,
-//! and the FIFO stage behind them moves whole. So a store narrower than a
-//! word would push a message three quarters of which the firmware never
-//! wrote, and a load narrower than a word would consume a stage and hand
-//! back one lane of it with the rest gone for good. Both are refused and
-//! counted here rather than taken: the FIFO keeps what it has, and the run
-//! says the access was the wrong width. dev takes either one, so on that
-//! tree a driver reading a message through two halfword loads drains two
-//! stages and assembles a word out of the low halves of both.
-//!
-//! THE SEMAPHORES BELOW THE CHANNELS take the same question and answer it
-//! differently, because LOCK is one bit rather than a message: an access
-//! that names bit 0 carries the lock whatever its width, and one that does
-//! not carries nothing and must not take it. sync.zig owns that rule;
-//! this file's job is to hand it the lanes the access actually named
-//! instead of only the offset it landed on.
-//!
-//! NOT MODELLED, AND NOT GUESSED: any IPC interrupt besides the two receive
-//! events, and NMI delivery, which is latched and counted here but reaches
-//! no core. The event is queued for the chunk boundary rather than raised
-//! inside the store, which is how every other block on this board offers
-//! one.
-const std = @import("std");
-const Bounded = @import("../../core/bounded.zig").Bounded;
-const periph = @import("../registry.zig");
-const lanes = @import("../lanes.zig");
-const prcr = @import("../prcr.zig");
-pub const sync = @import("sync.zig");
+//! sync.zig owns semaphores and NMI doorbells. A semaphore read returns the
+//! prior lock value and claims bit 0 (HUM 3.2.3 p210); accesses that do not
+//! name bit 0 cannot claim it. Other bytes below +0xC0 remain shadowed.
+//! NMI delivery and interrupts other than the receive events are unmodelled.
+
 pub const attr = @import("attr.zig");
+const Bounded = @import("../../core/bounded.zig").Bounded;
+const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
+const prcr = @import("../prcr.zig");
 const repeating = @import("repeat.zig");
+pub const sync = @import("sync.zig");
 
 /// IPC geometry (ra8_ipc_regs.h). The bus folds the Non-secure alias onto
 /// this base before it arrives.

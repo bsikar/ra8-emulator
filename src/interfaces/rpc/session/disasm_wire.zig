@@ -1,6 +1,6 @@
 //! Wire types and row packer for authoritative backend disassembly RPC.
-const std = @import("std");
 const proto = @import("rpc.zig");
+const std = @import("std");
 
 pub const disasm_max_rows: usize = 64;
 pub const disasm_text_cap: usize = 96;

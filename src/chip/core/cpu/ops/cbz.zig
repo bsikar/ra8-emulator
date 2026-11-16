@@ -2,9 +2,9 @@
 //! zero. Flags are untouched. The target is relative to the PC the
 //! instruction sees, its own address plus 4. Inside an IT block either form
 //! is UNPREDICTABLE; IT itself arrives later in RA8EMU-13.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     pub const mask: u16 = 0xF500;

@@ -23,8 +23,8 @@
 //! from the manual, so RA8EMU-230 carries it as an open question rather than
 //! this file inventing a refusal. Recorded, not enforced: nothing here stops
 //! a Non-Secure access to SRAM a boundary left Secure.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const cpscu_base: u32 = 0x4000_8000;
 

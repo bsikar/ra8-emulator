@@ -4,12 +4,13 @@
 //! per LLVM's assembler and the Arm ARM (DDI0553). VDUP is predicated
 //! element-wise, so it writes through the VPT element mask and advances the
 //! block. Rt of 13 or 15 is UNPREDICTABLE and left unclaimed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
 const mve = @import("../../mve/all.zig");
 const mve_int = @import("int/int.zig");
+const op = @import("../../op.zig");
 const scalar = @import("int/scalar.zig");
+
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_vdup", .decode = decode, .oracle = false };

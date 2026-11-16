@@ -9,6 +9,7 @@
 //! fits no region. region/map/text.zig lays the map out; this file opens the
 //! image and prints it.
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const region_map = @import("ra8_session").region.map;
 const region_map_text = @import("ra8_session").region.map.text;

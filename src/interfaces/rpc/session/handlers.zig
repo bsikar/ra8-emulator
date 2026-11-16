@@ -1,20 +1,23 @@
 //! Session RPC handlers and per-connection resources (RA8EMU-735).
 const std = @import("std");
-const session_lib = @import("ra8_session");
-const host = @import("ra8_host");
-const workspace_watch = @import("../workspace_watch.zig");
-const nav_hooks = @import("nav_hooks.zig");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const load_chunks = @import("load_chunks.zig");
+
 const api = @import("ra8_session").api;
-const session_symbols = @import("ra8_session").symbols;
-const stop_machine = @import("ra8_session").stop_machine;
-const region_map = @import("ra8_session").region.map;
-const source_spec = @import("ra8_host").camera.source_spec;
-const session_rtc = @import("ra8_session").rtc;
-const transport_mod = @import("ra8_session").transport;
+const artifact_service = @import("../artifacts/service.zig");
+const artifact_transfer = @import("../artifacts/transfer.zig");
 const board_lib = @import("ra8_board");
+const host = @import("ra8_host");
+const load_chunks = @import("load_chunks.zig");
+const nav_hooks = @import("nav_hooks.zig");
+const proto = @import("rpc.zig");
+const region_map = @import("ra8_session").region.map;
+const rpc = @import("ra8_rpc_wire");
+const session_lib = @import("ra8_session");
+const session_rtc = @import("ra8_session").rtc;
+const session_symbols = @import("ra8_session").symbols;
+const source_spec = @import("ra8_host").camera.source_spec;
+const stop_machine = @import("ra8_session").stop_machine;
+const transport_mod = @import("ra8_session").transport;
+const workspace_watch = @import("../workspace_watch.zig");
 
 /// The refusal codes live with the wire (RA8EMU-998): both ends agree on them.
 pub const app_codes = proto.app_codes;
@@ -76,6 +79,9 @@ const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
     session: *api.Session,
+    targets: ?*host.targets.Registry = null,
+    artifacts: ?*artifact_service.Service = null,
+    artifact_transfer: artifact_transfer.Transfer = .{},
     project: ?*host.project.Project = null,
     project_base_workspace: ?*host.workspace.Workspace = null,
     project_base_runner: ?*host.build.Runner = null,
@@ -256,10 +262,12 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
 /// `break NAME` resolves modules before the image, waiting if unknown (RA8EMU-1141).
 pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome(proto.NamedPoint) {
     const which = core(args.core);
-    if (context.modules) |table| if (table.addressOf(args.name)) |address|
+    if (context.modules) |table| if (table.addressOf(args.name)) |address| {
         return placeNamed(context, which, address);
-    if (imageOf(context, which)) |image| if (session_symbols.addressOf(image, args.name)) |address|
+    };
+    if (imageOf(context, which)) |image| if (session_symbols.addressOf(image, args.name)) |address| {
         return placeNamed(context, which, address);
+    };
     const table = context.modules orelse return refuse(proto.NamedPoint, error.UnknownSymbol);
     const id = table.deferBreak(which, args.name) catch return refuse(proto.NamedPoint, error.NoRoom);
     return .{ .ok = .{ .id = id, .address = 0, .deferred = 1 } };
@@ -281,7 +289,10 @@ pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32
     if (args.last < args.first) return .{ .err = .bad_args };
     const kind = std.meta.stringToEnum(@FieldType(session_lib.watch.table.Watch, "kind"), @tagName(args.access)) orelse
         return .{ .err = .bad_args };
-    const id = context.session.setWatchpoint(core(args.core), .{ .first = args.first, .last = args.last, .kind = kind }) catch |err|
+    const id = context.session.setWatchpoint(
+        core(args.core),
+        .{ .first = args.first, .last = args.last, .kind = kind },
+    ) catch |err|
         return refuse(proto.U32, err);
     return .{ .ok = .{ .value = id } };
 }
@@ -361,7 +372,12 @@ fn reported(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopp
     const pc = session.register(core(of), .pc) catch 0;
     return switch (ended) {
         .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },
-        .core => |stop| .{ .core = of, .reason = .core_fault, .address = pc, .detail = @backingInt(std.meta.activeTag(stop)) },
+        .core => |stop| .{
+            .core = of,
+            .reason = .core_fault,
+            .address = pc,
+            .detail = @backingInt(std.meta.activeTag(stop)),
+        },
         .stop => |stop| .{ .core = of, .reason = reason(stop), .address = pc, .detail = detail(stop) },
     };
 }

@@ -4,11 +4,12 @@
 //! the formats sit in one place and a transcript changes only when one of
 //! them does.
 const std = @import("std");
-const disasm = @import("disasm.zig");
+
 const annotate = @import("annotate.zig");
 const core_view = @import("core_view.zig");
-const registers_list = @import("registers.zig");
+const disasm = @import("disasm.zig");
 const elf = @import("ra8_board").image.elf;
+const registers_list = @import("registers.zig");
 
 pub const limits = struct {
     /// Words on one line of `x`.

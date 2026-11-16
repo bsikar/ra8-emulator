@@ -1,5 +1,6 @@
 //! Ethernet II, IPv4, UDP and TCP framing for the C6 station data path.
 const std = @import("std");
+
 const frame = @import("frame.zig");
 
 pub const eth_header: usize = 14;
@@ -187,7 +188,9 @@ fn transportChecksum(src: [4]u8, dst: [4]u8, protocol: u8, bytes: []const u8) u1
 pub fn sum(start: u32, bytes: []const u8) u32 {
     var acc = start;
     var i: usize = 0;
-    while (i + 1 < bytes.len) : (i += 2) acc += be16(bytes[i..][0..2]);
+    while (i + 1 < bytes.len) : (i += 2) {
+        acc += be16(bytes[i..][0..2]);
+    }
     if (bytes.len % 2 == 1) acc += @as(u32, bytes[bytes.len - 1]) << 8;
     return acc;
 }
@@ -195,7 +198,9 @@ pub fn sum(start: u32, bytes: []const u8) u32 {
 /// Folds a one's-complement sum to 16 bits and inverts it.
 pub fn fold(start: u32) u16 {
     var acc = start;
-    while (acc >> 16 != 0) acc = (acc & 0xFFFF) + (acc >> 16);
+    while (acc >> 16 != 0) {
+        acc = (acc & 0xFFFF) + (acc >> 16);
+    }
     return ~@as(u16, @truncate(acc));
 }
 

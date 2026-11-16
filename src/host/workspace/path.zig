@@ -1,5 +1,6 @@
 //! Portable workspace-relative paths and no-follow directory traversal.
 const std = @import("std");
+
 pub const capacity = 4096;
 
 pub fn normalize(path: []const u8, out: []u8) ![]const u8 {

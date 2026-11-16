@@ -2,27 +2,39 @@
 //! workload needs first, then one line per configuration with where its
 //! time went. sweep_report.zig carries the same rows as JSON.
 const std = @import("std");
-const workload = @import("ra8_board").sizing.workload;
+
 const sweep = @import("ra8_board").sizing.sweep;
 const sweep_report = @import("report.zig");
+const workload = @import("ra8_board").sizing.workload;
+
 const caveat = sweep_report.caveat;
 
 pub fn write(out: anytype, source: sweep_report.Source, target_ns: ?u64, rows: []const sweep.Row) !void {
     const summary = sweep.summarize(rows);
     switch (source) {
-        .synthetic => |job| try out.print("memory sizing sweep: {d} configurations, synthetic weight streaming, {d} KiB weights, {d} KiB activations, {d} pass(es)\n", .{
+        .synthetic,
+        => |job| try out.print("memory sizing sweep: {d} configurations, synthetic weight streaming, {d} KiB " ++
+            "weights, {d} KiB activations, {d} pass(es)\n", .{
             rows.len, job.weights_bytes / workload.kib, job.activations_bytes / workload.kib, job.passes,
         }),
         .elf => |path| try out.print("memory sizing sweep: {d} configurations, guest image {s}\n", .{ rows.len, path }),
     }
-    try out.print("flash: high water {d} bytes, minimum with {d}% headroom ", .{ rows[0].result.flash_high_bytes, sweep.headroom_percent });
+    try out.print(
+        "flash: high water {d} bytes, minimum with {d}% headroom ",
+        .{ rows[0].result.flash_high_bytes, sweep.headroom_percent },
+    );
     try size(out, summary.flash_min_bytes);
-    try out.print("sdram: high water {d} bytes, minimum with {d}% headroom ", .{ rows[0].result.sdram_high_bytes, sweep.headroom_percent });
+    try out.print(
+        "sdram: high water {d} bytes, minimum with {d}% headroom ",
+        .{ rows[0].result.sdram_high_bytes, sweep.headroom_percent },
+    );
     try size(out, summary.sdram_min_bytes);
     try out.writeAll("target: ");
     if (target_ns) |target| try millis(out, target) else try out.writeAll("none");
     try out.writeAll("\n   #  ospi          sdram             total ms      npu ms      cpu ms    stall ms  target\n");
-    for (rows, 0..) |row, index| try line(out, index, row, target_ns != null, source == .elf);
+    for (rows, 0..) |row, index| {
+        try line(out, index, row, target_ns != null, source == .elf);
+    }
     try out.print("fastest: #{d}, ", .{summary.fastest});
     try millis(out, rows[summary.fastest].result.total_ns);
     try out.writeAll(" ms\nslowest that meets the target: ");

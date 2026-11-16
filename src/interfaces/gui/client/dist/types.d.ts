@@ -80,6 +80,7 @@ export declare enum Method {
     Seek = 300,
     Rcont = 301,
     Metrics = 302,
+    Disasm = 303,
     BranchList = 304,
     BranchSwitch = 305,
     BranchDelete = 306,
@@ -94,12 +95,14 @@ export declare enum Method {
     FrameStatus = 315,
     Diff = 316,
     SetVar = 317,
-    Disasm = 318
+    UndoWrite = 318,
+    ResetImage = 319
 }
 export declare const CAP_TRANSPORT: number;
 export declare const CAP_WORKSPACE: number;
 export declare const CAP_BUILD: number;
 export declare const CAP_PROJECT: number;
+export declare const CAP_RECOVERY: number;
 /** Opcode is an alias for Method */
 export { Method as Opcode };
 /** All 7 Event Topics (Topic in rpc.zig) */
@@ -229,7 +232,8 @@ export declare enum EventKind {
     RtosSwitch = 19,
     RtosIdle = 20,
     IsrEnter = 21,
-    IsrLeave = 22
+    IsrLeave = 22,
+    Rewound = 23
 }
 /** Input kind (InputKind in rpc.zig) */
 export declare enum InputKind {

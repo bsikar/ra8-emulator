@@ -11,10 +11,12 @@
 //!    and applies the intervention.
 
 const std = @import("std");
+
 const branch_mod = @import("branch.zig");
 const history_position = @import("position.zig");
 const history_record = @import("record.zig");
 const session_root = @import("../root.zig");
+
 const stream = session_root.event.stream;
 const core_view = session_root.core_view;
 const endpoint = @import("ra8_components").endpoint;
@@ -32,6 +34,7 @@ pub const FaultMode = fault_spec.Mode;
 
 /// What mutation was requested by the host intervention.
 pub const Action = union(enum) {
+    restore: []const u8,
     register: struct { core: Core, which: Register, value: u32 },
     memory: struct { core: Core, address: u32, bytes: []const u8 },
     input: struct { core: Core, at_ns: u64, event: input_script.Event },
@@ -60,10 +63,23 @@ pub const RouteDecision = enum {
 /// Duplicates any borrowed slice in `action` using `allocator`.
 pub fn dupeAction(allocator: std.mem.Allocator, action: Action) !Action {
     switch (action) {
-        .memory => |m| return .{ .memory = .{ .core = m.core, .address = m.address, .bytes = try allocator.dupe(u8, m.bytes) } },
+        .restore => |bytes| return .{ .restore = try allocator.dupe(u8, bytes) },
+        .memory => |m| return .{
+            .memory = .{
+                .core = m.core,
+                .address = m.address,
+                .bytes = try allocator.dupe(u8, m.bytes),
+            },
+        },
         .console => |c| return .{ .console = .{ .core = c.core, .bytes = try allocator.dupe(u8, c.bytes) } },
         .camera => |cam| return .{ .camera = .{ .core = cam.core, .spec = try allocator.dupe(u8, cam.spec) } },
-        .plug => |p| return .{ .plug = .{ .core = p.core, .at = p.at, .name = if (p.name) |n| try allocator.dupe(u8, n) else null } },
+        .plug => |p| return .{
+            .plug = .{
+                .core = p.core,
+                .at = p.at,
+                .name = if (p.name) |n| try allocator.dupe(u8, n) else null,
+            },
+        },
         .load => |l| return .{ .load = .{ .core = l.core, .image = try allocator.dupe(u8, l.image) } },
         else => return action,
     }
@@ -72,6 +88,7 @@ pub fn dupeAction(allocator: std.mem.Allocator, action: Action) !Action {
 /// Frees any duplicated slice in `action` using `allocator`.
 pub fn freeAction(allocator: std.mem.Allocator, action: *Action) void {
     switch (action.*) {
+        .restore => |bytes| allocator.free(bytes),
         .memory => |m| allocator.free(m.bytes),
         .console => |c| allocator.free(c.bytes),
         .camera => |cam| allocator.free(cam.spec),

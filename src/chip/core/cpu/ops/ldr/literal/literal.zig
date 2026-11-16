@@ -1,9 +1,9 @@
 //! LDR Rt, [PC, #imm8] (T1): a word from the literal pool. The address is
 //! Align(PC, 4) + imm8 * 4, where PC reads as the instruction's address
 //! plus 4. Rt is r0-r7, so this encoding never loads the PC.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 pub const wide = @import("wide.zig");
 
 pub const encodings = struct {

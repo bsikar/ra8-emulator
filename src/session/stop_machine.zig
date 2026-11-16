@@ -19,12 +19,12 @@
 //! and only then does the machine start asking.
 const break_table = @import("breaks/table.zig");
 const breakpoint = @import("breakpoint.zig");
-const watch_table = @import("watch/table.zig");
-const fpb = @import("fpb.zig");
-const dwt = @import("ra8_chip").periph.dwt;
-const itm = @import("ra8_chip").periph.itm;
 const dcb = @import("ra8_chip").periph.dcb;
+const dwt = @import("ra8_chip").periph.dwt;
+const fpb = @import("fpb.zig");
+const itm = @import("ra8_chip").periph.itm;
 const stop_types = @import("stop_types.zig");
+const watch_table = @import("watch/table.zig");
 
 pub const Event = stop_types.Event;
 pub const Mode = stop_types.Mode;
@@ -257,10 +257,12 @@ pub const Machine = struct {
 
     /// The earliest unreported watch arrival, the one that ends the run.
     fn firstWatch(self: *const Machine) ?watch_table.Hit {
-        for (self.hits[0..self.hits_len]) |arrival| switch (arrival) {
-            .watch => |hit| return hit,
-            else => {},
-        };
+        for (self.hits[0..self.hits_len]) |arrival| {
+            switch (arrival) {
+                .watch => |hit| return hit,
+                else => {},
+            }
+        }
         return null;
     }
 

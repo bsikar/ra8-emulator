@@ -3,9 +3,9 @@
 //! GE[3:0]. Nothing is read, so no flags but the cleared ones change.
 //!
 //! Left unclaimed (UNPREDICTABLE): an empty list and hw2[13] set (SP).
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const xpsr_bits = @import("../regs.zig").xpsr_bits;
 
 pub const encodings = struct {

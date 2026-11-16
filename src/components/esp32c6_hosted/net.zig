@@ -1,16 +1,17 @@
 //! Host TCP/UDP sockets behind the ESP32-C6 station interface.
+const route_mod = @import("route.zig");
 const std = @import("std");
+
+const dhcp = @import("dhcp.zig");
 const dns = @import("dns/dns.zig");
 const dns_host = @import("dns/host.zig");
-const worker = @import("worker.zig");
 const eth = @import("eth.zig");
 const frame = @import("frame.zig");
-const dhcp = @import("dhcp.zig");
-const Queue = @import("queue.zig").Queue;
-const udp_net = @import("udp.zig");
-const tape = @import("tape/tape.zig");
-const Sock = @import("sock.zig").Sock;
 const host_net = @import("host_net.zig");
+const Queue = @import("queue.zig").Queue;
+const tape = @import("tape/tape.zig");
+const udp_net = @import("udp.zig");
+const worker = @import("worker.zig");
 
 pub const tcp_capacity: usize = 8;
 const guest_window: u16 = eth.tcp_payload_max;
@@ -22,6 +23,7 @@ pub const Landing = @import("hold.zig").Landing;
 const landing_mod = @import("landing.zig");
 
 const tcp_flow = @import("tcp_flow.zig");
+
 const Key = tcp_flow.Key;
 const TcpFlow = tcp_flow.TcpFlow;
 
@@ -48,7 +50,9 @@ pub const Bridge = struct {
 
     /// Host attachments and the tape outlive restored guest connections.
     pub fn closeFlows(self: *Bridge) void {
-        for (&self.tcp_flows) |*flow| flow.close();
+        for (&self.tcp_flows) |*flow| {
+            flow.close();
+        }
         self.udp_bridge.deinit();
         self.dns_bridge.deinit();
         self.tcp_cursor = 0;
@@ -97,7 +101,7 @@ pub const Bridge = struct {
     }
 
     fn forwardDns(self: *Bridge, queue: *Queue, ip: eth.Ipv4, datagram: eth.Udp) void {
-        const route = replyRoute(ip, datagram.src_port, datagram.dst_port);
+        const route = route_mod.replyRoute(ip, datagram.src_port, datagram.dst_port);
         if (self.tape.mode != .replay) return self.dns_bridge.start(datagram.data, route, self.resolver, self.worker);
         var answer: [eth.udp_payload_max]u8 = undefined;
         const recorded = self.tape.loadDns(datagram.data, &answer) orelse return;
@@ -107,25 +111,10 @@ pub const Bridge = struct {
     }
 
     fn forwardTcp(self: *Bridge, queue: *Queue, ip: eth.Ipv4, segment: eth.Tcp) void {
-        const key = makeKey(ip, segment.src_port, segment.dst_port);
+        const key = route_mod.makeKey(ip, segment.src_port, segment.dst_port);
         const found = self.findTcp(key);
         if (segment.flags & eth.TcpFlag.syn != 0) {
-            if (found) |index| {
-                const flow = &self.tcp_flows[index];
-                if (flow.opening_syn == segment.seq) {
-                    if (flow.state == .established) flow.control = .syn_ack;
-                    self.queueControl(queue, index);
-                    return;
-                }
-                flow.close();
-                self.openTcp(queue, index, key, replyRoute(ip, segment.src_port, segment.dst_port), segment.seq, segment.window);
-                return;
-            }
-            const index = self.freeTcp() orelse {
-                self.queueStatelessReset(queue, replyRoute(ip, segment.src_port, segment.dst_port), segment.seq +% 1);
-                return;
-            };
-            self.openTcp(queue, index, key, replyRoute(ip, segment.src_port, segment.dst_port), segment.seq, segment.window);
+            self.acceptSyn(queue, ip, segment, key, found);
             return;
         }
         const index = found orelse return;
@@ -173,6 +162,24 @@ pub const Bridge = struct {
         if (flow.control == .none) self.releaseClosed(index);
     }
 
+    fn acceptSyn(self: *Bridge, queue: *Queue, ip: eth.Ipv4, segment: eth.Tcp, key: Key, found: ?usize) void {
+        const reply = route_mod.replyRoute(ip, segment.src_port, segment.dst_port);
+        const index = found orelse self.freeTcp() orelse {
+            self.queueStatelessReset(queue, reply, segment.seq +% 1);
+            return;
+        };
+        if (found != null) {
+            const flow = &self.tcp_flows[index];
+            if (flow.opening_syn == segment.seq) {
+                if (flow.state == .established) flow.control = .syn_ack;
+                self.queueControl(queue, index);
+                return;
+            }
+            flow.close();
+        }
+        self.openTcp(queue, index, key, reply, segment.seq, segment.window);
+    }
+
     fn openTcp(self: *Bridge, queue: *Queue, index: usize, key: Key, route: eth.Route, syn: u32, window: u16) void {
         const flow = &self.tcp_flows[index];
         flow.* = .{
@@ -186,7 +193,15 @@ pub const Bridge = struct {
             .receive_window = window,
         };
         const host = tape.Key{ .proto = .tcp, .ip = key.dst_ip, .port = key.dst_port };
-        const opened = flow.sock.connect(&self.tape, self.net, host, hostAddress(key.dst_ip, key.dst_port)) catch {
+        const opened = flow.sock.connect(
+            &self.tape,
+            self.net,
+            host,
+            route_mod.hostAddress(
+                key.dst_ip,
+                key.dst_port,
+            ),
+        ) catch {
             flow.state = .reset_pending;
             flow.control = .reset;
             self.queueControl(queue, index);
@@ -220,7 +235,10 @@ pub const Bridge = struct {
             const sent = flow.sock.send(flow.pending[flow.pending_at..flow.pending_len]) catch |err| switch (err) {
                 error.WouldBlock => return,
                 else => {
-                    if (err == error.ReplayDiverged) self.tape.miss("guest sent bytes the recording does not have", .{});
+                    if (err == error.ReplayDiverged) self.tape.miss(
+                        "guest sent bytes the recording does not have",
+                        .{},
+                    );
                     self.hardTcpError(index);
                     return;
                 },
@@ -261,7 +279,15 @@ pub const Bridge = struct {
             self.queueControl(queue, index);
             return;
         }
-        if (self.queueTcp(queue, flow.route, flow.server_next, flow.guest_next, eth.TcpFlag.psh | eth.TcpFlag.ack, guest_window, payload[0..got])) {
+        if (self.queueTcp(
+            queue,
+            flow.route,
+            flow.server_next,
+            flow.guest_next,
+            eth.TcpFlag.psh | eth.TcpFlag.ack,
+            guest_window,
+            payload[0..got],
+        )) {
             flow.server_next +%= @intCast(got);
         }
     }
@@ -315,7 +341,16 @@ pub const Bridge = struct {
             flow.pending_len == 0 and !flow.shutdown_pending and flow.control == .none) flow.close();
     }
 
-    fn queueTcp(self: *Bridge, queue: *Queue, route: eth.Route, seq: u32, acknowledgement: u32, flags: u8, window: u16, payload: []const u8) bool {
+    fn queueTcp(
+        self: *Bridge,
+        queue: *Queue,
+        route: eth.Route,
+        seq: u32,
+        acknowledgement: u32,
+        flags: u8,
+        window: u16,
+        payload: []const u8,
+    ) bool {
         _ = self;
         if (queue.len >= network_queue_limit) return false;
         var ethernet: [frame.max_payload]u8 = undefined;
@@ -337,26 +372,6 @@ pub const Bridge = struct {
         return null;
     }
 };
-
-fn hostAddress(destination: [4]u8, port: u16) std.Io.net.Ip4Address {
-    const host = if (std.mem.eql(u8, &destination, &dhcp.server_ip)) [4]u8{ 127, 0, 0, 1 } else destination;
-    return .{ .bytes = host, .port = port };
-}
-
-fn makeKey(ip: eth.Ipv4, src_port: u16, dst_port: u16) Key {
-    return .{ .src_ip = ip.src_ip, .dst_ip = ip.dst_ip, .src_port = src_port, .dst_port = dst_port };
-}
-
-fn replyRoute(ip: eth.Ipv4, src_port: u16, dst_port: u16) eth.Route {
-    return .{
-        .src_mac = ip.dst_mac,
-        .dst_mac = ip.src_mac,
-        .src_ip = ip.dst_ip,
-        .dst_ip = ip.src_ip,
-        .src_port = dst_port,
-        .dst_port = src_port,
-    };
-}
 
 fn queueEthernet(queue: *Queue, ethernet: []const u8) bool {
     var hosted: [frame.frame_size]u8 = undefined;

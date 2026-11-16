@@ -8,16 +8,17 @@
 //! part on that line lets it go. SPI and UART channels go through
 //! session_faults_lines.zig.
 const std = @import("std");
+
+const Board = @import("ra8_board").board.Board;
 const endpoint = @import("ra8_components").endpoint;
 const fault = @import("ra8_components").fault;
-const fault_spec = @import("ra8_components").fault.spec;
 const fault_lines = @import("ra8_components").fault.lines;
+const fault_spec = @import("ra8_components").fault.spec;
+const lines = @import("lines.zig");
 const riic_bus = @import("ra8_chip").periph.riic.bus;
-const spi = @import("ra8_chip").periph.spi;
 const sci = @import("ra8_chip").periph.sci;
 const sci_device = @import("ra8_chip").periph.sci.device;
-const lines = @import("lines.zig");
-const Board = @import("ra8_board").board.Board;
+const spi = @import("ra8_chip").periph.spi;
 
 pub const Error = error{ WrongEndpoint, NothingFitted, TooManyFaults } || lines.Error;
 

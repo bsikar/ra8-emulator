@@ -8,8 +8,8 @@
 //! PendSV is banked: the copy it was pended in decides (RA8EMU-439).
 //! SysTick is banked the same way now that each Security state has its own
 //! timer (RA8EMU-438, RA8EMU-154).
-const memmap = @import("../../memmap.zig");
 const Cpu = @import("../cpu.zig").Cpu;
+const memmap = @import("../../memmap.zig");
 
 /// AIRCR.BFHFNMINS.
 pub const bfhfnmins: u32 = 1 << 13;

@@ -30,18 +30,27 @@
 //! tests/all.zig and tests/all_host.zig collect them, with no inline tests.
 //!
 //! Zig 0.17.0, the version pinned in ra8-firmware .devcontainer/Dockerfile.
+const debug_build = @import("tools/debug_build.zig");
+const modules_build = @import("tools/modules_build.zig");
+
 const std = @import("std");
+
 const build_tests = @import("build_tests.zig");
+const gate_build = @import("tools/gate_build.zig");
+const lint_build = @import("tools/lint/build.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const peer_only = b.option(bool, "host-move-peer-only", "Build the internal native directory move peer") orelse false;
+    const peer_only = b.option(
+        bool,
+        "host-move-peer-only",
+        "Build the internal native directory move peer",
+    ) orelse false;
 
     const firmware = b.dependency("ra8_firmware", .{});
-    const libs = libraries(b, target, optimize, firmware);
-    // The umbrella over the libraries, reached as "ra8" by the tests and by
-    // a build that embeds the emulator, so neither walks paths into src/.
+    const libs = modules_build.libraries(b, target, optimize, firmware);
+    // Tests and embedders reach the libraries through the "ra8" umbrella.
     const emu = b.addModule("ra8", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -49,19 +58,9 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     libs.importInto(emu);
-    const cli = application(b, target, optimize, libs, firmware);
+    const cli = modules_build.application(b, target, optimize, libs, firmware);
 
-    const exe = b.addExecutable(.{
-        .name = if (peer_only) "ra8_host_move_peer" else "ra8_emulator",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path(if (peer_only) "src/interfaces/cli/host_move_main.zig" else "src/interfaces/cli/main.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .imports = &.{ .{ .name = "cli_app", .module = cli }, .{ .name = "ra8_host", .module = libs.host } },
-        }),
-    });
-    b.installArtifact(exe);
+    const exe = executable(b, target, optimize, cli, libs, peer_only);
     const peers = testPeers(b, target, optimize, cli);
     const move_peer = if (peer_only) exe else peers[0];
     const lifecycle_peer = peers[1];
@@ -71,7 +70,84 @@ pub fn build(b: *std.Build) void {
     run.addPassthruArgs();
     b.step("run", "Run the emulator").dependOn(&run.step);
 
-    @import("tools/debug_build.zig").add(b);
+    debug_build.add(b);
+    usbipAttach(b, target, optimize);
+    lint_build.add(b, @This());
+
+    configureTests(b, target, optimize, emu, cli, exe, move_peer, lifecycle_peer);
+
+    b.step(
+        "gate",
+        "Check formatting, file and function length, and terminology",
+    ).dependOn(gate_build.add(b, target));
+}
+
+/// The two internal peers the tests spawn as real second processes.
+fn testPeers(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    cli: *std.Build.Module,
+) [2]*std.Build.Step.Compile {
+    var peers: [2]*std.Build.Step.Compile = undefined;
+    const mains = [_][]const u8{
+        "src/interfaces/cli/host_move_main.zig",
+        "src/interfaces/cli/host_lifecycle_main.zig",
+    };
+    for (mains, 0..) |main_file, i| {
+        peers[i] = b.addExecutable(.{
+            .name = if (i == 0) "ra8_host_move_peer" else "ra8_host_lifecycle_peer",
+            .root_module = b.createModule(
+                .{
+                    .root_source_file = b.path(main_file),
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                    .imports = &.{.{ .name = "cli_app", .module = cli }},
+                },
+            ),
+        });
+    }
+    return peers;
+}
+
+/// A tools/ program's module, shared by its executable and its tests.
+fn toolModule(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    path: []const u8,
+) *std.Build.Module {
+    return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });
+}
+
+/// tools/usbip_attach.zig attaches `--usbip PORT` the way usbip does and
+/// checks the descriptor and the vendor loopback (RA8EMU-75 slice 5c).
+fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const usbip_mod = b.createModule(.{
+        .root_source_file = b.path("tools/usbip_attach.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    usbip_mod.addImport(
+        "usbip_client",
+        b.createModule(.{ .root_source_file = b.path("src/interfaces/usbip/client.zig") }),
+    );
+    const usbip = b.addRunArtifact(b.addExecutable(.{ .name = "usbip_attach", .root_module = usbip_mod }));
+    usbip.addPassthruArgs();
+    b.step("usbip-attach", "Attach --usbip PORT and check it end to end: -- PORT").dependOn(&usbip.step);
+}
+
+fn configureTests(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    emu: *std.Build.Module,
+    cli: *std.Build.Module,
+    exe: *std.Build.Step.Compile,
+    move_peer: *std.Build.Step.Compile,
+    lifecycle_peer: *std.Build.Step.Compile,
+) void {
     // The gate executable and its tests share the scanner modules.
     const gate_mod = toolModule(b, target, optimize, "tools/gate.zig");
     // tools/terms.zig is the terminology half, tested the same way.
@@ -86,173 +162,58 @@ pub fn build(b: *std.Build) void {
     table.addPassthruArgs();
     b.step("examples", "Print the example pass table: -- EMULATOR DIR [INSTRUCTIONS]").dependOn(&table.step);
 
-    usbipAttach(b, target, optimize);
-
-    const imports: build_tests.Imports = .{ .filter = b.option([]const u8, "test-filter", "Compile only tests whose name contains this text"), .emu = emu, .cli = cli, .gate = gate_mod, .terms = terms_mod, .table = table_mod };
-    // Two roots, one after the other under -j1, so peak memory is the larger suite's (RA8EMU-785).
-    const tests = [_]*std.Build.Step.Compile{
-        build_tests.compile(b, "ra8_tests", "tests/all.zig", target, optimize, imports, exe, move_peer, lifecycle_peer),
-        build_tests.compile(b, "ra8_host_tests", "tests/all_host.zig", target, optimize, imports, exe, move_peer, lifecycle_peer),
+    const imports: build_tests.Imports = .{
+        .filter = b.option([]const u8, "test-filter", "Compile only tests whose name contains this text"),
+        .emu = emu,
+        .cli = cli,
+        .gate = gate_mod,
+        .terms = terms_mod,
+        .table = table_mod,
     };
-    build_tests.add(b, &tests, target, optimize, emu, &exe.step);
-
-    b.step("gate", "Check formatting, file and function length, and terminology").dependOn(gate(b, target));
-}
-
-/// The two internal peers the tests spawn as real second processes.
-fn testPeers(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, cli: *std.Build.Module) [2]*std.Build.Step.Compile {
-    var peers: [2]*std.Build.Step.Compile = undefined;
-    const mains = [_][]const u8{ "src/interfaces/cli/host_move_main.zig", "src/interfaces/cli/host_lifecycle_main.zig" };
-    for (mains, 0..) |main_file, i| {
-        peers[i] = b.addExecutable(.{
-            .name = if (i == 0) "ra8_host_move_peer" else "ra8_host_lifecycle_peer",
-            .root_module = b.createModule(.{ .root_source_file = b.path(main_file), .target = target, .optimize = optimize, .link_libc = true, .imports = &.{.{ .name = "cli_app", .module = cli }} }),
-        });
+    const specs = [_]struct { name: []const u8, root: []const u8 }{
+        .{ .name = "ra8_tests", .root = "tests/all.zig" },
+        .{ .name = "ra8_host_tests", .root = "tests/all_host.zig" },
+    };
+    var suites: [specs.len]*std.Build.Step.Compile = undefined;
+    for (specs, &suites) |spec, *suite| {
+        suite.* = build_tests.compile(
+            b,
+            spec.name,
+            spec.root,
+            target,
+            optimize,
+            imports,
+            exe,
+            move_peer,
+            lifecycle_peer,
+        );
     }
-    return peers;
+    build_tests.add(b, &suites, target, optimize, emu, &exe.step);
 }
 
-/// The libraries that are build modules of their own (ADR 0004 section 1,
-/// RA8EMU-1031). Each is rooted in its own directory, so Zig refuses an
-/// import that leaves it, and is given exactly the modules it may import:
-/// only ones below it, and the host only where the ADR allows it.
-const Libraries = struct {
-    host: *std.Build.Module,
-    snapshot: *std.Build.Module,
-    chip: *std.Build.Module,
-    components: *std.Build.Module,
-    board: *std.Build.Module,
-    session: *std.Build.Module,
-    render: *std.Build.Module,
-    rpc: *std.Build.Module,
-    gdb: *std.Build.Module,
-    dap: *std.Build.Module,
-    usbip: *std.Build.Module,
-
-    /// Every library, under its own name, into `module`.
-    fn importInto(self: Libraries, module: *std.Build.Module) void {
-        inline for (@typeInfo(Libraries).@"struct".field_names) |name| module.addImport("ra8_" ++ name, @field(self, name));
-    }
-};
-
-fn libraries(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, firmware: *std.Build.Dependency) Libraries {
-    const host = library(b, target, optimize, "ra8_host", "src/host/root.zig", &.{});
-    const snapshot = library(b, target, optimize, "ra8_snapshot", "src/snapshot/root.zig", &.{});
-    const chip = library(b, target, optimize, "ra8_chip", "src/chip/root.zig", &.{.{ .name = "ra8_snapshot", .module = snapshot }});
-    const components = library(b, target, optimize, "ra8_components", "src/components/root.zig", &.{
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_snapshot", .module = snapshot },
-    });
-    const board = library(b, target, optimize, "ra8_board", "src/board/root.zig", &.{
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_components", .module = components },
-        .{ .name = "ra8_snapshot", .module = snapshot },
-    });
-    const session = library(b, target, optimize, "ra8_session", "src/session/root.zig", &.{
-        .{ .name = "ra8_board", .module = board },
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_components", .module = components },
-    });
-    const render = library(b, target, optimize, "ra8_render", "src/interfaces/render/root.zig", &.{
-        .{ .name = "ra8_session", .module = session },
-    });
-    const rpc = library(b, target, optimize, "ra8_rpc", "src/interfaces/rpc/root.zig", &.{
-        .{ .name = "ra8_session", .module = session },
-        .{ .name = "ra8_components", .module = components },
-        .{ .name = "ra8_host", .module = host },
-        .{ .name = "ra8_board", .module = board },
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_rpc_wire", .module = firmware.module("ra8_rpc") },
-    });
-    const gdb = library(b, target, optimize, "ra8_gdb", "src/interfaces/gdb/root.zig", &.{
-        .{ .name = "ra8_session", .module = session },
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_host", .module = host },
-    });
-    const dap = library(b, target, optimize, "ra8_dap", "src/interfaces/dap/root.zig", &.{.{ .name = "ra8_session", .module = session }});
-    // The host listener (RA8EMU-1156) serves GDB through the library adapter.
-    rpc.addImport("ra8_gdb", gdb);
-    rpc.addOptions("history_build", @import("tools/history_build.zig").options(b));
-    const usbip = library(b, target, optimize, "ra8_usbip", "src/interfaces/usbip/root.zig", &.{
-        .{ .name = "ra8_board", .module = board },
-        .{ .name = "ra8_chip", .module = chip },
-        .{ .name = "ra8_host", .module = host },
-    });
-    return .{ .host = host, .snapshot = snapshot, .chip = chip, .components = components, .board = board, .session = session, .render = render, .rpc = rpc, .gdb = gdb, .dap = dap, .usbip = usbip };
-}
-
-/// One library module, importable by its name from this build and from a
-/// build that depends on this package.
-fn library(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, name: []const u8, root: []const u8, imports: []const std.Build.Module.Import) *std.Build.Module {
-    return b.addModule(name, .{ .root_source_file = b.path(root), .target = target, .optimize = optimize, .link_libc = true, .imports = imports });
-}
-
-/// The CLI owns one module shared by its executable and tests.
-fn application(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libs: Libraries, firmware: *std.Build.Dependency) *std.Build.Module {
-    const cli = b.createModule(.{ .root_source_file = b.path("src/interfaces/cli/root.zig"), .target = target, .optimize = optimize, .link_libc = true });
-    libs.importInto(cli);
-    cli.addImport("ra8_rpc_wire", firmware.module("ra8_rpc"));
-    return cli;
-}
-
-/// A tools/ program's module, shared by its executable and its tests.
-fn toolModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, path: []const u8) *std.Build.Module {
-    return b.createModule(.{ .root_source_file = b.path(path), .target = target, .optimize = optimize });
-}
-
-/// The light gate AGENTS.md promises and nothing more: `zig fmt --check` over
-/// everything we write, then a file and function length check over the same
-/// paths. Anything heavier belongs in ra8-firmware, not in a tool.
-fn gate(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths = [_][]const u8{ "build.zig", "build_tests.zig", "src", "tests", "tools" };
-
-    var fmt_paths: [paths.len]std.Build.LazyPath = undefined;
-    for (paths, &fmt_paths) |path, *lazy| lazy.* = b.path(path);
-    const fmt = b.addFmt(.{ .paths = &fmt_paths, .check = true });
-
-    const checker = b.addExecutable(.{
-        .name = "gate",
+fn executable(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    cli: *std.Build.Module,
+    libs: modules_build.Libraries,
+    peer_only: bool,
+) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = if (peer_only) "ra8_host_move_peer" else "ra8_emulator",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/gate.zig"),
+            .root_source_file = b.path(
+                if (peer_only)
+                    "src/interfaces/cli/host_move_main.zig"
+                else
+                    "src/interfaces/cli/main.zig",
+            ),
             .target = target,
-            .optimize = .debug,
+            .optimize = optimize,
+            .link_libc = true,
+            .imports = &.{ .{ .name = "cli_app", .module = cli }, .{ .name = "ra8_host", .module = libs.host } },
         }),
     });
-    const run = b.addRunArtifact(checker);
-    run.has_side_effects = true;
-    for (paths) |path| run.addArg(path);
-    run.step.dependOn(&fmt.step);
-    run.step.dependOn(terms(b, target));
-    return &run.step;
-}
-
-/// tools/terms.zig over everything we write.
-fn terms(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-    const paths: []const []const u8 = &.{ "build.zig", "build_tests.zig", "build.zig.zon", "src", "tests", "tools", "README.md", "AGENTS.md" };
-    const checker = b.addExecutable(.{
-        .name = "terms",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("tools/terms.zig"),
-            .target = target,
-            .optimize = .debug,
-        }),
-    });
-    const run = b.addRunArtifact(checker);
-    run.has_side_effects = true;
-    for (paths) |path| run.addArg(path);
-    return &run.step;
-}
-
-/// tools/usbip_attach.zig attaches `--usbip PORT` the way usbip does and
-/// checks the descriptor and the vendor loopback (RA8EMU-75 slice 5c).
-fn usbipAttach(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const usbip_mod = b.createModule(.{
-        .root_source_file = b.path("tools/usbip_attach.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    usbip_mod.addImport("usbip_client", b.createModule(.{ .root_source_file = b.path("src/interfaces/usbip/client.zig") }));
-    const usbip = b.addRunArtifact(b.addExecutable(.{ .name = "usbip_attach", .root_module = usbip_mod }));
-    usbip.addPassthruArgs();
-    b.step("usbip-attach", "Attach --usbip PORT and check it end to end: -- PORT").dependOn(&usbip.step);
+    b.installArtifact(exe);
+    return exe;
 }

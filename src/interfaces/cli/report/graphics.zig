@@ -3,8 +3,8 @@
 //! in the framebuffer. Split out of report.zig, which was at the file-length
 //! limit, and they belong together anyway: all three read the same domain.
 const Board = @import("ra8_board").board.Board;
-const Writer = @import("../report.zig").Writer;
 const system = @import("glcdc_sys.zig");
+const Writer = @import("../report.zig").Writer;
 
 /// The three in the order a person reads them: what is powered, what the
 /// panel shows, what drew it.
@@ -49,7 +49,8 @@ pub fn panel(board: *Board, out: Writer) !void {
     try film(unit, out);
     if (unit.overdrain != 0 or unit.stray != 0 or unit.read_only != 0 or unit.spilled != 0) {
         try out.print(
-            "IT8951 e-ink: {d} read(s) past the device-info block, {d} data word(s) with no command, {d} write(s) to LUTAFSR, {d} register write(s) dropped\n",
+            "IT8951 e-ink: {d} read(s) past the device-info block, {d} data word(s) with no " ++
+                "command, {d} write(s) to LUTAFSR, {d} register write(s) dropped\n",
             .{ unit.overdrain, unit.stray, unit.read_only, unit.spilled },
         );
     }
@@ -110,7 +111,8 @@ pub fn display(board: *Board, out: Writer) !void {
     }
     if (unit.updates() != 0) {
         try out.print(
-            "GLCDC: {d} register update(s) latched by a VEN command (the bit is spent on the write, so the driver's vblank poll finishes)\n",
+            "GLCDC: {d} register update(s) latched by a VEN command (the bit is spent on the " ++
+                "write, so the driver's vblank poll finishes)\n",
             .{unit.updates()},
         );
     }
@@ -188,13 +190,15 @@ fn scanned(unit: anytype, out: Writer) !void {
     }
     if (panel_scan.count(.no_palette) != 0) {
         try out.print(
-            "GLCDC: REFUSED {d} scan(s) of a CLUT layer with an empty palette plane (fill the CLUT, or point CLUTINT.SEL at the plane you filled)\n",
+            "GLCDC: REFUSED {d} scan(s) of a CLUT layer with an empty palette plane (fill " ++
+                "the CLUT, or point CLUTINT.SEL at the plane you filled)\n",
             .{panel_scan.count(.no_palette)},
         );
     }
     if (panel_scan.count(.off_ram) != 0 or panel_scan.count(.too_big) != 0) {
         try out.print(
-            "GLCDC: REFUSED {d} scan(s) whose framebuffer ran past the end of its RAM window, {d} larger than this will walk\n",
+            "GLCDC: REFUSED {d} scan(s) whose framebuffer ran past the end of its RAM " ++
+                "window, {d} larger than this will walk\n",
             .{ panel_scan.count(.off_ram), panel_scan.count(.too_big) },
         );
     }
@@ -239,7 +243,8 @@ fn composited(unit: anytype, out: Writer) !void {
     const mixer = &unit.mixer;
     if (mixer.quiet()) return;
     try out.print(
-        "GLCDC: panel composited {d} time(s), {d} pixel(s) with two layers over each other, {d} showing the background colour\n",
+        "GLCDC: panel composited {d} time(s), {d} pixel(s) with two layers over each " ++
+            "other, {d} showing the background colour\n",
         .{ mixer.mixes, mixer.overlapped, mixer.bare },
     );
 }
@@ -267,7 +272,8 @@ fn outputStage(unit: anytype, out: Writer) !void {
     }
     if (stage.pending()) {
         try out.print(
-            "GLCDC: output registers written but never committed (OUT_VLATCH.VEN unwritten), so the panel is still driven from the previous settings\n",
+            "GLCDC: output registers written but never committed (OUT_VLATCH.VEN unwritten), " ++
+                "so the panel is still driven from the previous settings\n",
             .{},
         );
     }
@@ -299,7 +305,8 @@ pub fn raster(board: *Board, out: Writer) !void {
     );
     if (unit.limited != 0) {
         try out.print(
-            "DRW: {d} render(s) shaped by the spatial limiters, {d} pixel(s) clipped out, {d} on a boundary this model paints hard\n",
+            "DRW: {d} render(s) shaped by the spatial limiters, {d} pixel(s) clipped out, " ++
+                "{d} on a boundary this model paints hard\n",
             .{ unit.limited, unit.clipped, unit.hard_edges },
         );
     }
@@ -336,7 +343,8 @@ fn caches(unit: anytype, out: Writer) !void {
     const fb = &unit.pixel_cache;
     if (fb.quiet()) return;
     try out.print(
-        "DRW: framebuffer cache held {d} pixel write(s), wrote back {d} over {d} flush(es), {d} evicted to make room, {d} destination read(s) served from it\n",
+        "DRW: framebuffer cache held {d} pixel write(s), wrote back {d} over {d} " ++
+            "flush(es), {d} evicted to make room, {d} destination read(s) served from it\n",
         .{ fb.held, fb.written_back, fb.flushes, fb.evicted, fb.forwarded },
     );
     if (fb.dirty()) {
@@ -347,7 +355,8 @@ fn caches(unit: anytype, out: Writer) !void {
     }
     if (fb.disabled_dirty != 0) {
         try out.print(
-            "DRW: the framebuffer cache was switched off {d} time(s) with pixels still held (silicon leaves that undefined; written back here)\n",
+            "DRW: the framebuffer cache was switched off {d} time(s) with pixels still held " ++
+                "(silicon leaves that undefined; written back here)\n",
             .{fb.disabled_dirty},
         );
     }

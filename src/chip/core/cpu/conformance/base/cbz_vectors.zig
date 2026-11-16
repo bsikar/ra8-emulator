@@ -29,7 +29,11 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 }
 
 pub const all = [_]V{
-    vec("cbz r0, +0 taken lands at address + 4", .{ .hw1 = 0xB100, .rn = 0, .nzcv = 0xF }, .{ .pc = 0x1004, .nzcv = 0xF }),
+    vec(
+        "cbz r0, +0 taken lands at address + 4",
+        .{ .hw1 = 0xB100, .rn = 0, .nzcv = 0xF },
+        .{ .pc = 0x1004, .nzcv = 0xF },
+    ),
     vec("cbz r0 not taken", .{ .hw1 = 0xB100, .rn = 1 }, .{ .pc = next }),
     vec("cbz r3, +126 is the furthest", .{ .hw1 = 0xB3FB, .rn = 0 }, .{ .pc = 0x1082 }),
     vec("cbnz r0, +2 taken", .{ .hw1 = 0xB908, .rn = 1 }, .{ .pc = 0x1006 }),

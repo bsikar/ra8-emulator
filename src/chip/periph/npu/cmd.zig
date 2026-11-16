@@ -10,7 +10,6 @@
 //! The decode lives here rather than in npu.zig so the register window stays
 //! a register window, the same split dmac/dmac.zig and dmac/xfer.zig, and
 //! sdhi/sdhi.zig and sdhi/xfer.zig, have.
-const std = @import("std");
 
 /// The header the stand-in program starts with.
 pub const header = struct {
@@ -122,7 +121,9 @@ pub const Check = struct {
     value: u32 = offset_basis,
 
     pub fn fold(self: *Check, bytes: []const u8) void {
-        for (bytes) |byte| self.value = (self.value ^ byte) *% prime;
+        for (bytes) |byte| {
+            self.value = (self.value ^ byte) *% prime;
+        }
     }
 };
 

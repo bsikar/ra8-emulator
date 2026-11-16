@@ -10,12 +10,13 @@
 //! Console keystrokes and a camera change act on the board, not on a core,
 //! so their bodies are the bytes alone and decode on CPU0.
 const std = @import("std");
-const record_mod = @import("record.zig");
-const fork_router_mod = @import("fork_router.zig");
+
 const core_view = @import("../core_view.zig");
-const input_script = @import("ra8_components").input_script;
 const endpoint = @import("ra8_components").endpoint;
 const fault_spec = @import("ra8_components").fault.spec;
+const fork_router_mod = @import("fork_router.zig");
+const input_script = @import("ra8_components").input_script;
+const record_mod = @import("record.zig");
 
 pub const Action = fork_router_mod.Action;
 pub const What = record_mod.Intervention.What;
@@ -36,6 +37,10 @@ pub fn encode(allocator: std.mem.Allocator, action: Action) !EncodedAction {
     errdefer out.deinit();
     const w = &out.writer;
     const what: What = switch (action) {
+        .restore => |bytes| blk: {
+            try w.writeAll(bytes);
+            break :blk .state_restore;
+        },
         .register => |reg| blk: {
             try w.writeByte(@backingInt(reg.core));
             try w.writeInt(u32, @backingInt(reg.which), .little);
@@ -99,6 +104,7 @@ pub fn free(allocator: std.mem.Allocator, encoded: *EncodedAction) void {
 pub fn decode(allocator: std.mem.Allocator, what: What, body: []const u8) !Action {
     var r: Reader = .{ .body = body };
     switch (what) {
+        .state_restore => return .{ .restore = try allocator.dupe(u8, body) },
         .register_write => {
             const core = try r.core();
             const raw = try r.int(u32);
@@ -129,7 +135,10 @@ pub fn decode(allocator: std.mem.Allocator, what: What, body: []const u8) !Actio
         .fault => {
             const core = try r.core();
             const at = endpoint.parse(try r.text()) catch return Error.BadValue;
-            const mode: ?fault_spec.Mode = if (r.done()) null else fault_spec.parseMode(try r.text()) catch return Error.BadValue;
+            const mode: ?fault_spec.Mode = if (r.done())
+                null
+            else
+                fault_spec.parseMode(try r.text()) catch return Error.BadValue;
             return .{ .fault = .{ .core = core, .at = at, .mode = mode } };
         },
         .skip_bkpt => return .{ .skip_bkpt = .{ .core = try r.core() } },

@@ -10,8 +10,9 @@
 //!
 //! A mismatch refuses visibly with the exact slot position, never continuing.
 const std = @import("std");
-const slot_mod = @import("window_slot.zig");
+
 const fields = @import("ra8_board").snapshot.run.fields;
+const slot_mod = @import("window_slot.zig");
 
 pub const Position = slot_mod.Position;
 pub const Core = slot_mod.Core;

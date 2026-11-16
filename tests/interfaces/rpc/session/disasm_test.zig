@@ -19,8 +19,8 @@ fn noMap(_: *anyopaque, _: usize, _: bool, _: []u8) anyerror![]const u8 {
     return error.NoImage;
 }
 
-test "Method opcode disasm is 0x013E and routed in server" {
-    try std.testing.expectEqual(@as(u16, 0x013E), @backingInt(proto.Method.disasm));
+test "Method opcode disasm is 0x012F and routed in server" {
+    try std.testing.expectEqual(@as(u16, 0x012F), @backingInt(proto.Method.disasm));
     var found = false;
     inline for (server.routes) |route| {
         if (route[0] == @backingInt(proto.Method.disasm)) found = true;

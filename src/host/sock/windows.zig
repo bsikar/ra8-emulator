@@ -2,10 +2,12 @@
 //! nonblocking IPv4 calls as sock.zig, through ws2_32. Winsock has no
 //! SIGPIPE, so no per-socket opt-out is needed.
 const std = @import("std");
+
 const win32 = @import("../win32.zig");
 
 const Socket = win32.HANDLE;
 const Error = @import("sock.zig").Error;
+
 const Address = std.Io.net.Ip4Address;
 
 const af_inet: c_int = 2;
@@ -37,20 +39,22 @@ var started = std.atomic.Value(u8).init(0);
 
 /// Winsock must be started once per process before the first socket.
 pub fn start() Error!void {
-    while (true) switch (started.load(.acquire)) {
-        2 => return,
-        0 => {
-            if (started.cmpxchgStrong(0, 1, .acq_rel, .acquire) != null) continue;
-            var data: [512]u8 align(8) = undefined;
-            if (WSAStartup(0x0202, &data) == 0) {
-                started.store(2, .release);
-                return;
-            }
-            started.store(0, .release);
-            return error.SystemResources;
-        },
-        else => std.atomic.spinLoopHint(),
-    };
+    while (true) {
+        switch (started.load(.acquire)) {
+            2 => return,
+            0 => {
+                if (started.cmpxchgStrong(0, 1, .acq_rel, .acquire) != null) continue;
+                var data: [512]u8 align(8) = undefined;
+                if (WSAStartup(0x0202, &data) == 0) {
+                    started.store(2, .release);
+                    return;
+                }
+                started.store(0, .release);
+                return error.SystemResources;
+            },
+            else => std.atomic.spinLoopHint(),
+        }
+    }
 }
 
 /// Enable nonblocking mode on a Winsock socket handle.

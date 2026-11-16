@@ -15,7 +15,10 @@ pub fn sections(board: *Board, out: Writer) !void {
         try out.print("PFS: REFUSED direction in {d} write(s), unsupported by the pad\n", .{unit.direction_refused});
     }
     if (board.pins.direction_refused != 0) {
-        try out.print("GPIO: REFUSED direction in {d} write(s), unsupported by the pad\n", .{board.pins.direction_refused});
+        try out.print(
+            "GPIO: REFUSED direction in {d} write(s), unsupported by the pad\n",
+            .{board.pins.direction_refused},
+        );
     }
     if (unit.guard.refused != 0) {
         try out.print(
@@ -25,8 +28,8 @@ pub fn sections(board: *Board, out: Writer) !void {
     }
     if (unit.ordering.glitched != 0) {
         try out.print(
-            "PFS: {d} pin(s) handed straight from one peripheral function to another, " ++
-                "clear PMR before programming a new PSEL\n",
+            "PFS: {d} pin(s) handed straight from one peripheral function to another, clear " ++
+                "PMR before programming a new PSEL\n",
             .{unit.ordering.glitched},
         );
     }

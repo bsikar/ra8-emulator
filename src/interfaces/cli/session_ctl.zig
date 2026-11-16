@@ -7,90 +7,55 @@
 //! --stdio` on the profile's host for this one command, so each call is a
 //! fresh machine booted from ELF.
 const std = @import("std");
-const proto = @import("ra8_rpc").session.rpc;
+
 const chunk_load = @import("ra8_rpc").session.load_chunks;
-const Spec = @import("serve/listen.zig").Spec;
 const ctl_client = @import("ctl/client.zig");
+const proto = @import("ra8_rpc").session.rpc;
+const Spec = @import("serve/listen.zig").Spec;
+const targets = @import("ctl/targets.zig");
+
 const Client = ctl_client.Client;
-const profiles = @import("ra8_host").profiles;
+const ctl_branch = @import("ctl/branch.zig");
+const ctl_diff = @import("ctl/diff.zig");
+const ctl_nav = @import("ctl/nav.zig");
+const ctl_write = @import("ctl/write.zig");
+pub const events = @import("ctl/events.zig");
 const host_spawn = @import("host/spawn.zig");
 const out = @import("ctl/print.zig");
-pub const events = @import("ctl/events.zig");
-const ctl_branch = @import("ctl/branch.zig");
-const ctl_write = @import("ctl/write.zig");
-const ctl_nav = @import("ctl/nav.zig");
-const ctl_diff = @import("ctl/diff.zig");
+const profiles = @import("ra8_host").profiles;
 
 pub const usage =
-    \\usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND
-    \\       ra8_emulator ctl --host NAME [--hosts FILE] --image ELF [--json] COMMAND
-    \\  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem ADDRESS LENGTH
-    \\            speed FACTOR|max | break ADDRESS|NAME | break --clear ID
-    \\            watch ADDRESS read|write|access | watch --clear ID
-    \\            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]
-    \\            advance 500ms|600s | seek TARGET | frame N | iter N | marker NAME | marker set NAME PLACE | nav KIND [ARG] | frames | play [--dir=back]
-    \\            rc | plug MODEL@ENDPOINT | unplug ENDPOINT | snapshot PATH | restore PATH
-    \\            map | stack | rtc | periph [BLOCK] | folded [THREAD] | fault MODEL@ENDPOINT=MODE
-    \\            branch ls | branch switch ID | branch rm ID [--confirm] | diff A B
-    \\            fork confirm | fork cancel | fork status | write-reg NAME VALUE | set NAME=VALUE | console TEXT
-;
+    "usage: ra8_emulator ctl --connect unix:PATH|tcp:[HOST]:PORT [--json] COMMAND\n" ++
+    "       ra8_emulator ctl --host NAME [--hosts FILE] --image ELF [--json] " ++
+    "COMMAND\n" ++
+    "  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem " ++
+    "ADDRESS LENGTH\n" ++
+    "            speed FACTOR|max | break ADDRESS|NAME | break --clear ID\n" ++
+    "            watch ADDRESS read|write|access | watch --clear ID\n" ++
+    "            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]\n" ++
+    "            advance 500ms|600s | seek TARGET | frame N | iter N | marker NAME | " ++
+    "marker set NAME PLACE | nav KIND [ARG] | frames | play [--dir=back]\n" ++
+    "            rc | plug MODEL@ENDPOINT | unplug ENDPOINT | snapshot PATH | " ++
+    "restore PATH\n" ++
+    "            map | stack | rtc | periph [BLOCK] | folded [THREAD] | fault " ++
+    "MODEL@ENDPOINT=MODE\n" ++
+    "            branch ls | branch switch ID | branch rm ID [--confirm] | diff A B\n" ++
+    "            fork confirm | fork cancel | fork status | write-reg NAME VALUE | " ++
+    "set NAME=VALUE | console " ++
+    "TEXT\n" ++
+    "            undo | reset-image\n" ++
+    "            targets list | targets use HOST_ID PROBE_ID BOARD_ID GENERATION DISAMBIGUATION|- ACTION...\n";
 
-/// What `regs` reads when it is given no names.
-const default_regs = [_]proto.Register{ .r0, .r1, .r2, .r3, .r4, .r5, .r6, .r7, .r8, .r9, .r10, .r11, .r12, .sp, .lr, .pc, .xpsr };
-const max_regs = 32;
+const command_parse = @import("ctl/parse.zig");
+const command_types = @import("ctl/command.zig");
 
-pub const Command = union(enum) {
-    load: []const u8,
-    run: u64,
-    advance: u64,
-    seek: []const u8,
-    marker_set: ctl_nav.MarkerSet,
-    nav: ctl_nav.NavQuery,
-    frame_status,
-    play: ctl_nav.PlayCmd,
-    rc,
-    step,
-    pause,
-    regs: []const proto.Register,
-    mem: struct { address: u32, length: u32 },
-    /// Thousandths of the default rate; zero is `max`.
-    speed: u64,
-    set_break: u32,
-    set_break_name: []const u8,
-    clear_break: u32,
-    set_watch: struct { address: u32, access: proto.Access },
-    clear_watch: u32,
-    events: events.Options,
-    part: Part,
-    files: Files,
-    /// The memory map of the last loaded image (RA8EMU-794).
-    map,
-    /// The stack pointers, their low marks and any overflow (RA8EMU-816).
-    stack,
-    /// The board's RTC calendar (RA8EMU-809).
-    rtc,
-    /// The peripheral blocks, or one block's registers when named (RA8EMU-818).
-    periph: []const u8,
-    /// CPU0's sampled stacks, folded, for one thread and window (RA8EMU-833).
-    folded: Folded,
-    branch_cmd: ctl_branch.BranchCommand,
-    write_cmd: ctl_write.WriteCommand,
-    diff_cmd: struct { a: []const u8, b: []const u8 },
-};
-
-/// What `ctl folded` asks for; the defaults take every thread, all time.
-pub const Folded = struct { thread: u32 = proto.all_threads, from_ns: u64 = 0, to_ns: u64 = 0xFFFF_FFFF_FFFF_FFFF };
-
-pub const Part = struct { method: proto.Method, text: []const u8 };
-
-pub const Files = struct { method: proto.Method, path: []const u8 };
-
-/// A profile from the hosts file and the image its `serve` boots.
-pub const Host = struct { name: []const u8, hosts: ?[]const u8, image: []const u8 };
-
-pub const Where = union(enum) { connect: Spec, host: Host };
-
-pub const Request = struct { where: Where, json: bool, command: Command };
+pub const Command = command_types.Command;
+pub const Folded = command_types.Folded;
+pub const Part = command_types.Part;
+pub const Files = command_types.Files;
+pub const Host = command_types.Host;
+pub const Where = command_types.Where;
+pub const Request = command_types.Request;
 
 /// Parse `argv`; `--json`, `--hosts` and `--image` may sit anywhere after
 /// the connect spec or host name.
@@ -115,7 +80,7 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
         } else try words.append(allocator, word);
     }
     if (words.items.len == 0) return error.BadArguments;
-    const command = try parseCommand(allocator, words.items[0], words.items[1..]);
+    const command = try command_parse.command(allocator, words.items[0], words.items[1..]);
     if (!by_host) {
         if (hosts != null or image != null) return error.BadArguments;
         return .{ .where = .{ .connect = try Spec.parse(argv[3]) }, .json = json, .command = command };
@@ -125,7 +90,12 @@ pub fn parse(allocator: std.mem.Allocator, argv: []const []const u8) !Request {
 }
 
 /// The link `where` names: a socket, or a `serve --stdio` started for it.
-fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, where: Where) !ctl_client.Target {
+fn target(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    where: Where,
+) !ctl_client.Target {
     switch (where) {
         .connect => |spec| return .{ .socket = spec },
         .host => |host| {
@@ -135,120 +105,13 @@ fn target(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Envi
     }
 }
 
-fn parseCommand(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
-    const eql = std.mem.eql;
-    if (eql(u8, name, "branch")) return .{ .branch_cmd = try ctl_branch.parseBranch(args) };
-    if (eql(u8, name, "fork")) return .{ .branch_cmd = try ctl_branch.parseFork(args) };
-    if (eql(u8, name, "diff")) return if (args.len == 2) .{ .diff_cmd = .{ .a = args[0], .b = args[1] } } else error.BadArguments;
-    if (try ctl_write.parseWord(allocator, name, args)) |cmd| return .{ .write_cmd = cmd };
-    if (eql(u8, name, "load")) return if (args.len == 1) .{ .load = args[0] } else error.BadArguments;
-    if (eql(u8, name, "run")) return .{ .run = try parseBudget(args) };
-    if (eql(u8, name, "advance")) return if (args.len == 1) .{ .advance = try parseAdvance(args[0]) } else error.BadArguments;
-    if (eql(u8, name, "play")) return .{ .play = try ctl_nav.parsePlay(args) };
-    if (eql(u8, name, "seek")) return .{ .seek = try ctl_nav.parseSeek(allocator, args) };
-    if (eql(u8, name, "frame")) return .{ .seek = try std.fmt.allocPrint(allocator, "frame {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
-    if (eql(u8, name, "iter")) return .{ .seek = try std.fmt.allocPrint(allocator, "iter {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
-    if (eql(u8, name, "frames")) return if (args.len == 0) .frame_status else error.BadArguments;
-    if (eql(u8, name, "nav")) return .{ .nav = try ctl_nav.parseNav(args) };
-    if (eql(u8, name, "marker") and args.len == 3 and eql(u8, args[0], "set")) return .{ .marker_set = .{ .name = args[1], .place = args[2] } };
-    if (eql(u8, name, "marker")) return .{ .seek = try std.fmt.allocPrint(allocator, "bm {s}", .{if (args.len == 1) args[0] else return error.BadArguments}) };
-    if (eql(u8, name, "rc")) return if (args.len == 0) .rc else error.BadArguments;
-    if (eql(u8, name, "step")) return if (args.len == 0) .step else error.BadArguments;
-    if (eql(u8, name, "pause")) return if (args.len == 0) .pause else error.BadArguments;
-    if (eql(u8, name, "map")) return if (args.len == 0) .map else error.BadArguments;
-    if (eql(u8, name, "stack")) return if (args.len == 0) .stack else error.BadArguments;
-    if (eql(u8, name, "rtc")) return if (args.len == 0) .rtc else error.BadArguments;
-    if (eql(u8, name, "folded")) return .{ .folded = try parseFolded(args) };
-    if (eql(u8, name, "periph")) return if (args.len <= 1) .{ .periph = if (args.len == 1) args[0] else "" } else error.BadArguments;
-    if (eql(u8, name, "regs")) return .{ .regs = try parseRegs(allocator, args) };
-    if (eql(u8, name, "speed")) return if (args.len == 1) .{ .speed = try parseSpeed(args[0]) } else error.BadArguments;
-    if (eql(u8, name, "break")) return parseBreak(allocator, args);
-    if (eql(u8, name, "watch")) return parseWatch(args);
-    if (eql(u8, name, "events")) return .{ .events = try events.parse(args) };
-    if (eql(u8, name, "plug")) return part(.plug, args);
-    if (eql(u8, name, "unplug")) return part(.unplug, args);
-    if (eql(u8, name, "fault")) return parseFault(args);
-    if (eql(u8, name, "snapshot")) return if (args.len == 1) .{ .files = .{ .method = .snapshot, .path = args[0] } } else error.BadArguments;
-    if (eql(u8, name, "restore")) return if (args.len == 1) .{ .files = .{ .method = .restore, .path = args[0] } } else error.BadArguments;
-    if (!eql(u8, name, "mem")) return error.UnknownCommand;
-    if (args.len != 2) return error.BadArguments;
-    const length = try std.fmt.parseInt(u32, args[1], 0);
-    if (length == 0) return error.BadLength;
-    return .{ .mem = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .length = length } };
-}
-
-/// A duration in `events --timeout` syntax, as virtual nanoseconds.
-/// `folded`, `folded THREAD`, `folded FROM TO` or `folded THREAD FROM TO`.
-fn parseFolded(args: []const []const u8) !Folded {
-    var asked: Folded = .{};
-    const window = switch (args.len) {
-        0 => return asked,
-        1 => return .{ .thread = try std.fmt.parseInt(u32, args[0], 0) },
-        2 => args,
-        3 => args[1..],
-        else => return error.BadArguments,
-    };
-    if (args.len == 3) asked.thread = try std.fmt.parseInt(u32, args[0], 0);
-    asked.from_ns = try std.fmt.parseInt(u64, window[0], 0);
-    asked.to_ns = try std.fmt.parseInt(u64, window[1], 0);
-    return asked;
-}
-
-fn parseAdvance(word: []const u8) !u64 {
-    const ms: u64 = @intCast(try events.parseDuration(word));
-    return ms * std.time.ns_per_ms;
-}
-
-fn parseBudget(args: []const []const u8) !u64 {
-    if (args.len == 0) return 0;
-    if (args.len == 2 and std.mem.eql(u8, args[0], "--budget")) return std.fmt.parseInt(u64, args[1], 0);
-    return error.BadArguments;
-}
-
-/// `max`, or a positive factor of the default rate kept to thousandths.
-fn parseSpeed(word: []const u8) !u64 {
-    if (std.mem.eql(u8, word, "max")) return 0;
-    const factor = try std.fmt.parseFloat(f64, word);
-    if (!std.math.isFinite(factor) or factor < 0.001 or factor > 1e9) return error.BadSpeed;
-    return @intFromFloat(@round(factor * 1000.0));
-}
-
-fn parseBreak(allocator: std.mem.Allocator, args: []const []const u8) !Command {
-    if (args.len == 1) {
-        if (std.fmt.parseInt(u32, args[0], 0)) |address| return .{ .set_break = address } else |_| {}
-        return .{ .set_break_name = try allocator.dupe(u8, args[0]) };
-    }
-    if (args.len == 2 and std.mem.eql(u8, args[0], "--clear")) return .{ .clear_break = try std.fmt.parseInt(u32, args[1], 0) };
-    return error.BadArguments;
-}
-
-fn parseWatch(args: []const []const u8) !Command {
-    if (args.len != 2) return error.BadArguments;
-    if (std.mem.eql(u8, args[0], "--clear")) return .{ .clear_watch = try std.fmt.parseInt(u32, args[1], 0) };
-    const access = std.meta.stringToEnum(proto.Access, args[1]) orelse return error.UnknownAccess;
-    return .{ .set_watch = .{ .address = try std.fmt.parseInt(u32, args[0], 0), .access = access } };
-}
-
-fn part(method: proto.Method, args: []const []const u8) !Command {
-    if (args.len != 1) return error.BadArguments;
-    return .{ .part = .{ .method = method, .text = args[0] } };
-}
-
-fn parseFault(args: []const []const u8) !Command {
-    if (args.len == 2 and std.mem.eql(u8, args[0], "--clear")) return part(.clear_fault, args[1..]);
-    return part(.set_fault, args);
-}
-
-fn parseRegs(allocator: std.mem.Allocator, names: []const []const u8) ![]const proto.Register {
-    if (names.len == 0) return &default_regs;
-    if (names.len > max_regs) return error.TooManyRegisters;
-    const regs = try allocator.alloc(proto.Register, names.len);
-    for (names, regs) |name, *reg| reg.* = std.meta.stringToEnum(proto.Register, name) orelse return error.UnknownRegister;
-    return regs;
-}
-
 /// Run `argv` (`ra8_emulator ctl --connect|--host ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
+pub fn run(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    argv: []const []const u8,
+) !u8 {
     const request = parse(allocator, argv) catch |err| {
         std.debug.print("ctl: {s}\n{s}", .{ @errorName(err), usage });
         return 2;
@@ -262,9 +125,18 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
 /// Ask for a break by symbol name: the server places it, or pends it
 /// until its module loads (RA8EMU-1141).
 fn breakNamed(client: *Client, w: *std.Io.Writer, json: bool, name: []const u8) !void {
-    const reply = try client.call(proto.NamedPoint, proto.NamedBreak, .set_breakpoint_name, .{ .core = .cpu0, .name = name });
+    const reply = try client.call(
+        proto.NamedPoint,
+        proto.NamedBreak,
+        .set_breakpoint_name,
+        .{ .core = .cpu0, .name = name },
+    );
     if (reply.deferred == 0) return out.point(w, json, "breakpoint", reply.id, reply.address, null);
-    if (json) try w.print("{{\"breakpoint\":{d},\"pending\":\"{s}\"}}\n", .{ reply.id, name }) else try w.print("breakpoint {d} pending ({s})\n", .{ reply.id, name });
+    if (json) {
+        try w.print("{{\"breakpoint\":{d},\"pending\":\"{s}\"}}\n", .{ reply.id, name });
+    } else {
+        try w.print("breakpoint {d} pending ({s})\n", .{ reply.id, name });
+    }
 }
 
 fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: Request) !u8 {
@@ -272,6 +144,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
     const w = &stdout.interface;
     const json = request.json;
     switch (request.command) {
+        .targets => |cmd| try targets.run(client, w, cmd),
         .events => |options| return events.watch(client, w, json, options),
         .load => |path| try loadFile(allocator, io, client, w, json, path),
         .run => |budget| try runTo(client, w, json, budget),
@@ -315,23 +188,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
             _ = try client.call(proto.Ack, proto.StatePath, asked.method, .{ .path = asked.path });
             try out.files(w, json, asked.method, asked.path);
         },
-        .map => {
-            const map = try client.call(proto.MapText, proto.MapAsk, .map, .{ .core = .cpu0, .json = @intFromBool(json) });
-            try out.map(w, json, map.text);
-        },
-        .periph => |block| {
-            const listed = try client.call(proto.PeriphText, proto.PeriphAsk, .periph, .{ .core = .cpu0, .json = @intFromBool(json), .block = block });
-            try out.periph(w, json, listed.text);
-        },
-        .folded => |asked| try foldedRows(client, w, json, asked),
-        .stack => {
-            const report = try client.call(proto.StackReport, proto.CoreOnly, .stack, .{ .core = .cpu0 });
-            try out.stack(w, json, report);
-        },
-        .rtc => {
-            const report = try client.call(proto.RtcReport, proto.CoreOnly, .rtc, .{ .core = .cpu0 });
-            try out.rtc(w, json, report);
-        },
+        .map, .periph, .folded, .stack, .rtc => try inspect(client, w, json, request.command),
         .branch_cmd => |cmd| try ctl_branch.perform(client, w, json, cmd),
         .write_cmd => |cmd| return try ctl_write.perform(client, w, json, cmd),
         .diff_cmd => |cmd| try ctl_diff.perform(client, w, json, cmd.a, cmd.b),
@@ -339,16 +196,28 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
     return 0;
 }
 
-fn loadFile(allocator: std.mem.Allocator, io: std.Io, client: *Client, w: *std.Io.Writer, json: bool, path: []const u8) !void {
+fn loadFile(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    client: *Client,
+    w: *std.Io.Writer,
+    json: bool,
+    path: []const u8,
+) !void {
     const image = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(@intCast(chunk_load.max_image)));
     _ = try chunk_load.loadImageCall(client, .cpu0, image);
     try out.loaded(w, json, path, image.len);
 }
 
 fn readRegs(client: *Client, w: *std.Io.Writer, json: bool, regs: []const proto.Register) !void {
-    var values: [max_regs]out.Reg = undefined;
+    var values: [32]out.Reg = undefined;
     for (regs, values[0..regs.len]) |reg, *value| {
-        const read = try client.call(proto.U32, proto.ReadRegister, .read_register, .{ .core = .cpu0, .register = reg });
+        const read = try client.call(
+            proto.U32,
+            proto.ReadRegister,
+            .read_register,
+            .{ .core = .cpu0, .register = reg },
+        );
         value.* = .{ .register = reg, .value = read.value };
     }
     try out.registers(w, json, values[0..regs.len]);
@@ -373,7 +242,12 @@ const watch_bytes = 4;
 
 /// CPU0's sampled stacks folded for one thread and window (RA8EMU-833).
 fn foldedRows(client: *Client, w: anytype, json: bool, asked: Folded) !void {
-    const ask: proto.FoldedAsk = .{ .core = .cpu0, .thread = asked.thread, .from_ns = asked.from_ns, .to_ns = asked.to_ns };
+    const ask: proto.FoldedAsk = .{
+        .core = .cpu0,
+        .thread = asked.thread,
+        .from_ns = asked.from_ns,
+        .to_ns = asked.to_ns,
+    };
     const rows = try client.call(proto.FoldedText, proto.FoldedAsk, .folded, ask);
     try out.folded(w, json, rows.text);
 }
@@ -392,4 +266,37 @@ fn runTo(client: *Client, w: anytype, json: bool, budget: ?u64) !void {
         _ = try client.call(proto.Ack, proto.CoreOnly, .step, .{ .core = .cpu0 });
     }
     try out.stopped(w, json, try client.stop());
+}
+
+fn inspect(client: *Client, w: *std.Io.Writer, json: bool, command: Command) !void {
+    switch (command) {
+        .map => {
+            const map = try client.call(
+                proto.MapText,
+                proto.MapAsk,
+                .map,
+                .{ .core = .cpu0, .json = @intFromBool(json) },
+            );
+            try out.map(w, json, map.text);
+        },
+        .periph => |block| {
+            const listed = try client.call(
+                proto.PeriphText,
+                proto.PeriphAsk,
+                .periph,
+                .{ .core = .cpu0, .json = @intFromBool(json), .block = block },
+            );
+            try out.periph(w, json, listed.text);
+        },
+        .folded => |asked| try foldedRows(client, w, json, asked),
+        .stack => {
+            const report = try client.call(proto.StackReport, proto.CoreOnly, .stack, .{ .core = .cpu0 });
+            try out.stack(w, json, report);
+        },
+        .rtc => {
+            const report = try client.call(proto.RtcReport, proto.CoreOnly, .rtc, .{ .core = .cpu0 });
+            try out.rtc(w, json, report);
+        },
+        else => unreachable,
+    }
 }

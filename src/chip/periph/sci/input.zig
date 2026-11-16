@@ -1,7 +1,7 @@
 //! Host input polled at board boundaries and queued on the console SCI.
+const ByteSource = @import("../byte_source.zig").ByteSource;
 const sci = @import("sci.zig");
 const sci_reply = @import("reply.zig");
-const ByteSource = @import("../byte_source.zig").ByteSource;
 
 pub const Hook = struct {
     context: *anyopaque,

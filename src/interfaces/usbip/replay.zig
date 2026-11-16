@@ -5,9 +5,10 @@
 //! pump of the URBs in flight when the connection was already up at the
 //! start of that poll.
 const std = @import("std");
+
 const session = @import("session.zig");
-const usbfs = @import("ra8_chip").periph.usbfs;
 const traffic = @import("ra8_board").usb.traffic;
+const usbfs = @import("ra8_chip").periph.usbfs;
 
 pub const Replayer = struct {
     urbs: session.Session = .{},

@@ -4,8 +4,9 @@
 //! list of units as one section. It imports only std. What goes into each
 //! section lives with the model it saves, in the chip, the components and
 //! the board (RA8EMU-1023).
-pub const file = @import("file.zig");
-pub const fields = @import("fields.zig");
-pub const sparse = @import("sparse.zig");
 pub const blocks = @import("blocks.zig");
+pub const bundle = @import("bundle/root.zig");
+pub const fields = @import("fields.zig");
+pub const file = @import("file.zig");
+pub const sparse = @import("sparse.zig");
 pub const units = @import("units.zig");

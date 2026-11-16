@@ -16,11 +16,12 @@
 //! An unaligned word or halfword goes through as bytes, the behaviour with
 //! CCR.UNALIGN_TRP clear; with it set the core stops (RA8EMU-85).
 const std = @import("std");
-const op = @import("../../op.zig");
+
 const alignment = @import("../../alignment.zig");
+const bti = @import("../../bti.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
-const bti = @import("../../bti.zig");
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     /// hw1[15:9] = 0b1111100 for the whole single-register load/store space.
@@ -131,7 +132,9 @@ fn run(cpu: *Cpu, instr: Instr) op.Error!void {
     if (f.writeback) cpu.regs.set(f.rn, offset_address);
     if (f.rt == 15) {
         cpu.regs.bxWritePc(value);
-        if ((f.rn != 13 or !f.writeback) and cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
+        if ((f.rn != 13 or
+            !f.writeback) and
+            cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
     } else cpu.regs.set(f.rt, value);
 }
 

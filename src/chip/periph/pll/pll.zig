@@ -86,12 +86,12 @@
 //! the core voltage range VSCR selected: step 2 is a brown-out hazard rather
 //! than a rule the clock registers enforce, so it belongs to whatever models
 //! the consequence, not to this file.
+pub const config = @import("config.zig");
+pub const div = @import("div.zig");
+const lanes = @import("../lanes.zig");
+const oscsf = @import("../oscsf.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-const oscsf = @import("../oscsf.zig");
-pub const div = @import("div.zig");
-pub const config = @import("config.zig");
-const lanes = @import("../lanes.zig");
 
 /// The group these sit behind: PRC0, the clock generation circuit.
 pub const guard: u16 = prcr.group.cgc;

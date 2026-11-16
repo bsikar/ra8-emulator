@@ -1,44 +1,37 @@
+const callbacks = @import("served_callbacks.zig");
+const served_card = @import("served_card.zig");
+const served_startup = @import("served_startup.zig");
+const session = @import("ra8_session");
+
 const std = @import("std");
-const harness = @import("ra8_session").harness;
-const served_camera = @import("served_camera.zig");
-const served_usbip = @import("served_usbip.zig");
-const served_initial = @import("served_initial.zig");
+
 const board_c6 = @import("ra8_session").board.recorded_c6;
 const board_rtc = @import("ra8_session").board.rtc;
-const session_plug = @import("ra8_session").board.plug;
 const cpu1_bringup = @import("ra8_session").cpu1.bringup;
-const session_api = @import("ra8_session").api;
-const region_map = @import("ra8_session").region.map;
-const region_map_json = @import("ra8_session").region.map.json;
-const region_map_text = @import("ra8_session").region.map.text;
-const symbols = @import("ra8_session").symbols;
-const rtos_names = @import("ra8_session").rtos.names;
-const rtos_hook = @import("ra8_session").rtos.hook;
-const periph_list = @import("ra8_session").periph_list;
-const stack_samples = @import("ra8_session").stack.samples;
-const stack_profile = @import("ra8_session").stack.profile;
+const harness = @import("ra8_session").harness;
 const proto = @import("session/rpc.zig");
 const served = @import("session/server.zig");
+const served_camera = @import("served_camera.zig");
+const served_initial = @import("served_initial.zig");
+const served_owner = @import("served_owner.zig");
+const served_usbip = @import("served_usbip.zig");
+const symbols = @import("ra8_session").symbols;
 
+const frame_cache = @import("ra8_session").history_frame_cache;
+const frame_pipeline = @import("frame_pipeline.zig");
+const history = @import("ra8_host").history;
 const history_bind = @import("history_bind.zig");
-const history_ram = @import("history_ram.zig");
 const history_bridge = @import("history_bridge.zig");
+const history_marker_store = @import("history_marker_store.zig");
+const history_ram = @import("history_ram.zig");
 const history_resources = @import("ra8_host").history.resources;
-const history_budget = @import("ra8_host").history.budget;
+const history_root = @import("ra8_session").history_root;
+const served_frames = @import("served_frames.zig");
+const served_history = @import("served_history.zig");
+const served_prefetch = @import("served_prefetch.zig");
+const served_second = @import("served_second.zig");
 const session_branch = @import("ra8_session").history_branch;
 const session_fork = @import("ra8_session").history_fork_router;
-const session_async = @import("ra8_session").history_async_queue;
-const session_async_traffic = @import("ra8_session").history_async_traffic;
-const history_root = @import("ra8_session").history_root;
-const served_history = @import("served_history.zig");
-const served_second = @import("served_second.zig");
-const history = @import("ra8_host").history;
-const history_marker_store = @import("history_marker_store.zig");
-const frame_pipeline = @import("frame_pipeline.zig");
-const served_frames = @import("served_frames.zig");
-const served_prefetch = @import("served_prefetch.zig");
-const frame_tap = @import("ra8_session").history_frame_tap;
-const frame_cache = @import("ra8_session").history_frame_cache;
 
 /// How a served session's persistent history is rooted, when the caller
 /// asks for one (RA8EMU-1196). A root puts every record on the host's
@@ -47,6 +40,8 @@ const frame_cache = @import("ra8_session").history_frame_cache;
 /// nothing it writes lands on the disk. No options at all records
 /// nothing.
 pub const HistoryOpts = struct {
+    /// Consumed even on open failure; an admitted import keeps its existing lease.
+    imported: ?*history_bind.Bind = null,
     root: ?[]const u8 = null,
     checkpoint_every: u32 = 64,
     /// An explicit cap on the served session's disk history share, in
@@ -64,12 +59,7 @@ pub const HistoryOpts = struct {
     elf_bytes: ?[]const u8 = null,
 };
 
-/// Borrowed startup input; CPU1 copies bytes before openInitial returns.
-pub const Startup = struct {
-    card: @import("served_card.zig").Options = .{},
-    /// A complete SD snapshot read from an admitted immutable replay root.
-    media: ?[]const u8 = null,
-};
+pub const Startup = served_startup.Startup;
 
 pub const SecondImage = served_second.Image;
 
@@ -104,71 +94,97 @@ pub const Served = struct {
     /// Passive frame pipeline (milestone M7): tap, worker and cache.
     frames: ?*frame_pipeline.FramePipeline = null,
     markers: ?*history_marker_store.MarkerStore = null,
-    feed: ?*@import("ra8_session").history_nav_feed.NavFeed = null,
-    nav: ?*@import("ra8_session").history_nav_index.NavIndex = null,
-    rewind: ?*@import("ra8_session").smooth_rewind.SmoothRewindEngine = null,
+    feed: ?*session.history_nav_feed.NavFeed = null,
+    nav: ?*session.history_nav_index.NavIndex = null,
+    rewind: ?*session.smooth_rewind.SmoothRewindEngine = null,
     /// The prefetch pool and its transport hook, once a disk history opened one.
     prefetch: ?*served_prefetch.Wired = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
-    pub fn open(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history_opts: ?HistoryOpts) !void {
+    pub fn open(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        elf_path: []const u8,
+        board_profile: ?[]const u8,
+        history_opts: ?HistoryOpts,
+    ) !void {
         return self.openInitial(allocator, io, elf_path, board_profile, history_opts, null);
     }
 
     /// Both images are installed before the root and first checkpoint.
-    pub fn openInitial(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history_opts: ?HistoryOpts, second_image: ?SecondImage) !void {
+    pub fn openInitial(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        elf_path: []const u8,
+        board_profile: ?[]const u8,
+        history_opts: ?HistoryOpts,
+        second_image: ?SecondImage,
+    ) !void {
         return self.openInputs(allocator, io, elf_path, board_profile, history_opts, second_image, .{});
     }
 
     /// Install admitted startup media before the root, reverse window and checkpoint.
-    pub fn openInputs(self: *Served, allocator: std.mem.Allocator, io: std.Io, elf_path: []const u8, board_profile: ?[]const u8, history_opts: ?HistoryOpts, second_image: ?SecondImage, startup: Startup) !void {
-        var initial = served_initial.Images.init(allocator, io, elf_path, if (history_opts) |opts| opts.elf_bytes else null, second_image);
+    pub fn openInputs(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        elf_path: []const u8,
+        board_profile: ?[]const u8,
+        history_opts: ?HistoryOpts,
+        second_image: ?SecondImage,
+        startup: Startup,
+    ) !void {
+        var initial = served_initial.Images.init(
+            allocator,
+            io,
+            elf_path,
+            if (history_opts) |opts| opts.elf_bytes else null,
+            second_image,
+        );
         defer initial.deinit();
         // The history outlives the harness: the armed checkpoints write
         // through its shapes until the harness's teardown disarms, so on
         // an error the harness goes first and the history closes second.
-        var bind: ?*history_bind.Bind = null;
+        var bind: ?*history_bind.Bind = if (history_opts) |opts| opts.imported else null;
         errdefer if (bind) |b| if (b.close()) |_| {} else |_| {};
         var ram: ?*history_ram.RamHistory = null;
         errdefer if (ram) |r| r.deinit();
-        if (history_opts) |opts| {
+        if (history_opts) |opts| if (bind == null) {
             if (opts.root) |root| {
-                const id = if (opts.reopen) |text| try history.name.id(text) else null;
-                bind = try history_bind.Bind.open(allocator, io, root, .{ .cap = opts.budget, .kept = false, .reopen = id, .board_profile = board_profile, .images = &initial });
+                bind = try openHistory(allocator, io, root, board_profile, opts, &initial);
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
-        }
+        };
         const profile = if (bind) |b| if (b.reopened) b.root.?.board_profile else board_profile else board_profile;
-        var owner = try harness.open(allocator, io, .{
-            .elf_path = elf_path,
-            .elf_bytes = initial.firstBytes(),
-            .board_profile = profile,
-            .history_storage = if (bind) |b| b.storage else if (ram) |r| r.storage else null,
-            .history_objects = if (bind) |b| b.objects else if (ram) |r| r.object_space else null,
-            .history_disk = if (bind) |b| b.disk else if (ram) |r| r.budget else null,
-            .history_checkpoint_cap = if (bind) |b| b.checkpoint_cap else 0,
-            .checkpoint_every = if (history_opts) |opts| opts.checkpoint_every else 64,
-            .files = @import("ra8_host").session_files.cwd(@import("ra8_session").file_ops.Ops),
-        });
+        var owner = try served_owner.open(allocator, io, elf_path, &initial, profile, bind, ram, history_opts);
         errdefer owner.deinit();
         _ = owner.watchModules();
-        const Env = served.Server.Env;
-        const rx = try allocator.alloc(u8, 2 * Env.max_frame);
-        errdefer allocator.free(rx);
-        const tx = try allocator.alloc(u8, Env.max_frame);
-        errdefer allocator.free(tx);
-        const scratch = try allocator.alloc(u8, proto.max_payload);
-        errdefer allocator.free(scratch);
-        self.* = .{ .owner = owner, .context = undefined, .rx = rx, .tx = tx, .gpa = allocator, .io = io, .history = bind, .ram_history = ram };
-        self.context = .{ .session = self.owner.session(), .scratch = scratch, .state = self.owner.stateFiles(), .gpa = allocator };
+        try self.initContext(allocator, io, owner, bind, ram);
+        errdefer allocator.free(self.rx);
+        errdefer allocator.free(self.tx);
+        errdefer allocator.free(self.context.scratch);
+        try self.finishOpen(allocator, io, &initial, profile, history_opts, startup);
+    }
+
+    fn finishOpen(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        initial: *served_initial.Images,
+        profile: ?[]const u8,
+        history_opts: ?HistoryOpts,
+        startup: Startup,
+    ) !void {
         if (initial.second) |image| try served_second.open(self, image);
         errdefer served_second.close(self);
-        errdefer @import("served_card.zig").release(self);
+        errdefer served_card.release(self);
         try served_initial.media(self, startup);
         // Seed the reverse window only after both images and startup media exist.
-        if (history_opts) |opts| try self.owner.openWindow(try windowBytes(opts));
+        if (history_opts) |opts| try self.owner.openWindow(try served_owner.windowBytes(opts));
         if (self.second) |cpu1| if (self.owner.state.window) |window| window.attachSecond(&cpu1.cpu().slots);
         // The transport rides the context so run-control methods route through it (slice 14).
         self.context.transport = self.owner.transport();
@@ -179,8 +195,44 @@ pub const Served = struct {
         };
         errdefer served_prefetch.detach(self);
         try served_prefetch.attach(self, if (history_opts) |o| o.ram_budget else null);
+        // Freeze the clean startup after both images and media, before a
+        // reopened history restores a historical checkpoint in attachContext.
+        self.owner.session().history.?.edits.loaded();
         try self.attachContext(allocator, profile);
-        if (bind) |b| if (history_opts.?.kept) try b.session.keep();
+        if (self.history) |b| if (history_opts.?.kept) try b.session.keep();
+    }
+
+    fn initContext(
+        self: *Served,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        owner: harness.Harness,
+        bind: ?*history_bind.Bind,
+        ram: ?*history_ram.RamHistory,
+    ) !void {
+        const Env = served.Server.Env;
+        const rx = try allocator.alloc(u8, 2 * Env.max_frame);
+        errdefer allocator.free(rx);
+        const tx = try allocator.alloc(u8, Env.max_frame);
+        errdefer allocator.free(tx);
+        const scratch = try allocator.alloc(u8, proto.max_payload);
+        errdefer allocator.free(scratch);
+        self.* = .{
+            .owner = owner,
+            .context = undefined,
+            .rx = rx,
+            .tx = tx,
+            .gpa = allocator,
+            .io = io,
+            .history = bind,
+            .ram_history = ram,
+        };
+        self.context = .{
+            .session = self.owner.session(),
+            .scratch = scratch,
+            .state = self.owner.stateFiles(),
+            .gpa = allocator,
+        };
     }
 
     fn attachHistory(self: *Served, allocator: std.mem.Allocator, io: std.Io, history_opts: ?HistoryOpts) !void {
@@ -189,7 +241,12 @@ pub const Served = struct {
         // log and puts the machine back through the checkpoint objects.
         // The bridge points into `self`, which stays put until deinit.
         if (self.history != null or self.ram_history != null) {
-            self.bridge = .{ .gpa = allocator, .session = self.owner.session(), .disk = self.history, .ram = self.ram_history };
+            self.bridge = .{
+                .gpa = allocator,
+                .session = self.owner.session(),
+                .disk = self.history,
+                .ram = self.ram_history,
+            };
             self.context.transport.?.history = .{
                 .context = &self.bridge.?,
                 .facts = &history_bridge.Bridge.facts,
@@ -202,22 +259,32 @@ pub const Served = struct {
     }
 
     fn attachContext(self: *Served, allocator: std.mem.Allocator, board_profile: ?[]const u8) !void {
-        self.context.wall = .{ .context = self, .nowFn = hostClock };
-        if (self.owner.session().persistent_recorder) |rec| rec.bindClock(.{ .context = self, .nowFn = hostClock });
-        self.context.listing = .{ .context = self.owner.plugs(), .listFn = listParts };
+        self.context.wall = .{ .context = self, .nowFn = callbacks.hostClock };
+        if (self.owner.session().persistent_recorder) |rec| rec.bindClock(
+            .{
+                .context = self,
+                .nowFn = callbacks.hostClock,
+            },
+        );
+        self.context.listing = .{ .context = self.owner.plugs(), .listFn = callbacks.listParts };
         self.context.board_profile = self.owner.boardProfile();
-        self.context.mapping = .{ .context = &self.owner, .mapFn = mapImage, .stackFn = stackOf, .imageFn = imageOf };
+        self.context.mapping = .{
+            .context = &self.owner,
+            .mapFn = callbacks.mapImage,
+            .stackFn = callbacks.stackOf,
+            .imageFn = callbacks.imageOf,
+        };
         self.context.clock = board_rtc.clock(self.owner.board());
-        self.context.peripherals = .{ .context = &self.owner, .listFn = listPeriph };
+        self.context.peripherals = .{ .context = &self.owner, .listFn = callbacks.listPeriph };
         self.context.camera = .{ .context = self, .setFn = served_camera.set };
         self.owner.session().attachCamera(.{ .context = self, .changeFn = served_camera.setDirect });
         try served_camera.attach(self);
         try served_history.attach(self, allocator, board_profile);
-        self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = closeC6 });
-        self.owner.session().attachConsole(.{ .context = self, .feedFn = feedConsoleDirect });
-        self.context.trace_on = .{ .context = self, .onFn = traceOn };
-        self.context.thread_names = .{ .context = self, .nameFn = threadName };
-        self.context.host_clock = .{ .context = self, .nowFn = hostClock };
+        self.owner.session().attachNet(.{ .context = self, .closeFlowsFn = callbacks.closeC6 });
+        self.owner.session().attachConsole(.{ .context = self, .feedFn = callbacks.feedConsoleDirect });
+        self.context.trace_on = .{ .context = self, .onFn = callbacks.traceOn };
+        self.context.thread_names = .{ .context = self, .nameFn = callbacks.threadName };
+        self.context.host_clock = .{ .context = self, .nowFn = callbacks.hostClock };
     }
 
     /// Records the USB/IP bridge the application has put on the board's USB
@@ -230,7 +297,7 @@ pub const Served = struct {
     /// from them (RA8EMU-833), tagged with the ThreadX thread when the image has one.
     /// Name loaded ThreadX modules from their paired ELFs (RA8EMU-1141);
     /// `pairs` outlives the server.
-    pub fn pairModules(self: *Served, pairs: []const @import("ra8_session").txm.debug.Pair) void {
+    pub fn pairModules(self: *Served, pairs: []const session.txm.debug.Pair) void {
         self.context.modules = self.owner.pairModules(pairs);
     }
 
@@ -242,9 +309,12 @@ pub const Served = struct {
         _ = allocator;
         if (app_paths.len == 0) return;
         if (self.history != null or self.ram_history != null) return error.HistoryAlreadyRooted;
-        var card: @import("served_card.zig").Options = .{};
-        for (app_paths) |path| try card.addApp(path);
-        try @import("served_card.zig").stage(self, card);
+        var card: served_card.Options = .{};
+        for (app_paths) |path| {
+            try card.addApp(path);
+        }
+        try served_card.stage(self, card);
+        self.owner.session().history.?.edits.loaded();
     }
 
     pub fn sampleStacks(self: *Served, every: u32) !void {
@@ -255,38 +325,14 @@ pub const Served = struct {
         if (symbols.addressOf(self.owner.image(), "_tx_thread_current_ptr") != null) _ = self.owner.traceRtos();
         self.owner.sampleStacks(stacks);
         if (self.second) |cpu1| stacks.watch(1, cpu1.cpu(), &cpu1.image.?, &self.owner.board().time.base, null);
-        self.context.folding = .{ .context = self, .foldFn = foldStacks };
+        self.context.folding = .{ .context = self, .foldFn = callbacks.foldStacks };
     }
 
     /// Bring CPU1 up from the ELF at `path`, parked until a request runs
     /// it (RA8EMU-1147). Call once, after open and before sampleStacks.
     pub fn openSecond(self: *Served, path: []const u8) !void {
         try served_second.open(self, .{ .path = path });
-    }
-
-    /// The host clock the lcd_dirty rate measures against (RA8EMU-822).
-    fn hostClock(context: *anyopaque) u64 {
-        const self: *Served = @ptrCast(@alignCast(context));
-        return @intCast(@max(0, std.Io.Timestamp.now(self.io, .awake).nanoseconds));
-    }
-
-    fn traceOn(context: *anyopaque) bool {
-        const self: *Served = @ptrCast(@alignCast(context));
-        const first = self.owner.traceIfRtos();
-        const second = if (self.second) |cpu1| cpu1.traceIfRtos(&self.owner) else false;
-        return first or second;
-    }
-
-    /// The name of the thread whose control block is at `thread` on `core`,
-    /// read from its TX_THREAD.
-    fn threadName(context: *anyopaque, core: usize, thread: u32, buffer: []u8) ?[]const u8 {
-        if (thread == 0) return null;
-        const self: *Served = @ptrCast(@alignCast(context));
-        const memory = if (core == 0)
-            rtos_hook.Memory{ .guest = self.owner.guest() }
-        else
-            rtos_hook.Memory{ .guest = (self.second orelse return null).guest() };
-        return rtos_names.name(memory, thread, buffer[0..rtos_names.longest]);
+        self.owner.session().history.?.edits.loaded();
     }
 
     pub fn frameCache(self: *Served) ?*frame_cache.FrameCache {
@@ -310,6 +356,7 @@ pub const Served = struct {
         }
         served_second.close(self);
         self.context.chunks.drop();
+        self.context.artifact_transfer.drop();
         self.gpa.free(self.context.scratch);
         self.gpa.free(self.tx);
         self.gpa.free(self.rx);
@@ -318,7 +365,7 @@ pub const Served = struct {
         if (self.history) |b| b.detached = self.owner.session().graph_sink == null;
         if (self.owner.session().async_traffic.queue) |*q| q.deinit();
         self.owner.deinit();
-        @import("served_card.zig").release(self);
+        served_card.release(self);
         if (self.ram_router) |r| {
             r.deinit();
             self.gpa.destroy(r);
@@ -331,64 +378,21 @@ pub const Served = struct {
         if (self.ram_history) |ram| ram.deinit();
     }
 };
-/// The reverse window's byte budget: the window share of the RAM budget, the
-/// 128 MiB floor's share when the host's RAM cannot be measured.
-fn windowBytes(opts: HistoryOpts) !usize {
-    const ram = history_resources.ramBudget(opts.ram_budget) catch |err| switch (err) {
-        error.MeasurementUnavailable => history_budget.bytes.floor,
-        else => return err,
-    };
-    return @intCast((try history_budget.partition(ram)).window);
-}
-fn closeC6(context: *anyopaque) void {
-    const self: *Served = @ptrCast(@alignCast(context));
-    self.owner.board().c6.wire.bridge.closeFlows();
-}
-fn feedConsoleDirect(context: *anyopaque, bytes: []const u8) anyerror!void {
-    const self: *Served = @ptrCast(@alignCast(context));
-    self.owner.board().serial.feed(@import("ra8_chip").periph.sci.console_channel, bytes);
-}
-fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {
-    const plugs: *session_plug.Plugs = @ptrCast(@alignCast(context));
-    return plugs.list(out);
-}
-/// The map of a core's last loaded image, as `--map` text or JSON.
-fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerror![]const u8 {
-    const owner: *harness.Harness = @ptrCast(@alignCast(context));
-    const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
-    const image = owner.loadedImage(which) orelse return error.NoImage;
-    var w: std.Io.Writer = .fixed(out);
-    if (json) try region_map_json.write(&w, image, &region_map.ek_ra8d2) else try region_map_text.render(&w, image, &region_map.ek_ra8d2);
-    return w.buffered();
-}
-/// The blocks on the board's bus, or one block's registers (RA8EMU-818).
-/// Both cores share the one peripheral bus.
-fn listPeriph(context: *anyopaque, core: usize, block: []const u8, json: bool, out: []u8) anyerror![]const u8 {
-    const owner: *harness.Harness = @ptrCast(@alignCast(context));
-    return periph_list.list(&owner.board().bus, core, block, json, out);
-}
-/// A core's sampled stacks over [from_ns, to_ns), named by the image they
-/// were walked with; a window, thread or core that took none is refused.
-fn foldStacks(context: *anyopaque, core: usize, thread: ?u32, from_ns: u64, to_ns: u64, out: []u8) anyerror![]const u8 {
-    const self: *Served = @ptrCast(@alignCast(context));
-    const stacks = self.stacks orelse return error.NothingSampled;
-    const image = if (core == 0) self.owner.image() else (self.second orelse return error.NothingSampled).image.?;
-    var w: std.Io.Writer = .fixed(out);
-    var scratch: [stack_samples.limits.samples]usize = undefined;
-    const filter: stack_samples.Filter = .{ .core = @intCast(core), .from_ns = from_ns, .to_ns = to_ns, .thread = thread };
-    try stack_samples.fold(&stacks.store, filter, stack_profile.names(&image), &w, &scratch);
-    if (w.end == 0) return error.NothingSampled;
-    return w.buffered();
-}
-/// The main stack reservation of a core's last loaded image, if it names one.
-fn stackOf(context: *anyopaque, core: usize) ?region_map.Stack {
-    const owner: *harness.Harness = @ptrCast(@alignCast(context));
-    const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
-    const image = owner.loadedImage(which) orelse return null;
-    return region_map.stackOf(image, &region_map.ek_ra8d2);
-}
-/// A core's last loaded image, for the backtrace's names and lines.
-fn imageOf(context: *anyopaque, core: usize) ?symbols.Image {
-    const owner: *harness.Harness = @ptrCast(@alignCast(context));
-    return owner.loadedImage(if (core == 0) .cpu0 else .cpu1);
+
+fn openHistory(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    root: []const u8,
+    board_profile: ?[]const u8,
+    opts: HistoryOpts,
+    initial: *served_initial.Images,
+) !*history_bind.Bind {
+    const id = if (opts.reopen) |text| try history.name.id(text) else null;
+    return history_bind.Bind.open(allocator, io, root, .{
+        .cap = opts.budget,
+        .kept = false,
+        .reopen = id,
+        .board_profile = board_profile,
+        .images = initial,
+    });
 }

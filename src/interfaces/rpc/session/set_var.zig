@@ -1,12 +1,13 @@
 //! RPC handler for `Method.set_var` (0x013D): delegates symbol/DWARF variable
 //! resolution and write mutation to `ra8_session.var_write`.
-const rpc = @import("ra8_rpc_wire");
 const ra8_session = @import("ra8_session");
+const rpc = @import("ra8_rpc_wire");
+
 const api = ra8_session.api;
 const var_write = ra8_session.var_write;
+const Context = @import("server.zig").Context;
 const handlers = @import("handlers.zig");
 const wire = @import("set_var_wire.zig");
-const Context = @import("server.zig").Context;
 
 pub const SetVarOutcome = rpc.Outcome(wire.SetVarReply);
 

@@ -1,10 +1,15 @@
 //! Export the versioned toolchain decision and per-host/per-target preflight plan.
 const std = @import("std");
+
 const plan = @import("ra8_host").toolchain.plan;
-const usage = "usage: ra8_emulator toolchain plan HOST TARGET [--project-zig PATH] [--backend-zig PATH] [--cache-root PATH] [--offline]\n";
+
+const usage = "usage: ra8_emulator toolchain plan HOST TARGET [--project-zig PATH] " ++
+    "[--backend-zig PATH] [--cache-root PATH] [--offline]\n";
 
 pub fn parse(argv: []const []const u8) !plan.Request {
-    if (argv.len < 5 or !std.mem.eql(u8, argv[1], "toolchain") or !std.mem.eql(u8, argv[2], "plan")) return error.BadArguments;
+    if (argv.len < 5 or
+        !std.mem.eql(u8, argv[1], "toolchain") or
+        !std.mem.eql(u8, argv[2], "plan")) return error.BadArguments;
     var request: plan.Request = .{ .host = argv[3], .target = argv[4] };
     var at: usize = 5;
     while (at < argv.len) : (at += 1) {

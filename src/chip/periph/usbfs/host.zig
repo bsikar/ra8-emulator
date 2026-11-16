@@ -8,8 +8,9 @@
 //! answers it. A step that takes longer than `patience` boundaries ends the
 //! script in `failed`, so a driver that never answers cannot hold it forever.
 const std = @import("std");
-const usbfs = @import("usbfs.zig");
+
 const regs = @import("../usbhs/regs.zig");
+const usbfs = @import("usbfs.zig");
 
 pub const Step = enum {
     waiting,
@@ -119,8 +120,9 @@ pub const Host = struct {
             },
             .config_descriptor => self.read(device, requests.config_descriptor, self.config[0..9], .full_config),
             .full_config => self.readAll(device),
-            .set_configuration => if (self.write(device, requests.set_configuration)) |answer|
-                self.advance(if (answer == .ack) .get_configuration else .failed),
+            .set_configuration => if (self.write(device, requests.set_configuration)) |answer| {
+                self.advance(if (answer == .ack) .get_configuration else .failed);
+            },
             .get_configuration => self.read(device, requests.get_configuration, &self.config_value, .get_status),
             .get_status => self.read(device, requests.get_status, &self.status, .string_languages),
             .string_languages => self.readLanguages(device),

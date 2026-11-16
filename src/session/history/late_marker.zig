@@ -3,8 +3,9 @@
 //! and cached in `<session_dir>/index/markers.idx` via the host storage interface.
 //! Session code never opens files directly.
 const std = @import("std");
-const position_mod = @import("position.zig");
+
 const nav_index = @import("nav_index.zig");
+const position_mod = @import("position.zig");
 
 pub const Position = position_mod.Position;
 pub const NavIndex = nav_index.NavIndex;
@@ -268,7 +269,9 @@ pub fn loadInto(
     defer freeDiskCache(allocator, cached);
     for (cached) |m| {
         if (m.end != end) continue;
-        for (m.arrivals) |p| _ = try target_nav.addMarkerArrivalAt(m.name, m.address, p, end);
+        for (m.arrivals) |p| {
+            _ = try target_nav.addMarkerArrivalAt(m.name, m.address, p, end);
+        }
     }
 }
 

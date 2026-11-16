@@ -1,9 +1,9 @@
 //! Session API window methods and rewind/stepBack delegation (Slice 21.4).
-const std = @import("std");
+
 const api = @import("api.zig");
+const canonical_step = @import("history/canonical_step.zig");
 const session_control = @import("control.zig");
 const window_engine = @import("history/window_engine.zig");
-const canonical_step = @import("history/canonical_step.zig");
 
 pub const Status = window_engine.Status;
 
@@ -65,7 +65,9 @@ pub fn canStepBack(w: *window_engine.ReverseWindow, core: api.Core, count: u32) 
     var remaining = count;
     var pos = w.cursor();
     while (remaining > 0) {
-        while (pos > 0 and !canonical_step.retiresOn(w.slotAt(pos - 1), tc)) pos -= 1;
+        while (pos > 0 and !canonical_step.retiresOn(w.slotAt(pos - 1), tc)) {
+            pos -= 1;
+        }
         if (pos == 0) return false;
         pos -= 1;
         remaining -= 1;

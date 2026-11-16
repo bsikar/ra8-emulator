@@ -3,10 +3,10 @@
 //! amount is non-zero, as Shift_C leaves it otherwise).
 //!
 //! SP or PC in any register field is UNPREDICTABLE and left unclaimed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const flags = @import("../../flags.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 const shift = @import("../../shift.zig");
 
 pub const encodings = struct {

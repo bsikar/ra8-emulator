@@ -15,8 +15,8 @@
 //! source is modelled; NMICLR clears it anyway, so the sequence is honest
 //! the day one is. Nothing here wakes a core: WUPEN is held for the
 //! low-power model to read later.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const base: u32 = 0x4000_6000 + 0x6100;
 

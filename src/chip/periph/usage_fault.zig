@@ -9,11 +9,11 @@
 //! address. Deciding THAT an instruction faults is the core's; this file only
 //! raises what the core reports.
 
-const memmap = @import("../core/memmap.zig");
-const status = @import("fault/status.zig");
 const fault_route = @import("fault/route.zig");
 const fault_take = @import("fault/take.zig");
+const memmap = @import("../core/memmap.zig");
 const nvic = @import("nvic/nvic.zig");
+const status = @import("fault/status.zig");
 
 pub const Error = error{NotUsageFault};
 

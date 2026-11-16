@@ -2,14 +2,14 @@
 //! base, RA8EMU-A-2): one name per library module and nothing else. The
 //! embedding API is `session` (`ra8.session.harness.open`). The CLI
 //! application lives in its own cli_app module.
-pub const host = @import("ra8_host");
-pub const snapshot = @import("ra8_snapshot");
+pub const board = @import("ra8_board");
 pub const chip = @import("ra8_chip");
 pub const components = @import("ra8_components");
-pub const board = @import("ra8_board");
-pub const session = @import("ra8_session");
+pub const dap = @import("ra8_dap");
+pub const gdb = @import("ra8_gdb");
+pub const host = @import("ra8_host");
 pub const render = @import("ra8_render");
 pub const rpc = @import("ra8_rpc");
-pub const gdb = @import("ra8_gdb");
-pub const dap = @import("ra8_dap");
+pub const session = @import("ra8_session");
+pub const snapshot = @import("ra8_snapshot");
 pub const usbip = @import("ra8_usbip");

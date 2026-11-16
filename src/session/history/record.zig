@@ -14,8 +14,8 @@
 //! host and the boundaries did, never with how many instructions ran.
 
 const std = @import("std");
+
 const history_position = @import("position.zig");
-const scheduler = @import("ra8_chip").core.scheduler;
 
 pub const Position = history_position.Position;
 
@@ -207,6 +207,7 @@ pub const Intervention = struct {
         camera_change = 10,
         skip_bkpt = 11,
         load = 12,
+        state_restore = 13,
         _,
     };
     what: What,

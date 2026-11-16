@@ -5,11 +5,12 @@
 //! bind uses.
 
 const std = @import("std");
+
 const format = @import("format.zig");
 const log = @import("log.zig");
+const manifest = @import("manifest.zig");
 const record = @import("record.zig");
 const touched_pages = @import("touched_pages.zig");
-const manifest = @import("manifest.zig");
 
 /// One object name: the lowercase hex of a checkpoint record's 128-bit
 /// truncated SHA-256, the same name the object space files carry.
@@ -21,17 +22,39 @@ pub const Name = [32]u8;
 /// recovery scan does, so uncommitted frames name nothing. A frame the
 /// table calls mandatory but the reader cannot make sense of is a hard
 /// error, and the walk stops before it.
-pub fn scanCheckpointObjects(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void) format.Error!void {
+pub fn scanCheckpointObjects(
+    bytes: []const u8,
+    context: anytype,
+    comptime visit: fn (
+        @TypeOf(context),
+        Name,
+    ) void,
+) format.Error!void {
     return scan(bytes, context, visit, true);
 }
 
 /// The same walk narrowed to the checkpoint picture records: the names of
 /// the pictures quota relief must never evict.
-pub fn scanPictureObjects(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void) format.Error!void {
+pub fn scanPictureObjects(
+    bytes: []const u8,
+    context: anytype,
+    comptime visit: fn (
+        @TypeOf(context),
+        Name,
+    ) void,
+) format.Error!void {
     return scan(bytes, context, visit, false);
 }
 
-fn scan(bytes: []const u8, context: anytype, comptime visit: fn (@TypeOf(context), Name) void, comptime machines: bool) format.Error!void {
+fn scan(
+    bytes: []const u8,
+    context: anytype,
+    comptime visit: fn (
+        @TypeOf(context),
+        Name,
+    ) void,
+    comptime machines: bool,
+) format.Error!void {
     const Walker = struct {
         segment: []const u8,
         ctx: @TypeOf(context),

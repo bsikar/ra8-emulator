@@ -6,10 +6,8 @@
 //! fork point (future slots discarded, window line updated to the child).
 //! On a branch switch, the window drops or rebuilds for the new active line.
 
-const std = @import("std");
 const engine = @import("window_engine.zig");
 const rebuild = @import("window_rebuild.zig");
-const position_mod = @import("position.zig");
 
 const ReverseWindow = engine.ReverseWindow;
 const Position = engine.Position;

@@ -8,11 +8,11 @@
 //! and ECI moves on after.
 //! Rt or Rt2 of 13 or 15, and the same register twice when reading into
 //! the core, are UNPREDICTABLE and left unclaimed.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
 
 pub const group: op.Group = .{ .name = "mve_lane_pair", .decode = decode, .oracle = false };
 

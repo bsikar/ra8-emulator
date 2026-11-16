@@ -23,11 +23,12 @@
 //! trough are due where the folded phase mode.zig counts in next
 //! reaches the period or a whole cycle (`turnDueAt`).
 const std = @import("std");
-const gpt = @import("gpt.zig");
+
+const cadence = @import("../../core/cadence.zig");
 const ch = @import("channel.zig");
 const clk = @import("clock.zig");
 const cmp = @import("compare.zig");
-const cadence = @import("../../core/cadence.zig");
+const gpt = @import("gpt.zig");
 const timebase = @import("../time/timebase.zig");
 
 /// The PCLKD rate the per-boundary step stands for.

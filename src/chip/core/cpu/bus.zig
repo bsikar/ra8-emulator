@@ -3,14 +3,17 @@
 //! The core owns no memory. It reaches whatever the run hands it through this
 //! one interface: the board's RAM and peripheral bus in a real run, a flat
 //! array in a test.
+const touched_api = @import("memory/touched.zig");
+
 const std = @import("std");
-const memmap = @import("../memmap.zig");
-const Gate = @import("data_gate.zig").Gate;
-const code_lines = @import("code_lines.zig");
-const Peer = @import("exclusive_peer.zig").Peer;
+
 const bus_fault = @import("../../periph/bus_fault.zig");
-const observer = @import("memory/observer.zig");
+const code_lines = @import("code_lines.zig");
+const Gate = @import("data_gate.zig").Gate;
 const Initiator = @import("memory/initiator.zig").Initiator;
+const memmap = @import("../memmap.zig");
+const observer = @import("memory/observer.zig");
+const Peer = @import("exclusive_peer.zig").Peer;
 
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
 pub const Error = error{ Unmapped, SecurityViolation };
@@ -18,7 +21,7 @@ pub const Error = error{ Unmapped, SecurityViolation };
 /// Fixed host-backed ranges. Separate fields avoid a per-access region loop;
 /// peripheral addresses and cross-range accesses continue through the vtable.
 pub const DirectMemory = struct {
-    touched: ?*@import("memory/touched.zig").Tracker = null,
+    touched: ?*touched_api.Tracker = null,
     flash: ?[]u8 = null,
     sram: ?[]u8 = null,
     enabled: bool = false,
@@ -84,7 +87,15 @@ pub const DirectMemory = struct {
     inline fn write(self: *const DirectMemory, address: u32, bytes: []const u8) bool {
         const hit = self.locate(address, bytes.len) orelse return false;
         if (self.touched) |tracker| tracker.note(hit.base, hit.offset, bytes.len);
-        if (self.observer) |o| o.bytes(.{ .base = hit.base, .offset = hit.offset, .initiator = self.initiator, .pre = hit.data, .new = bytes });
+        if (self.observer) |o| o.bytes(
+            .{
+                .base = hit.base,
+                .offset = hit.offset,
+                .initiator = self.initiator,
+                .pre = hit.data,
+                .new = bytes,
+            },
+        );
         @memcpy(hit.data, bytes);
         if (self.lines) |fan| fan.notify(address, bytes.len);
         return true;

@@ -178,5 +178,9 @@ pub fn formatResponse(accept_key: *const [accept_len]u8, out: []u8) Error![]cons
 
 /// Formats an HTTP error response (e.g. 403 Forbidden or 400 Bad Request).
 pub fn formatErrorResponse(status_code: u16, status_text: []const u8, out: []u8) ![]const u8 {
-    return std.fmt.bufPrint(out, "HTTP/1.1 {d} {s}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n", .{ status_code, status_text });
+    return std.fmt.bufPrint(
+        out,
+        "HTTP/1.1 {d} {s}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+        .{ status_code, status_text },
+    );
 }

@@ -436,3 +436,182 @@ try session.tapWidgetPart(allocator, .cpu0, 1_700_000_000, "chrome.bars.pager", 
 
 `Options.device` defaults to `ra8p1`; `settle_window_ns` defaults to 50 ms.
 Frames are native panel-resolution grayscale bytes owned by the caller.
+
+Backend code-quality checks run with `zig build lint -j1`; their regression
+tests run with `zig build lint-test -j1`. They require Python 3.12 or newer
+(`-Dpython=PATH` selects an interpreter). The immutable zlinter package is
+resolved only by lint commands, so ordinary builds need no linter download.
+
+The lint scope is `src/`, `tools/`, and `build.zig`.
+The backend rules enforce named imports, a blank line after each import
+group, alphabetical import chunks, braces on loops and multiline branches,
+unused declarations, swallowed errors, and a 120-column limit. Columns count
+Unicode code points, including comments and literals. GUI/render source and
+the GUI smoke helper are excluded; third-party packages are outside the scope.
+
+The custom complexity rule limits each function to a branch score of 15 and
+nesting depth of 3. Each `if`, loop, `switch`, or `catch` adds one plus its
+branch nesting; else-if chains stay flat. Each boolean operator sequence
+adds one. Switch arms do not count individually, and nested functions are
+measured independently. This is a documented branch metric, not an exact
+implementation of Detekt or Sonar cognitive complexity. The separate gate
+continues to enforce 400-line files and 80-line functions.
+
+The style rules have no baseline allowances. Remaining legacy complexity
+and ignored-error findings are counted in `tools/lint/baseline.json`. Fingerprints
+include source and diagnostic text: moving code cannot hide a finding,
+duplicating it uses another allowance, and increasing a complexity score
+fails. Syntax and analysis errors cannot be baselined. A changed finding,
+including an improved score still above the limit, requires reviewing its
+new fingerprint. After removing findings, run
+`zig build lint -- --prune-baseline`; this command refuses new debt.
+`--update-baseline` accepts debt and requires explicit review of the diff.
+
+## Session bundle writer
+
+`ra8.snapshot.bundle.writer.Writer` packs a frozen session into a standalone
+USTAR archive without allocating or buffering its payloads. `init` writes
+`manifest.json`, `state.ra8snap`, and, when recording is enabled,
+`recording/root.bin` and `recording/branches.bin`. The state uses the existing
+snapshot format unchanged. Its magic and current version are checked before
+any archive bytes are written; the caller supplies a reader buffer of at
+least 12 bytes. Import performs the full state and recording validation.
+
+The JSON manifest identifies `ra8-session-bundle` version 1, the snapshot
+version, board label, primary/optional secondary ELF name, byte length and
+16-byte BLAKE3 identity (32 lowercase hexadecimal characters), and whether
+recording is present.
+Names and board labels are nonempty UTF-8 strings of at most 256 bytes.
+This descriptive metadata must come from the same frozen session as the
+payloads; the format writer cannot establish that relationship itself.
+
+For recordings, call `add(.log, leaf, source)` and
+`add(.objects, leaf, source)` for all committed log segments and referenced
+object files, including pack data and indexes. Supply entries in strictly
+increasing archive-path order: log entries first, then objects. At least one
+log entry is required; an empty segment is allowed. Files may be opened and
+closed one at a time. Leaves are at most 96 ASCII letters, digits, dots,
+dashes or underscores, excluding `.` and `..`. Paths, links, ownership locks,
+lifecycle markers and scratch files do not belong in the bundle.
+
+Each source supplies a reader and exact byte length, at most 8 GiB minus one
+byte per file (USTAR's numeric limit). Entries use mode 0600 and timestamp
+zero; `finish` appends two zero blocks. Short reads and I/O failures propagate
+and prevent completion. After any `add` or `finish` error, discard the partial
+output. The caller owns source consistency, output flushing and atomic
+publication. CLI/RPC export/import verbs remain separate follow-on work.
+
+
+`ra8.snapshot.bundle.reader.Reader` admits the same format as a bounded
+stream. Its manifest fields are required; unknown bundle/snapshot versions,
+duplicate JSON fields, unsafe or duplicate paths, unsupported tar entry
+kinds, bad checksums, nonzero padding, missing payloads/footer and trailing
+content fail admission. Standard USTAR zero record padding is accepted within
+the byte budget. Consume each entry with `copy` or `readAlloc` before
+calling `next`. An error poisons the reader. Default limits are 4 GiB total
+(including headers and footer), 1 GiB per entry and 4096 entries; callers can
+supply stricter limits.
+
+`ra8.rpc.bundle_import.open` returns a separate, owned `*Served` ready for an
+application to publish. It never receives or changes the live session.
+Snapshot-only imports require the original ELF bytes and a matching board
+profile. Recording imports require a host history root: they create a fresh
+leased session, stream recording files into it, and use the recorded profile
+and embedded ELF images. The lease transfers into the restored server without
+being released. A failed import removes only that private session. Destroy a
+successful import with `deinit` followed by the supplied allocator's `destroy`.
+
+Admission checks snapshot section bounds/duplicates, model/build provenance,
+image identities, branch tables, complete log frames, checkpoint snapshots,
+optional derived checkpoint sidecars, and required referenced objects. Pack
+indexes are validated before ordinary store recovery can repair them; pack
+records and their declared expansion are bounded and verified. Recording
+admission additionally caps each log at 64 MiB, other files at 256 MiB, roots
+at 64 MiB, branch tables at 8 MiB, branches/checkpoints at 4096, and total pack
+expansion at the reader's total-byte limit. Existing snapshot preparation
+validates machine semantics before restoring the private machine. The saved
+active line and scheduler position must fit the recording; future writes use
+a fresh segment, preserving every imported segment.
+
+
+### Headless target inventory
+
+`serve --targets FILE --listen tcp:127.0.0.1:PORT firmware.elf` enables
+operator-owned target bindings. FILE is a JSON array, for example:
+
+```json
+[
+  {
+    "kind": "emulator",
+    "target": {
+      "host_id": "backend-a",
+      "probe_id": "virtual-a",
+      "board_id": "emulator-a",
+      "managed": false,
+      "identity_verified": true,
+      "vendor": "Renesas",
+      "model": "RA8D2 emulation",
+      "cores": "configured CPU0 M85; CPU1 M33 only with --cpu1",
+      "transport": "in-process"
+    }
+  }
+]
+```
+
+`ctl --connect tcp:127.0.0.1:PORT targets list` returns JSON descriptors,
+registration generations, connection state and reservation state. Host, probe
+and board IDs are explicit operator identities, never list positions or USB
+VID/PID pairs. `probe_serial` and `board_serial` are optional metadata.
+The operator supplies vendor, model and core topology; these are configured
+metadata, not automatic hardware identification. A physical binding uses
+`"kind":"rsp"`, `"host":"127.0.0.1"`, `"port":2331` beside `target`, and
+`"transport":"rsp"` inside it. It starts in `configured` connection state,
+not a claim that a board was detected. Configuration cannot enable build,
+flash, reset or NPU execution. Separate capability booleans and the
+`operations` array report what the provider implements. RSP reuses the
+existing probe control implementation for registers, halt, step and resume;
+step/resume report only that the command was sent, not execution completion.
+Emulator operations currently address CPU0 and support registers, halt and step.
+
+Select with the complete identity and generation returned by list:
+
+```sh
+ra8_emulator ctl --connect tcp:127.0.0.1:PORT targets use backend-a virtual-a emulator-a GENERATION - registers step
+```
+
+`use` reserves exactly one target for that connection, runs its ordered
+operations, then releases it. Disconnect also releases it, including failed
+operations. RPC methods 0x190 through 0x193 expose list, reserve, release and
+perform for clients that keep a connection open. The capability bit is 21.
+Owners are server-side connection contexts, never client-supplied IDs.
+Reservations share the host registry. Embedders must serialize registry calls
+and hold descriptor/provider storage until removal. Registration generations
+change on host removal/re-registration; serve seeds them randomly on startup.
+Provider errors fence the binding as disconnected and clear its reservation.
+An authenticated probe-host adapter must call `Registry.disconnect(host_id)`
+on agent loss before accepting new operations. No remote registration RPC exists.
+
+If physical identity is unavailable, keep `identity_verified` false and set
+an operator-verified `disambiguation` binding. Clients must explicitly provide
+that exact binding instead of `-`. This is a manual mapping, not proof from
+RSP: generic RSP cannot verify probe/board serials or detect a physical swap
+behind a still-running GDB server. The endpoint must be exclusively pinned to
+the identified board by the operator. Do not reuse it after hotplug without
+removing/re-registering the binding. Duplicate board IDs, host/probe pairs
+and identical configured RSP endpoints are refused. DNS aliases and multiple
+backend processes are outside this in-process ownership boundary.
+
+`managed` is mandatory. Managed RA8CI targets can be listed but reservation
+and operations fail closed with custodian-unavailable. No direct fallback is
+provided. This does not qualify or replace RA8CI custodian enforcement.
+Use the existing trusted listener/SSH host boundary; inventory adds neither
+network authentication nor authority to access another host. Existing session
+and direct probe commands retain their existing contracts. Target bindings
+cannot be combined with artifact-session replacement.
+
+Remaining hardware acceptance requires authenticated probe-host discovery,
+serial-to-endpoint verification across actual same-model board hotplug,
+custodian-authorized fenced leases, cross-process ownership, and real
+multi-board operation evidence. Fixture/loopback tests establish only backend
+routing, stale-selection rejection and connection cleanup. No physical flash,
+reset, NPU execution or real multi-board qualification is claimed here.

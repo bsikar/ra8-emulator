@@ -5,10 +5,10 @@
 //! LDR with Rt = PC branches with interworking, and LDR with Rt = SP loads SP
 //! (RA8EMU-132). A byte or halfword form with Rt = PC is PLD or PLI, which
 //! ops/preload.zig claims; one with Rt = SP is UNPREDICTABLE and unclaimed.
-const op = @import("../../../op.zig");
+const bti = @import("../../../bti.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const bti = @import("../../../bti.zig");
+const op = @import("../../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with S ([8]), U ([7]) and size ([6:5]) masked out: load, Rn = PC.

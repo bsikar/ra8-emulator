@@ -14,10 +14,11 @@
 //! and leaves the board unticked, so the board's own clock alone would read
 //! an advance inside one stretch as no time at all.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
+
 const api = @import("ra8_session").api;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const Outcome = rpc.Outcome(proto.Advanced);
 
@@ -53,7 +54,15 @@ fn reply(context: *handlers.Context, core: proto.Core, from: u64, ended: api.End
     const stop = handlers.stopped(session, core, ended);
     context.pending = stop;
     const to = session.now() catch |err| return refuse(err);
-    return .{ .ok = .{ .core = stop.core, .from_ns = from, .to_ns = to, .reason = stop.reason, .address = stop.address } };
+    return .{
+        .ok = .{
+            .core = stop.core,
+            .from_ns = from,
+            .to_ns = to,
+            .reason = stop.reason,
+            .address = stop.address,
+        },
+    };
 }
 
 /// Run until session time reaches `target`, a stop, or a round that moves no time.
@@ -108,7 +117,16 @@ pub fn advanceQueued(context: *handlers.Context, args: proto.Advance) rpc.Outcom
     // run would fail mid-flight with nothing reported on the topic.
     _ = budgetOf(context.session, which) catch return .{ .err = refusedCode() };
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = refusedCode() };
-    const ticket = plane.command(.{ .advance = .{ .core = which, .ns = args.ns } }) catch return .{ .err = refusedCode() };
+    const ticket = plane.command(
+        .{
+            .advance = .{
+                .core = which,
+                .ns = args.ns,
+            },
+        },
+    ) catch return .{
+        .err = refusedCode(),
+    };
     context.advance_ticket = ticket;
     context.advance_from_ns = from;
     context.advance_target_ns = target;

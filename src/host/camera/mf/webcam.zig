@@ -3,10 +3,11 @@
 //! through the source reader into the shared Webcam. Windows has no
 //! device paths, so `webcam:PATH` is refused; a bare `webcam` is device 0.
 const std = @import("std");
+
 const consent = @import("../webcam/consent.zig");
-const privacy = @import("../webcam/privacy.zig");
-const mf_open = @import("open.zig");
 const mf_capture = @import("capture.zig");
+const mf_open = @import("open.zig");
+const privacy = @import("../webcam/privacy.zig");
 const source = @import("../webcam/input.zig");
 
 pub const request_width: u32 = 640;
@@ -19,7 +20,14 @@ pub fn index(arg: []const u8) ?u32 {
 }
 
 /// Asks (unless allowed), checks the privacy setting and opens device N.
-pub fn openWith(allocator: std.mem.Allocator, calls: mf_open.Calls, arg: []const u8, grant: consent.Grant, reader: *std.Io.Reader, writer: *std.Io.Writer) !*source.Webcam {
+pub fn openWith(
+    allocator: std.mem.Allocator,
+    calls: mf_open.Calls,
+    arg: []const u8,
+    grant: consent.Grant,
+    reader: *std.Io.Reader,
+    writer: *std.Io.Writer,
+) !*source.Webcam {
     const n = index(arg) orelse return error.BadDevice;
     var name: [24]u8 = undefined;
     const named = std.fmt.bufPrint(&name, "webcam {d}", .{n}) catch unreachable;

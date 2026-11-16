@@ -5,9 +5,9 @@
 //!
 //! Left unclaimed: Rd or Rn of SP or PC (UNPREDICTABLE), and the ASR #0
 //! encodings, which are SSAT16 and USAT16 from the DSP extension.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 const xpsr_bits = @import("../regs.zig").xpsr_bits;
 
 pub const encodings = struct {

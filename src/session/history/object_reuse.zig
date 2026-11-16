@@ -1,8 +1,9 @@
 //! Existing immutable bytes and snapshot-keyed metadata have different reuse rules.
 const std = @import("std");
+
+const dirty = @import("dirty_pages.zig");
 const manifest = @import("manifest.zig");
 const position = @import("position.zig");
-const dirty = @import("dirty_pages.zig");
 
 pub const Kind = enum { data, manifest, touched };
 

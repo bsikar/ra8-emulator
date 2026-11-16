@@ -2,6 +2,7 @@
 //! Segments longer than 250 ms virtual time lay temporary in-memory
 //! checkpoints at 100 ms intervals during unpaced silent replay.
 const std = @import("std");
+
 const position_mod = @import("position.zig");
 
 pub const Position = position_mod.Position;

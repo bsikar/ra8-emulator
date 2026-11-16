@@ -8,8 +8,8 @@ const usbfs = @import("ra8_chip").periph.usbfs;
 pub fn section(plugged: ?*const Loop, out: anytype) !void {
     const cable = plugged orelse return;
     try out.print(
-        "  cabled to the board's FS device, which is {s}: {d} SETUP(s), " ++
-            "{d} control IN, {d} control OUT, {d} bulk OUT, {d} bulk IN\n",
+        "  cabled to the board's FS device, which is {s}: {d} SETUP(s), {d} control IN, " ++
+            "{d} control OUT, {d} bulk OUT, {d} bulk IN\n",
         .{
             stateName(cable.deviceState()),
             cable.setups,

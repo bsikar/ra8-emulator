@@ -5,87 +5,104 @@
 //! (--listen). Frames are the only thing written to stdout; complaints go
 //! to stderr.
 const std = @import("std");
-const host = @import("ra8_host");
-const served_setup = @import("ra8_rpc").served_setup;
-const served_camera = @import("ra8_rpc").served_camera;
-const source_spec = @import("ra8_host").camera.source_spec;
-const loop = @import("loop.zig");
-const listen = @import("listen.zig");
-const discovery = @import("discovery.zig");
+
+const artifact_service = @import("ra8_rpc").artifacts.service;
+const bindings = @import("bindings.zig");
 const card_setup = @import("../card/setup.zig");
-const card_apps = @import("ra8_rpc").card_apps;
-const txm_debug = @import("ra8_session").txm.debug;
-const session_api = @import("ra8_session").api;
+const discovery = @import("discovery.zig");
 const elf = @import("ra8_board").image.elf;
+const flag_parser = @import("flags.zig");
+const listen = @import("listen.zig");
+const Listener = @import("ra8_rpc").host_listener.Listener;
+const loop = @import("loop.zig");
+const served_camera = @import("ra8_rpc").served_camera;
+const served_setup = @import("ra8_rpc").served_setup;
+const source_spec = @import("ra8_host").camera.source_spec;
+const targets = @import("targets.zig");
 const usbip_run = @import("ra8_usbip").exported.run;
 const Workbench = @import("workbench.zig").Workbench;
 
 pub const usage =
-    \\usage: ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] --stdio <firmware.elf>
-    \\       ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] [--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>
-    \\       --discover publishes per-user RPC/GDB discovery for ctl and IDE clients
-    \\       --profile-folded samples each core's call stacks for `ctl folded`
-    \\       --cpu1 brings CPU1 up from its own image, parked until it is run
-    \\       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the SDHI card, as for a run
-    \\       --allow-state-files lets snapshot and restore run on a non-loopback listener
-    \\       --workspace DIR enables rooted workbench file operations for connected clients
-    \\       --build-zig ABSOLUTE_PATH enables backend Zig builds in that workspace (trusted projects only)
-    \\       --history DIR puts the session's persistent history in DIR; --history off keeps it RAM only
-    \\       --kept preserves the session on disk after exit (with --history DIR)
-    \\       --checkpoint-every N writes a closed-round checkpoint every N rounds (default 64)
-    \\       --history-budget BYTES caps the served session's history share (with --history DIR; minimum 128 MiB)
-    \\       --frame-hz N caps the frame tap at N captures per host second (0 captures every change; default 60)
-    \\       --ram-budget BYTES caps the RAM-only history's share (with --history off; minimum 128 MiB)
-    \\       --camera-source KIND[:ARG] and --allow-webcam select the served session's camera source
-    \\
-;
+    "usage: ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] --stdio " ++
+    "<firmware.elf>\n" ++
+    "       ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] " ++
+    "[--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>\n" ++
+    "       --discover publishes per-user RPC/GDB discovery for ctl and IDE clients\n" ++
+    "       --profile-folded samples each core's call stacks for `ctl folded`\n" ++
+    "       --cpu1 brings CPU1 up from its own image, parked until it is run\n" ++
+    "       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the " ++
+    "SDHI card, as for a run\n" ++
+    "       --allow-state-files lets snapshot and restore run on a non-loopback " ++
+    "listener\n" ++
+    "       --targets FILE enables operator-owned target bindings (incompatible with artifact replacement)\n" ++
+    "       --artifacts-root DIR enables bounded bundle export/import over RPC and WebSocket\n" ++
+    "       --workspace DIR enables rooted workbench file operations for connected " ++
+    "clients\n" ++
+    "       --build-zig ABSOLUTE_PATH enables backend Zig builds in that workspace " ++
+    "(trusted projects only)\n" ++
+    "       --history DIR puts the session's persistent history in DIR; --history " ++
+    "off keeps it RAM only\n" ++
+    "       --kept preserves the session on disk after exit (with --history DIR)\n" ++
+    "       --checkpoint-every N writes a closed-round checkpoint every N rounds " ++
+    "(default 64)\n" ++
+    "       --history-budget BYTES caps the served session's history share (with " ++
+    "--history DIR; minimum 128 MiB)\n" ++
+    "       --frame-hz N caps the frame tap at N captures per host second (0 " ++
+    "captures every change; default 60)\n" ++
+    "       --ram-budget BYTES caps the RAM-only history's share (with --history " ++
+    "off; minimum 128 MiB)\n" ++
+    "       --camera-source KIND[:ARG] and --allow-webcam select the served " ++
+    "session's camera source\n";
 
 const Where = union(enum) { stdio, listen: listen.Spec };
-const Asked = struct { build_zig: ?[]const u8 = null, where: Where, elf: []const u8, folded: bool = false, discover: bool = false, cpu1: ?[]const u8 = null, sdhi: card_setup.Sdhi = .{}, allow_state_files: bool = false, history: ?[]const u8 = null, history_off: bool = false, checkpoint_every: u32 = 64, history_budget: ?u64 = null, ram_budget: ?u64 = null, kept: bool = false, reopen: ?[]const u8 = null, frame_hz: ?u32 = null, usbip: ?u16 = null, camera: ?source_spec.Spec = null, allow_webcam: bool = false, workspace: ?[]const u8 = null };
-
-/// Samples taken one every this many instructions under --profile-folded.
-pub const fold_every: u32 = 1000;
-
-const ParsedFlags = struct {
+const Asked = struct {
+    targets: ?[]const u8 = null,
+    artifacts_root: ?[]const u8 = null,
     build_zig: ?[]const u8 = null,
-    workspace: ?[]const u8 = null,
-    folded: bool = false,
+    where: Where,
+    elf: []const u8,
     discover: bool = false,
-    allow_state: bool = false,
+    folded: bool = false,
     cpu1: ?[]const u8 = null,
     sdhi: card_setup.Sdhi = .{},
-    history_root: ?[]const u8 = null,
+    allow_state_files: bool = false,
+    history: ?[]const u8 = null,
     history_off: bool = false,
+    checkpoint_every: u32 = 64,
+    history_budget: ?u64 = null,
+    ram_budget: ?u64 = null,
     kept: bool = false,
     reopen: ?[]const u8 = null,
     frame_hz: ?u32 = null,
     usbip: ?u16 = null,
     camera: ?source_spec.Spec = null,
     allow_webcam: bool = false,
-    checkpoint_every: u32 = 64,
-    history_budget: ?u64 = null,
-    ram_budget: ?u64 = null,
-    checkpoint_set: bool = false,
+    workspace: ?[]const u8 = null,
 };
+
+/// Samples taken one every this many instructions under --profile-folded.
+pub const fold_every: u32 = 1000;
 
 /// The transport and image `argv` asks for, or null for a malformed line.
 /// The options come first, in any order, each at most once.
 pub fn parse(argv: []const []const u8) ?Asked {
     if (argv.len < 2) return null;
-    var flags: ParsedFlags = .{};
+    var flags: flag_parser.ParsedFlags = .{};
     var at: usize = 2;
     while (at < argv.len) : (at += 1) {
-        switch (parseFlag(&flags, argv, &at)) {
+        switch (flag_parser.parseFlag(&flags, argv, &at)) {
             .taken => {},
             .stop => break,
             .bad => return null,
         }
     }
     var asked = parseTail(argv, at) orelse return null;
+    asked.targets = flags.targets;
     asked.folded = flags.folded;
     asked.discover = flags.discover;
     asked.workspace = flags.workspace;
     asked.build_zig = flags.build_zig;
+    asked.artifacts_root = flags.artifacts_root;
     asked.allow_state_files = flags.allow_state;
     asked.history = flags.history_root;
     asked.history_off = flags.history_off;
@@ -107,67 +124,6 @@ pub fn parse(argv: []const []const u8) ?Asked {
     return if (consistent(asked)) asked else null;
 }
 
-const FlagStep = enum { taken, stop, bad };
-
-fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
-    const idx = at.*;
-    const valued = idx + 1 < argv.len;
-    if (std.mem.eql(u8, argv[idx], "--discover") and !flags.discover) {
-        flags.discover = true;
-    } else if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
-        flags.folded = true;
-    } else if (std.mem.eql(u8, argv[idx], "--allow-state-files") and !flags.allow_state) {
-        flags.allow_state = true;
-    } else if (std.mem.eql(u8, argv[idx], "--build-zig") and flags.build_zig == null and valued) {
-        at.* += 1;
-        host.build.Runner.validateCompiler(argv[at.*]) catch return .bad;
-        flags.build_zig = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--workspace") and flags.workspace == null and valued) {
-        at.* += 1;
-        if (argv[at.*].len == 0) return .bad;
-        flags.workspace = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--cpu1") and flags.cpu1 == null and valued) {
-        at.* += 1;
-        flags.cpu1 = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--sd-dir") and flags.sdhi.dir == null and valued) {
-        at.* += 1;
-        flags.sdhi.dir = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--app") and valued) {
-        at.* += 1;
-        flags.sdhi.addApp(argv[at.*]) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--history") and flags.history_root == null and !flags.history_off and valued) {
-        at.* += 1;
-        if (std.mem.eql(u8, argv[at.*], "off")) flags.history_off = true else flags.history_root = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--kept") and !flags.kept) {
-        flags.kept = true;
-    } else if (std.mem.eql(u8, argv[idx], "--frame-hz") and flags.frame_hz == null and valued) {
-        at.* += 1;
-        flags.frame_hz = std.fmt.parseInt(u32, argv[at.*], 10) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--usbip") and flags.usbip == null and valued) {
-        at.* += 1;
-        flags.usbip = std.fmt.parseInt(u16, argv[at.*], 10) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--reopen") and flags.reopen == null and valued) {
-        at.* += 1;
-        flags.reopen = argv[at.*];
-    } else if (std.mem.eql(u8, argv[idx], "--checkpoint-every") and !flags.checkpoint_set and valued) {
-        at.* += 1;
-        flags.checkpoint_every = std.fmt.parseInt(u32, argv[at.*], 10) catch return .bad;
-        flags.checkpoint_set = true;
-    } else if (std.mem.eql(u8, argv[idx], "--history-budget") and flags.history_budget == null and valued) {
-        at.* += 1;
-        flags.history_budget = std.fmt.parseInt(u64, argv[at.*], 10) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--ram-budget") and flags.ram_budget == null and valued) {
-        at.* += 1;
-        flags.ram_budget = std.fmt.parseInt(u64, argv[at.*], 10) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--camera-source") and flags.camera == null and valued) {
-        at.* += 1;
-        flags.camera = source_spec.parse(argv[at.*]) catch return .bad;
-    } else if (std.mem.eql(u8, argv[idx], "--allow-webcam") and !flags.allow_webcam) {
-        flags.allow_webcam = true;
-    } else return .stop;
-    return .taken;
-}
-
 /// The transport and image after the options: they are dropped, so the
 /// transport sits at index 2 as before.
 fn parseTail(argv: []const []const u8, at: usize) ?Asked {
@@ -182,6 +138,7 @@ fn parseTail(argv: []const []const u8, at: usize) ?Asked {
 
 /// Whether the history options make sense together.
 fn consistent(asked: Asked) bool {
+    if (asked.targets != null and asked.artifacts_root != null) return false;
     if (asked.build_zig != null and asked.workspace == null) return false;
     // A cap means nothing without a persistent history to cap.
     if (asked.history_budget != null and asked.history == null) return false;
@@ -201,50 +158,13 @@ fn parseWhere(argv: []const []const u8) ?Asked {
 }
 
 /// Each paired app's display name and module ELF, as the session places them.
-/// Places and clears real breakpoints for breaks named before their
-/// module loaded, through the served session (RA8EMU-1141).
-const BreakArmer = struct {
-    session: *session_api.Session,
-    fn arm(ctx: *anyopaque, of: txm_debug.Core, address: u32) anyerror!u32 {
-        const self: *BreakArmer = @ptrCast(@alignCast(ctx));
-        return self.session.setBreakpoint(of, .{ .address = address });
-    }
-    fn drop(ctx: *anyopaque, of: txm_debug.Core, id: u32) anyerror!void {
-        const self: *BreakArmer = @ptrCast(@alignCast(ctx));
-        return self.session.clearBreakpoint(of, id);
-    }
-};
-
-fn historyOptions(asked: Asked) ?served_setup.HistoryOpts {
-    if (asked.history) |root| return .{ .root = root, .checkpoint_every = asked.checkpoint_every, .budget = asked.history_budget, .kept = asked.kept, .reopen = asked.reopen, .frame_hz = asked.frame_hz };
-    if (asked.history_off) return .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget, .frame_hz = asked.frame_hz };
-    return null;
-}
-
-fn attachServeDevices(io: std.Io, bridges: *std.heap.ArenaAllocator, setup: *served_setup.Served, asked: Asked) bool {
-    if (asked.camera) |cam| served_camera.set(setup, cam) catch |err| {
-        std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});
-        return false;
-    };
-    if (asked.usbip) |port| {
-        usbip_run.install(&setup.owner.board().usb, bridges.allocator(), io, port) catch |err| {
-            std.debug.print("serve: cannot export the FS device: {s}\n", .{@errorName(err)});
-            return false;
-        };
-        setup.attachUsbip() catch |err| {
-            std.debug.print("serve: cannot record the USB/IP bridge: {s}\n", .{@errorName(err)});
-            return false;
-        };
-    }
-    if (asked.folded) setup.sampleStacks(fold_every) catch |err| {
-        std.debug.print("serve: cannot sample stacks: {s}\n", .{@errorName(err)});
-        return false;
-    };
-    return true;
-}
-
 /// Serve `argv` (`ra8_emulator serve ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Environ.Map, argv: []const []const u8) !u8 {
+pub fn run(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    argv: []const []const u8,
+) !u8 {
     const asked = parse(argv) orelse {
         std.debug.print("{s}", .{usage});
         return 2;
@@ -253,11 +173,30 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     var bridges = std.heap.ArenaAllocator.init(allocator);
     defer bridges.deinit();
     var setup: served_setup.Served = undefined;
-    setup.openInputs(allocator, io, asked.elf, null, historyOptions(asked), if (asked.cpu1) |path| .{ .path = path } else null, .{ .card = asked.sdhi }) catch |err| {
+    const history_opts = historyOptions(asked);
+    setup.openInputs(
+        allocator,
+        io,
+        asked.elf,
+        null,
+        history_opts,
+        if (asked.cpu1) |path| .{ .path = path } else null,
+        .{ .card = asked.sdhi },
+    ) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
         return 1;
     };
-    defer setup.deinit();
+    var inventory: targets.Inventory = .{};
+    defer inventory.close();
+    inventory.bind(allocator, io, asked.targets, &setup.context) catch |err| {
+        setup.deinit();
+        std.debug.print("serve: target bindings: {s}\n", .{@errorName(err)});
+        return 1;
+    };
+    var service: ?*artifact_service.Service = null;
+    defer if (service) |owner| {
+        owner.close() catch |err| std.log.err("serve: artifact cleanup failed: {s}", .{@errorName(err)});
+    } else setup.deinit();
     var workbench: Workbench = .{};
     workbench.open(io, asked.workspace, asked.build_zig) catch |err| {
         std.debug.print("serve: cannot open workbench: {s}\n", .{@errorName(err)});
@@ -265,33 +204,119 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, env: *const std.process.Env
     };
     defer workbench.close();
     workbench.bind(&setup.context);
-    defer workbench.unbind(&setup.context);
-    if (!attachServeDevices(io, &bridges, &setup, asked)) return 1;
-    var armer = BreakArmer{ .session = setup.context.session };
-    if (setup.context.modules) |table|
-        table.armer = .{ .ctx = &armer, .arm = BreakArmer.arm, .drop = BreakArmer.drop };
-    switch (asked.where) {
-        .listen => |spec| if (!listen.allowsState(spec, asked.allow_state_files)) {
-            setup.context.state = null;
-            std.debug.print("serve: snapshot and restore are off on a non-loopback listener; pass --allow-state-files to keep them\n", .{});
-        },
-        .stdio => {},
-    }
-    if (asked.discover) listen.catchStops();
-    var hosted = if (asked.discover) try discovery.open(allocator, io, env, asked.elf, setup.context.session) else null;
-    defer if (hosted) |*listener| listener.deinit();
-    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx, .listener = if (hosted) |*listener| listener else null };
-    const done = switch (asked.where) {
-        .stdio => loop.answerStdio(io, &setup.context, buffers),
-        .listen => |spec| listen.serve(io, spec, &setup.context, buffers),
+    defer workbench.unbind(if (service) |owner| &owner.active.context else &setup.context);
+    if (!attachDevices(&setup, asked, bridges.allocator(), io)) return 1;
+    bindings.debugger(&setup);
+    if (asked.folded) try setup.sampleStacks(fold_every);
+    restrictStateFiles(&setup, asked);
+    var imported: bindings.Bindings = .{
+        .workbench = &workbench,
+        .folded = asked.folded,
+        .allow_state = setup.context.state != null,
     };
-    done catch |err| {
+    if (asked.artifacts_root) |path| {
+        service = try artifact_service.Service.open(allocator, io, &setup, path, .{
+            .enabled = imported.allow_state,
+            .context = &imported,
+            .prepareFn = bindings.Bindings.prepare,
+        });
+    }
+    serveWithDiscovery(allocator, io, env, asked, &setup, service) catch |err| {
         std.debug.print("serve: {s}\n", .{@errorName(err)});
         return 1;
     };
-    setup.flushHistory() catch |err| {
+    const active = if (service) |owner| owner.active else &setup;
+    active.flushHistory() catch |err| {
         std.debug.print("serve: cannot flush history: {s}\n", .{@errorName(err)});
         return 1;
     };
     return 0;
+}
+
+fn serveWithDiscovery(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    asked: Asked,
+    setup: *served_setup.Served,
+    service: ?*artifact_service.Service,
+) !void {
+    if (asked.discover) listen.catchStops();
+    var hosted = if (asked.discover)
+        try discovery.open(allocator, io, env, asked.elf, setup.context.session)
+    else
+        null;
+    defer if (hosted) |*listener| listener.deinit();
+    try answer(io, asked.where, setup, service, if (hosted) |*listener| listener else null);
+}
+
+fn attachDevices(setup: *served_setup.Served, asked: Asked, allocator: std.mem.Allocator, io: std.Io) bool {
+    if (asked.camera) |cam| {
+        served_camera.set(setup, cam) catch |err| {
+            std.debug.print("serve: cannot open camera source: {s}\n", .{@errorName(err)});
+            return false;
+        };
+    }
+    if (asked.usbip) |port| {
+        usbip_run.install(&setup.owner.board().usb, allocator, io, port) catch |err| {
+            std.debug.print("serve: cannot export the FS device: {s}\n", .{@errorName(err)});
+            return false;
+        };
+        setup.attachUsbip() catch |err| {
+            std.debug.print("serve: cannot record the USB/IP bridge: {s}\n", .{@errorName(err)});
+            return false;
+        };
+    }
+    return true;
+}
+
+fn restrictStateFiles(setup: *served_setup.Served, asked: Asked) void {
+    // Snapshot and restore stay off a non-loopback TCP listener unless the
+    // operator asked for them there (RA8EMU-1175): a network peer could
+    // otherwise overwrite or read files as the serving user.
+    switch (asked.where) {
+        .listen => |spec| if (!listen.allowsState(spec, asked.allow_state_files)) {
+            setup.context.state = null;
+            std.debug.print(
+                "serve: snapshot and restore are off on a non-loopback listener; pass " ++
+                    "--allow-state-files to keep them\n",
+                .{},
+            );
+        },
+        .stdio => {},
+    }
+}
+
+fn historyOptions(asked: Asked) ?served_setup.HistoryOpts {
+    return if (asked.history) |root|
+        .{
+            .root = root,
+            .checkpoint_every = asked.checkpoint_every,
+            .budget = asked.history_budget,
+            .kept = asked.kept,
+            .reopen = asked.reopen,
+            .frame_hz = asked.frame_hz,
+        }
+    else if (asked.history_off)
+        .{ .checkpoint_every = asked.checkpoint_every, .ram_budget = asked.ram_budget, .frame_hz = asked.frame_hz }
+    else
+        null;
+}
+
+fn answer(
+    io: std.Io,
+    where: Where,
+    setup: *served_setup.Served,
+    service: ?*artifact_service.Service,
+    listener: ?*Listener,
+) !void {
+    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx, .listener = listener };
+    const context = &setup.context;
+    return if (service) |owner| switch (where) {
+        .stdio => loop.answerStdioManaged(io, owner),
+        .listen => |spec| listen.serveManaged(io, spec, owner),
+    } else switch (where) {
+        .stdio => loop.answerStdio(io, context, buffers),
+        .listen => |spec| listen.serve(io, spec, context, buffers),
+    };
 }

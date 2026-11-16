@@ -8,10 +8,11 @@
 //! section can read every half before it changes anything: `read` gives a
 //! `Staged` unit, and `install` puts it in place once its cells are built.
 const std = @import("std");
+
 const fields = @import("ra8_snapshot").fields;
-const sparse = @import("ra8_snapshot").sparse;
 const Mram = @import("mram.zig").Mram;
 const otp = @import("otp.zig");
+const sparse = @import("ra8_snapshot").sparse;
 
 const wiring = .{ "otp", "memory" };
 const Cells = sparse.List(1);
@@ -48,7 +49,9 @@ pub const Staged = struct {
         errdefer map.deinit();
         try map.ensureTotalCapacity(self.cells.count);
         var i: u32 = 0;
-        while (i < self.cells.count) : (i += 1) map.putAssumeCapacity(self.cells.number(i), self.cells.value(i)[0]);
+        while (i < self.cells.count) : (i += 1) {
+            map.putAssumeCapacity(self.cells.number(i), self.cells.value(i)[0]);
+        }
         return map;
     }
 

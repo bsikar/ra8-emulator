@@ -5,6 +5,7 @@
 //! Half precision uses the single numbering: it reads S[i]<15:0> and
 //! writes Zeros(16):value.
 const fpu = @import("../../fpu/all.zig");
+
 const Format = fpu.format.Format;
 const Bank = fpu.bank.Bank;
 

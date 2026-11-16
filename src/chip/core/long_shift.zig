@@ -10,9 +10,9 @@
 //! decoders (src/chip/core/cpu/ops/long_shift*.zig) whether an encoding is
 //! theirs and runs their arithmetic over a plain register file, so there
 //! is one definition.
-const Instr = @import("cpu/instr.zig").Instr;
-const imm = @import("cpu/ops/long/shift/shift.zig");
 const by_reg = @import("cpu/ops/long/shift/reg.zig");
+const imm = @import("cpu/ops/long/shift/shift.zig");
+const Instr = @import("cpu/instr.zig").Instr;
 const sat = @import("cpu/ops/long/shift/sat.zig");
 const sat64 = @import("cpu/ops/long/shift/sat64.zig");
 

@@ -2,10 +2,10 @@
 //! CMP, ADD and SUB with an 8-bit immediate (T1/T1/T2/T2). CMP always sets
 //! the flags; the rest set them only outside an IT block. MOV sets N and Z
 //! and leaves C and V.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
-const Instr = @import("../../../instr.zig").Instr;
 const flags = @import("../../../flags.zig");
+const Instr = @import("../../../instr.zig").Instr;
+const op = @import("../../../op.zig");
 pub const wide = @import("wide.zig");
 
 pub const encodings = struct {

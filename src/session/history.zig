@@ -11,15 +11,18 @@
 //! capacity is the caller's stated size, and the byte total is on hand for
 //! whoever displays it.
 const std = @import("std");
-const session_state = @import("board/state.zig");
-const history_record = @import("history/record.zig");
+
 const history_position = @import("history/position.zig");
+const history_record = @import("history/record.zig");
+const input_script = @import("ra8_components").input_script;
 const recorder_mod = @import("history/recorder.zig");
 const scheduler = @import("ra8_chip").core.scheduler;
-const input_script = @import("ra8_components").input_script;
+const session_state = @import("board/state.zig");
+const write_undo = @import("write_undo.zig");
 
 pub const History = struct {
     files: *session_state.Files,
+    edits: write_undo.Journal,
     gpa: std.mem.Allocator,
     /// The stated size: frames the ring keeps before it drops the oldest.
     capacity: u32,
@@ -53,7 +56,7 @@ pub const History = struct {
         var ring: std.ArrayList(Frame) = try .initCapacity(gpa, capacity);
         ring.items.len = capacity;
         @memset(ring.items, .{});
-        return .{ .files = files, .gpa = gpa, .capacity = capacity, .ring = ring };
+        return .{ .files = files, .gpa = gpa, .capacity = capacity, .ring = ring, .edits = .init(gpa, files) };
     }
 
     /// Attaches the persistent recorder (slice 16); recording sites then
@@ -64,7 +67,12 @@ pub const History = struct {
 
     /// Records one intervention frame through the attached recorder at the
     /// given position; no recorder attached keeps this a no-op.
-    pub fn recordIntervention(self: *History, position: history_position.Position, what: history_record.Intervention.What, body: []const u8) anyerror!void {
+    pub fn recordIntervention(
+        self: *History,
+        position: history_position.Position,
+        what: history_record.Intervention.What,
+        body: []const u8,
+    ) anyerror!void {
         if (self.replaying) return;
         const rec = self.recorder orelse return;
         try rec.recordIntervention(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
@@ -73,7 +81,12 @@ pub const History = struct {
 
     /// Records where a scripted input landed, as a boundary record: an
     /// observation, never replayed, so an input is applied once on replay.
-    pub fn recordLanding(self: *History, position: history_position.Position, what: history_record.Boundary.What, body: []const u8) anyerror!void {
+    pub fn recordLanding(
+        self: *History,
+        position: history_position.Position,
+        what: history_record.Boundary.What,
+        body: []const u8,
+    ) anyerror!void {
         if (self.replaying) return;
         const rec = self.recorder orelse return;
         try rec.recordBoundary(.{ .position = position, .seq = self.seq }, .{ .what = what, .body = body });
@@ -81,6 +94,7 @@ pub const History = struct {
     }
 
     pub fn deinit(self: *History) void {
+        self.edits.deinit();
         for (self.ring.items) |entry| {
             if (entry.bytes.len > 0) self.gpa.free(entry.bytes);
         }
@@ -139,7 +153,9 @@ pub const History = struct {
     /// The bytes the live frames hold, for whoever sizes or displays the ring.
     pub fn totalBytes(self: *const History) usize {
         var total: usize = 0;
-        for (self.ring.items) |entry| total += entry.bytes.len;
+        for (self.ring.items) |entry| {
+            total += entry.bytes.len;
+        }
         return total;
     }
 };

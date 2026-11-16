@@ -1,14 +1,14 @@
 //! Authoritative backend disassembly handler: decodes instructions forward
 //! using the Zig CPU core's instruction table (including Armv8.1-M, MVE
 //! Helium, PACBTI, DSP, and TrustZone) and annotates symbol entry labels.
-const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
-const disasm_wire = @import("disasm_wire.zig");
 const api = @import("ra8_session").api;
+const disasm_wire = @import("disasm_wire.zig");
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const session_disasm = @import("ra8_session").disasm;
 const session_view = @import("ra8_session").view;
+const std = @import("std");
 const symbols = @import("ra8_session").symbols;
 const txm_debug = @import("ra8_session").txm.debug;
 
@@ -28,7 +28,14 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     var emitted: u8 = 0;
     for (0..count) |_| {
         var text_buf: [disasm_wire.disasm_text_cap]u8 = undefined;
-        const row = decodeOne(context.session, which, address, image, context.modules, &text_buf) catch |err| return refuse(err);
+        const row = decodeOne(
+            context.session,
+            which,
+            address,
+            image,
+            context.modules,
+            &text_buf,
+        ) catch |err| return refuse(err);
         disasm_wire.put(context.scratch[0..disasm_wire.disasm_bytes], &at, row) catch |err| return refuse(err);
         emitted += 1;
         address +%= if (row.size == 0) session_view.encoding.narrow else row.size;

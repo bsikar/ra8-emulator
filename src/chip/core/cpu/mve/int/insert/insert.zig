@@ -4,6 +4,7 @@
 //! survive. VSLI is the same leftwards, so the bottom n bits survive.
 const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
+
 const Size = qreg.Size;
 
 fn full(size: Size) u64 {

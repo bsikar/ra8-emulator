@@ -5,9 +5,9 @@
 //!
 //! SP or PC in Rd, Rn or Rm is UNPREDICTABLE, as are Ra of SP and an MLS with
 //! Ra of PC; all are left unclaimed.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

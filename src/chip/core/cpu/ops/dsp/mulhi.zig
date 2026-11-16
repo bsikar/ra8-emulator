@@ -10,9 +10,9 @@
 //!
 //! Left unclaimed: SP or PC in Rd, Rn or Rm, Ra = SP (UNPREDICTABLE), Ra =
 //! 1111 on 0xFB60 (no SMMLS without an accumulator), and nonzero hw2[7:5].
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

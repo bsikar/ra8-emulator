@@ -45,9 +45,10 @@
 //! only touches the bytes it names, which is the discipline every block here
 //! follows; with four banks the status word never reaches its high byte, so
 //! no image can tell the difference today.
-const std = @import("std");
+
 const periph = @import("../registry.zig");
 const prot = @import("lock.zig");
+
 pub const lock = prot;
 
 /// SRAMPRCR and the registers its key guards, re-exported so a caller that

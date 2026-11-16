@@ -1,6 +1,7 @@
 //! Win32 calls the Windows arms need that Zig 0.17's std no longer exports
 //! (RA8EMU-827). Kept in one place so each Windows arm declares nothing itself.
 const std = @import("std");
+
 const windows = std.os.windows;
 
 pub const HANDLE = windows.HANDLE;
@@ -13,11 +14,43 @@ pub const std_input: DWORD = @bitCast(@as(i32, -10));
 pub const std_output: DWORD = @bitCast(@as(i32, -11));
 
 pub extern "kernel32" fn GetStdHandle(which: DWORD) callconv(.winapi) ?HANDLE;
-pub extern "kernel32" fn CreatePipe(read: *HANDLE, write: *HANDLE, security: ?*anyopaque, size: DWORD) callconv(.winapi) BOOL;
-pub extern "kernel32" fn CreateFileW(name: [*:0]const u16, access: DWORD, share: DWORD, security: ?*anyopaque, creation: DWORD, flags: DWORD, template: ?HANDLE) callconv(.winapi) HANDLE;
-pub extern "kernel32" fn ReadFile(file: HANDLE, into: [*]u8, len: DWORD, read: ?*DWORD, overlapped: ?*anyopaque) callconv(.winapi) BOOL;
-pub extern "kernel32" fn WriteFile(file: HANDLE, from: [*]const u8, len: DWORD, written: ?*DWORD, overlapped: ?*anyopaque) callconv(.winapi) BOOL;
-pub extern "kernel32" fn PeekNamedPipe(pipe: HANDLE, into: ?*anyopaque, len: DWORD, read: ?*DWORD, available: ?*DWORD, left: ?*DWORD) callconv(.winapi) BOOL;
+pub extern "kernel32" fn CreatePipe(
+    read: *HANDLE,
+    write: *HANDLE,
+    security: ?*anyopaque,
+    size: DWORD,
+) callconv(.winapi) BOOL;
+pub extern "kernel32" fn CreateFileW(
+    name: [*:0]const u16,
+    access: DWORD,
+    share: DWORD,
+    security: ?*anyopaque,
+    creation: DWORD,
+    flags: DWORD,
+    template: ?HANDLE,
+) callconv(.winapi) HANDLE;
+pub extern "kernel32" fn ReadFile(
+    file: HANDLE,
+    into: [*]u8,
+    len: DWORD,
+    read: ?*DWORD,
+    overlapped: ?*anyopaque,
+) callconv(.winapi) BOOL;
+pub extern "kernel32" fn WriteFile(
+    file: HANDLE,
+    from: [*]const u8,
+    len: DWORD,
+    written: ?*DWORD,
+    overlapped: ?*anyopaque,
+) callconv(.winapi) BOOL;
+pub extern "kernel32" fn PeekNamedPipe(
+    pipe: HANDLE,
+    into: ?*anyopaque,
+    len: DWORD,
+    read: ?*DWORD,
+    available: ?*DWORD,
+    left: ?*DWORD,
+) callconv(.winapi) BOOL;
 
 /// The process's own std handle, or `invalid_handle` when it has none.
 pub fn stdHandle(which: DWORD) HANDLE {
@@ -49,7 +82,18 @@ pub extern "kernel32" fn SetConsoleCtrlHandler(handler: ?CtrlHandler, add: BOOL)
 pub extern "kernel32" fn Sleep(ms: DWORD) callconv(.winapi) void;
 
 pub const ProcessInfo = extern struct { process: HANDLE, thread: HANDLE, process_id: DWORD, thread_id: DWORD };
-pub extern "kernel32" fn CreateProcessW(app: ?[*:0]const u16, command: [*:0]u16, process_security: ?*anyopaque, thread_security: ?*anyopaque, inherit: BOOL, flags: DWORD, environment: ?*anyopaque, cwd: ?[*:0]const u16, startup: *windows.STARTUPINFOW, info: *ProcessInfo) callconv(.winapi) BOOL;
+pub extern "kernel32" fn CreateProcessW(
+    app: ?[*:0]const u16,
+    command: [*:0]u16,
+    process_security: ?*anyopaque,
+    thread_security: ?*anyopaque,
+    inherit: BOOL,
+    flags: DWORD,
+    environment: ?*anyopaque,
+    cwd: ?[*:0]const u16,
+    startup: *windows.STARTUPINFOW,
+    info: *ProcessInfo,
+) callconv(.winapi) BOOL;
 pub extern "kernel32" fn SetHandleInformation(handle: HANDLE, mask: DWORD, flags: DWORD) callconv(.winapi) BOOL;
 pub extern "kernel32" fn GetProcessId(handle: HANDLE) callconv(.winapi) DWORD;
 pub extern "kernel32" fn AttachConsole(process_id: DWORD) callconv(.winapi) BOOL;
@@ -58,7 +102,12 @@ pub extern "kernel32" fn GenerateConsoleCtrlEvent(event: DWORD, group: DWORD) ca
 
 pub extern "kernel32" fn CreateJobObjectW(security: ?*anyopaque, name: ?[*:0]const u16) callconv(.winapi) ?HANDLE;
 pub extern "kernel32" fn AssignProcessToJobObject(job: HANDLE, process: HANDLE) callconv(.winapi) BOOL;
-pub extern "kernel32" fn SetInformationJobObject(job: HANDLE, class: c_int, info: *const anyopaque, length: DWORD) callconv(.winapi) BOOL;
+pub extern "kernel32" fn SetInformationJobObject(
+    job: HANDLE,
+    class: c_int,
+    info: *const anyopaque,
+    length: DWORD,
+) callconv(.winapi) BOOL;
 pub extern "kernel32" fn TerminateJobObject(job: HANDLE, code: DWORD) callconv(.winapi) BOOL;
 pub extern "kernel32" fn GetComputerNameW(name: [*]u16, length: *DWORD) callconv(.winapi) BOOL;
 

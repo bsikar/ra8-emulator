@@ -1,33 +1,38 @@
 //! The Zig core: a register file, the bus it fetches through, and the
 //! fetch-decode-execute step.
+const hint = @import("ops/hint.zig");
+const StackPointers = @import("stack_pointers.zig").StackPointers;
+
+const block_cache = @import("block/cache.zig");
 const bus = @import("bus.zig");
+const cond = @import("cond.zig");
+const decode = @import("decode/decode.zig");
+const decode_cache = @import("decode/cache.zig");
+const divide = @import("ops/divide.zig");
+const it_state = @import("it_state.zig");
 const regs_mod = @import("regs.zig");
 const reset_mod = @import("reset.zig");
-const decode = @import("decode/decode.zig");
-const divide = @import("ops/divide.zig");
-const decode_cache = @import("decode/cache.zig");
-const block_cache = @import("block/cache.zig");
-const cond = @import("cond.zig");
-const it_state = @import("it_state.zig");
+
 /// What step() does with a nonzero EPSR.ECI (RA8EMU-453).
-pub const eci_gate = @import("eci_gate.zig");
-const Instr = @import("instr.zig").Instr;
-const fp_state = @import("fpu/state.zig");
-const exception = @import("exception/all.zig");
 const banked_mod = @import("../banked.zig");
+const count_mod = @import("count.zig");
+pub const counted = @import("counted/counted.zig");
+pub const eci_gate = @import("eci_gate.zig");
+const exception = @import("exception/all.zig");
+pub const fixed_trip = @import("fixed_trip.zig");
+const fp_state = @import("fpu/state.zig");
+const Instr = @import("instr.zig").Instr;
 const mpu_check = @import("mpu_check.zig");
 const sysreg = @import("sysreg.zig");
-const count_mod = @import("count.zig");
-pub const fixed_trip = @import("fixed_trip.zig");
 pub const trip_decode = @import("trip_decode.zig");
-pub const counted = @import("counted/counted.zig");
 const Until = @import("../until.zig").Until;
+
 /// Public so its tests reach it without a root export.
-pub const systick_cut = @import("systick_cut.zig");
-pub const bti = @import("bti.zig");
 pub const attribution = @import("attribution.zig");
-pub const sau_source = @import("sau_source.zig");
+pub const bti = @import("bti.zig");
 pub const data_gate = @import("data_gate.zig");
+pub const sau_source = @import("sau_source.zig");
+pub const systick_cut = @import("systick_cut.zig");
 pub const tt_mpu = @import("tt_mpu.zig");
 
 /// Why `run` or `step` stopped.
@@ -134,7 +139,7 @@ pub const Cpu = struct {
     /// and return, cleared by a WFE that finds it set.
     event: bool = false,
     /// Embedding wiring for SEV broadcast; excluded from architectural state.
-    event_sender: ?@import("ops/hint.zig").EventSender = null,
+    event_sender: ?hint.EventSender = null,
     /// Whether reset has run. The first one keeps the SCS configuration the
     /// board seeded; every later one is a warm reboot that clears it.
     booted: bool = false,
@@ -153,10 +158,14 @@ pub const Cpu = struct {
     /// The instruction at `address` and its decode: from the block cache
     /// when there is one and it answers, else fetched and decoded here.
     fn fetchDecoded(self: *Cpu, address: u32) bus.Error!Fetched {
-        if (self.blocks) |cache| if (cache.next(self.bus, self.profile, address)) |kept|
+        if (self.blocks) |cache| if (cache.next(self.bus, self.profile, address)) |kept| {
             return .{ .instr = kept.instr, .found = kept.hit };
+        };
         const instr = try Instr.fetch(self.bus, address);
-        const found = if (self.decoded) |cache| cache.findFor(self.profile, instr) else decode.decodeFor(self.profile, instr);
+        const found = if (self.decoded) |cache|
+            cache.findFor(self.profile, instr)
+        else
+            decode.decodeFor(self.profile, instr);
         return .{ .instr = instr, .found = found };
     }
 
@@ -171,24 +180,45 @@ pub const Cpu = struct {
 
     fn execute(self: *Cpu) ?Stop {
         const address = self.regs.pc;
-        if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(.invstate, address, .{ .invalid_state = address });
-        if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted()))
+        if (self.regs.xpsr & regs_mod.xpsr_bits.thumb == 0) return self.usageFault(
+            .invstate,
+            address,
+            .{ .invalid_state = address },
+        );
+        if (self.mpu) |m| if (m.unit.on() and m.refusesFetch(address, sysreg.privileged(&self.regs), self.boosted())) {
             return self.fetchRefused(address);
+        };
         const fetched = self.fetchDecoded(address) catch return self.fetchBusFault(address);
         const instr = fetched.instr;
-        if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr))
+        if (self.banked.current == .non_secure and attribution.refusesEntry(self.attribution, instr)) {
             return self.secureFault(.invep, address, 0, .{ .invalid_state = address });
-        if (self.banked.current == .secure and attribution.refusesTransition(self.attribution, address))
+        }
+        if (self.banked.current == .secure and attribution.refusesTransition(self.attribution, address)) {
             return self.secureFault(.invtran, address, 0, .{ .invalid_state = address });
+        }
         const it = it_state.get(self.regs.xpsr);
         const runs = !it_state.active(it) or cond.passed(it_state.condition(it), self.regs.xpsr);
-        if (runs and self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and bti.enabled(&self.regs, self.profile.v8_1m) and !bti.allowed(instr))
+        if (runs and
+            self.regs.xpsr & regs_mod.xpsr_bits.bti != 0 and
+            bti.enabled(&self.regs, self.profile.v8_1m) and
+            !bti.allowed(instr))
+        {
             return self.usageFault(.invstate, address, .{ .invalid_state = address });
+        }
         const found = fetched.found;
         // An encoding whose IT condition failed never runs, so it is skipped
         // whether or not any group knows it.
         if (found == null and runs) {
-            if (decode.refused(self.profile, instr)) return self.usageFault(.undefinstr, address, .{ .unknown = instr });
+            if (decode.refused(
+                self.profile,
+                instr,
+            )) return self.usageFault(
+                .undefinstr,
+                address,
+                .{
+                    .unknown = instr,
+                },
+            );
             return .{ .unknown = instr };
         }
         if (found) |hit| switch (eci_gate.action(it, hit.eci)) {
@@ -209,20 +239,7 @@ pub const Cpu = struct {
             if (self.mpu) |m| m.disarm();
             ran catch |err| {
                 self.regs.pc = address;
-                return switch (err) {
-                    error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
-                    error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
-                    error.Breakpoint => self.breakpoint(address),
-                    error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
-                    error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
-                    error.InvalidEntry => self.secureFault(.invep, address, 0, .{ .invalid_state = address }),
-                    error.NoCoprocessor => self.usageFault(.nocp, address, .{ .unknown = instr }),
-                    error.LazyStateError => self.secureFault(.lserr, address, 0, .{ .invalid_state = address }),
-                    error.LazyMemManage, error.LazyBusFault => |e| exception.lazy_fault.orStop(self, e, address),
-                    error.LazyPreserveError => self.secureFault(.lsperr, address, self.fp.context.fpcar, .{ .invalid_state = address }),
-                    error.SecurityViolation => self.secureFault(.auviol, address, self.bus.gate.?.refused, .{ .bus_fault = address }),
-                    else => self.refusedOr(address),
-                };
+                return self.executionFault(err, address, instr);
             };
             if (before.overrun(self)) {
                 before.restore(self);
@@ -237,6 +254,34 @@ pub const Cpu = struct {
         self.retired += 1;
         if (self.retire_listener) |listener| listener.instruction(address);
         return null;
+    }
+
+    /// Restore fault dispatch after an instruction fails; the caller has restored PC.
+    fn executionFault(self: *Cpu, err: anyerror, address: u32, instr: Instr) ?Stop {
+        return switch (err) {
+            error.Unaligned => self.usageFault(.unaligned, address, .{ .unaligned = address }),
+            error.Undefined => self.usageFault(.undefinstr, address, .{ .unknown = instr }),
+            error.Breakpoint => self.breakpoint(address),
+            error.StackOverflow => self.usageFault(.stkof, address, .{ .stack_overflow = address }),
+            error.InvalidState => self.usageFault(.invstate, address, .{ .invalid_state = address }),
+            error.InvalidEntry => self.secureFault(.invep, address, 0, .{ .invalid_state = address }),
+            error.NoCoprocessor => self.usageFault(.nocp, address, .{ .unknown = instr }),
+            error.LazyStateError => self.secureFault(.lserr, address, 0, .{ .invalid_state = address }),
+            error.LazyMemManage, error.LazyBusFault => |e| exception.lazy_fault.orStop(self, e, address),
+            error.LazyPreserveError => self.secureFault(
+                .lsperr,
+                address,
+                self.fp.context.fpcar,
+                .{ .invalid_state = address },
+            ),
+            error.SecurityViolation => self.secureFault(
+                .auviol,
+                address,
+                self.bus.gate.?.refused,
+                .{ .bus_fault = address },
+            ),
+            else => self.refusedOr(address),
+        };
     }
 
     /// What an instruction leaves for after it retires and its IT state has
@@ -312,7 +357,15 @@ pub const Cpu = struct {
 
     /// Chain the SecureFault a refused exception return of `value` owes
     /// over the frame it left, or stop when that locks up.
-    fn chainedSecure(self: *Cpu, chain: *const fn (*Cpu, u32) exception.secure.Error!void, value: u32, address: u32) ?Stop {
+    fn chainedSecure(
+        self: *Cpu,
+        chain: *const fn (
+            *Cpu,
+            u32,
+        ) exception.secure.Error!void,
+        value: u32,
+        address: u32,
+    ) ?Stop {
         chain(self, value) catch return .{ .invalid_return = address };
         self.secure_faults +%= 1;
         return null;
@@ -342,49 +395,3 @@ pub const Cpu = struct {
 };
 
 const Fetched = struct { instr: Instr, found: ?decode.Hit };
-
-/// The four stack pointers an instruction may move, taken before it runs so
-/// a write that crosses MSPLIM or PSPLIM can be undone. SG and BXNS swap the
-/// banks without moving a pointer, so each is compared in its own bank.
-const StackPointers = struct {
-    msp: u32,
-    psp: u32,
-    other_msp: u32,
-    other_psp: u32,
-    state: @TypeOf(@as(Cpu, undefined).banked.current),
-
-    fn read(cpu: *const Cpu) StackPointers {
-        return .{
-            .msp = cpu.regs.msp,
-            .psp = cpu.regs.psp,
-            .other_msp = cpu.banked.other.msp,
-            .other_psp = cpu.banked.other.psp,
-            .state = cpu.banked.current,
-        };
-    }
-
-    /// Whether a pointer the instruction changed now sits below its limit.
-    fn overrun(self: StackPointers, cpu: *const Cpu) bool {
-        const r = &cpu.regs;
-        const o = &cpu.banked.other;
-        const was = self.inBanks(cpu);
-        return (r.msp != was.msp and r.msp < r.msplim) or
-            (r.psp != was.psp and r.psp < r.psplim) or
-            (o.msp != was.other_msp and o.msp < o.msplim) or
-            (o.psp != was.other_psp and o.psp < o.psplim);
-    }
-
-    fn restore(self: StackPointers, cpu: *Cpu) void {
-        const was = self.inBanks(cpu);
-        cpu.regs.msp = was.msp;
-        cpu.regs.psp = was.psp;
-        cpu.banked.other.msp = was.other_msp;
-        cpu.banked.other.psp = was.other_psp;
-    }
-
-    /// The snapshot laid out the way the banks sit now.
-    fn inBanks(self: StackPointers, cpu: *const Cpu) StackPointers {
-        if (cpu.banked.current == self.state) return self;
-        return .{ .msp = self.other_msp, .psp = self.other_psp, .other_msp = self.msp, .other_psp = self.psp, .state = cpu.banked.current };
-    }
-};

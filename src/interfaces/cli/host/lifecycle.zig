@@ -8,9 +8,11 @@
 //! blocks until it is killed or stdin closes; `clean` closes and exits;
 //! `hangup` closes when the stop plumbing observes a stop request; `keep`
 //! marks the session kept and closes into the optional kept root.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
+
 const host = @import("ra8_host");
+
 const history = host.history;
 
 pub fn peer(init: std.process.Init) !u8 {
@@ -52,7 +54,12 @@ fn linuxPeer(init: std.process.Init) !u8 {
     return error.BadScenario;
 }
 
-fn closed(io: std.Io, session: *history.session.Session, kept: ?*const history.base.Base, placement: history.session.Placement) !u8 {
+fn closed(
+    io: std.Io,
+    session: *history.session.Session,
+    kept: ?*const history.base.Base,
+    placement: history.session.Placement,
+) !u8 {
     const outcome = try session.close(kept, placement);
     try reportOutcome(io, outcome);
     return 0;

@@ -10,12 +10,13 @@
 //! which is what the sparse register file did, minus the alternating
 //! 0/all-ones answers to reads.
 const std = @import("std");
-const periph = @import("../registry.zig");
-const regs = @import("../usbhs/regs.zig");
+
+pub const bulk = @import("bulk.zig");
 pub const dcp = @import("dcp.zig");
 pub const host = @import("host.zig");
+const periph = @import("../registry.zig");
 pub const pipe = @import("pipe.zig");
-pub const bulk = @import("bulk.zig");
+const regs = @import("../usbhs/regs.zig");
 
 pub const window = struct {
     pub const base: u32 = 0x4025_0000;
@@ -225,9 +226,17 @@ pub const Device = struct {
             regs.reg.intsts0 => self.interruptStatus(),
             regs.reg.dvstctr0 => self.portStatus(),
             regs.reg.dcpctr => self.controlPipeStatus(),
-            regs.reg.cfifo => if (self.bulkPipe()) |n| self.endpoints.readData(&self.pipes, n, width) else self.control.readData(width),
+            regs.reg.cfifo,
+            => if (self.bulkPipe()) |n|
+                self.endpoints.readData(&self.pipes, n, width)
+            else
+                self.control.readData(width),
             regs.reg.cfifosel => self.control.sel,
-            regs.reg.cfifoctr => if (self.bulkPipe()) |n| self.endpoints.status(&self.pipes, n) else self.control.status(),
+            regs.reg.cfifoctr,
+            => if (self.bulkPipe()) |n|
+                self.endpoints.status(&self.pipes, n)
+            else
+                self.control.status(),
             regs.reg.brdysts => @intFromBool(self.control.brdy) | self.endpoints.brdy,
             regs.reg.bempsts => @intFromBool(self.control.bemp) | self.endpoints.bemp,
             else => self.shadow[offset / window.word],
@@ -248,9 +257,19 @@ pub const Device = struct {
             regs.reg.usbreq, regs.reg.usbval, regs.reg.usbindx, regs.reg.usbleng => self.read_only += 1,
             regs.reg.intsts0 => self.status &= v | ~intsts0.write_zero_clears,
             regs.reg.dcpctr => self.controlPipe(v),
-            regs.reg.cfifo => if (self.bulkPipe()) |n| self.endpoints.writeData(&self.pipes, n, value, width) else self.control.writeData(value, width),
+            regs.reg.cfifo => if (self.bulkPipe()) |n| self.endpoints.writeData(
+                &self.pipes,
+                n,
+                value,
+                width,
+            ) else self.control.writeData(value, width),
             regs.reg.cfifosel => self.selectPort(v),
-            regs.reg.cfifoctr => if (self.bulkPipe()) |n| self.endpoints.control(&self.pipes, n, v) else self.control.control(v),
+            regs.reg.cfifoctr,
+            => if (self.bulkPipe()) |n| {
+                self.endpoints.control(&self.pipes, n, v);
+            } else {
+                self.control.control(v);
+            },
             regs.reg.brdysts => {
                 self.control.brdy = self.control.brdy and v & 1 != 0;
                 self.endpoints.brdy &= v;

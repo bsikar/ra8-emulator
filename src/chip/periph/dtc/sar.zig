@@ -13,9 +13,9 @@
 //! here does not refuse a Non-secure access to DTCST because this word left
 //! it Secure. The word is modelled so a driver reads back what it wrote
 //! instead of the sparse bus's alternating cell.
+const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const prcr = @import("../prcr.zig");
-const lanes = @import("../lanes.zig");
 
 pub const win_base: u32 = 0x4000_8030;
 pub const win_span: u32 = 0x4;

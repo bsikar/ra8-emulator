@@ -24,14 +24,14 @@
 //! and no undo past it is trustworthy.
 
 const std = @import("std");
+
 const memory = @import("ra8_chip").core.cpu.memory;
+
 const observer = memory.observer;
 const store_mod = memory.store;
-const initiator_mod = memory.initiator;
 const types = @import("trail_types.zig");
 
 const Allocator = std.mem.Allocator;
-const Initiator = initiator_mod.Initiator;
 
 pub const Source = types.Source;
 pub const Core = types.Core;
@@ -140,15 +140,21 @@ pub const Recording = struct {
 
     pub fn deinit(self: *Recording) void {
         self.unlink();
-        for (self.records[0..self.record_count]) |*record| switch (record.*) {
-            .bytes => |*bytes| bytes.deinit(self.allocator),
-            .barrier => {},
-        };
+        for (self.records[0..self.record_count]) |*record| {
+            switch (record.*) {
+                .bytes => |*bytes| bytes.deinit(self.allocator),
+                .barrier => {},
+            }
+        }
         if (self.record_capacity != 0) self.allocator.free(self.records);
         if (self.part_capacity != 0) self.allocator.free(self.parts);
-        for (self.nodes[0..self.node_count]) |node| self.allocator.destroy(node);
+        for (self.nodes[0..self.node_count]) |node| {
+            self.allocator.destroy(node);
+        }
         if (self.node_count != 0) self.allocator.free(self.nodes);
-        for (self.watches[0..self.watch_count]) |one| self.allocator.free(one.label);
+        for (self.watches[0..self.watch_count]) |one| {
+            self.allocator.free(one.label);
+        }
         if (self.watch_count != 0) self.allocator.free(self.watches);
         if (self.hit_count != 0) self.allocator.free(self.hits);
         self.* = undefined;

@@ -9,9 +9,9 @@
 //! Left unclaimed: SP or PC in any register field, RdHi == RdLo
 //! (UNPREDICTABLE), and the other hw2[7:4] rows, which belong to
 //! ops/long.mul.zig (0000) or are unallocated.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
 const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.
@@ -62,8 +62,9 @@ fn formOf(hw1: u16, hw2: u16) ?Form {
         encodings.smlsld => .{ .dual = .{ .subtract = true, .swap = m_top } },
         else => null,
     };
-    if (hw1 == encodings.smlal and hw2 & encodings.halves_mask == encodings.halves)
+    if (hw1 == encodings.smlal and hw2 & encodings.halves_mask == encodings.halves) {
         return .{ .halves = .{ .n_top = hw2 & encodings.n_top != 0, .m_top = m_top } };
+    }
     return null;
 }
 

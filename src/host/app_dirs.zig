@@ -3,8 +3,8 @@
 //! directory, and the runtime directory for sockets. Paths only: nothing
 //! here opens or makes a directory, so a test can ask for any platform's
 //! answer from any host.
-const std = @import("std");
 const builtin = @import("builtin");
+const std = @import("std");
 
 const Env = std.process.Environ.Map;
 
@@ -41,7 +41,18 @@ pub const Error = error{ NoHome, RelativePath } || std.mem.Allocator.Error;
 /// cache directory's `ra8_emulator/history`. The one root that carries a
 /// CACHEDIR.TAG.
 pub fn historyCache(allocator: std.mem.Allocator, env: *const Env, platform: Platform) Error![]u8 {
-    if (try given(env, variables.history, platform)) |base| return join(allocator, platform, &.{ base, names.override });
+    if (try given(
+        env,
+        variables.history,
+        platform,
+    )) |base| return join(
+        allocator,
+        platform,
+        &.{
+            base,
+            names.override,
+        },
+    );
     const base = try cache(allocator, env, platform);
     defer allocator.free(base);
     return join(allocator, platform, &.{ base, names.app, names.history });
@@ -50,7 +61,18 @@ pub fn historyCache(allocator: std.mem.Allocator, env: *const Env, platform: Pla
 /// The kept history root: `$RA8_HISTORY_KEPT_DIR/ra8_history_kept`, else the
 /// data directory's `ra8_emulator/kept_history`. Never roaming on Windows.
 pub fn historyKept(allocator: std.mem.Allocator, env: *const Env, platform: Platform) Error![]u8 {
-    if (try given(env, variables.kept, platform)) |base| return join(allocator, platform, &.{ base, names.kept_override });
+    if (try given(
+        env,
+        variables.kept,
+        platform,
+    )) |base| return join(
+        allocator,
+        platform,
+        &.{
+            base,
+            names.kept_override,
+        },
+    );
     const base = try data(allocator, env, platform);
     defer allocator.free(base);
     return join(allocator, platform, &.{ base, names.app, names.kept });

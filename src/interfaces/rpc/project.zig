@@ -1,12 +1,17 @@
 //! RPC project lifecycle delegates to the same host Project used by the CLI.
+const Ack = @import("session/rpc.zig").Ack;
+const build_wire = @import("build_wire.zig");
+const builds = @import("build.zig");
+const Context = @import("session/handlers.zig").Context;
 const rpc = @import("ra8_rpc_wire");
 const wire = @import("project_wire.zig");
-const builds = @import("build.zig");
-const build_wire = @import("build_wire.zig");
-const Context = @import("session/handlers.zig").Context;
-const Ack = @import("session/rpc.zig").Ack;
 
-pub const routes = .{ .{ @backingInt(wire.Method.open), open }, .{ @backingInt(wire.Method.close), close }, .{ @backingInt(wire.Method.build), start }, .{ @backingInt(wire.Method.prepare), prepare } };
+pub const routes = .{
+    .{ @backingInt(wire.Method.open), open },
+    .{ @backingInt(wire.Method.close), close },
+    .{ @backingInt(wire.Method.build), start },
+    .{ @backingInt(wire.Method.prepare), prepare },
+};
 
 pub fn open(context: *Context, args: wire.Open) rpc.Outcome(Ack) {
     const project = context.project orelse return refuse(Ack, error.Unavailable);
@@ -55,7 +60,11 @@ fn refuse(comptime T: type, err: anyerror) rpc.Outcome(T) {
         error.Unavailable => wire.codes.unavailable,
         error.ProjectNotOpen, error.ProjectAlreadyOpen, error.BuildBusy, error.UnknownBuild => wire.codes.state,
         error.BuildNotSuccessful => wire.codes.failed,
-        error.SourceChanged, error.ArtifactChanged, error.ProjectConfigChanged, error.ProjectFileChanged => wire.codes.changed,
+        error.SourceChanged,
+        error.ArtifactChanged,
+        error.ProjectConfigChanged,
+        error.ProjectFileChanged,
+        => wire.codes.changed,
         else => wire.codes.invalid,
     };
     return .{ .err = @fromBackingInt(code) };

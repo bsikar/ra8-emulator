@@ -12,10 +12,11 @@
 //! How many workers run follows the RAM budget (`Prefetch.Config.forBudget`):
 //! 1 GiB allows several, 512 MiB one, 256 MiB none.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
-const session_api = @import("ra8_session").api;
-const prefetch = @import("ra8_session").history_prefetch;
 pub const ObjectId = @import("ra8_session").history_object_id.ObjectId;
+const prefetch = @import("ra8_session").history_prefetch;
+const session_api = @import("ra8_session").api;
 
 /// How the loads ended since the pool opened.
 pub const Stats = struct {
@@ -77,7 +78,9 @@ pub const Pool = struct {
         self.closing = true;
         self.cond.broadcast(self.io);
         self.mutex.unlock(self.io);
-        for (self.threads[0..count]) |thread| thread.join();
+        for (self.threads[0..count]) |thread| {
+            thread.join();
+        }
     }
 
     /// Workers running; zero when the budget allows none.
@@ -164,7 +167,12 @@ pub const StoreSource = struct {
     fn read(context: *anyopaque, allocator: std.mem.Allocator, object: ObjectId) prefetch.Error![]u8 {
         const self: *StoreSource = @ptrCast(@alignCast(context));
         const name = nameOf(object);
-        const file = self.store.vtable.open(self.store.context, .objects, &name, .read) catch return prefetch.Error.NotFound;
+        const file = self.store.vtable.open(
+            self.store.context,
+            .objects,
+            &name,
+            .read,
+        ) catch return prefetch.Error.NotFound;
         defer file.vtable.close(file.context);
         const len = file.vtable.length(file.context) catch return prefetch.Error.NotFound;
         const buf = allocator.alloc(u8, @intCast(len)) catch return prefetch.Error.OutOfMemory;

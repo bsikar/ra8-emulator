@@ -1,5 +1,10 @@
 //! Exclusive per-job output and evidence directories, never a shared zig-out.
+const builtin = @import("builtin");
+
+const win32 = @import("../win32.zig");
+
 const std = @import("std");
+
 pub const Store = struct {
     dir: std.Io.Dir,
     relative: [44]u8,
@@ -25,10 +30,10 @@ pub const Store = struct {
 };
 
 pub fn hostname(allocator: std.mem.Allocator) ![]const u8 {
-    if (@import("builtin").os.tag == .windows) {
+    if (builtin.os.tag == .windows) {
         var name: [256]u16 = undefined;
         var length: u32 = name.len;
-        if (!@import("../win32.zig").GetComputerNameW(&name, &length).toBool()) return error.HostIdentityUnavailable;
+        if (!win32.GetComputerNameW(&name, &length).toBool()) return error.HostIdentityUnavailable;
         return std.unicode.utf16LeToUtf8Alloc(allocator, name[0..length]);
     }
     var name: [std.posix.HOST_NAME_MAX]u8 = undefined;

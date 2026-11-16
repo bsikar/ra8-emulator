@@ -1,10 +1,11 @@
 //! Fit the CLI's SD card options onto the board's card.
 const std = @import("std");
+
 const Board = @import("ra8_board").board.Board;
-const sd_format = @import("ra8_components").sd_card.format;
-const sd_advice = @import("ra8_components").sd_card.format_advice;
-const sd_image = @import("ra8_components").sd_card.image;
 const disk_file = @import("ra8_host").disk_file;
+const sd_advice = @import("ra8_components").sd_card.format_advice;
+const sd_format = @import("ra8_components").sd_card.format;
+const sd_image = @import("ra8_components").sd_card.image;
 
 /// The label a `--sd-new` format gives the card when the spec names none.
 pub const default_label = "RA8";
@@ -16,10 +17,11 @@ pub fn newSpec(spec: []const u8) !struct { sd_format.Kind, []const u8 } {
     return .{ kind, if (split < spec.len) spec[split + 1 ..] else default_label };
 }
 
+pub const prepareSdhi = @import("ra8_rpc").served_card.prepare;
+
 /// `--sd-image PATH` backs the SDHI card with a raw host image; the card's
 /// RAM store is the overlay, written back over PATH only with `--sd-writable`.
 pub const Sdhi = @import("ra8_rpc").served_card.Options;
-pub const prepareSdhi = @import("ra8_rpc").served_card.prepare;
 
 /// Write the SDHI card back over its image when `--sd-writable` asked.
 pub fn saveSdhi(board: *Board, io: std.Io, sdhi: Sdhi) void {

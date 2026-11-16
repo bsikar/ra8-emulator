@@ -1,14 +1,14 @@
 //! CPU1's run state, apart from whatever runs its instructions (RA8EMU-589).
 //! A Zig CPU1 on its own store (RA8EMU-588) carries one. Everything here
 //! reads and writes CPU1's memory only through a memory.Guest.
+const clocks = @import("../../periph/clocks.zig");
 const fault = @import("../fault.zig");
+const Guest = @import("../cpu/memory/guest/guest.zig").Guest;
 const memmap = @import("../memmap.zig");
 const nvic = @import("../../periph/nvic/nvic.zig");
-const clocks = @import("../../periph/clocks.zig");
-const second_wait = @import("wait.zig");
 const rate = @import("../rate.zig");
+const second_wait = @import("wait.zig");
 const Wiring = @import("wiring.zig").Wiring;
-const Guest = @import("../cpu/memory/guest/guest.zig").Guest;
 
 pub const State = struct {
     /// Where CPU1 stopped at the end of its last turn.

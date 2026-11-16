@@ -2,10 +2,10 @@
 //! design section 11). Both go through the Session's intervention choke
 //! point, so in the recorded past they fork like a write does: the first
 //! fork of a session refuses until branch_confirm_fork confirms it.
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
-const handlers = @import("handlers.zig");
 const api = @import("ra8_session").api;
+const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 
 const AckOutcome = rpc.Outcome(proto.Ack);
 
@@ -24,6 +24,24 @@ pub fn consoleInput(context: *handlers.Context, args: ConsoleInput) AckOutcome {
 /// Steps the core's PC over the BKPT it is stopped on.
 pub fn skipBkpt(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     context.session.skipBkpt(core(args.core)) catch |err| return refuse(err);
+    return .{ .ok = .{ .accepted = 1 } };
+}
+
+/// Restores the whole machine to before the most recent debugger write.
+pub fn undoWrite(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
+    _ = args;
+    if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
+    context.session.undoWrite() catch |err| return refuse(err);
+    context.pending = null;
+    return .{ .ok = .{ .accepted = 1 } };
+}
+
+/// Restores the whole machine's clean image checkpoint.
+pub fn resetImage(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
+    _ = args;
+    if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
+    context.session.resetImage() catch |err| return refuse(err);
+    context.pending = null;
     return .{ .ok = .{ .accepted = 1 } };
 }
 

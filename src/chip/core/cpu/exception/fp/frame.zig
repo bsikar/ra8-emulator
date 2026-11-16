@@ -7,6 +7,7 @@
 //! words (`reserve`); fpu/lazy.zig fills the rest later (RA8EMU-163). The word after FPSCR is VPR on a core with
 //! MVE (RA8EMU-330) and reserved, stacked as 0, on one without.
 const std = @import("std");
+
 const bus = @import("../../bus.zig");
 const frame = @import("../frame.zig");
 
@@ -89,8 +90,14 @@ pub const Popped = struct {
 pub fn pop(from: bus.Bus, at: u32, ts: bool) bus.Error!Popped {
     var all: [words_ts]u32 = undefined;
     const n: usize = if (ts) words_ts else words;
-    for (all[0..n], 0..) |*word, i| word.* = try from.readWord(at +% @as(u32, @intCast(i * 4)));
-    var popped: Popped = .{ .frame = undefined, .fp = .{ .s = undefined, .fpscr = all[slot.fpscr], .vpr = all[slot.vpr] }, .sp = 0 };
+    for (all[0..n], 0..) |*word, i| {
+        word.* = try from.readWord(at +% @as(u32, @intCast(i * 4)));
+    }
+    var popped: Popped = .{
+        .frame = undefined,
+        .fp = .{ .s = undefined, .fpscr = all[slot.fpscr], .vpr = all[slot.vpr] },
+        .sp = 0,
+    };
     @memcpy(&popped.frame, all[0..frame.words]);
     @memcpy(&popped.fp.s, all[slot.s0..slot.fpscr]);
     if (ts) popped.fp.high = all[slot.s16..words_ts].*;

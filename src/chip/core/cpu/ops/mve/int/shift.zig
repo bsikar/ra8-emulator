@@ -5,13 +5,14 @@
 //! (hw2[3:1]) holds the values and Qn (hw1[3:1]) the per-lane shifts. The
 //! saturating forms raise FPSCR.QC only from lanes the VPT block leaves
 //! active. The lane semantics are in src/chip/core/cpu/mve/int/shift/shift.zig.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
 const mve_int = @import("int.zig");
+const op = @import("../../../op.zig");
 const pair = @import("pair.zig");
+
 const Size = mve.qreg.Size;
 const Mode = mve.int.shift.Mode;
 

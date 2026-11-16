@@ -22,10 +22,11 @@
 //!     crc32c: u32 (over header and all records)
 //!     end_magic: [4]u8 = "EDBR"
 const std = @import("std");
+
 const branch_mod = @import("branch.zig");
+const history_format = @import("format.zig");
 const history_position = @import("position.zig");
 const history_record = @import("record.zig");
-const history_format = @import("format.zig");
 
 const Crc32c = std.hash.crc.@"CRC-32/ISCSI";
 

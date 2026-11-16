@@ -13,14 +13,18 @@ const base = [4]u8{ 0xC4, 0xD3, 0xE2, 0xF1 };
 
 pub fn bankAt(i: u5) u32 {
     var w: u32 = 0;
-    for (base, 0..) |b, k| w |= @as(u32, b +% @as(u8, i)) << @intCast(8 * k);
+    for (base, 0..) |b, k| {
+        w |= @as(u32, b +% @as(u8, i)) << @intCast(8 * k);
+    }
     return w;
 }
 
 pub fn qAt(n: u3) u128 {
     var q: u128 = 0;
     var k: u5 = 4;
-    while (k > 0) : (k -= 1) q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    while (k > 0) : (k -= 1) {
+        q = q << 32 | bankAt(@as(u5, n) * 4 + (k - 1));
+    }
     return q;
 }
 
@@ -52,22 +56,62 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 pub const all = to_core ++ to_vector ++ beats ++ unclaimed;
 
 const to_core = [_]V{
-    vec("vmov r0, r1, q0[2], q0[0]", .{ .hw1 = 0xEC01, .hw2 = 0x0F00 }, .{ .q = qAt(0), .rt = 0xF3E4_D5C6, .rt2 = 0xF1E2_D3C4 }),
-    vec("vmov r2, r3, q1[3], q1[1]", .{ .hw1 = 0xEC03, .hw2 = 0x2F12 }, .{ .q = qAt(1), .rt = 0xF8E9_DACB, .rt2 = 0xF6E7_D8C9 }),
-    vec("vmov lr, r12, q7[2], q7[0]", .{ .hw1 = 0xEC0C, .hw2 = 0xEF0E }, .{ .q = qAt(7), .rt = 0x0F00_F1E2, .rt2 = 0x0DFE_EFE0 }),
+    vec(
+        "vmov r0, r1, q0[2], q0[0]",
+        .{ .hw1 = 0xEC01, .hw2 = 0x0F00 },
+        .{ .q = qAt(0), .rt = 0xF3E4_D5C6, .rt2 = 0xF1E2_D3C4 },
+    ),
+    vec(
+        "vmov r2, r3, q1[3], q1[1]",
+        .{ .hw1 = 0xEC03, .hw2 = 0x2F12 },
+        .{ .q = qAt(1), .rt = 0xF8E9_DACB, .rt2 = 0xF6E7_D8C9 },
+    ),
+    vec(
+        "vmov lr, r12, q7[2], q7[0]",
+        .{ .hw1 = 0xEC0C, .hw2 = 0xEF0E },
+        .{ .q = qAt(7), .rt = 0x0F00_F1E2, .rt2 = 0x0DFE_EFE0 },
+    ),
 };
 
 const to_vector = [_]V{
-    vec("vmov q0[2], q0[0], r0, r1", .{ .hw1 = 0xEC11, .hw2 = 0x0F00 }, .{ .q = 0xF4E5D6C7_11111111_F2E3D4C5_22222222 }),
-    vec("vmov q7[3], q7[1], r5, r6", .{ .hw1 = 0xEC16, .hw2 = 0xEF15 }, .{ .q = 0x11111111_0F00F1E2_22222222_0DFEEFE0 }),
-    vec("vmov q0[2], q0[0], r4, r4 writes r4 twice", .{ .hw1 = 0xEC14, .hw2 = 0x0F04 }, .{ .q = 0xF4E5D6C7_22222222_F2E3D4C5_22222222, .rt = 0x2222_2222 }),
+    vec(
+        "vmov q0[2], q0[0], r0, r1",
+        .{ .hw1 = 0xEC11, .hw2 = 0x0F00 },
+        .{ .q = 0xF4E5D6C7_11111111_F2E3D4C5_22222222 },
+    ),
+    vec(
+        "vmov q7[3], q7[1], r5, r6",
+        .{ .hw1 = 0xEC16, .hw2 = 0xEF15 },
+        .{ .q = 0x11111111_0F00F1E2_22222222_0DFEEFE0 },
+    ),
+    vec(
+        "vmov q0[2], q0[0], r4, r4 writes r4 twice",
+        .{ .hw1 = 0xEC14, .hw2 = 0x0F04 },
+        .{ .q = 0xF4E5D6C7_22222222_F2E3D4C5_22222222, .rt = 0x2222_2222 },
+    ),
 };
 
 const beats = [_]V{
-    vec("eci a0 keeps lane 0 and writes lane 2", .{ .hw1 = 0xEC11, .hw2 = 0x0F00, .it = 0x10 }, .{ .q = 0xF4E5D6C7_11111111_F2E3D4C5_F1E2D3C4 }),
-    vec("eci a0a1a2 writes lane 3 only", .{ .hw1 = 0xEC11, .hw2 = 0x0F10, .it = 0x40 }, .{ .q = 0x11111111_F3E4D5C6_F2E3D4C5_F1E2D3C4 }),
-    vec("eci a0a1 reads lane 2 and leaves rt2", .{ .hw1 = 0xEC01, .hw2 = 0x0F00, .it = 0x20 }, .{ .q = qAt(0), .rt = 0xF3E4_D5C6 }),
-    vec("a vpt block is neither applied nor advanced", .{ .hw1 = 0xEC01, .hw2 = 0x0F00, .vpr = 0x0088_0000 }, .{ .q = qAt(0), .rt = 0xF3E4_D5C6, .rt2 = 0xF1E2_D3C4, .vpr = 0x0088_0000 }),
+    vec(
+        "eci a0 keeps lane 0 and writes lane 2",
+        .{ .hw1 = 0xEC11, .hw2 = 0x0F00, .it = 0x10 },
+        .{ .q = 0xF4E5D6C7_11111111_F2E3D4C5_F1E2D3C4 },
+    ),
+    vec(
+        "eci a0a1a2 writes lane 3 only",
+        .{ .hw1 = 0xEC11, .hw2 = 0x0F10, .it = 0x40 },
+        .{ .q = 0x11111111_F3E4D5C6_F2E3D4C5_F1E2D3C4 },
+    ),
+    vec(
+        "eci a0a1 reads lane 2 and leaves rt2",
+        .{ .hw1 = 0xEC01, .hw2 = 0x0F00, .it = 0x20 },
+        .{ .q = qAt(0), .rt = 0xF3E4_D5C6 },
+    ),
+    vec(
+        "a vpt block is neither applied nor advanced",
+        .{ .hw1 = 0xEC01, .hw2 = 0x0F00, .vpr = 0x0088_0000 },
+        .{ .q = qAt(0), .rt = 0xF3E4_D5C6, .rt2 = 0xF1E2_D3C4, .vpr = 0x0088_0000 },
+    ),
 };
 
 const unclaimed = [_]V{

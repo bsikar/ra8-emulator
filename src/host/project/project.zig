@@ -1,12 +1,13 @@
 //! An opened project owns its workspace and current build, never debugger state.
 const std = @import("std");
-const Workspace = @import("../workspace/workspace.zig").Workspace;
+
 const build = @import("../build/root.zig");
 const config = @import("config.zig");
 const files = @import("files.zig");
-const receipt = @import("receipt.zig");
 const handoff = @import("handoff.zig");
+const receipt = @import("receipt.zig");
 const sources = @import("sources.zig");
+const Workspace = @import("../workspace/workspace.zig").Workspace;
 
 pub const Project = struct {
     allocator: std.mem.Allocator,
@@ -36,7 +37,10 @@ pub const Project = struct {
         errdefer self.allocator.free(root_path);
         const config_name = try self.allocator.dupe(u8, name);
         errdefer self.allocator.free(config_name);
-        const compiler = parsed.value.compiler orelse if (self.backend_compiler.len != 0) self.backend_compiler else return error.CompilerRequired;
+        const compiler = parsed.value.compiler orelse if (self.backend_compiler.len != 0)
+            self.backend_compiler
+        else
+            return error.CompilerRequired;
         const runner = try build.Runner.init(self.base.io, dir, compiler);
         self.parsed = parsed;
         self.workspace = .{ .dir = dir, .io = self.base.io };
@@ -75,7 +79,11 @@ pub const Project = struct {
     }
 
     pub fn budget(self: *Project, cancel: *const std.atomic.Value(bool)) build.request.Budget {
-        return .{ .io = self.base.io, .cancel = cancel, .deadline = std.Io.Clock.awake.now(self.base.io).nanoseconds + 5_000_000_000 };
+        return .{
+            .io = self.base.io,
+            .cancel = cancel,
+            .deadline = std.Io.Clock.awake.now(self.base.io).nanoseconds + 5_000_000_000,
+        };
     }
 
     pub fn checkConfig(self: *Project) !void {
@@ -92,7 +100,18 @@ pub const Project = struct {
         defer parsed.deinit();
         const record = parsed.value;
         const selected = self.latest_recipe orelse return error.UnknownBuild;
-        const value: receipt.Receipt = .{ .config_sha256 = &self.config_sha256, .recipe = selected.name, .target = self.parsed.?.value.target, .build_id = id, .directory = record.directory, .artifact = record.artifact, .artifact_sha256 = record.artifact_sha256, .source_sha256 = record.source_sha256, .compiler = record.compiler, .compiler_version = record.compiler_version };
+        const value: receipt.Receipt = .{
+            .config_sha256 = &self.config_sha256,
+            .recipe = selected.name,
+            .target = self.parsed.?.value.target,
+            .build_id = id,
+            .directory = record.directory,
+            .artifact = record.artifact,
+            .artifact_sha256 = record.artifact_sha256,
+            .source_sha256 = record.source_sha256,
+            .compiler = record.compiler,
+            .compiler_version = record.compiler_version,
+        };
         const verified = try self.verify(value);
         self.allocator.free(verified);
         const bytes = try std.json.Stringify.valueAlloc(self.allocator, value, .{});
@@ -106,7 +125,12 @@ pub const Project = struct {
         if (self.parsed == null) return error.ProjectNotOpen;
         const bytes = try files.read(self.allocator, self.base.io, self.workspace.?.dir, name, 32_768);
         defer self.allocator.free(bytes);
-        const parsed = try std.json.parseFromSlice(receipt.Receipt, self.allocator, bytes, .{ .allocate = .alloc_always });
+        const parsed = try std.json.parseFromSlice(
+            receipt.Receipt,
+            self.allocator,
+            bytes,
+            .{ .allocate = .alloc_always },
+        );
         defer parsed.deinit();
         const elf = try self.verify(parsed.value);
         self.bound_source = parsed.value.source_sha256[0..64].*;

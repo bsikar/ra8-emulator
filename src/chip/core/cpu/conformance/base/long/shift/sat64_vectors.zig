@@ -105,7 +105,14 @@ const registers = [_]V{
     reg("sqrshrl +1 of -3", sqrshrl, 1, ones - 2, ones, false),
     reg("sqrshrl -1 saturates high", sqrshrl, 0xFF, 0x4000_0000_0000_0000, 0x7FFF_FFFF_FFFF_FFFF, true),
     reg("sqrshrl +64 of the most positive", sqrshrl, 64, 0x7FFF_FFFF_FFFF_FFFF, 0, false),
-    reg("sqrshrl -128 of the most negative saturates", sqrshrl, 0x80, 0x8000_0000_0000_0000, 0x8000_0000_0000_0000, true),
+    reg(
+        "sqrshrl -128 of the most negative saturates",
+        sqrshrl,
+        0x80,
+        0x8000_0000_0000_0000,
+        0x8000_0000_0000_0000,
+        true,
+    ),
 };
 
 const narrow = [_]V{
@@ -115,9 +122,23 @@ const narrow = [_]V{
     reg("uqrshll sat48 -1 still too wide", uqrshll | sat48, 0xFF, 0x3_0000_0000_0000, 0xFFFF_FFFF_FFFF, true),
     reg("sqrshrl sat48 -4 in range", sqrshrl | sat48, 0xFC, 0x07FF_FFFF_FFFF, 0x7FFF_FFFF_FFF0, false),
     reg("sqrshrl sat48 -1 saturates high", sqrshrl | sat48, 0xFF, 0x4000_0000_0000, 0x7FFF_FFFF_FFFF, true),
-    reg("sqrshrl sat48 -1 reaches the 48-bit minimum", sqrshrl | sat48, 0xFF, 0xFFFF_C000_0000_0000, 0xFFFF_8000_0000_0000, false),
+    reg(
+        "sqrshrl sat48 -1 reaches the 48-bit minimum",
+        sqrshrl | sat48,
+        0xFF,
+        0xFFFF_C000_0000_0000,
+        0xFFFF_8000_0000_0000,
+        false,
+    ),
     reg("sqrshrl sat48 +1 of -3", sqrshrl | sat48, 1, ones - 2, ones, false),
-    reg("sqrshrl sat48 by 0 clamps and sign-extends", sqrshrl | sat48, 0, 0x8000_0000_0000_0000, 0xFFFF_8000_0000_0000, true),
+    reg(
+        "sqrshrl sat48 by 0 clamps and sign-extends",
+        sqrshrl | sat48,
+        0,
+        0x8000_0000_0000_0000,
+        0xFFFF_8000_0000_0000,
+        true,
+    ),
 };
 
 const unclaimed = [_]V{

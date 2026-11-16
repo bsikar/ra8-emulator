@@ -5,48 +5,52 @@
 //! call and encodes the reply. `run` and `step` reply once the run ends and
 //! also queue a `stop` event, which `Host.poll` sends to a subscribed client
 //! after any `uart` events the run produced (RA8EMU-758).
-const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const api = @import("ra8_session").api;
-const transport_mod = @import("ra8_session").transport;
-const handlers = @import("handlers.zig");
-const uart_feed = @import("uart_feed.zig");
-const event_feed = @import("event_feed.zig");
-const lcd_feed = @import("lcd_feed.zig");
-const trace_feed = @import("trace_feed.zig");
-const parts = @import("parts.zig");
-const session_camera = @import("camera.zig");
-const session_advance = @import("advance.zig");
-const session_seek = @import("seek.zig");
-const session_rcont = @import("rcont.zig");
-const session_files = @import("files.zig");
-const session_map = @import("map.zig");
-const session_stack = @import("stack.zig");
-const session_rtc = @import("rtc.zig");
-const session_input = @import("input.zig");
-const session_backtrace = @import("backtrace.zig");
-const session_source_line = @import("source_line.zig");
-const session_locals = @import("locals.zig");
-const session_periph = @import("periph.zig");
-const session_folded = @import("folded.zig");
-const session_chunks = @import("load_chunks.zig");
-const session_branch = @import("branch.zig");
-const session_intervene = @import("intervene.zig");
-const session_nav = @import("nav_handlers.zig");
-const rewind_feed = @import("rewind_feed.zig");
-const workspace = @import("../workspace.zig");
-const workspace_wire = @import("../workspace_wire.zig");
-const workspace_watch = @import("../workspace_watch.zig");
+const artifact_handlers = @import("../artifacts/handlers.zig");
+const artifact_wire = @import("../artifacts/wire.zig");
 const build = @import("../build.zig");
 const build_wire = @import("../build_wire.zig");
+const event_feed = @import("event_feed.zig");
+const handlers = @import("handlers.zig");
+const lcd_feed = @import("lcd_feed.zig");
+const parts = @import("parts.zig");
 const project = @import("../project.zig");
 const project_wire = @import("../project_wire.zig");
-const session_marker = @import("nav_marker.zig");
+const proto = @import("rpc.zig");
+const rewind_feed = @import("rewind_feed.zig");
+const rpc = @import("ra8_rpc_wire");
+const session_advance = @import("advance.zig");
+const session_backtrace = @import("backtrace.zig");
+const session_branch = @import("branch.zig");
+const session_camera = @import("camera.zig");
+const session_chunks = @import("load_chunks.zig");
 const session_diff = @import("diff.zig");
-const session_set_var = @import("set_var.zig");
+const session_disasm = @import("disasm.zig");
+const session_files = @import("files.zig");
+const session_folded = @import("folded.zig");
+const session_input = @import("input.zig");
+const session_intervene = @import("intervene.zig");
+const session_locals = @import("locals.zig");
+const session_map = @import("map.zig");
+const session_marker = @import("nav_marker.zig");
 pub const session_metrics = @import("metrics.zig");
-pub const session_disasm = @import("disasm.zig");
+const session_nav = @import("nav_handlers.zig");
+const session_periph = @import("periph.zig");
+const session_rcont = @import("rcont.zig");
+const session_rtc = @import("rtc.zig");
+const session_seek = @import("seek.zig");
+const session_set_var = @import("set_var.zig");
+const session_source_line = @import("source_line.zig");
+const session_stack = @import("stack.zig");
+const targets = @import("../targets.zig");
+const targets_wire = @import("../targets_wire.zig");
+const trace_feed = @import("trace_feed.zig");
+const transport_mod = @import("ra8_session").transport;
+const uart_feed = @import("uart_feed.zig");
+const workspace = @import("../workspace.zig");
+const workspace_watch = @import("../workspace_watch.zig");
+const workspace_wire = @import("../workspace_wire.zig");
 
 /// The framing library, for callers that only import the emulator.
 pub const rpc_lib = rpc;
@@ -113,6 +117,8 @@ const session_routes = .{
     .{ @backingInt(M.branch_status), session_branch.branchStatus },
     .{ @backingInt(M.console_input), session_intervene.consoleInput },
     .{ @backingInt(M.skip_bkpt), session_intervene.skipBkpt },
+    .{ @backingInt(M.undo_write), session_intervene.undoWrite },
+    .{ @backingInt(M.reset_image), session_intervene.resetImage },
     .{ @backingInt(M.play), session_nav.play },
     .{ @backingInt(M.nav_query), session_nav.navQuery },
     .{ @backingInt(M.marker_set), session_marker.markerSet },
@@ -122,7 +128,8 @@ const session_routes = .{
     .{ @backingInt(M.disasm), session_disasm.disasm },
 };
 
-pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes;
+pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++
+    artifact_handlers.routes ++ targets.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
 
@@ -147,6 +154,8 @@ pub const Host = struct {
         if (context.workspace != null) caps |= workspace_wire.capability;
         if (context.build_runner != null) caps |= build_wire.capability;
         if (context.project != null) caps |= project_wire.capability;
+        if (context.artifacts != null) caps |= artifact_wire.capability;
+        if (context.targets != null) caps |= targets_wire.capability;
 
         return .{ .server = Server.init(wire, rx, context, caps) };
     }
@@ -161,6 +170,7 @@ pub const Host = struct {
     pub fn poll(self: *Host, tx: []u8) anyerror!rpc.Step {
         const step = try self.server.poll(tx);
         const context = self.server.context;
+        if (context.artifacts) |service| if (service.pending != null) return step;
         try pumpFeeds(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;

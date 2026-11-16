@@ -1,9 +1,11 @@
 //! One explicitly opened host workspace. Descendants never follow symlinks.
 const std = @import("std");
-pub const path = @import("path.zig");
+
 pub const entry = @import("entry.zig");
 pub const observation = @import("observe.zig");
+pub const path = @import("path.zig");
 const saving = @import("save.zig");
+
 pub const Version = entry.Version;
 pub const Entry = entry.Entry;
 pub const max_file_bytes = 262_144;
@@ -45,7 +47,11 @@ pub const Workspace = struct {
         const kind = (try entry.at(parent.dir, self.io, parent.name)).kind;
         if (kind == .missing) return error.FileNotFound;
         if (kind != .file) return error.NotFile;
-        const file = try parent.dir.openFile(self.io, parent.name, .{ .allow_directory = false, .follow_symlinks = false });
+        const file = try parent.dir.openFile(
+            self.io,
+            parent.name,
+            .{ .allow_directory = false, .follow_symlinks = false },
+        );
         defer file.close(self.io);
         const before = try entry.version(try file.stat(self.io));
         if (before.kind != .file) return error.NotFile;

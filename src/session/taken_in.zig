@@ -20,6 +20,7 @@
 //! a narrower window, not a longer list.
 
 const std = @import("std");
+
 const elf = @import("ra8_board").image.elf;
 const symbols = @import("symbols.zig");
 

@@ -16,17 +16,18 @@
 //! the three rounding modes of OFM_PRECISION b[15:14]. Anything else is
 //! error.OperatorNotModelled.
 const std = @import("std");
-const regs = @import("regs.zig");
+
+const addr = @import("addr.zig");
+const conv = @import("conv.zig");
 const dma = @import("dma.zig");
 const fm = @import("fm.zig");
-const quant = @import("quant.zig");
-const addr = @import("addr.zig");
 const minmax = @import("minmax.zig");
-const pool = @import("pool.zig");
-const conv = @import("conv.zig");
-const weights = @import("weights.zig");
 const order = @import("order.zig");
+const pool = @import("pool.zig");
+const quant = @import("quant.zig");
+const regs = @import("regs.zig");
 const round = @import("round.zig");
+const weights = @import("weights.zig");
 
 pub const Error = minmax.Error || error{ BadWeights, BadScales, OutOfMemory };
 
@@ -108,7 +109,14 @@ fn params(inputs: Inputs, rounding: round.Rounding, depthwise: bool) conv.Params
 }
 
 /// Read `len` bytes at `offset` in `region` into a new buffer.
-fn readBlock(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regions, region: u16, offset: u64, len: u64) Error![]u8 {
+fn readBlock(
+    gpa: std.mem.Allocator,
+    memory: anytype,
+    regions: *const dma.Regions,
+    region: u16,
+    offset: u64,
+    len: u64,
+) Error![]u8 {
     if (len > std.math.maxInt(u32)) return error.AddressTooHigh;
     const bytes = try gpa.alloc(u8, @intCast(len));
     errdefer gpa.free(bytes);
@@ -118,10 +126,26 @@ fn readBlock(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Region
 }
 
 /// Decode the weight stream into OHWI order for `p`.
-fn loadWeights(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regions, inputs: Inputs, p: conv.Params) Error![]i16 {
-    const stream = try readBlock(gpa, memory, regions, inputs.conv.weight_region, inputs.bases.weight_base, inputs.bases.weight_length);
+fn loadWeights(
+    gpa: std.mem.Allocator,
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: Inputs,
+    p: conv.Params,
+) Error![]i16 {
+    const stream = try readBlock(
+        gpa,
+        memory,
+        regions,
+        inputs.conv.weight_region,
+        inputs.bases.weight_base,
+        inputs.bases.weight_length,
+    );
     defer gpa.free(stream);
-    const decoded = weights.decode(gpa, stream) catch |why| return if (why == error.OutOfMemory) error.OutOfMemory else error.BadWeights;
+    const decoded = weights.decode(gpa, stream) catch |why| return if (why == error.OutOfMemory)
+        error.OutOfMemory
+    else
+        error.BadWeights;
     defer gpa.free(decoded);
     const ifm_depth: u32 = if (p.depthwise) 1 else p.ifm.depth;
     const layout = order.Layout{
@@ -130,7 +154,12 @@ fn loadWeights(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regi
         .kernel_width = p.kernel_width,
         .ifm_depth = ifm_depth,
         .ofm_block_depth = @as(u32, inputs.conv.ofm_blk_depth_m1) + 1,
-        .traversal = if (p.depthwise) .depthwise else if (inputs.kernel.stride & part_kernel_first != 0) .part_kernel_first else .depth_first,
+        .traversal = if (p.depthwise)
+            .depthwise
+        else if (inputs.kernel.stride & part_kernel_first != 0)
+            .part_kernel_first
+        else
+            .depth_first,
     };
     const ohwi = try gpa.alloc(i16, p.ofm.depth * p.kernel_height * p.kernel_width * ifm_depth);
     errdefer gpa.free(ohwi);
@@ -140,32 +169,67 @@ fn loadWeights(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regi
 
 /// Gather the IFM the convolution reads into packed NHWC, or scatter the
 /// packed OFM back to its region (`write`).
-fn move(memory: anytype, regions: *const dma.Regions, tiles: regs.Tiles, map: fm.Map, stride: quant.Stride, shape: conv.Shape, f: addr.Format, buffer: []i8, write: bool) Error!void {
+fn move(
+    memory: anytype,
+    regions: *const dma.Regions,
+    tiles: regs.Tiles,
+    map: fm.Map,
+    stride: quant.Stride,
+    shape: conv.Shape,
+    f: addr.Format,
+    buffer: []i8,
+    write: bool,
+) Error!void {
     var index: usize = 0;
     for (0..shape.height) |y| for (0..shape.width) |x| for (0..shape.depth) |c| {
-        const at = try minmax.location(regions, map.region, addr.address(tiles, map, stride, f, @intCast(y), @intCast(x), @intCast(c)), 1);
-        if (write) try minmax.store(memory, at, buffer[index], f) else buffer[index] = @intCast(try minmax.load(memory, at, f));
+        const at = try minmax.location(
+            regions,
+            map.region,
+            addr.address(tiles, map, stride, f, @intCast(y), @intCast(x), @intCast(c)),
+            1,
+        );
+        if (write) {
+            try minmax.store(memory, at, buffer[index], f);
+        } else {
+            buffer[index] = @intCast(try minmax.load(memory, at, f));
+        }
         index += 1;
     };
 }
 
 /// Run one NPU_OP_CONV (or NPU_OP_DEPTHWISE, `depthwise`) over the whole
 /// OFM. Returns the elements written.
-pub fn run(gpa: std.mem.Allocator, memory: anytype, regions: *const dma.Regions, inputs: Inputs, depthwise: bool) Error!u64 {
+pub fn run(
+    gpa: std.mem.Allocator,
+    memory: anytype,
+    regions: *const dma.Regions,
+    inputs: Inputs,
+    depthwise: bool,
+) Error!u64 {
     const p = params(inputs, try supported(inputs), depthwise);
     const maps = inputs.maps;
     const ifm_f = addr.ifmFormat(maps.ifm.precision).?;
     const ofm_f = addr.ofmFormat(maps.ofm.precision).?;
     const ohwi = try loadWeights(gpa, memory, regions, inputs, p);
     defer gpa.free(ohwi);
-    const records = try readBlock(gpa, memory, regions, inputs.quant.scale_region, inputs.bases.scale_base, inputs.bases.scale_length);
+    const records = try readBlock(
+        gpa,
+        memory,
+        regions,
+        inputs.quant.scale_region,
+        inputs.bases.scale_base,
+        inputs.bases.scale_length,
+    );
     defer gpa.free(records);
     const ifm = try gpa.alloc(i8, p.ifm.len());
     defer gpa.free(ifm);
     const ofm = try gpa.alloc(i8, p.ofm.len());
     defer gpa.free(ofm);
     try move(memory, regions, inputs.bases.ifm, maps.ifm, inputs.quant.ifm_stride, p.ifm, ifm_f, ifm, false);
-    conv.run(p, ifm, ohwi, records, ofm) catch |why| return if (why == error.MissingRecord) error.BadScales else error.OperatorNotModelled;
+    conv.run(p, ifm, ohwi, records, ofm) catch |why| return if (why == error.MissingRecord)
+        error.BadScales
+    else
+        error.OperatorNotModelled;
     try move(memory, regions, inputs.bases.ofm, maps.ofm, inputs.quant.ofm_stride, p.ofm, ofm_f, ofm, true);
     return ofm.len;
 }

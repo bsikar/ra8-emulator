@@ -1,9 +1,9 @@
 //! Text for the extend_b16 group: SXTB16/UXTB16 and SXTAB16/UXTAB16.
 //! These have no 16-bit forms, so we print no .w; a nonzero rotation
 //! prints as ", ror #8|16|24" in decimal.
+const Fields = @import("../../ops/extend/b16.zig").Fields;
 const Instr = @import("../../instr.zig").Instr;
 const text = @import("../text.zig");
-const Fields = @import("../../ops/extend/b16.zig").Fields;
 
 pub fn print(instr: Instr, out: *text.Text) void {
     const f = Fields.of(instr).?;

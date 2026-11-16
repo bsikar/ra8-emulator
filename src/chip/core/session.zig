@@ -13,15 +13,14 @@
 //! a copy, so the caller still owns the thing and can ask it afterwards
 //! what happened during the run.
 const clocks = @import("../periph/clocks.zig");
-const nvic = @import("../periph/nvic/nvic.zig");
-const mpu_guard = @import("mpu_guard.zig");
-const reboot = @import("reboot.zig");
-const stop = @import("stop.zig");
-const until = @import("until.zig");
-const undefined_ops = @import("undefined_ops.zig");
 const fault = @import("fault.zig");
 const idle = @import("idle.zig");
-const bus_fault = @import("../periph/bus_fault.zig");
+const mpu_guard = @import("mpu_guard.zig");
+const nvic = @import("../periph/nvic/nvic.zig");
+const reboot = @import("reboot.zig");
+const stop = @import("stop.zig");
+const undefined_ops = @import("undefined_ops.zig");
+const until = @import("until.zig");
 
 /// Records the invalid access behind a fault.
 pub const Watch = fault.Watch;

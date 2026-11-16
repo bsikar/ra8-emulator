@@ -5,9 +5,10 @@
 //! at the closed round, so the picture is a function of the run alone,
 //! never of a worker thread's timing or the tap's host-time rate cap.
 const std = @import("std");
-const state = @import("../board/state.zig");
+
 const checkpoint_picture = @import("../history/checkpoint_picture.zig");
 const frame_crop = @import("../history/frame_crop.zig");
+const state = @import("../board/state.zig");
 
 /// The source over the run's files (which reach the board lazily, at
 /// the first checkpoint).
@@ -17,7 +18,11 @@ pub fn source(files: *state.Files) checkpoint_picture.Source {
 
 /// The gray panel at `at`, or null when the display shows nothing (off,
 /// unpowered, no layer, unclocked).
-fn lastScan(context: *anyopaque, allocator: std.mem.Allocator, at: checkpoint_picture.Position) anyerror!?checkpoint_picture.Decoded {
+fn lastScan(
+    context: *anyopaque,
+    allocator: std.mem.Allocator,
+    at: checkpoint_picture.Position,
+) anyerror!?checkpoint_picture.Decoded {
     const files: *state.Files = @ptrCast(@alignCast(context));
     const display = &files.board.display;
     const width = display.panelWidth();

@@ -4,13 +4,14 @@
 //! active execution line, orders them by canonical position, and supplies them
 //! to the session to be re-applied at their exact positions without re-recording.
 const std = @import("std");
+
+const action_codec = @import("action_codec.zig");
 const branch_mod = @import("branch.zig");
+const c6_landing = @import("c6_landing.zig");
+const fork_router_mod = @import("fork_router.zig");
 const position_mod = @import("position.zig");
 const record_mod = @import("record.zig");
 const replay_mod = @import("replay.zig");
-const fork_router_mod = @import("fork_router.zig");
-const action_codec = @import("action_codec.zig");
-const c6_landing = @import("c6_landing.zig");
 
 pub const Action = fork_router_mod.Action;
 pub const Position = position_mod.Position;
@@ -80,15 +81,21 @@ pub const ReplayFeeder = struct {
         self.items.deinit(self.allocator);
         self.items = std.ArrayList(ScheduledIntervention).empty;
         self.cursor = 0;
-        for (self.frames.items) |frame| self.allocator.free(frame.body);
+        for (self.frames.items) |frame| {
+            self.allocator.free(frame.body);
+        }
         self.frames.deinit(self.allocator);
         self.frames = .empty;
         self.frame_cursor = 0;
-        for (self.traffic.items) |item| self.allocator.free(item.body);
+        for (self.traffic.items) |item| {
+            self.allocator.free(item.body);
+        }
         self.traffic.deinit(self.allocator);
         self.traffic = .empty;
         self.traffic_cursor = 0;
-        for (self.c6.items) |item| self.allocator.free(item.body);
+        for (self.c6.items) |item| {
+            self.allocator.free(item.body);
+        }
         self.c6.deinit(self.allocator);
         self.c6 = .empty;
         self.c6_cursor = 0;
@@ -98,7 +105,15 @@ pub const ReplayFeeder = struct {
     /// or null when none is due. Taking it consumes it. A frame recorded
     /// for a position already passed was missed: it is returned flagged, so
     /// the caller can fail the replay rather than skip it.
-    pub fn takeLanding(self: *ReplayFeeder, pos: Position, site: u8, ordinal: u32) ?struct { body: []const u8, missed: bool } {
+    pub fn takeLanding(
+        self: *ReplayFeeder,
+        pos: Position,
+        site: u8,
+        ordinal: u32,
+    ) ?struct {
+        body: []const u8,
+        missed: bool,
+    } {
         if (self.c6_cursor >= self.c6.items.len) return null;
         const next = self.c6.items[self.c6_cursor];
         switch (branch_mod.scalarOrder(next.position, pos)) {
@@ -311,7 +326,19 @@ fn visitRecord(ctx: *ScanContext, entry: replay_mod.Entry) anyerror!void {
 
 fn replayable(what: Intervention.What) bool {
     return switch (what) {
-        .tap, .button, .keystroke, .register_write, .memory_write, .plug, .unplug, .fault, .camera_change, .skip_bkpt, .load => true,
+        .tap,
+        .button,
+        .keystroke,
+        .register_write,
+        .memory_write,
+        .plug,
+        .unplug,
+        .fault,
+        .camera_change,
+        .skip_bkpt,
+        .load,
+        .state_restore,
+        => true,
         else => false,
     };
 }

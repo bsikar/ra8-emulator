@@ -1,0 +1,66 @@
+name: lint
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12.10'
+
+      - name: Install verified Zig 0.17.0
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $platform = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
+            if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
+          } else { 'x86_64-linux' }
+          $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
+          $expected = @{
+            'x86_64-windows' = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+            'x86_64-linux' = '1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026'
+            'aarch64-macos' = 'b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a'
+            'x86_64-macos' = '4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6'
+          }[$platform]
+          $archive = Join-Path $env:RUNNER_TEMP "debug-zig.$extension"
+          curl -fsSL --retry 3 -o $archive "https://ziglang.org/download/0.17.0/zig-$platform-0.17.0.$extension"
+          if ($LASTEXITCODE -ne 0) { throw 'Zig download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Zig SHA256 mismatch' }
+          $destination = Join-Path $env:RUNNER_TEMP 'debug-zig'
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+          tar -xf $archive -C $destination
+          if ($LASTEXITCODE -ne 0) { throw 'Zig extraction failed' }
+          Join-Path $destination "zig-$platform-0.17.0" | Add-Content -Path $env:GITHUB_PATH
+
+      - name: Lint-rule and baseline regression tests
+        shell: pwsh
+        run: |
+          zig build lint-test -j1
+          if ($LASTEXITCODE -ne 0) { throw 'Lint regression tests failed' }
+
+      - name: Reject new backend lint findings
+        shell: pwsh
+        run: |
+          zig build lint -j1
+          if ($LASTEXITCODE -ne 0) { throw 'Backend lint failed' }

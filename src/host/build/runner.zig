@@ -1,7 +1,13 @@
 //! One active backend build, with an explicit compiler and connection ownership.
+const builtin = @import("builtin");
+
+const process = @import("process.zig");
+
 const std = @import("std");
+
 const Job = @import("job.zig").Job;
 const request = @import("request.zig");
+
 const heap = std.heap.page_allocator;
 pub const Runner = struct {
     io: std.Io,
@@ -11,16 +17,19 @@ pub const Runner = struct {
     job: ?*Job = null,
 
     pub fn init(io: std.Io, root: std.Io.Dir, compiler: []const u8) !Runner {
-        if (!@import("process.zig").supported) return error.UnsupportedPlatform;
+        if (!process.supported) return error.UnsupportedPlatform;
         try validateCompiler(compiler);
         return .{ .io = io, .root = root, .compiler = compiler };
     }
 
     pub fn validateCompiler(compiler: []const u8) !void {
-        if (!std.fs.path.isAbsolute(compiler) or compiler.len > 4096 or std.mem.indexOfScalar(u8, compiler, 0) != null) return error.InvalidCompiler;
+        if (!std.fs.path.isAbsolute(compiler) or
+            compiler.len > 4096 or
+            std.mem.indexOfScalar(u8, compiler, 0) != null) return error.InvalidCompiler;
         // A Windows rooted path such as /tools/zig.exe depends on the current
         // drive. Pin the drive or UNC share as well as the path beneath it.
-        if (@import("builtin").os.tag == .windows and std.fs.path.diskDesignatorWindows(compiler).len == 0) return error.InvalidCompiler;
+        if (builtin.os.tag == .windows and
+            std.fs.path.diskDesignatorWindows(compiler).len == 0) return error.InvalidCompiler;
     }
 
     pub fn start(self: *Runner, asked: request.Request) !u64 {
@@ -32,7 +41,14 @@ pub const Runner = struct {
         errdefer arena.deinit();
         const recipe = try request.parse(arena.allocator(), asked);
         const compiler = try arena.allocator().dupe(u8, self.compiler);
-        job.* = .{ .arena = arena, .io = self.io, .root = self.root, .compiler = compiler, .recipe = recipe, .id = self.next_id };
+        job.* = .{
+            .arena = arena,
+            .io = self.io,
+            .root = self.root,
+            .compiler = compiler,
+            .recipe = recipe,
+            .id = self.next_id,
+        };
         job.thread = try std.Thread.spawn(.{}, Job.run, .{job});
         self.clear();
         self.job = job;

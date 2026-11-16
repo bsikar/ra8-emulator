@@ -8,6 +8,11 @@
             .url = "https://github.com/bsikar/ra8-firmware/archive/c258cd9326b2c3f4a64cf81c8211a3ff88dbfd6b.tar.gz",
             .hash = "ra8_firmware-0.1.0-HagwjdUPCwr40zx3eP1hnxDxA5eV-6kdq36QOJKZ2yN1",
         },
+        .zlinter = .{
+            .url = "https://github.com/KurtWagner/zlinter/archive/625c00333d1c28fb102bd7f83e38bc40ba0be137.tar.gz",
+            .hash = "zlinter-0.0.1-OjQ08ftpFgDQ3g8eA9mvbFIp_JMCkR91eyYGKXEGCiJc",
+            .lazy = true,
+        },
     },
     .paths = .{ "build.zig", "build_tests.zig", "build.zig.zon", "src", "tools", "tests", "docs" },
 }

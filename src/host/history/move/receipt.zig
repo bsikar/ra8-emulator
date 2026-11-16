@@ -1,8 +1,12 @@
 //! Immutable per-directory intent and destination provenance. Empty
 //! directories without this proof are never adopted or removed.
+const intent = @import("intent.zig");
+
 const std = @import("std");
-const h = @import("../root.zig");
+
 const file = @import("file.zig");
+const h = @import("../root.zig");
+
 pub const origin = "move-origin";
 pub const ready = "move-ready";
 pub const max_bytes = 1024 * 1024;
@@ -26,7 +30,10 @@ pub const Record = struct {
 };
 
 pub fn internal(leaf: []const u8) bool {
-    return std.mem.eql(u8, leaf, h.layout.files.moving) or std.mem.eql(u8, leaf, @import("intent.zig").note) or std.mem.eql(u8, leaf, origin) or std.mem.eql(u8, leaf, ready);
+    return std.mem.eql(u8, leaf, h.layout.files.moving) or
+        std.mem.eql(u8, leaf, intent.note) or
+        std.mem.eql(u8, leaf, origin) or
+        std.mem.eql(u8, leaf, ready);
 }
 
 pub fn read(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, leaf: []const u8) !std.json.Parsed(Record) {
@@ -60,7 +67,9 @@ pub fn write(allocator: std.mem.Allocator, io: std.Io, dir: std.Io.Dir, leaf: []
 
 fn validate(record: Record) !void {
     if (record.version != 1 or !h.name.isId(&record.nonce) or record.host.len == 0) return error.BadReceipt;
-    if (record.from_parent.kind != .directory or record.to_parent.kind != .directory or record.source.kind != .directory) return error.BadReceipt;
+    if (record.from_parent.kind != .directory or
+        record.to_parent.kind != .directory or
+        record.source.kind != .directory) return error.BadReceipt;
     if (record.marker.kind != .file or record.marker.links != 1) return error.BadReceipt;
     if (record.target) |target| if (target.kind != .directory) return error.BadReceipt;
     _ = try h.name.component(record.from);
@@ -74,30 +83,56 @@ fn validate(record: Record) !void {
         for (record.entries[0..index]) |prior| if (std.mem.eql(u8, prior.name, entry.name)) return error.BadReceipt;
     }
     for (record.internal) |entry| {
-        if (!internal(entry.name) or std.mem.eql(u8, entry.name, h.layout.files.moving) or entry.id.kind != .file or entry.id.links != 1) return error.BadReceipt;
+        if (!internal(entry.name) or
+            std.mem.eql(u8, entry.name, h.layout.files.moving) or
+            entry.id.kind != .file or
+            entry.id.links != 1) return error.BadReceipt;
     }
 }
 
-pub fn scope(record: Record, source_parent: std.Io.Dir, from: []const u8, target_parent: std.Io.Dir, to: []const u8) !void {
+pub fn scope(
+    record: Record,
+    source_parent: std.Io.Dir,
+    from: []const u8,
+    target_parent: std.Io.Dir,
+    to: []const u8,
+) !void {
     if (!std.mem.eql(u8, from, record.from) or !std.mem.eql(u8, to, record.to)) return error.IdentityConflict;
-    if (!record.from_parent.same(try file.here(source_parent)) or !record.to_parent.same(try file.here(target_parent))) return error.IdentityConflict;
+    if (!record.from_parent.same(try file.here(source_parent)) or
+        !record.to_parent.same(try file.here(target_parent))) return error.IdentityConflict;
     if (!record.source.same(try file.state(source_parent, from))) return error.IdentityConflict;
 }
 
 pub fn pair(source: Record, target: Record, actual: file.State) !void {
     const bound = target.target orelse return error.BadReceipt;
     if (!bound.same(actual) or !source.source.same(target.source)) return error.IdentityConflict;
-    if (!std.mem.eql(u8, &source.nonce, &target.nonce) or !std.mem.eql(u8, source.host, target.host)) return error.IdentityConflict;
-    if (!source.from_parent.same(target.from_parent) or !source.to_parent.same(target.to_parent)) return error.IdentityConflict;
-    if (!std.mem.eql(u8, source.from, target.from) or !std.mem.eql(u8, source.to, target.to) or !std.mem.eql(u8, source.purpose, target.purpose)) return error.IdentityConflict;
+    if (!std.mem.eql(u8, &source.nonce, &target.nonce) or
+        !std.mem.eql(u8, source.host, target.host)) return error.IdentityConflict;
+    if (!source.from_parent.same(target.from_parent) or
+        !source.to_parent.same(target.to_parent)) return error.IdentityConflict;
+    if (!std.mem.eql(u8, source.from, target.from) or
+        !std.mem.eql(u8, source.to, target.to) or
+        !std.mem.eql(u8, source.purpose, target.purpose)) return error.IdentityConflict;
     if (!std.mem.eql(u8, source.to_path, target.to_path)) return error.IdentityConflict;
     if (source.entries.len != target.entries.len) return error.IdentityConflict;
-    for (source.entries, target.entries) |a, b| if (!std.mem.eql(u8, a.name, b.name) or !a.id.same(b.id)) return error.IdentityConflict;
-    if (!std.mem.eql(u8, source.owner_host, target.owner_host) or source.internal.len != target.internal.len) return error.IdentityConflict;
-    for (source.internal, target.internal) |a, b| if (!std.mem.eql(u8, a.name, b.name) or !a.id.same(b.id)) return error.IdentityConflict;
+    for (source.entries, target.entries) |a, b| if (!std.mem.eql(u8, a.name, b.name) or
+        !a.id.same(b.id)) return error.IdentityConflict;
+    if (!std.mem.eql(u8, source.owner_host, target.owner_host) or
+        source.internal.len != target.internal.len) return error.IdentityConflict;
+    for (source.internal, target.internal) |a, b| if (!std.mem.eql(u8, a.name, b.name) or
+        !a.id.same(b.id)) return error.IdentityConflict;
 }
 
-pub fn start(allocator: std.mem.Allocator, io: std.Io, source_parent: std.Io.Dir, from: []const u8, target_parent: std.Io.Dir, to: []const u8, purpose: []const u8, nonce: ?h.name.Id) !void {
+pub fn start(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    source_parent: std.Io.Dir,
+    from: []const u8,
+    target_parent: std.Io.Dir,
+    to: []const u8,
+    purpose: []const u8,
+    nonce: ?h.name.Id,
+) !void {
     _ = try h.name.component(from);
     _ = try h.name.component(to);
     var source = try source_parent.openDir(io, from, .{ .iterate = true, .follow_symlinks = false });
@@ -128,7 +163,10 @@ pub fn start(allocator: std.mem.Allocator, io: std.Io, source_parent: std.Io.Dir
     var path: [std.fs.max_path_bytes]u8 = undefined;
     const path_len = try target_parent.realPath(io, &path);
     const found = h.name.classify(from);
-    const token = nonce orelse if (found.id.len != 0) try h.lease.nonce(io, source_parent, found.id) else h.name.newId(io);
+    const token = nonce orelse if (found.id.len != 0)
+        try h.lease.nonce(io, source_parent, found.id)
+    else
+        h.name.newId(io);
     try write(allocator, io, source, h.layout.files.moving, .{
         .version = 1,
         .nonce = token,
@@ -156,7 +194,14 @@ pub fn anchorName(buffer: *[h.name.limits.component]u8, from: []const u8) ![]con
 /// Recovery-only alias read. Ordinary owner metadata still requires one
 /// link. Exactly the recorded inode, both names, and this nonce-bound target
 /// proof authorize the transient two-link state.
-pub fn localOwner(allocator: std.mem.Allocator, io: std.Io, source_parent: std.Io.Dir, from: []const u8, target_parent: std.Io.Dir, to: []const u8) !bool {
+pub fn localOwner(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    source_parent: std.Io.Dir,
+    from: []const u8,
+    target_parent: std.Io.Dir,
+    to: []const u8,
+) !bool {
     var source = try source_parent.openDir(io, from, .{ .follow_symlinks = false });
     defer source.close(io);
     const parsed = try read(allocator, io, source, h.layout.files.moving);
@@ -165,7 +210,9 @@ pub fn localOwner(allocator: std.mem.Allocator, io: std.Io, source_parent: std.I
     try scope(record, source_parent, from, target_parent, to);
     var host: [h.machine.limits.host]u8 = undefined;
     const local = h.machine.hostName(&host);
-    if (std.mem.eql(u8, local, h.machine.unknown) or !std.mem.eql(u8, local, record.host) or !std.mem.eql(u8, local, record.owner_host)) return false;
+    if (std.mem.eql(u8, local, h.machine.unknown) or
+        !std.mem.eql(u8, local, record.host) or
+        !std.mem.eql(u8, local, record.owner_host)) return false;
     var expected: ?file.State = null;
     for (record.entries) |entry| if (std.mem.eql(u8, entry.name, h.layout.files.owner)) {
         expected = entry.id;

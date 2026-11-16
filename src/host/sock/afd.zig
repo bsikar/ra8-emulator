@@ -1,6 +1,7 @@
 //! Native operations on std.Io.net's Windows AFD handles. The caller owns
 //! the handle; every batch is canceled and drained before its buffers die.
 const std = @import("std");
+
 const windows = std.os.windows;
 
 pub const limits = struct {
@@ -13,7 +14,6 @@ pub const Error = error{ SystemResources, Timeout, ConnectionReset, BrokenPipe, 
 
 const Events = struct {
     const receive: u32 = 0x0001;
-    const send: u32 = 0x0004;
     const disconnect: u32 = 0x0008;
     const abort: u32 = 0x0010;
     const local_close: u32 = 0x0020;
@@ -49,10 +49,25 @@ pub fn wait(io: std.Io, handle: windows.HANDLE, ms: i32) Error!Ready {
         .timeout = if (ms < 0) std.math.maxInt(i64) else -@as(i64, ms) * 10_000,
         .count = 1,
         .exclusive = 0,
-        .handles = .{.{ .handle = handle, .events = Events.receive | Events.accept | Events.closed, .status = .SUCCESS }},
+        .handles = .{
+            .{
+                .handle = handle,
+                .events = Events.receive | Events.accept | Events.closed,
+                .status = .SUCCESS,
+            },
+        },
     };
-    const timeout: std.Io.Timeout = if (ms < 0) .none else .{ .duration = .{ .raw = .fromMilliseconds(@as(i64, ms) + 500), .clock = .awake } };
-    const result = try control(io, handle, windows.IOCTL.AFD.POLL, std.mem.asBytes(&info), std.mem.asBytes(&info), timeout);
+    const timeout: std.Io.Timeout = if (ms < 0) .none else .{
+        .duration = .{ .raw = .fromMilliseconds(@as(i64, ms) + 500), .clock = .awake },
+    };
+    const result = try control(
+        io,
+        handle,
+        windows.IOCTL.AFD.POLL,
+        std.mem.asBytes(&info),
+        std.mem.asBytes(&info),
+        timeout,
+    );
     if (result.u.Status == .TIMEOUT) return .{};
     _ = try check(result);
     if (info.count == 0) return .{};
@@ -64,7 +79,9 @@ pub fn wait(io: std.Io, handle: windows.HANDLE, ms: i32) Error!Ready {
 
 pub fn receive(io: std.Io, handle: windows.HANDLE, bytes: []u8, peek: bool, timeout: std.Io.Timeout) Error!usize {
     if (bytes.len == 0) return 0;
-    const buffers = [_]windows.AFD.WSABUF(.@"var"){.{ .len = @intCast(@min(bytes.len, std.math.maxInt(u32))), .buf = bytes.ptr }};
+    const buffers = [_]windows.AFD.WSABUF(.@"var"){
+        .{ .len = @intCast(@min(bytes.len, std.math.maxInt(u32))), .buf = bytes.ptr },
+    };
     const info: windows.AFD.RECV_INFO = .{
         .BufferArray = &buffers,
         .BufferCount = 1,
@@ -76,7 +93,9 @@ pub fn receive(io: std.Io, handle: windows.HANDLE, bytes: []u8, peek: bool, time
 
 pub fn send(io: std.Io, handle: windows.HANDLE, bytes: []const u8, timeout: std.Io.Timeout) Error!usize {
     if (bytes.len == 0) return 0;
-    const buffers = [_]windows.AFD.WSABUF(.@"const"){.{ .len = @intCast(@min(bytes.len, limits.send_bytes)), .buf = bytes.ptr }};
+    const buffers = [_]windows.AFD.WSABUF(.@"const"){
+        .{ .len = @intCast(@min(bytes.len, limits.send_bytes)), .buf = bytes.ptr },
+    };
     const info: windows.AFD.SEND_INFO = .{
         .BufferArray = &buffers,
         .BufferCount = 1,
@@ -86,7 +105,14 @@ pub fn send(io: std.Io, handle: windows.HANDLE, bytes: []const u8, timeout: std.
     return check(try control(io, handle, windows.IOCTL.AFD.SEND, std.mem.asBytes(&info), &.{}, timeout));
 }
 
-fn control(io: std.Io, handle: windows.HANDLE, code: windows.CTL_CODE, in: []const u8, out: []u8, timeout: std.Io.Timeout) Error!windows.IO_STATUS_BLOCK {
+fn control(
+    io: std.Io,
+    handle: windows.HANDLE,
+    code: windows.CTL_CODE,
+    in: []const u8,
+    out: []u8,
+    timeout: std.Io.Timeout,
+) Error!windows.IO_STATUS_BLOCK {
     var storage: [1]std.Io.Operation.Storage = undefined;
     var batch = std.Io.Batch.init(&storage);
     defer cancel(io, &batch);

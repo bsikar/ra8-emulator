@@ -11,12 +11,12 @@
 //! When an exception is taken, the BKPT itself is the stacked return
 //! address. The register addresses match src/chip/periph/dcb.zig; the core does
 //! not import the debug layer.
-const memmap = @import("../../memmap.zig");
-const status = @import("../../../periph/fault/status.zig");
 const active = @import("active.zig");
+const Cpu = @import("../cpu.zig").Cpu;
 const dispatch = @import("dispatch.zig");
 const fault = @import("fault.zig");
-const Cpu = @import("../cpu.zig").Cpu;
+const memmap = @import("../../memmap.zig");
+const status = @import("../../../periph/fault/status.zig");
 
 pub const dhcsr: u32 = 0xE000_EDF0;
 pub const dfsr: u32 = 0xE000_ED30;

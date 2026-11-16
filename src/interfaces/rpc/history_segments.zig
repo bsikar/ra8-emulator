@@ -9,6 +9,7 @@
 //! own canonical positions, so the order segments are joined in does not
 //! matter to the readers, which sort by position.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
 const session_log = @import("ra8_session").history_log;
 const session_recorder = @import("ra8_session").history_recorder;

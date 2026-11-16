@@ -187,6 +187,20 @@ fn accepted(result: Env.Result) !void {
 
 const subscribe: proto.Subscription = .{ .core = .cpu0, .topic = .lcd_dirty };
 
+test "a rewind resends the complete panel even without a new LCD refresh" {
+    var panel: Panel = .{ .width = 16, .height = 12 };
+    var rig: Rig = .{};
+    try rig.init(&panel, std.testing.allocator);
+    const wire = try Wire.init(std.testing.allocator);
+    defer wire.deinit();
+    try wire.open(&rig.context, &panel);
+    try accepted(try wire.call(proto.Subscription, .subscribe, subscribe));
+    rig.session.event_stream.publish(.{ .core = .cpu0, .kind = .rewound, .virtual_ns = 17 });
+    try wire.poke();
+    try std.testing.expectEqualSlices(Got, &.{.{ .x = 0, .y = 0, .width = 16, .height = 12, .virtual_ns = 17 }}, wire.got.slice());
+    try std.testing.expectEqual(@as(usize, 1), panel.captures);
+}
+
 test "a subscribed client gets the dirty rectangle's pixels at the refresh's time, and nothing once it leaves" {
     var panel: Panel = .{ .width = 16, .height = 12 };
     var rig: Rig = .{};

@@ -99,7 +99,9 @@ pub fn fold(store: *const Store, filter: Filter, names: Names, out: anytype, scr
     while (run < picked.len) {
         const stack = store.at(picked[run]).stack();
         var next = run + 1;
-        while (next < picked.len and std.mem.eql(u32, store.at(picked[next]).stack(), stack)) next += 1;
+        while (next < picked.len and std.mem.eql(u32, store.at(picked[next]).stack(), stack)) {
+            next += 1;
+        }
         try row(out, names, stack, next - run);
         run = next;
     }

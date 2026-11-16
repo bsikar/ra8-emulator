@@ -5,9 +5,9 @@
 //!
 //! Left unclaimed as UNPREDICTABLE: Rd or Rn of SP or PC (Rn = PC is BFC), an
 //! extract running past bit 31, and an insert whose msb sits below its lsb.
-const op = @import("../op.zig");
 const Cpu = @import("../cpu.zig").Cpu;
 const Instr = @import("../instr.zig").Instr;
+const op = @import("../op.zig");
 
 pub const encodings = struct {
     /// hw1 with Rn ([3:0]) masked out.

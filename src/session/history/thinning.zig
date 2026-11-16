@@ -11,9 +11,10 @@
 //!  - Never drops a branch's fork-point base checkpoint needed to replay a child line.
 //!  - Retains all checkpoint pictures attached to kept checkpoints.
 const std = @import("std");
+
+const branch_mod = @import("branch.zig");
 const ObjectId = @import("object_id.zig").ObjectId;
 const Position = @import("position.zig").Position;
-const branch_mod = @import("branch.zig");
 
 pub const CheckpointRef = struct {
     id: u32,

@@ -11,23 +11,24 @@
 //! line switch, then the action itself. A step that fails puts every
 //! earlier one back.
 const std = @import("std");
-const api = @import("api.zig");
-const fork_router_mod = @import("history/fork_router.zig");
-const history_record = @import("history/record.zig");
-const history_position = @import("history/position.zig");
-const history_root = @import("history/root.zig");
-const recorder_mod = @import("history/recorder.zig");
-const input_script = @import("ra8_components").input_script;
+
 const action_codec = @import("history/action_codec.zig");
-const async_traffic = @import("history/async_traffic.zig");
-const replay_feeder = @import("history/replay_feeder.zig");
-const lifecycle = @import("history/lifecycle.zig");
-const new_history = @import("new_history.zig");
+const api = @import("api.zig");
 const apply = @import("apply.zig");
+const async_traffic = @import("history/async_traffic.zig");
+const fork_router_mod = @import("history/fork_router.zig");
+const history_position = @import("history/position.zig");
+const history_record = @import("history/record.zig");
+const history_root = @import("history/root.zig");
+const input_script = @import("ra8_components").input_script;
+const lifecycle = @import("history/lifecycle.zig");
 const line = @import("line.zig");
+const new_history = @import("new_history.zig");
+const recorder_mod = @import("history/recorder.zig");
+const replay_feeder = @import("history/replay_feeder.zig");
 const run_slice = @import("run_slice.zig");
-const window_fork = @import("history/window_fork.zig");
 const session_window = @import("window.zig");
+const window_fork = @import("history/window_fork.zig");
 
 const Session = api.Session;
 const Core = api.Core;
@@ -43,6 +44,7 @@ pub const ForkReason = history_record.ForkReason;
 pub const Position = history_position.Position;
 
 pub const fork_types = @import("fork_types.zig");
+
 pub const NetHook = fork_types.NetHook;
 pub const ConsoleHook = fork_types.ConsoleHook;
 pub const CameraHook = fork_types.CameraHook;
@@ -69,6 +71,7 @@ pub fn loadReplayInterventions(self: *Session, log_bytes: []const u8) anyerror!v
 /// Stages the intervention record for `action` at `pos`.
 fn recordActionIntervention(self: *Session, pos: Position, action: Action) anyerror!void {
     if (self.replaying) return;
+    if (self.persistent_recorder == null and (self.history == null or self.history.?.recorder == null)) return;
     const router = self.fork_router;
     const allocator = if (router) |r| r.allocator else if (self.persistent_recorder) |rec| rec.gpa else return;
     var encoded = try action_codec.encode(allocator, action);
@@ -149,9 +152,8 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     if (self.persistent_recorder) |rec| try rec.commit(now_ns);
     router.switchActiveLine(undo.new_id);
     line.stampLine(self);
-    window_fork.noteFork(self, undo.new_id);
     undo.stage = .switched;
-    try apply.applyAction(self, action);
+    try applyForkAction(self, undo.new_id, action);
     // The cut window still holds the state before the write.
     session_window.replantWindow(self);
     if (self.persistent_recorder == null) try recordActionIntervention(self, at, action);
@@ -159,6 +161,21 @@ pub fn executeFork(self: *Session, reason: ForkReason, fork_pos: Position, actio
     _ = async_traffic.clearOnFork(self);
     if (self.async_traffic.usbip_hook) |hook| if (hook.forkedFn) |forked| forked(hook.context);
     replay_feeder.release(self);
+}
+
+fn applyForkAction(self: *Session, branch: u32, action: Action) !void {
+    switch (action) {
+        .restore => {
+            // Snapshot preparation can still refuse. Keep the old window
+            // intact until every fallible restore operation has succeeded.
+            try apply.applyAction(self, action);
+            window_fork.noteFork(self, branch);
+        },
+        else => {
+            window_fork.noteFork(self, branch);
+            try apply.applyAction(self, action);
+        },
+    }
 }
 
 /// The single Session-level routing choke point for host interventions.
@@ -172,7 +189,14 @@ pub fn routeIntervention(self: *Session, core: Core, reason: ForkReason, action:
         return;
     };
     const cursor = currentPosition(self);
-    const decision = fork_router_mod.decide(router.graph, router.active_line, cursor, router.recordedEnd(), router.first_fork_confirmed, reason);
+    const decision = fork_router_mod.decide(
+        router.graph,
+        router.active_line,
+        cursor,
+        router.recordedEnd(),
+        router.first_fork_confirmed,
+        reason,
+    );
     switch (decision) {
         .live => {
             try applyAction(self, action);

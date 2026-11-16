@@ -4,9 +4,11 @@
 //! dropped checkpoints' bytes back. The session's lock is held throughout,
 //! so a live session is never touched.
 const std = @import("std");
+
 const history = @import("ra8_host").history;
 const rpc = @import("ra8_rpc");
 const session_lib = @import("ra8_session");
+
 const branches_file = history.branches_file;
 const branches_recover = session_lib.history_branches_recover;
 
@@ -26,7 +28,12 @@ pub const Open = struct {
         const held = (try history.lock.take(base.io, base.dir, &id)) orelse return error.SessionLocked;
         errdefer held.close(base.io);
         try history.rename.settle(base.io, dir);
-        return .{ .dir = dir, .held = held, .session = .{ .base = base, .id = id, .dir = dir, .lock = held, .kept = kept }, .base = base };
+        return .{
+            .dir = dir,
+            .held = held,
+            .session = .{ .base = base, .id = id, .dir = dir, .lock = held, .kept = kept },
+            .base = base,
+        };
     }
 
     pub fn close(self: *Open) void {
@@ -46,8 +53,22 @@ pub fn reclaim(allocator: std.mem.Allocator, opened: *Open, out: *std.Io.Writer)
     const swept = try history.prune.relief(store, allocator, rpc.history_bind.prune_referrer);
     const packs = try rpc.pack_store.PackStore.open(allocator, &opened.session);
     defer packs.close();
-    const compacted = try rpc.history_live.compactPacks(store, allocator, packs, rpc.history_bind.prune_referrer.collect);
-    try out.print("reclaimed {d} orphan objects ({d} bytes), {d} packs compacted ({d} -> {d} bytes)\n", .{ swept.orphans, swept.orphan_bytes, compacted.packs_removed, compacted.bytes_before, compacted.bytes_after });
+    const compacted = try rpc.history_live.compactPacks(
+        store,
+        allocator,
+        packs,
+        rpc.history_bind.prune_referrer.collect,
+    );
+    try out.print(
+        "reclaimed {d} orphan objects ({d} bytes), {d} packs compacted ({d} -> {d} bytes)\n",
+        .{
+            swept.orphans,
+            swept.orphan_bytes,
+            compacted.packs_removed,
+            compacted.bytes_before,
+            compacted.bytes_after,
+        },
+    );
 }
 
 fn graphOf(allocator: std.mem.Allocator, opened: *Open) !session_lib.history_branch.BranchGraph {
@@ -59,7 +80,14 @@ fn graphOf(allocator: std.mem.Allocator, opened: *Open) !session_lib.history_bra
 
 /// Thins session `name`'s checkpoints so no two survivors are more than
 /// `gap` rounds apart.
-pub fn thin(allocator: std.mem.Allocator, base: *const history.base.Base, name: []const u8, kept: bool, gap: u64, out: *std.Io.Writer) !u8 {
+pub fn thin(
+    allocator: std.mem.Allocator,
+    base: *const history.base.Base,
+    name: []const u8,
+    kept: bool,
+    gap: u64,
+    out: *std.Io.Writer,
+) !u8 {
     var opened = try Open.open(base, name, kept);
     defer opened.close();
     var graph = try graphOf(allocator, &opened);
@@ -71,13 +99,24 @@ pub fn thin(allocator: std.mem.Allocator, base: *const history.base.Base, name: 
 }
 
 /// Re-roots session `name` at checkpoint `target`; `confirm` must be set.
-pub fn reroot(allocator: std.mem.Allocator, base: *const history.base.Base, name: []const u8, kept: bool, target: u32, confirm: bool, out: *std.Io.Writer) !u8 {
+pub fn reroot(
+    allocator: std.mem.Allocator,
+    base: *const history.base.Base,
+    name: []const u8,
+    kept: bool,
+    target: u32,
+    confirm: bool,
+    out: *std.Io.Writer,
+) !u8 {
     var opened = try Open.open(base, name, kept);
     defer opened.close();
     var graph = try graphOf(allocator, &opened);
     defer graph.deinit();
     const report = try rpc.history_maint.reroot(allocator, opened.store(), &graph, target, confirm);
-    try out.print("{s}: re-rooted at checkpoint {d}, {d} checkpoints dropped, {d} kept, {d} branches left without history\n", .{ name, target, report.dropped, report.kept, report.branches_orphaned });
+    try out.print(
+        "{s}: re-rooted at checkpoint {d}, {d} checkpoints dropped, {d} kept, {d} branches left without history\n",
+        .{ name, target, report.dropped, report.kept, report.branches_orphaned },
+    );
     try reclaim(allocator, &opened, out);
     return 0;
 }

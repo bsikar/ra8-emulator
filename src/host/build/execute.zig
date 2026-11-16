@@ -1,12 +1,21 @@
 //! One thread owns the child from spawn through pipe drain and reap.
 const std = @import("std");
-const Process = @import("process.zig").Process;
-const pipe = @import("pipe.zig");
+
 const Budget = @import("request.zig").Budget;
 const Output = @import("output.zig").Output;
+const pipe = @import("pipe.zig");
+const Process = @import("process.zig").Process;
+
 pub const Cleanup = enum { not_started, complete, unknown };
 
-pub fn run(argv: []const []const u8, root: std.Io.Dir, budget: Budget, output: ?*Output, capture: ?*std.ArrayList(u8), cleanup: *Cleanup) !i32 {
+pub fn run(
+    argv: []const []const u8,
+    root: std.Io.Dir,
+    budget: Budget,
+    output: ?*Output,
+    capture: ?*std.ArrayList(u8),
+    cleanup: *Cleanup,
+) !i32 {
     cleanup.* = .not_started;
     try budget.check();
     var process = try Process.spawn(budget.io, argv, root);

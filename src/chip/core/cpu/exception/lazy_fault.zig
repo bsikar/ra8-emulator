@@ -10,12 +10,13 @@
 //! up. The FP instruction is stacked as the return address and
 //! FPCCR.LSPACT stays set, so the push is retried when it runs again.
 
-const memmap = @import("../../memmap.zig");
-const fault_route = @import("../../../periph/fault/route.zig");
-const status = @import("../../../periph/fault/status.zig");
+const cpu_mod = @import("../cpu.zig");
 const dispatch = @import("dispatch.zig");
 const fault = @import("fault.zig");
-const cpu_mod = @import("../cpu.zig");
+const fault_route = @import("../../../periph/fault/route.zig");
+const memmap = @import("../../memmap.zig");
+const status = @import("../../../periph/fault/status.zig");
+
 const Cpu = cpu_mod.Cpu;
 const Stop = cpu_mod.Stop;
 

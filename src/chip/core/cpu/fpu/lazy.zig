@@ -17,6 +17,7 @@
 //! SPLIMVIOL. A Secure context (FPCCR.S) with FPCCR.TS set also writes
 //! S16-S31 from 0x48 (RA8EMU-165).
 const std = @import("std");
+
 const bus = @import("../bus.zig");
 const State = @import("state.zig").State;
 
@@ -45,8 +46,9 @@ pub fn preserve(to: bus.Bus, state: *State) Error!void {
         return;
     }
     const gate = to.gate orelse return write(to, state);
-    if (state.context.fpccr.s == 0 and !nonSecure(gate.source, state.context.fpcar))
+    if (state.context.fpccr.s == 0 and !nonSecure(gate.source, state.context.fpcar)) {
         return error.LazyPreserveError;
+    }
     const was = gate.armed;
     gate.armed = false;
     defer gate.armed = was;

@@ -27,13 +27,14 @@
 //! and a replay records nothing). A fork in between records its own
 //! disconnect at the fork point, before its live run continues.
 const std = @import("std");
+
+const api = @import("../api.zig");
+const async_traffic = @import("../history/async_traffic.zig");
+const line = @import("../line.zig");
+const replay_feeder = @import("../history/replay_feeder.zig");
 const usb = @import("ra8_board").usb;
 const usbfs = @import("ra8_chip").periph.usbfs;
 const usbip_traffic = @import("../history/usbip_traffic.zig");
-const async_traffic = @import("../history/async_traffic.zig");
-const api = @import("../api.zig");
-const line = @import("../line.zig");
-const replay_feeder = @import("../history/replay_feeder.zig");
 
 const traffic = usb.traffic;
 

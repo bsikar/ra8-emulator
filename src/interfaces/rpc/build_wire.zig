@@ -1,4 +1,6 @@
 //! Backend build contract. Result and diagnostic JSON are version-one records.
+const host = @import("ra8_host");
+
 pub const capability: u32 = 1 << 17;
 pub const event_topic: u16 = 0x181;
 pub const completed_topic: u16 = 0x182;
@@ -20,7 +22,7 @@ pub const Status = struct {
 pub const Event = struct {
     id: u64,
     sequence: u64,
-    kind: @import("ra8_host").build.queue.Kind,
+    kind: host.build.queue.Kind,
     bytes: []const u8,
     pub const max_len = .{ .bytes = 4096 };
 };

@@ -20,6 +20,7 @@
 //! carry the 1-based line through `Diagnostic`. Plug names are borrowed
 //! from the text, so the text has to outlive the schedule.
 const std = @import("std");
+
 const catalog = @import("../catalog.zig");
 const endpoint = @import("../endpoint.zig");
 const fault_spec = @import("spec.zig");

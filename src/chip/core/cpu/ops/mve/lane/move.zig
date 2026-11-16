@@ -9,11 +9,12 @@
 //! (mve_skip_vmov). D or N set would name D16+,
 //! which MVE lacks, and Rt of 13 or 15 is UNPREDICTABLE, so all of those
 //! stay unclaimed.
-const op = @import("../../../op.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
 const mve = @import("../../../mve/all.zig");
 const mve_beats = @import("../beats.zig");
+const op = @import("../../../op.zig");
+
 const Size = mve.qreg.Size;
 
 pub const group: op.Group = .{ .name = "mve_lane_move", .decode = decode, .oracle = false };
@@ -81,7 +82,10 @@ fn toCoreFor(comptime signed: bool) op.Exec {
         fn exec(cpu: *Cpu, instr: Instr) op.Error!void {
             const lane = laneOf(instr).?;
             const raw = mve.qreg.elem(mve.qreg.read(&cpu.fp.bank, lane.q), lane.size, lane.elem);
-            if (pending(cpu, lane)) cpu.regs.set(@intCast(instr.hw2 >> 12), if (signed) extend(raw, lane.size) else raw);
+            if (pending(cpu, lane)) cpu.regs.set(
+                @intCast(instr.hw2 >> 12),
+                if (signed) extend(raw, lane.size) else raw,
+            );
             mve_beats.finishEci(cpu);
         }
     }.exec;

@@ -1,9 +1,16 @@
 //! Borrowed, application-supplied native peer capability.
 const std = @import("std");
+
 const wire = @import("wire.zig");
+
 pub const Info = struct { proxy_pid: i32, reply: wire.Reply };
 pub const Observer = struct { context: *anyopaque, report: *const fn (*anyopaque, Info) anyerror!void };
-pub const Provider = struct { executable: []const u8, sha256: [32]u8, observer: ?Observer = null, bounds: wire.Bounds = .{} };
+pub const Provider = struct {
+    executable: []const u8,
+    sha256: [32]u8,
+    observer: ?Observer = null,
+    bounds: wire.Bounds = .{},
+};
 
 pub fn check(io: std.Io, value: Provider) !void {
     if (!std.mem.eql(u8, &value.sha256, &try digest(io, value.executable))) return error.PeerDigestMismatch;

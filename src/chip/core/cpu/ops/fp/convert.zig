@@ -10,10 +10,11 @@
 //! fixed-point forms convert Vd in place: M is the low bit of imm5 and Vm
 //! its top four, with fraction bits = width - imm5. A negative fraction
 //! count, a D16+ double and opc2 0111 with o clear stay unclaimed.
-const op = @import("../../op.zig");
 const Cpu = @import("../../cpu.zig").Cpu;
-const Instr = @import("../../instr.zig").Instr;
 const fpu = @import("../../fpu/all.zig");
+const Instr = @import("../../instr.zig").Instr;
+const op = @import("../../op.zig");
+
 const Format = fpu.format.Format;
 const fp_regs = @import("regs.zig");
 

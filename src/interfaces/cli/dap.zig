@@ -1,10 +1,11 @@
 //! `ra8_emulator dap PORT [IMAGE]`: one DAP client on loopback TCP.
 //! Launch supplies `program`; attach uses the optional preloaded IMAGE.
 const std = @import("std");
+
 const dap = @import("ra8_dap");
-const session = @import("ra8_session");
-const ready = @import("ra8_host").sock.ready;
 const image_file = @import("image_file.zig");
+const ready = @import("ra8_host").sock.ready;
+const session = @import("ra8_session");
 
 pub const Owner = struct {
     allocator: std.mem.Allocator,
@@ -31,7 +32,10 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
     const port = std.fmt.parseInt(u16, argv[2], 10) catch return 1;
     var owner: Owner = .{ .allocator = allocator, .io = io };
     defer if (owner.harness) |*h| h.deinit();
-    var adapter: dap.adapter.Adapter = .{ .allocator = allocator, .opener = .{ .context = &owner, .openFn = Owner.open } };
+    var adapter: dap.adapter.Adapter = .{
+        .allocator = allocator,
+        .opener = .{ .context = &owner, .openFn = Owner.open },
+    };
     defer adapter.deinit();
     if (argv.len == 4) adapter.target = try Owner.open(&owner, argv[3]);
     try listen(allocator, io, port, &adapter);

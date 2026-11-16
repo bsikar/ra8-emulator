@@ -112,7 +112,9 @@ pub fn put(out: []Entry, name: []const u8, index: u32, attribute: u8, cluster: u
 /// The checksum every long entry carries of its short name.
 pub fn checksum(name11: *const [11]u8) u8 {
     var sum: u8 = 0;
-    for (name11) |c| sum = ((sum & 1) << 7) +% (sum >> 1) +% c;
+    for (name11) |c| {
+        sum = ((sum & 1) << 7) +% (sum >> 1) +% c;
+    }
     return sum;
 }
 

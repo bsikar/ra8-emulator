@@ -3,10 +3,10 @@
 //!
 //! The name is the class a lockstep divergence table reports under, so keep
 //! it short and stable.
+const alignment = @import("alignment.zig");
+const bus = @import("bus.zig");
 const Cpu = @import("cpu.zig").Cpu;
 const Instr = @import("instr.zig").Instr;
-const bus = @import("bus.zig");
-const alignment = @import("alignment.zig");
 const profile = @import("profile.zig");
 
 /// An encoding that decodes but must not run: UDF, taken as UNDEFINSTR.
@@ -15,7 +15,20 @@ pub const Undefined = error{Undefined};
 /// BKPT: a debug event the core takes once the instruction has decoded.
 pub const Debug = error{Breakpoint};
 
-pub const Error = bus.Error || alignment.Error || Undefined || Debug || error{ StackOverflow, InvalidState, InvalidEntry, NoCoprocessor, LazyStateError, LazyPreserveError, LazyMemManage, LazyBusFault };
+pub const Error = bus.Error ||
+    alignment.Error ||
+    Undefined ||
+    Debug ||
+    error{
+        StackOverflow,
+        InvalidState,
+        InvalidEntry,
+        NoCoprocessor,
+        LazyStateError,
+        LazyPreserveError,
+        LazyMemManage,
+        LazyBusFault,
+    };
 
 /// Runs one decoded instruction. The PC already points past it when this is
 /// called; a branch writes the PC, everything else leaves it alone.

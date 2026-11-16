@@ -7,11 +7,12 @@
 //! in a store list, P and M both set on a load, and writeback with Rn in the
 //! list. Every access goes through the bus.
 const std = @import("std");
-const op = @import("../../../op.zig");
+
 const alignment = @import("../../../alignment.zig");
+const bti = @import("../../../bti.zig");
 const Cpu = @import("../../../cpu.zig").Cpu;
 const Instr = @import("../../../instr.zig").Instr;
-const bti = @import("../../../bti.zig");
+const op = @import("../../../op.zig");
 
 pub const encodings = struct {
     /// hw1 with W and Rn masked out.

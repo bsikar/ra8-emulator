@@ -11,12 +11,12 @@
 //! Both windows are 32-bit registers, so an access narrower than a word takes
 //! the `lanes.zig` rule: a read is cut to the lanes it names, a store keeps
 //! the lanes it does not.
-const std = @import("std");
+
+const eth_forward = @import("forward.zig");
+const eth_mode = @import("mode.zig");
 const lanes = @import("../lanes.zig");
 const periph = @import("../registry.zig");
 const regs = @import("regs.zig");
-const eth_mode = @import("mode.zig");
-const eth_forward = @import("forward.zig");
 
 /// GWCA: the mode pair and the AXI-init handshake, two windows apart.
 pub const Gateway = struct {

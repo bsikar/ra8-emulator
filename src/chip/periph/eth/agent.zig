@@ -19,8 +19,8 @@
 //!
 //! The ESWM power domain gate that eth.zig applies to EAMC/EAMS is not
 //! applied here. Recorded, not enforced.
-const periph = @import("../registry.zig");
 const lanes = @import("../lanes.zig");
+const periph = @import("../registry.zig");
 
 pub const off = struct {
     pub const eatdqdc0: u32 = 0x060;

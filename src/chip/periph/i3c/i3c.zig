@@ -21,12 +21,12 @@
 //! condition-detect flags it declared were never raised at all, so a driver
 //! waiting on one of them waited forever. Each of those is refused and
 //! counted here instead.
-const periph = @import("../registry.zig");
 const bus = @import("../riic/bus.zig");
 pub const flags = @import("flags.zig");
+const periph = @import("../registry.zig");
 pub const regs = @import("regs.zig");
-pub const target = @import("target.zig");
 pub const reset = @import("reset.zig");
+pub const target = @import("target.zig");
 
 pub const win_base = flags.win_base;
 pub const win_span = flags.win_span;

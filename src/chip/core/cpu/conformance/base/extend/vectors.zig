@@ -26,7 +26,11 @@ fn vec(name: []const u8, input: In, expect: Out) V {
 
 pub const all = [_]V{
     vec("sxth r0, r1: negative halfword", .{ .hw1 = 0xB208, .rm = 0x0000_8001 }, .{ .rd = 0xFFFF_8001, .nzcv = 0 }),
-    vec("sxth r0, r1: top half dropped", .{ .hw1 = 0xB208, .rm = 0xABCD_7FFF, .nzcv = 0xF }, .{ .rd = 0x0000_7FFF, .nzcv = 0xF }),
+    vec(
+        "sxth r0, r1: top half dropped",
+        .{ .hw1 = 0xB208, .rm = 0xABCD_7FFF, .nzcv = 0xF },
+        .{ .rd = 0x0000_7FFF, .nzcv = 0xF },
+    ),
     vec("sxtb r0, r1: negative byte", .{ .hw1 = 0xB248, .rm = 0x0000_0080 }, .{ .rd = 0xFFFF_FF80, .nzcv = 0 }),
     vec("sxtb r0, r1: positive byte", .{ .hw1 = 0xB248, .rm = 0xFFFF_FF7F }, .{ .rd = 0x0000_007F, .nzcv = 0 }),
     vec("uxth r0, r1", .{ .hw1 = 0xB288, .rm = 0xFFFF_8001, .nzcv = 0x8 }, .{ .rd = 0x0000_8001, .nzcv = 0x8 }),

@@ -23,7 +23,9 @@ pub fn parse(text: []const u8) Error!?u64 {
     if (frac_text.len > 3) return error.TooFine;
     const whole = try digits(whole_text);
     var frac = try digits(frac_text);
-    for (frac_text.len..3) |_| frac *= 10;
+    for (frac_text.len..3) |_| {
+        frac *= 10;
+    }
     if (whole > max_milli / 1000) return error.TooFast;
     const milli = whole * 1000 + frac;
     if (milli == 0) return error.NotPositive;

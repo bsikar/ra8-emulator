@@ -8,12 +8,13 @@
 //! flags count only when its first byte is, and the result is merged under
 //! the mask.
 const fpu = @import("../../../fpu/all.zig");
+
 const Fpscr = fpu.fpscr.Fpscr;
 const Rounding = fpu.rounding.Rounding;
 const format = fpu.format;
-const qreg = @import("../../qreg.zig");
-const predicate = @import("../../predicate.zig");
 const float = @import("../float.zig");
+const predicate = @import("../../predicate.zig");
+const qreg = @import("../../qreg.zig");
 pub const vectors = @import("vectors.zig");
 
 pub const Kind = enum {

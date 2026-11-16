@@ -3,12 +3,15 @@
 //! closed terminal or a supervisor stop ends it like the others). An empty host or
 //! `localhost` binds 127.0.0.1; any other host must be an IP literal. The
 //! bound address goes to stderr, and a Unix socket path is removed on exit.
-const std = @import("std");
+
 const builtin = @import("builtin");
+const served = @import("ra8_rpc").session.server;
+const Service = @import("ra8_rpc").artifacts.service.Service;
 const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
+const std = @import("std");
 const win32 = @import("ra8_host").win32;
-const served = @import("ra8_rpc").session.server;
+
 const Connection = @import("ra8_rpc").ws_transport.Connection;
 const loop = @import("loop.zig");
 
@@ -63,6 +66,14 @@ const Server = union(enum) {
 
 /// Bind `spec` and answer clients one after another until a stop signal.
 pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buffers) !void {
+    return serveWith(io, spec, context, buffers, null);
+}
+
+pub fn serveManaged(io: std.Io, spec: Spec, service: *Service) !void {
+    return serveWith(io, spec, null, .{ .rx = &.{}, .tx = &.{} }, service);
+}
+
+fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Buffers, service: ?*Service) !void {
     var server: Server = switch (spec) {
         .unix => |path| .{ .unix = try sock_unix.Listener.bind(io, path) },
         .tcp => |*tcp| .{ .tcp = try tcp.listen(io, .{ .reuse_address = true }) },
@@ -74,19 +85,15 @@ pub fn serve(io: std.Io, spec: Spec, context: *served.Context, buffers: loop.Buf
         .tcp => std.debug.print("serve: listening on tcp:{f}\n", .{server.tcp.socket.address}),
     }
     while (!loop.stopping.load(.acquire)) {
-        try buffers.pump(context);
-        if (context.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
+        const active = if (service) |owner| &owner.active.context else context.?;
+        try buffers.pump(active);
+        if (active.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
         if (!try server.ready(io)) continue;
         const client = server.accept(io) catch |err| switch (err) {
             error.WouldBlock => continue,
             else => return err,
         };
-        var connection = if (spec == .unix) Connection.fromUnix(io, client) else Connection.init(io, client);
-        defer connection.close();
-        const link: loop.Link = if (spec == .unix and builtin.os.tag == .windows) .unix_socket else .socket;
-        loop.answer(io, context, connection.transport(), client.socket.handle, link, buffers) catch |err| {
-            std.debug.print("serve: client dropped: {s}\n", .{@errorName(err)});
-        };
+        answerClient(io, spec, client, active, buffers, service);
     }
 }
 
@@ -134,5 +141,25 @@ pub fn allowsState(spec: Spec, allow_state_files: bool) bool {
     return switch (spec) {
         .unix => true,
         .tcp => |address| allow_state_files or isLoopback(address),
+    };
+}
+
+fn answerClient(
+    io: std.Io,
+    spec: Spec,
+    client: std.Io.net.Stream,
+    active: *served.Context,
+    buffers: loop.Buffers,
+    service: ?*Service,
+) void {
+    var connection = if (spec == .unix) Connection.fromUnix(io, client) else Connection.init(io, client);
+    defer connection.close();
+    const link: loop.Link = if (spec == .unix and builtin.os.tag == .windows) .unix_socket else .socket;
+    const done = if (service) |owner|
+        loop.answerManaged(io, owner, connection.transport(), client.socket.handle, link)
+    else
+        loop.answer(io, active, connection.transport(), client.socket.handle, link, buffers);
+    done catch |err| {
+        std.debug.print("serve: client dropped: {s}\n", .{@errorName(err)});
     };
 }

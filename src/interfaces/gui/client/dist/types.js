@@ -83,7 +83,7 @@ export var Method;
     Method[Method["Seek"] = 300] = "Seek";
     Method[Method["Rcont"] = 301] = "Rcont";
     Method[Method["Metrics"] = 302] = "Metrics";
-    // 0x012F skipped
+    Method[Method["Disasm"] = 303] = "Disasm";
     Method[Method["BranchList"] = 304] = "BranchList";
     Method[Method["BranchSwitch"] = 305] = "BranchSwitch";
     Method[Method["BranchDelete"] = 306] = "BranchDelete";
@@ -98,12 +98,14 @@ export var Method;
     Method[Method["FrameStatus"] = 315] = "FrameStatus";
     Method[Method["Diff"] = 316] = "Diff";
     Method[Method["SetVar"] = 317] = "SetVar";
-    Method[Method["Disasm"] = 318] = "Disasm";
+    Method[Method["UndoWrite"] = 318] = "UndoWrite";
+    Method[Method["ResetImage"] = 319] = "ResetImage";
 })(Method || (Method = {}));
 export const CAP_TRANSPORT = 1 << 15;
 export const CAP_WORKSPACE = 1 << 16;
 export const CAP_BUILD = 1 << 17;
 export const CAP_PROJECT = 1 << 18;
+export const CAP_RECOVERY = 1 << 19;
 /** Opcode is an alias for Method */
 export { Method as Opcode };
 /** All 7 Event Topics (Topic in rpc.zig) */
@@ -241,6 +243,7 @@ export var EventKind;
     EventKind[EventKind["RtosIdle"] = 20] = "RtosIdle";
     EventKind[EventKind["IsrEnter"] = 21] = "IsrEnter";
     EventKind[EventKind["IsrLeave"] = 22] = "IsrLeave";
+    EventKind[EventKind["Rewound"] = 23] = "Rewound";
 })(EventKind || (EventKind = {}));
 /** Input kind (InputKind in rpc.zig) */
 export var InputKind;

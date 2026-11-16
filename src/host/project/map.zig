@@ -2,7 +2,10 @@
 const std = @import("std");
 
 pub fn normalize(name: []const u8, into: []u8) ![]const u8 {
-    if (name.len == 0 or name.len > 4096 or name.len > into.len or std.mem.indexOfScalar(u8, name, 0) != null) return error.SourceUnavailable;
+    if (name.len == 0 or
+        name.len > 4096 or
+        name.len > into.len or
+        std.mem.indexOfScalar(u8, name, 0) != null) return error.SourceUnavailable;
     const drive = name.len >= 3 and std.ascii.isAlphabetic(name[0]) and name[1] == ':' and slash(name[2]);
     if (!drive and !slash(name[0])) return error.SourceUnavailable;
     var used: usize = if (drive) 3 else if (name.len > 1 and slash(name[1])) 2 else 1;
@@ -35,13 +38,20 @@ pub fn normalize(name: []const u8, into: []u8) ![]const u8 {
 pub fn prefix(name: []const u8, root: []const u8) bool {
     if (name.len < root.len) return false;
     const windows = (root.len > 1 and root[1] == ':') or std.mem.startsWith(u8, root, "//");
-    if (!(if (windows) std.ascii.eqlIgnoreCase(name[0..root.len], root) else std.mem.eql(u8, name[0..root.len], root))) return false;
+    if (!(if (windows)
+        std.ascii.eqlIgnoreCase(name[0..root.len], root)
+    else
+        std.mem.eql(u8, name[0..root.len], root))) return false;
     return name.len == root.len or std.mem.endsWith(u8, root, "/") or name[root.len] == '/';
 }
 
 pub fn replace(name: []const u8, from: []const u8, to: []const u8, into: []u8) ![]const u8 {
     if (!prefix(name, from)) return error.SourceUnavailable;
-    const joined = try std.fmt.bufPrint(into, "{s}/{s}", .{ std.mem.trimEnd(u8, to, "/"), std.mem.trimStart(u8, name[from.len..], "/") });
+    const joined = try std.fmt.bufPrint(
+        into,
+        "{s}/{s}",
+        .{ std.mem.trimEnd(u8, to, "/"), std.mem.trimStart(u8, name[from.len..], "/") },
+    );
     return std.mem.trimEnd(u8, joined, if (joined.len > 3) "/" else "");
 }
 

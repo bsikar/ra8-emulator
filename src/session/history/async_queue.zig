@@ -97,14 +97,18 @@ pub const OverflowState = struct {
     /// Total count of dropped items across all sources.
     pub fn totalDroppedItems(self: OverflowState) u64 {
         var sum: u64 = 0;
-        for (self.dropped_items) |c| sum += c;
+        for (self.dropped_items) |c| {
+            sum += c;
+        }
         return sum;
     }
 
     /// Total count of dropped payload bytes across all sources.
     pub fn totalDroppedBytes(self: OverflowState) u64 {
         var sum: u64 = 0;
-        for (self.dropped_bytes) |b| sum += b;
+        for (self.dropped_bytes) |b| {
+            sum += b;
+        }
         return sum;
     }
 
@@ -220,7 +224,8 @@ pub const AsyncQueue = struct {
     /// Returns the number of items delivered.
     pub fn drain(self: *AsyncQueue, visitor: anytype) !usize {
         const VisitorType = @TypeOf(visitor);
-        const has_visit = comptime if (@typeInfo(VisitorType) == .pointer and @typeInfo(std.meta.Child(VisitorType)) == .@"struct")
+        const has_visit = comptime if (@typeInfo(VisitorType) == .pointer and
+            @typeInfo(std.meta.Child(VisitorType)) == .@"struct")
             @hasDecl(std.meta.Child(VisitorType), "visit")
         else if (@typeInfo(VisitorType) == .@"struct")
             @hasDecl(VisitorType, "visit")

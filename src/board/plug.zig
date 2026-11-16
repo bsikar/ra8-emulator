@@ -11,14 +11,15 @@
 //! which device answers. GPIO goes to the port block's pin table, one model
 //! per pin.
 const std = @import("std");
-const catalog = @import("ra8_components").catalog;
-const endpoint = @import("ra8_components").endpoint;
-const parts = @import("ra8_components").parts;
-const request = @import("ra8_components").request;
-const profile = @import("profile.zig");
-const fault_spec = @import("ra8_components").fault.spec;
-const eink = @import("ra8_components").eink;
+
 const Board = @import("board.zig").Board;
+const catalog = @import("ra8_components").catalog;
+const eink = @import("ra8_components").eink;
+const endpoint = @import("ra8_components").endpoint;
+const fault_spec = @import("ra8_components").fault.spec;
+const parts = @import("ra8_components").parts;
+const profile = @import("profile.zig");
+const request = @import("ra8_components").request;
 
 pub const Error = error{ ChannelTaken, NothingFitted, TooManyOwnedParts };
 
@@ -70,7 +71,11 @@ pub fn all(board: *Board) !void {
         if (board.asks.owned_count == board.asks.owned.len) return Error.TooManyOwnedParts;
         const made = if (std.mem.eql(u8, wanted.name, parts.c6_name)) blk: {
             if (wanted.at != .uart or wanted.at.uart.channel != 2) return catalog.Error.WrongEndpoint;
-            break :blk catalog.Instance{ .model = parts.all.find(parts.c6_name).?, .device = try parts.all.bind(parts.c6_name, &board.c6, wanted.at), .state = &board.c6 };
+            break :blk catalog.Instance{
+                .model = parts.all.find(parts.c6_name).?,
+                .device = try parts.all.bind(parts.c6_name, &board.c6, wanted.at),
+                .state = &board.c6,
+            };
         } else try parts.all.make(arena, wanted.name, wanted.at);
         const device = faulted(board, arena, made.device, wanted) catch |err| {
             std.debug.print("--fault {s}: not applied ({s})\n", .{ wanted.name, @errorName(err) });

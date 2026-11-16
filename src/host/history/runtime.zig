@@ -1,6 +1,7 @@
 //! Owned runtime namespace and stale-listener reclamation. Applications
 //! supply a connect probe, so OS files remain below this host boundary.
 const std = @import("std");
+
 const base = @import("base.zig");
 const name = @import("name.zig");
 
@@ -56,7 +57,13 @@ fn safeLeaf(leaf: []const u8) ![]const u8 {
 }
 
 fn kind(directory: *const Directory, leaf: []const u8) !?std.Io.File.Kind {
-    const stat = directory.root.dir.statFile(directory.root.io, leaf, .{ .follow_symlinks = false }) catch |err| switch (err) {
+    const stat = directory.root.dir.statFile(
+        directory.root.io,
+        leaf,
+        .{
+            .follow_symlinks = false,
+        },
+    ) catch |err| switch (err) {
         error.FileNotFound => return null,
         else => return err,
     };

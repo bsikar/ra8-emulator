@@ -1,11 +1,12 @@
 //! The octal NOR part behind XSPI0: a configurable array stored inverted so fresh erased flash
 //! is demand-zero host memory and mapped accesses allocate nothing.
 const std = @import("std");
-const xspi_nor = @import("ra8_chip").periph.xspi.nor;
-const mapped = @import("ra8_chip").core.cpu.mapped;
+
 const lines = @import("lines.zig");
+const mapped = @import("ra8_chip").core.cpu.mapped;
 const observer = @import("ra8_chip").core.cpu.memory.observer;
 pub const snapshot = @import("snapshot.zig");
+const xspi_nor = @import("ra8_chip").periph.xspi.nor;
 
 pub const part = struct {
     pub const size: u32 = 0x400_0000;
@@ -65,7 +66,12 @@ pub const Flash = struct {
             return;
         }
         if (self.capacity == capacity and self.inverted.len != 0) return;
-        const ptr = std.heap.PageAllocator.map(capacity, .fromByteUnits(std.heap.page_size_min)) orelse return error.OutOfMemory;
+        const ptr = std.heap.PageAllocator.map(
+            capacity,
+            .fromByteUnits(
+                std.heap.page_size_min,
+            ),
+        ) orelse return error.OutOfMemory;
         const bytes = ptr[0..capacity];
         errdefer std.heap.PageAllocator.unmap(@alignCast(bytes));
         const sectors = capacity / part.sector_len;
@@ -85,7 +91,9 @@ pub const Flash = struct {
 
     pub fn live(self: *const Flash) u32 {
         var total: u32 = 0;
-        for (self.dirty) |bits| total += @popCount(bits);
+        for (self.dirty) |bits| {
+            total += @popCount(bits);
+        }
         return total;
     }
 
@@ -120,7 +128,9 @@ pub const Flash = struct {
         if (address >= self.capacity or self.inverted.len == 0) return;
         const first = part.sectorOf(address) * part.sector_len;
         var before: [part.sector_len]u8 = undefined;
-        for (&before, self.inverted[first..][0..part.sector_len]) |*out, held| out.* = ~held;
+        for (&before, self.inverted[first..][0..part.sector_len]) |*out, held| {
+            out.* = ~held;
+        }
         @memset(self.inverted[first..][0..part.sector_len], 0);
         self.mark(part.sectorOf(address), false);
         self.record(first, &before);
@@ -168,10 +178,14 @@ pub const Flash = struct {
         }
         // The array holds the read view's complement, so the restore lands
         // the bytes' inverse: a restored 0xFF reads back as 0xFF.
-        for (bytes, 0..) |restored, i| self.inverted[address + i] = ~restored;
+        for (bytes, 0..) |restored, i| {
+            self.inverted[address + i] = ~restored;
+        }
         const last = part.sectorOf(address + @as(u32, @intCast(bytes.len - 1)));
         var index = part.sectorOf(address);
-        while (index <= last) : (index += 1) self.mark(index, true);
+        while (index <= last) : (index += 1) {
+            self.mark(index, true);
+        }
     }
 
     /// One byte record for the trail: the flash address space is its own
@@ -184,14 +198,18 @@ pub const Flash = struct {
 
     pub fn readMapped(self: *const Flash, address: u32, into: []u8) bool {
         if (!self.holds(address, @intCast(into.len))) return false;
-        for (into, 0..) |*value, index| value.* = self.byte(address + @as(u32, @intCast(index)));
+        for (into, 0..) |*value, index| {
+            value.* = self.byte(address + @as(u32, @intCast(index)));
+        }
         return true;
     }
 
     pub fn writeMapped(self: *Flash, address: u32, bytes: []const u8) !bool {
         if (!self.holds(address, @intCast(bytes.len))) return false;
         try self.ensure();
-        for (bytes, 0..) |value, index| try self.program(address + @as(u32, @intCast(index)), value);
+        for (bytes, 0..) |value, index| {
+            try self.program(address + @as(u32, @intCast(index)), value);
+        }
         return true;
     }
 
@@ -202,14 +220,18 @@ pub const Flash = struct {
 
     pub fn readSector(self: *const Flash, index: u32, out: *[part.sector_len]u8) void {
         const first = index * part.sector_len;
-        for (out, 0..) |*value, offset| value.* = self.byte(first + @as(u32, @intCast(offset)));
+        for (out, 0..) |*value, offset| {
+            value.* = self.byte(first + @as(u32, @intCast(offset)));
+        }
     }
 
     pub fn loadSector(self: *Flash, index: u32, bytes: *const [part.sector_len]u8) !void {
         if (index >= self.capacity / part.sector_len) return error.OutOfMemory;
         try self.ensure();
         const first = index * part.sector_len;
-        for (bytes, 0..) |value, offset| self.inverted[first + offset] = ~value;
+        for (bytes, 0..) |value, offset| {
+            self.inverted[first + offset] = ~value;
+        }
         self.mark(index, true);
     }
 

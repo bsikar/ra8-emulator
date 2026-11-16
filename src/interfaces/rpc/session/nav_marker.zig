@@ -5,9 +5,10 @@
 //! keeps them so a reopened history needs no second replay. The machine
 //! returns to where it stood before the replay.
 const std = @import("std");
-const rpc = @import("ra8_rpc_wire");
-const proto = @import("rpc.zig");
+
 const handlers = @import("handlers.zig");
+const proto = @import("rpc.zig");
+const rpc = @import("ra8_rpc_wire");
 const session_mod = @import("ra8_session");
 
 const late_marker = session_mod.history_late_marker;

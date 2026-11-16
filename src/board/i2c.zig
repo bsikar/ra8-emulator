@@ -11,7 +11,6 @@
 //! with no module fitted answers nothing at 0x6B or 0x36. They go on the line
 //! only when the run asks for them with `click`; by default those addresses
 //! stay silent, the same as the bench.
-const bus = @import("ra8_chip").periph.riic.bus;
 const catalog = @import("ra8_components").catalog;
 const endpoint = @import("ra8_components").endpoint;
 const gt911 = @import("ra8_components").gt911;
@@ -57,7 +56,9 @@ pub const Wire = struct {
     /// Point every RIIC channel's receive path at the board's virtual time,
     /// so a part that stretches the clock lands its bytes on it.
     pub fn clock(self: *Wire, base: *const timebase.TimeBase) void {
-        for (&self.controller.channels) |*channel| channel.rx.clock = base;
+        for (&self.controller.channels) |*channel| {
+            channel.rx.clock = base;
+        }
     }
 
     /// Bind a Click part this struct holds through the model catalog, at its

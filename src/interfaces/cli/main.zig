@@ -7,6 +7,7 @@
 //! debug front instead. Everything it calls is the cli_app module (root.zig),
 //! which reaches the machine through the library modules.
 const std = @import("std");
+
 const app = @import("cli_app");
 const host = @import("ra8_host");
 
@@ -19,21 +20,57 @@ pub fn main(init: std.process.Init) !u8 {
     const allocator = init.arena.allocator();
     const io = init.io;
     const argv = try init.minimal.args.toSlice(allocator);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "project")) return app.project.run(allocator, io, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "toolchain")) return app.toolchain.run(allocator, io, argv);
-    if (argv.len == 2 and std.mem.eql(u8, argv[1], "--internal-host-move")) return app.host.relocation.peer(init);
-    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and std.mem.eql(u8, argv[2], "probe")) return app.probe_ctl.run(allocator, io, argv);
-    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "--connect") or std.mem.eql(u8, argv[2], "--host"))) return app.session_ctl.run(allocator, io, init.environ_map, argv);
-    if (argv.len >= 3 and std.mem.eql(u8, argv[1], "ctl") and (std.mem.eql(u8, argv[2], "sessions") or std.mem.eql(u8, argv[2], "gdb-address"))) return app.ctl.discovery.run(allocator, io, init.environ_map, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "--map")) return app.map_main.run(allocator, io, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "serve")) return app.serve.main.run(allocator, io, init.environ_map, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "dap")) return app.dap.run(allocator, io, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "sweep")) return app.sweep.cli.run(io, init.environ_map, argv);
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "history")) return app.history_cli.run(allocator, io, argv);
+    if (try dispatch(init, argv)) |code| return code;
     const options = app.cli.parse(argv) catch return app.debug_front.refused(allocator, io, argv);
     if (options.history.active() or options.history.camera_set or options.camera.kind != .gradient) {
         return app.session_run.run(allocator, io, options);
     }
     const image = app.image_file.open(io, allocator, options.path) catch return 1;
     return app.zig.run.main_path.run(allocator, io, image, options);
+}
+
+fn dispatch(init: std.process.Init, argv: []const []const u8) !?u8 {
+    const allocator = init.arena.allocator();
+    const io = init.io;
+    if (argv.len < 2) return null;
+    const verb = argv[1];
+    if (std.mem.eql(u8, verb, "export-session") or std.mem.eql(u8, verb, "import-session")) {
+        return try app.artifacts.run(allocator, io, argv);
+    }
+    if (std.mem.eql(u8, verb, "project")) return try app.project.run(allocator, io, argv);
+    if (std.mem.eql(u8, verb, "toolchain")) return try app.toolchain.run(allocator, io, argv);
+    if (argv.len == 2 and std.mem.eql(u8, argv[1], "--internal-host-move")) return try app.host.relocation.peer(init);
+    if (try control(init, argv)) |code| return code;
+    if (std.mem.eql(u8, verb, "--map")) return try app.map_main.run(allocator, io, argv);
+    if (std.mem.eql(u8, verb, "serve")) return try app.serve.main.run(allocator, io, init.environ_map, argv);
+    if (std.mem.eql(u8, verb, "dap")) return try app.dap.run(allocator, io, argv);
+    if (std.mem.eql(u8, verb, "sweep")) return try app.sweep.cli.run(io, init.environ_map, argv);
+    if (std.mem.eql(u8, verb, "history")) return try app.history_cli.run(allocator, io, argv);
+    return null;
+}
+
+fn control(init: std.process.Init, argv: []const []const u8) !?u8 {
+    const allocator = init.arena.allocator();
+    const io = init.io;
+    if (argv.len >= 3 and
+        std.mem.eql(u8, argv[1], "ctl") and
+        std.mem.eql(u8, argv[2], "probe")) return try app.probe_ctl.run(allocator, io, argv);
+    if (argv.len >= 3 and
+        std.mem.eql(u8, argv[1], "ctl") and
+        (std.mem.eql(u8, argv[2], "--connect") or
+            std.mem.eql(u8, argv[2], "--host"))) return try app.session_ctl.run(allocator, io, init.environ_map, argv);
+    if (argv.len >= 3 and
+        std.mem.eql(u8, argv[1], "ctl") and
+        (std.mem.eql(u8, argv[2], "sessions") or
+            std.mem.eql(
+                u8,
+                argv[2],
+                "gdb-address",
+            ))) return try app.ctl.discovery.run(
+        allocator,
+        io,
+        init.environ_map,
+        argv,
+    );
+    return null;
 }
