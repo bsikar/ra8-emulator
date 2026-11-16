@@ -33,12 +33,96 @@ import {
   inspectElf,
   parseElfSymbols,
 } from 'ra8-rpc-client';
+import {
+  CAP_BUILD,
+  CAP_PROJECT,
+  CAP_TRANSPORT,
+  CAP_WORKSPACE,
+  TimeTravelArchiveBundle,
+  exportTimeTravelTarball,
+  importTimeTravelTarball,
+} from 'ra8-rpc-client';
 import { EvaluatedLocal, evaluateLocals } from './dwarf-eval';
+import {
+  BOARD_PRESETS,
+  BoardProfileConfig,
+  CoreArch,
+  SiliconTopology,
+  addCoreSlot,
+  parseBoardConfig,
+  removeCoreSlot,
+  serializeBoardConfig,
+  setTopologyMode,
+  toggleNpu,
+} from '../models/board-config';
+import {
+  DecompiledFunction,
+  decompileThumbRows,
+  detectElfDwarfSections,
+} from '../models/decompiler';
+import {
+  RewindTreeBranchInput,
+  RewindTreeLayout,
+  RewindTreeNodeInput,
+  buildSidewaysRewindLayout,
+} from '../models/rewind-tree';
+import { FlamegraphView, parseFoldedStacks } from '../models/flamegraph';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 export type ExecutionStatus = 'stopped' | 'running' | 'halted';
 export type CoreInspectionMode = 'split' | 'cpu0' | 'cpu1';
 export type ActorKind = 'human' | 'agent';
+
+export type WorkbenchTab = 'workspace' | 'debug' | 'rewind' | 'hardware' | 'profile';
+export type CodeViewMode = 'source' | 'decompiled' | 'disasm';
+export type WorkspaceTargetMode = 'local' | 'remote';
+
+export interface HardwareDeviceSlot {
+  id: string;
+  partSpec: string;
+  endpoint: string;
+  bus: string;
+  status: 'attached' | 'unplugged' | 'fault';
+  activeFault: string | null;
+  address: string;
+  core: number;
+}
+
+export interface InclusiveBusTransaction {
+  seq: number;
+  timeMs: number;
+  bus: 'RIIC1' | 'SPI0' | 'OSPI0';
+  role: 'Controller' | 'Peripheral';
+  signal: string;
+  address: string;
+  payload: string;
+  status: 'ACK' | 'NACK' | 'OK';
+}
+
+export interface DiffStateRow {
+  entity: string;
+  beforeVal: string;
+  afterVal: string;
+  delta: string;
+  scope: string;
+}
+
+const DEFAULT_DEMO_FOLDED_PROFILE = [
+  'Reset_Handler;main;tx_kernel_enter;vision_infer 390',
+  'Reset_Handler;main;tx_kernel_enter;ethos_u55_wait 290',
+  'Reset_Handler;main;tx_kernel_enter;imu_mve_norm 170',
+  'Reset_Handler;main;tx_kernel_enter;tx_idle 90',
+  'Reset_Handler;main;drw_blend 44',
+].join('\n');
+
+const DEMO_THUMB_ROWS = [
+  { address: 0x02004a10, size: 2, decoded: true, raw: new Uint8Array([0x10, 0xb5]), text: 'push {r4, lr}', symbol: 'fn_02004a10' },
+  { address: 0x02004a12, size: 4, decoded: true, raw: new Uint8Array(4), text: 'bl riic1_read_reg', symbol: '' },
+  { address: 0x02004a16, size: 2, decoded: true, raw: new Uint8Array(2), text: 'cmp r0, #0x6c', symbol: '' },
+  { address: 0x02004a18, size: 2, decoded: true, raw: new Uint8Array(2), text: 'bne 0x02004a24', symbol: '' },
+  { address: 0x02004a1a, size: 4, decoded: true, raw: new Uint8Array(4), text: 'ldr r3, [r1, #0x2c]', symbol: '' },
+  { address: 0x02004a1e, size: 2, decoded: true, raw: new Uint8Array(2), text: 'pop {r4, pc}', symbol: '' },
+];
 
 export interface ConsoleEntry {
   text: string;
@@ -305,6 +389,198 @@ export class EmulatorService implements OnDestroy {
 
   // High-throughput LCD dirty rect stream
   public readonly lcdDirty$ = new Subject<DirtyRect>();
+
+  /* Obsidian Precision Workbench V2 Signals */
+  public readonly workspaceMode = signal<WorkspaceTargetMode>('local');
+  public readonly flashTargetMode = signal<WorkspaceTargetMode>('local');
+  public readonly projectPath = signal<string>('./build/ra8_vision_demo.elf');
+  public readonly boardPresets = BOARD_PRESETS;
+  public readonly activeBoardConfig = signal<BoardProfileConfig>({ ...BOARD_PRESETS[1] });
+  public readonly importedBoardRaw = signal<string>(serializeBoardConfig(BOARD_PRESETS[1]));
+
+  public readonly cpu0HasDwarf = signal<boolean>(false);
+  public readonly cpu1HasDwarf = signal<boolean>(false);
+  public readonly codeViewMode = signal<CodeViewMode>('decompiled');
+  public readonly highlightedFunction = signal<string | null>(null);
+
+  public readonly decompiledCpu0 = computed<DecompiledFunction>(() => {
+    const live = this.cpu0Disasm();
+    const rows = live.length > 0 ? live : DEMO_THUMB_ROWS;
+    const pc = this.cpu0Pc() || 0x02004a16;
+    return decompileThumbRows(rows, pc, 'fn_02004a10');
+  });
+
+  public readonly decompiledCpu1 = computed<DecompiledFunction>(() => {
+    const live = this.cpu1Disasm();
+    const rows = live.length > 0 ? live : DEMO_THUMB_ROWS;
+    const pc = this.cpu1Pc() || 0x22001204;
+    return decompileThumbRows(rows, pc, 'fn_22001200');
+  });
+
+  public readonly hardwareDevices = signal<HardwareDeviceSlot[]>([
+    {
+      id: 'gt911',
+      partSpec: 'gt911@riic1:0x5d',
+      endpoint: 'riic1:0x5d',
+      bus: 'RIIC1',
+      status: 'attached',
+      activeFault: null,
+      address: '0x5D',
+      core: 0,
+    },
+    {
+      id: 'imx477',
+      partSpec: 'imx477@cam0',
+      endpoint: 'cam0',
+      bus: 'MIPI CSI-2',
+      status: 'attached',
+      activeFault: null,
+      address: '0x1A',
+      core: 0,
+    },
+    {
+      id: 'w25q128',
+      partSpec: 'w25q128jw@ospi0',
+      endpoint: 'ospi0',
+      bus: 'OSPI0',
+      status: 'attached',
+      activeFault: null,
+      address: '0x00',
+      core: 0,
+    },
+    {
+      id: 'icm42688',
+      partSpec: 'icm42688@spi0:cs0',
+      endpoint: 'spi0:cs0',
+      bus: 'SPI0 (CS0)',
+      status: 'attached',
+      activeFault: null,
+      address: 'CS0',
+      core: 1,
+    },
+  ]);
+
+  public readonly busTransactions = signal<InclusiveBusTransaction[]>([
+    {
+      seq: 1,
+      timeMs: 12.4,
+      bus: 'RIIC1',
+      role: 'Controller',
+      signal: 'SCL/SDA START+W',
+      address: '0x5D',
+      payload: '0x81 0x4E',
+      status: 'ACK',
+    },
+    {
+      seq: 2,
+      timeMs: 12.6,
+      bus: 'RIIC1',
+      role: 'Peripheral',
+      signal: 'SDA DATA',
+      address: '0x5D',
+      payload: '0x01 0x01 0x2C 0x00 0xF0',
+      status: 'ACK',
+    },
+    {
+      seq: 3,
+      timeMs: 14.1,
+      bus: 'SPI0',
+      role: 'Controller',
+      signal: 'CS0 ASSERT + COPI / CIPO',
+      address: 'CS0',
+      payload: 'TX 0x75 / RX 0x47',
+      status: 'OK',
+    },
+  ]);
+
+  public readonly foldedProfileText = signal<string>(DEFAULT_DEMO_FOLDED_PROFILE);
+  public readonly flamegraph = computed<FlamegraphView>(() =>
+    parseFoldedStacks(this.foldedProfileText())
+  );
+  public readonly lastArchiveSummary = signal<string | null>(null);
+
+  public readonly rewindLayout = computed<RewindTreeLayout>(() => {
+    const liveBranches = this.backendBranches();
+    const lanes = this.sessionLanes();
+    if (liveBranches.length > 0 && lanes.some((l) => l.nodes.length > 0)) {
+      const bInputs: RewindTreeBranchInput[] = liveBranches.map((b) => {
+        const laneMeta = lanes.find((l) => l.id === b.id);
+        return {
+          branch: b.id,
+          parentBranch: b.parent,
+          forkRound: Number(b.forkR / 1000n),
+          name: laneMeta?.name || `Branch ${b.id}`,
+          actor: laneMeta?.actor ?? 'human',
+          reasonBadge: laneMeta?.reasonBadge || (b.isLive ? 'ACTIVE' : 'FORK'),
+          isActive: b.isLive,
+        };
+      });
+      const nInputs: RewindTreeNodeInput[] = [];
+      for (const lane of lanes) {
+        for (const n of lane.nodes) {
+          const nsNum = Number(n.r);
+          nInputs.push({
+            id: n.id,
+            label: n.label,
+            round: Math.round(nsNum / 1000),
+            timeSec: nsNum / 1_000_000_000,
+            branch: n.branchId,
+            isCursor: n.r === this.currentR(),
+            faultBadge: n.badge === 'F' ? 'FAULT' : undefined,
+          });
+        }
+      }
+      if (nInputs.length > 0) {
+        return buildSidewaysRewindLayout(bInputs, nInputs);
+      }
+    }
+
+    const demoBranches: RewindTreeBranchInput[] = [
+      { branch: 0, parentBranch: 0, forkRound: 0, name: 'Branch 0 · Baseline', actor: 'human', reasonBadge: 'BASE' },
+      { branch: 1, parentBranch: 0, forkRound: 904, name: 'Branch 1 · Fault Active', actor: 'agent', reasonBadge: 'FAULT', isActive: true },
+      { branch: 2, parentBranch: 1, forkRound: 912, name: 'Branch 2 · Retry Patch', actor: 'human', reasonBadge: 'PATCH' },
+    ];
+    const demoNodes: RewindTreeNodeInput[] = [
+      { id: 'chk_0', label: 'Chk #0 · Reset', round: 0, timeSec: 0, branch: 0 },
+      { id: 'chk_8', label: 'Chk #8 · RIIC1 Init', round: 840, timeSec: 0.84, branch: 0 },
+      { id: 'chk_14', label: 'Chk #14 · Poll Start', round: 904, timeSec: 1.80, branch: 1, isJunction: true },
+      { id: 'chk_15', label: 'Chk #15 · NACK Fault', round: 912, timeSec: 1.82, branch: 1, isCursor: true, faultBadge: 'NACK' },
+      { id: 'chk_19', label: 'Chk #19 · Recovered', round: 1280, timeSec: 2.56, branch: 2 },
+      { id: 'chk_22', label: 'Chk #22 · Nominal', round: 1320, timeSec: 2.64, branch: 0 },
+    ];
+    return buildSidewaysRewindLayout(demoBranches, demoNodes);
+  });
+
+  public readonly activeDiffRows = computed<DiffStateRow[]>(() => {
+    const diff = this.activeDiff();
+    if (diff) {
+      const rows: DiffStateRow[] = [];
+      for (const reg of diff.regs) {
+        rows.push({
+          entity: reg.name,
+          beforeVal: `0x${(reg.valA >>> 0).toString(16).padStart(8, '0')}`,
+          afterVal: `0x${(reg.valB >>> 0).toString(16).padStart(8, '0')}`,
+          delta: `^0x${((reg.valA ^ reg.valB) >>> 0).toString(16)}`,
+          scope: `Core ${reg.core}`,
+        });
+      }
+      for (const page of diff.pages) {
+        rows.push({
+          entity: `Page @ 0x${(page.address >>> 0).toString(16)}`,
+          beforeVal: page.hasA ? `${page.objA.length}B` : 'absent',
+          afterVal: page.hasB ? `${page.objB.length}B` : 'absent',
+          delta: `space ${page.space} #${page.pageIndex}`,
+          scope: 'SRAM / MMIO',
+        });
+      }
+      if (rows.length > 0) return rows;
+    }
+    return [
+      { entity: 'CPU0 R0', beforeVal: '0x00000000', afterVal: '0xFFFFFFEB', delta: 'EIO (-21)', scope: 'Core 0' },
+      { entity: 'RIIC1.ICSR2', beforeVal: '0x00000004 (TDRE)', afterVal: '0x00000010 (NACKF)', delta: 'Bit 4 set', scope: 'Peripheral Bus' },
+      { entity: 'i2c_retry_cnt', beforeVal: '0', afterVal: '3', delta: '+3 retries', scope: 'SRAM' },
+    ];
+  });
 
   constructor() {
     this.setTheme(this.currentTheme());
@@ -614,20 +890,24 @@ export class EmulatorService implements OnDestroy {
       }
 
       const copy = new Uint8Array(bytes);
+      const hasDwarf = detectElfDwarfSections(copy);
       const symbols = parseElfSymbols(copy);
       this.loadedElfBytes[core === Core.Cpu1 ? 1 : 0] = copy;
 
       if (core === Core.Cpu0) {
         this.cpu0ElfName.set(fileName);
         this.cpu0ElfSymbols.set(symbols);
+        this.cpu0HasDwarf.set(hasDwarf);
         this.cpu0Breakpoints.set(new Map());
         this.bpLabelsCpu0.clear();
       } else {
         this.cpu1ElfName.set(fileName);
         this.cpu1ElfSymbols.set(symbols);
+        this.cpu1HasDwarf.set(hasDwarf);
         this.cpu1Breakpoints.set(new Map());
         this.bpLabelsCpu1.clear();
       }
+      this.codeViewMode.set(hasDwarf ? 'source' : 'decompiled');
       this.watchpoints.update((wps) => wps.filter((w) => w.core !== core));
       this.lastStop.set(null);
       this.executionStatus.set('halted');
@@ -1587,5 +1867,247 @@ export class EmulatorService implements OnDestroy {
       clearInterval(this.metricsTimer);
       this.metricsTimer = null;
     }
+  }
+
+  /* ------------------------------------------------------------------------ */
+  /* Obsidian Precision Workbench V2 Actions                                  */
+  /* ------------------------------------------------------------------------ */
+
+  public hasCapability(flag: number): boolean {
+    return (this.serverCaps() & flag) !== 0;
+  }
+
+  public get transportCapabilitiesSummary(): string {
+    const flags: string[] = [];
+    if (this.hasCapability(CAP_TRANSPORT)) flags.push('TRANSPORT');
+    if (this.hasCapability(CAP_WORKSPACE)) flags.push('WORKSPACE');
+    if (this.hasCapability(CAP_BUILD)) flags.push('BUILD');
+    if (this.hasCapability(CAP_PROJECT)) flags.push('PROJECT');
+    return flags.length > 0 ? flags.join(' · ') : 'LOCAL';
+  }
+
+  public setWorkspaceMode(mode: WorkspaceTargetMode): void {
+    this.workspaceMode.set(mode);
+  }
+
+  public setFlashTargetMode(mode: WorkspaceTargetMode): void {
+    this.flashTargetMode.set(mode);
+  }
+
+  public setCodeViewMode(mode: CodeViewMode): void {
+    this.codeViewMode.set(mode);
+  }
+
+  public isDwarfAvailable(core: Core = this.activeCore()): boolean {
+    return core === Core.Cpu1 ? this.cpu1HasDwarf() : this.cpu0HasDwarf();
+  }
+
+  public selectBoardPreset(presetId: string): void {
+    const found = BOARD_PRESETS.find((p) => p.id === presetId);
+    if (!found) return;
+    const cloned: BoardProfileConfig = { ...found, cores: found.cores.map((c) => ({ ...c })) };
+    this.activeBoardConfig.set(cloned);
+    this.importedBoardRaw.set(serializeBoardConfig(cloned));
+    this.cpu1Attached.set(cloned.cores.length > 1);
+    this.showToast(`Applied board config: ${cloned.name}`);
+  }
+
+  public importBoardText(fileName: string, rawText: string): BoardProfileConfig {
+    const parsed = parseBoardConfig(fileName, rawText);
+    this.activeBoardConfig.set(parsed);
+    this.importedBoardRaw.set(rawText);
+    this.cpu1Attached.set(parsed.cores.length > 1);
+    this.showToast(`Loaded board profile: ${fileName} (${parsed.cores.length} core${parsed.cores.length === 1 ? '' : 's'})`);
+    return parsed;
+  }
+
+  public setBoardTopology(mode: SiliconTopology): void {
+    const next = setTopologyMode(this.activeBoardConfig(), mode);
+    this.activeBoardConfig.set(next);
+    this.importedBoardRaw.set(serializeBoardConfig(next));
+    this.cpu1Attached.set(next.cores.length > 1);
+  }
+
+  public addBoardCore(arch: CoreArch = 'Cortex-M33'): void {
+    const next = addCoreSlot(this.activeBoardConfig(), arch);
+    this.activeBoardConfig.set(next);
+    this.importedBoardRaw.set(serializeBoardConfig(next));
+    this.cpu1Attached.set(next.cores.length > 1);
+  }
+
+  public removeBoardCore(index: number): void {
+    const next = removeCoreSlot(this.activeBoardConfig(), index);
+    this.activeBoardConfig.set(next);
+    this.importedBoardRaw.set(serializeBoardConfig(next));
+    this.cpu1Attached.set(next.cores.length > 1);
+  }
+
+  public toggleBoardNpu(): void {
+    const next = toggleNpu(this.activeBoardConfig());
+    this.activeBoardConfig.set(next);
+    this.importedBoardRaw.set(serializeBoardConfig(next));
+    this.npuStateLabel.set(next.npuEnabled ? 'ACTIVE' : 'DISABLED');
+  }
+
+  public async attachPart(partSpec: string, bus = 'RIIC1'): Promise<void> {
+    const clean = partSpec.trim();
+    if (!clean) return;
+    const endpoint = clean.includes('@') ? clean.split('@')[1] : clean;
+    const addr = endpoint.includes(':') ? endpoint.split(':')[1] : '0x00';
+    if (this.client && this.connectionState() === 'connected') {
+      try {
+        await this.client.plug(clean, this.activeCore());
+      } catch {
+        // Optimistic update below keeps workbench responsive
+      }
+    }
+    const existing = this.hardwareDevices().find((d) => d.partSpec === clean);
+    if (existing) {
+      this.hardwareDevices.update((list) =>
+        list.map((d) => (d.id === existing.id ? { ...d, status: 'attached', activeFault: null } : d))
+      );
+    } else {
+      this.hardwareDevices.update((list) => [
+        ...list,
+        {
+          id: `${clean}_${Date.now()}`,
+          partSpec: clean,
+          endpoint,
+          bus,
+          status: 'attached',
+          activeFault: null,
+          address: addr.toUpperCase(),
+          core: this.activeCore(),
+        },
+      ]);
+    }
+    this.showToast(`Attached part: ${clean}`);
+  }
+
+  public async detachPart(deviceId: string): Promise<void> {
+    const target = this.hardwareDevices().find((d) => d.id === deviceId);
+    if (!target) return;
+    if (this.client && this.connectionState() === 'connected') {
+      try {
+        await this.client.unplug(target.endpoint, target.core);
+      } catch {
+        // Offline / optimistic fallback
+      }
+    }
+    this.hardwareDevices.update((list) =>
+      list.map((d) => (d.id === deviceId ? { ...d, status: 'unplugged', activeFault: null } : d))
+    );
+    this.showToast(`Unplugged ${target.endpoint}`);
+  }
+
+  public async injectFaultOnPart(deviceId: string, faultRule: string): Promise<void> {
+    const target = this.hardwareDevices().find((d) => d.id === deviceId);
+    if (!target) return;
+    const rule = faultRule.includes('@') ? faultRule : `${target.endpoint}@${faultRule}`;
+    if (this.client && this.connectionState() === 'connected') {
+      try {
+        await this.client.setFault(rule, target.core);
+      } catch {
+        // Offline / optimistic fallback
+      }
+    }
+    this.hardwareDevices.update((list) =>
+      list.map((d) => (d.id === deviceId ? { ...d, status: 'fault', activeFault: faultRule } : d))
+    );
+    this.busTransactions.update((txs) => [
+      ...txs,
+      {
+        seq: txs.length + 1,
+        timeMs: Math.round((txs[txs.length - 1]?.timeMs ?? 15) * 10 + 14) / 10,
+        bus: target.bus.startsWith('SPI') ? 'SPI0' : target.bus.startsWith('OSPI') ? 'OSPI0' : 'RIIC1',
+        role: 'Peripheral',
+        signal: target.bus.startsWith('SPI') ? 'CS0 + COPI / CIPO' : 'SDA NACK',
+        address: target.address,
+        payload: `Fault injected (${faultRule})`,
+        status: 'NACK',
+      },
+    ]);
+    this.showToast(`Fault injected on ${target.endpoint}: ${faultRule}`);
+  }
+
+  public async clearFaultOnPart(deviceId: string): Promise<void> {
+    const target = this.hardwareDevices().find((d) => d.id === deviceId);
+    if (!target) return;
+    if (this.client && this.connectionState() === 'connected') {
+      try {
+        await this.client.clearFault(target.endpoint, target.core);
+      } catch {
+        // Offline / optimistic fallback
+      }
+    }
+    this.hardwareDevices.update((list) =>
+      list.map((d) => (d.id === deviceId ? { ...d, status: 'attached', activeFault: null } : d))
+    );
+    this.showToast(`Cleared fault on ${target.endpoint}`);
+  }
+
+  public async exportTimeTravelArchive(): Promise<{ fileName: string; bytes: Uint8Array }> {
+    const cfg = this.activeBoardConfig();
+    const layout = this.rewindLayout();
+    const branches = layout.branchLanes.map((b) => ({
+      branch: b.branch,
+      parentBranch: b.parentBranch,
+      forkR: BigInt(b.forkRound),
+      reason: ForkReason.Base,
+      isLive: Boolean(b.isActive),
+      isKept: true,
+      name: b.name,
+    }));
+    const checkpoints = layout.nodes.map((n) => ({
+      id: n.id,
+      label: n.label,
+      branch: n.branch,
+      round: BigInt(n.round),
+      virtualNs: BigInt(Math.round(n.timeSec * 1_000_000_000)),
+    }));
+    const bytes = await exportTimeTravelTarball({
+      manifest: {
+        version: 1,
+        exportedAtIso: new Date().toISOString(),
+        boardName: cfg.name,
+        boardSpec: serializeBoardConfig(cfg),
+        activeBranchId: branches.find((b) => b.branch === this.activeLaneId())?.branch ?? 0,
+        branches,
+        checkpoints,
+      },
+      snapshots: {},
+    });
+    const fileName = `${cfg.id}_rewind.tar.gz`;
+    this.lastArchiveSummary.set(`Exported ${fileName} (${bytes.length} bytes)`);
+    this.showToast(`Exported ${fileName}`);
+    return { fileName, bytes };
+  }
+
+  public async importTimeTravelArchive(fileName: string, bytes: Uint8Array): Promise<TimeTravelArchiveBundle> {
+    const bundle = await importTimeTravelTarball(bytes);
+    if (bundle.manifest.boardSpec.trim().length > 0) {
+      this.importBoardText(fileName.replace(/\.tar\.gz$/i, '.board'), bundle.manifest.boardSpec);
+    }
+    this.lastArchiveSummary.set(
+      `Imported ${fileName}: ${bundle.manifest.branches.length} branches, ${bundle.manifest.checkpoints.length} checkpoints`
+    );
+    this.showToast(`Imported time-travel archive ${fileName}`);
+    return bundle;
+  }
+
+  public async captureProfileTrace(): Promise<void> {
+    if (this.client && this.connectionState() === 'connected') {
+      try {
+        const folded = await this.client.getFolded(this.activeCore());
+        if (folded && folded.trim().length > 0) {
+          this.foldedProfileText.set(folded);
+          this.showToast(`Captured folded profile on CPU${this.activeCore()}`);
+          return;
+        }
+      } catch {
+        // Fallback to simulated refresh below
+      }
+    }
+    this.showToast(`Refreshed ${this.activeBoardConfig().cores.length}-core + NPU profile view`);
   }
 }

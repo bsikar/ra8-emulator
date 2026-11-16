@@ -100,7 +100,7 @@ import { EmulatorService } from '../../services/emulator.service';
     }
 
     .sub-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -108,7 +108,7 @@ import { EmulatorService } from '../../services/emulator.service';
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       cursor: pointer;
     }
@@ -118,7 +118,7 @@ import { EmulatorService } from '../../services/emulator.service';
       border: 1px solid var(--border-subtle);
       color: var(--text-secondary);
       border-radius: var(--radius-sm);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 1px 6px;
       cursor: pointer;
@@ -133,7 +133,7 @@ import { EmulatorService } from '../../services/emulator.service';
       min-height: 0;
       overflow-y: auto;
       padding: 6px 10px;
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.45;
       background: var(--bg-well);
     }
@@ -155,13 +155,13 @@ import { EmulatorService } from '../../services/emulator.service';
 
     .line-time {
       color: var(--text-tertiary);
-      font-size: 10px;
+      font-size: 12px;
       user-select: none;
     }
 
     .line-prefix {
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       user-select: none;
     }
 
@@ -182,7 +182,7 @@ import { EmulatorService } from '../../services/emulator.service';
     }
 
     .prompt {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-green);
       font-weight: 600;
     }
@@ -193,7 +193,7 @@ import { EmulatorService } from '../../services/emulator.service';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
-      font-size: 11px;
+      font-size: 12px;
       padding: 2px 6px;
       outline: none;
     }
@@ -210,7 +210,7 @@ import { EmulatorService } from '../../services/emulator.service';
       border: none;
       border-radius: var(--radius-sm);
       color: #ffffff;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 3px 8px;
       cursor: pointer;

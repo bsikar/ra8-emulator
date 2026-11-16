@@ -4,7 +4,7 @@
  * Implements high-performance binary encoding and decoding using DataView
  * adhering to ra8_rpc_wire specifications and zero-padding struct layout.
  */
-import { ErrorCode, LocalWhereKind, HEADER_BYTES, METRICS_REPORT_BYTES, MAX_PAYLOAD, PROTOCOL_MAGIC, PROTOCOL_VERSION, } from "./types.js";
+import { ErrorCode, Core, LocalWhereKind, HEADER_BYTES, METRICS_REPORT_BYTES, MAX_PAYLOAD, PROTOCOL_MAGIC, PROTOCOL_VERSION, } from "./types.js";
 /** Encode the 6-byte frame header */
 export function encodeHeader(length, kind) {
     const buf = new Uint8Array(HEADER_BYTES);
@@ -547,7 +547,7 @@ export function encodeDisasmAsk(args) {
     view.setUint8(6, args.usePc ? 1 : 0);
     return buf;
 }
-/** Decode DisasmReply from Method.Disasm (0x013D) */
+/** Decode DisasmReply from Method.Disasm (0x013E) */
 export function decodeDisasmReply(data) {
     if (data.length < 10)
         throw new Error("Truncated DisasmReply header");
@@ -1006,5 +1006,38 @@ export function decodeAdvanced(data) {
         reason: view.getUint8(17),
         address: view.getUint32(18, true),
     };
+}
+/** Encode PartSpec (core u8, text u32 LE length + UTF-8 up to 256 bytes) */
+export function encodePartSpec(spec, core = Core.Cpu0) {
+    const bytes = new TextEncoder().encode(spec);
+    if (bytes.length === 0)
+        throw new Error("PartSpec text must not be empty");
+    if (bytes.length > 256)
+        throw new Error("PartSpec text must not exceed 256 UTF-8 bytes");
+    const buf = new Uint8Array(5 + bytes.length);
+    const view = new DataView(buf.buffer);
+    view.setUint8(0, core);
+    view.setUint32(1, bytes.length, true);
+    buf.set(bytes, 5);
+    return buf;
+}
+/** Encode bare StatePath (path u32 LE length + bare filename up to 4096 bytes) */
+export function encodeStatePath(bareName) {
+    if (!bareName)
+        throw new Error("StatePath must not be empty");
+    if (bareName === "." ||
+        bareName === ".." ||
+        bareName.includes("/") ||
+        bareName.includes("\\") ||
+        bareName.includes("\0")) {
+        throw new Error("StatePath must be a bare name without directory separators");
+    }
+    const bytes = new TextEncoder().encode(bareName);
+    if (bytes.length > 4096)
+        throw new Error("StatePath must not exceed 4096 UTF-8 bytes");
+    const buf = new Uint8Array(4 + bytes.length);
+    new DataView(buf.buffer).setUint32(0, bytes.length, true);
+    buf.set(bytes, 4);
+    return buf;
 }
 //# sourceMappingURL=codec.js.map

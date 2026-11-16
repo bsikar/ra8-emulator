@@ -35,7 +35,7 @@ export enum ErrorCode {
   AppHistory = 0x0103,
 }
 
-/** All 61 Session RPC Opcodes (Method in rpc.zig) */
+/** All 62 Session RPC Opcodes (Method in rpc.zig) */
 export enum Method {
   Load = 0x0100,
   Run = 0x0101,
@@ -98,8 +98,14 @@ export enum Method {
   MarkerSet = 0x013A,
   FrameStatus = 0x013B,
   Diff = 0x013C,
-  Disasm = 0x013D,
+  SetVar = 0x013D,
+  Disasm = 0x013E,
 }
+
+export const CAP_TRANSPORT = 1 << 15;
+export const CAP_WORKSPACE = 1 << 16;
+export const CAP_BUILD = 1 << 17;
+export const CAP_PROJECT = 1 << 18;
 
 /** Opcode is an alias for Method */
 export { Method as Opcode };
@@ -711,6 +717,40 @@ export interface ElfSymbol {
   address: number;
   size: number;
   kind: "func" | "object" | "other";
+}
+
+export interface TimeTravelBranchRecord {
+  branch: number;
+  parentBranch: number;
+  forkR: bigint;
+  reason: ForkReason;
+  isLive: boolean;
+  isKept: boolean;
+  name: string;
+}
+
+export interface TimeTravelCheckpointRecord {
+  id: string;
+  label: string;
+  branch: number;
+  round: bigint;
+  virtualNs: bigint;
+  snapshotFile?: string;
+}
+
+export interface TimeTravelArchiveManifest {
+  version: 1;
+  exportedAtIso: string;
+  boardName: string;
+  boardSpec: string;
+  activeBranchId: number;
+  branches: TimeTravelBranchRecord[];
+  checkpoints: TimeTravelCheckpointRecord[];
+}
+
+export interface TimeTravelArchiveBundle {
+  manifest: TimeTravelArchiveManifest;
+  snapshots: Record<string, Uint8Array>;
 }
 
 

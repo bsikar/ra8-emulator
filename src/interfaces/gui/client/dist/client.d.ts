@@ -181,6 +181,18 @@ export declare class RA8RpcClient extends TypedEventEmitter {
     getLocalsAt(core: Core, frame: number): Promise<LocalsResult>;
     private sendRaw;
     private onData;
+    /** Plug an external off-chip peripheral (`MODEL@ENDPOINT`) */
+    plug(spec: string, core?: Core): Promise<boolean>;
+    /** Unplug an external peripheral attached at `ENDPOINT` */
+    unplug(endpoint: string, core?: Core): Promise<boolean>;
+    /** Inject a deterministic fault rule (`MODEL@ENDPOINT=MODE` or `@ENDPOINT=MODE`) */
+    setFault(rule: string, core?: Core): Promise<boolean>;
+    /** Clear any active fault rule on `ENDPOINT` */
+    clearFault(endpoint: string, core?: Core): Promise<boolean>;
+    /** Save a snapshot into the server state directory using a bare filename */
+    snapshot(bareName: string): Promise<boolean>;
+    /** Restore a previously saved snapshot using a bare filename */
+    restore(bareName: string): Promise<boolean>;
     private processFrame;
     private dispatchTopicEvent;
     private cleanupPending;

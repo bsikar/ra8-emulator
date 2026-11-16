@@ -164,14 +164,14 @@ import { Access, Core } from 'ra8-rpc-client';
     }
 
     .sub-title {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-secondary);
       white-space: nowrap;
     }
 
     .src-badge {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-blue);
       background: var(--accent-blue-subtle);
       padding: 1px 6px;
@@ -183,7 +183,7 @@ import { Access, Core } from 'ra8-rpc-client';
     }
 
     .core-tag, .count-pill {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       background: var(--border-subtle);
       padding: 1px 5px;
@@ -207,7 +207,7 @@ import { Access, Core } from 'ra8-rpc-client';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 3px 6px;
       outline: none;
     }
@@ -221,7 +221,7 @@ import { Access, Core } from 'ra8-rpc-client';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 3px 7px;
       cursor: pointer;
@@ -249,13 +249,13 @@ import { Access, Core } from 'ra8-rpc-client';
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .empty-note {
       padding: 18px 12px;
       color: var(--text-tertiary);
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.45;
     }
 
@@ -275,7 +275,7 @@ import { Access, Core } from 'ra8-rpc-client';
 
     .lw-table th {
       text-align: left;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-tertiary);
       background: var(--bg-well);
@@ -288,7 +288,7 @@ import { Access, Core } from 'ra8-rpc-client';
     .lw-table td {
       padding: 3px 8px;
       border-bottom: 1px solid var(--border-subtle);
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .var-name {
@@ -298,7 +298,7 @@ import { Access, Core } from 'ra8-rpc-client';
 
     .var-type {
       color: var(--text-tertiary);
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .var-val {
@@ -314,12 +314,12 @@ import { Access, Core } from 'ra8-rpc-client';
 
     .val-hex {
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .var-loc {
       color: var(--text-tertiary);
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .points-list {
@@ -333,7 +333,7 @@ import { Access, Core } from 'ra8-rpc-client';
       gap: 6px;
       padding: 4px 8px;
       border-bottom: 1px solid var(--border-subtle);
-      font-size: 10px;
+      font-size: 12px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -341,7 +341,7 @@ import { Access, Core } from 'ra8-rpc-client';
       padding: 1px 4px;
       border-radius: 3px;
       font-weight: 700;
-      font-size: 9px;
+      font-size: 12px;
     }
 
     .pt-badge.bp {
@@ -376,7 +376,7 @@ import { Access, Core } from 'ra8-rpc-client';
       color: var(--accent-blue);
       cursor: pointer;
       padding: 0;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .pt-link:hover {
@@ -397,7 +397,7 @@ import { Access, Core } from 'ra8-rpc-client';
       color: var(--text-tertiary);
       cursor: pointer;
       padding: 0 3px;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .pt-del:hover {

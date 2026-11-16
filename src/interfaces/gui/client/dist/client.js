@@ -6,7 +6,7 @@
  */
 import { Kind, ErrorCode, Method, Topic, Core, Register, RunMode, Direction, Access, PROTOCOL_MAGIC, PROTOCOL_VERSION, } from "./types.js";
 import { crc32 } from "./elf.js";
-import { encodeHello, decodeHello, decodeFault, encodeRequest, decodeResponse, decodeEvent, encodeFrame, splitFrames, encodeCoreOnly, encodeRun, encodeReadRegister, encodeWriteRegister, encodeReadMemory, decodeMemory, encodeWriteMemory, encodeSubscription, encodePoint, encodePointId, encodeAdvance, encodeSetSpeed, encodeScheduleInput, encodeConsoleInput, encodeDisasmAsk, decodeDisasmReply, decodeStackReport, encodePeriphAsk, encodeFoldedAsk, decodeTextSlice, decodeTraceEvent, decodeTransportEvent, decodeBranchList, encodeBranchSwitch, encodeBranchDelete, encodeBranchConfirmFork, decodeForkStatus, encodeSeek, encodePlayArgs, encodeNavQueryArgs, decodeNavQueryResult, encodeMarkerSetArgs, decodeFrameStatusResult, encodeDiffArgs, decodeDiff, encodeLoad, encodeLoadBegin, encodeLoadChunk, encodeNamedBreak, decodeNamedPoint, encodeWatchpoint, encodeMapAsk, decodeSourceLine, encodeCoreFrame, decodeLocals, decodeAdvanced, decodeU32, decodeU64, decodeAck, decodeStopped, decodeUart, decodeSessionEvent, decodeBoardParts, decodeBacktrace, decodeDirtyRect, decodeMetricsReport, } from "./codec.js";
+import { encodeHello, decodeHello, decodeFault, encodeRequest, decodeResponse, decodeEvent, encodeFrame, splitFrames, encodeCoreOnly, encodeRun, encodeReadRegister, encodeWriteRegister, encodeReadMemory, decodeMemory, encodeWriteMemory, encodeSubscription, encodePoint, encodePointId, encodeAdvance, encodeSetSpeed, encodeScheduleInput, encodeConsoleInput, encodeDisasmAsk, decodeDisasmReply, decodeStackReport, encodePeriphAsk, encodeFoldedAsk, decodeTextSlice, decodeTraceEvent, decodeTransportEvent, decodeBranchList, encodeBranchSwitch, encodeBranchDelete, encodeBranchConfirmFork, decodeForkStatus, encodeSeek, encodePlayArgs, encodeNavQueryArgs, decodeNavQueryResult, encodeMarkerSetArgs, decodeFrameStatusResult, encodeDiffArgs, decodeDiff, encodeLoad, encodeLoadBegin, encodeLoadChunk, encodeNamedBreak, decodeNamedPoint, encodeWatchpoint, encodeMapAsk, decodeSourceLine, encodeCoreFrame, decodeLocals, encodePartSpec, encodeStatePath, decodeAdvanced, decodeU32, decodeU64, decodeAck, decodeStopped, decodeUart, decodeSessionEvent, decodeBoardParts, decodeBacktrace, decodeDirtyRect, decodeMetricsReport, } from "./codec.js";
 /** Lightweight, zero-dependency typed event emitter */
 export class TypedEventEmitter {
     listeners = new Map();
@@ -552,6 +552,36 @@ export class RA8RpcClient extends TypedEventEmitter {
         for (const frame of frames) {
             this.processFrame(frame.kind, frame.payload);
         }
+    }
+    /** Plug an external off-chip peripheral (`MODEL@ENDPOINT`) */
+    async plug(spec, core = Core.Cpu0) {
+        const resp = await this.call(Method.Plug, encodePartSpec(spec, core));
+        return decodeAck(resp).accepted !== 0;
+    }
+    /** Unplug an external peripheral attached at `ENDPOINT` */
+    async unplug(endpoint, core = Core.Cpu0) {
+        const resp = await this.call(Method.Unplug, encodePartSpec(endpoint, core));
+        return decodeAck(resp).accepted !== 0;
+    }
+    /** Inject a deterministic fault rule (`MODEL@ENDPOINT=MODE` or `@ENDPOINT=MODE`) */
+    async setFault(rule, core = Core.Cpu0) {
+        const resp = await this.call(Method.SetFault, encodePartSpec(rule, core));
+        return decodeAck(resp).accepted !== 0;
+    }
+    /** Clear any active fault rule on `ENDPOINT` */
+    async clearFault(endpoint, core = Core.Cpu0) {
+        const resp = await this.call(Method.ClearFault, encodePartSpec(endpoint, core));
+        return decodeAck(resp).accepted !== 0;
+    }
+    /** Save a snapshot into the server state directory using a bare filename */
+    async snapshot(bareName) {
+        const resp = await this.call(Method.Snapshot, encodeStatePath(bareName));
+        return decodeAck(resp).accepted !== 0;
+    }
+    /** Restore a previously saved snapshot using a bare filename */
+    async restore(bareName) {
+        const resp = await this.call(Method.Restore, encodeStatePath(bareName));
+        return decodeAck(resp).accepted !== 0;
     }
     processFrame(kind, payload) {
         switch (kind) {

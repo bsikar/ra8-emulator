@@ -1,23 +1,25 @@
-import { Component, HostListener, inject, signal, computed, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Component, HostListener, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ConnectionBarComponent } from './components/connection-bar/connection-bar.component';
-import { VirtualBoardComponent } from './components/virtual-board/virtual-board.component';
-import { DisassemblyViewComponent } from './components/disassembly-view/disassembly-view.component';
-import { MemoryInspectorComponent } from './components/memory-inspector/memory-inspector.component';
-import { PeripheralInspectorComponent } from './components/peripheral-inspector/peripheral-inspector.component';
-import { RegisterInspectorComponent } from './components/register-inspector/register-inspector.component';
-import { LocalsWatchComponent } from './components/locals-watch/locals-watch.component';
-import { CallStackComponent } from './components/call-stack/call-stack.component';
-import { MetricsPanelComponent } from './components/metrics-panel/metrics-panel.component';
-import { UartTerminalComponent } from './components/uart-terminal/uart-terminal.component';
-import { ExecutionDagComponent } from './components/execution-dag/execution-dag.component';
-import { EmulatorService, CoreInspectionMode } from './services/emulator.service';
-import { Core, StopReason } from 'ra8-rpc-client';
+import { Core } from 'ra8-rpc-client';
+import { DebugTabComponent } from './components/debug-tab/debug-tab.component';
+import { HardwareTabComponent } from './components/hardware-tab/hardware-tab.component';
+import { ProfileTabComponent } from './components/profile-tab/profile-tab.component';
+import { RewindTabComponent } from './components/rewind-tab/rewind-tab.component';
+import { WorkspaceTabComponent } from './components/workspace-tab/workspace-tab.component';
+import { EmulatorService, WorkbenchTab } from './services/emulator.service';
 
-export type TopDeckTab = 'disasm' | 'memory' | 'periph';
-export type BottomDeckTab = 'registers' | 'locals' | 'stack' | 'metrics';
-export type DrawerTab = 'terminal' | 'dag';
+interface WorkbenchNavItem {
+  id: WorkbenchTab;
+  label: string;
+}
+
+interface CommandItem {
+  id: string;
+  label: string;
+  shortcut: string;
+  run: () => void | Promise<void>;
+}
 
 @Component({
   selector: 'app-root',
@@ -25,279 +27,129 @@ export type DrawerTab = 'terminal' | 'dag';
   imports: [
     CommonModule,
     FormsModule,
-    ConnectionBarComponent,
-    VirtualBoardComponent,
-    DisassemblyViewComponent,
-    MemoryInspectorComponent,
-    PeripheralInspectorComponent,
-    RegisterInspectorComponent,
-    LocalsWatchComponent,
-    CallStackComponent,
-    MetricsPanelComponent,
-    UartTerminalComponent,
-    ExecutionDagComponent,
+    WorkspaceTabComponent,
+    DebugTabComponent,
+    RewindTabComponent,
+    HardwareTabComponent,
+    ProfileTabComponent,
   ],
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.css']
+  styleUrl: './app.component.css',
 })
 export class AppComponent {
-  public emu = inject(EmulatorService);
-  public Core = Core;
+  public readonly emu = inject(EmulatorService);
 
-  public topDeckTab = signal<TopDeckTab>('disasm');
-  public bottomDeckTab = signal<BottomDeckTab>('registers');
-  public drawerTab = signal<DrawerTab>('terminal');
-  public drawerCollapsed = signal<boolean>(false);
-  public dismissedHalt = signal<boolean>(false);
-  public dismissedQuickstart = signal<boolean>(false);
-  public isDraggingFile = signal<boolean>(false);
-  public quickCopied = signal<boolean>(false);
+  public readonly tabs: readonly WorkbenchNavItem[] = [
+    { id: 'workspace', label: 'Workspace' },
+    { id: 'debug', label: 'Debug' },
+    { id: 'rewind', label: 'Rewind' },
+    { id: 'hardware', label: 'Hardware' },
+    { id: 'profile', label: 'Profile' },
+  ];
 
-  private dragDepth = 0;
-  private lastDiagTick = 0;
+  public readonly activeTab = signal<WorkbenchTab>('workspace');
+  public readonly debugDrawerOpen = signal<boolean>(false);
+  public readonly commandPaletteOpen = signal<boolean>(false);
+  public readonly commandQuery = signal<string>('');
+  public readonly isDragOver = signal<boolean>(false);
 
-  public isConnected = computed(() => this.emu.connectionState() === 'connected');
-  public isRunning = computed(() => this.emu.executionStatus() === 'running');
-  public cpu1Attached = this.emu.cpu1Attached;
-  public inspectionMode = this.emu.inspectionMode;
-  public speed = this.emu.speedMilli;
-  public lastStopInfo = this.emu.lastStop;
+  public readonly commands = computed<CommandItem[]>(() => [
+    { id: 'tab-ws', label: 'Go to Workspace', shortcut: '1', run: () => this.setTab('workspace') },
+    { id: 'tab-dbg', label: 'Go to Debug (IDE / DAP)', shortcut: '2', run: () => this.setTab('debug') },
+    { id: 'tab-rew', label: 'Go to Rewind (Time-Travel Tree)', shortcut: '3', run: () => this.setTab('rewind') },
+    { id: 'tab-hw', label: 'Go to Hardware (HIL & Bus Signals)', shortcut: '4', run: () => this.setTab('hardware') },
+    { id: 'tab-prof', label: 'Go to Profile (Compute & Flamegraph)', shortcut: '5', run: () => this.setTab('profile') },
+    { id: 'run', label: 'Toggle Continue / Pause', shortcut: 'F5', run: () => this.toggleRunPause() },
+    { id: 'step-over', label: 'Step Over', shortcut: 'F10', run: () => this.emu.stepOver() },
+    { id: 'step-into', label: 'Step Into', shortcut: 'F11', run: () => this.emu.step() },
+    { id: 'drawer', label: 'Toggle Registers / Locals / Memory Drawer', shortcut: 'Cmd+R', run: () => { this.setTab('debug'); this.debugDrawerOpen.update((v) => !v); } },
+    { id: 'trace', label: 'Capture Profile Trace', shortcut: 'P', run: () => { this.setTab('profile'); return this.emu.captureProfileTrace(); } },
+  ]);
 
-  public activeStopCount = computed(
-    () => this.emu.allBreakpoints().length + this.emu.watchpoints().length
-  );
-
-  public showQuickstartBanner = computed(
-    () => !this.isConnected() && !this.dismissedQuickstart()
-  );
-
-  public showErrorBanner = computed(() => {
-    const msg = this.emu.errorMessage();
-    return !!msg && !msg.startsWith('Offline — backend unreachable');
+  public readonly filteredCommands = computed<CommandItem[]>(() => {
+    const q = this.commandQuery().trim().toLowerCase();
+    if (!q) return this.commands();
+    return this.commands().filter((c) => c.label.toLowerCase().includes(q));
   });
 
-  public showHaltBanner = computed(() => {
-    return !this.dismissedHalt() && this.lastStopInfo() !== null && !this.isRunning();
-  });
+  public setTab(tab: WorkbenchTab): void {
+    this.activeTab.set(tab);
+  }
 
-  public haltSourceBadge = computed(() => {
-    const s = this.lastStopInfo();
-    if (!s) return '';
-    const sl = s.core === Core.Cpu1 ? this.emu.cpu1SourceLine() : this.emu.cpu0SourceLine();
-    if (!sl || !sl.found || !sl.path) return '';
-    const base = sl.path.split(/[\\/]/).pop() ?? sl.path;
-    return `${base}:${sl.line}`;
-  });
+  public async toggleRunPause(): Promise<void> {
+    if (this.emu.executionStatus() === 'running') {
+      await this.emu.pause();
+    } else {
+      await this.emu.run();
+    }
+  }
 
-  public canSkipBkpt = computed(() => {
-    const s = this.lastStopInfo();
-    return !!s && (s.reason === StopReason.Breakpoint || s.reason === StopReason.UnitBreak);
-  });
+  public onInspectFunction(fnName: string): void {
+    this.emu.highlightedFunction.set(fnName);
+    this.setTab('debug');
+  }
 
-  public lastStopReason = computed(() => {
-    const s = this.lastStopInfo();
-    if (!s) return '';
-    const reasons = [
-      'Stepped',
-      'Breakpoint Hit',
-      'Watchpoint Hit',
-      'Halt Requested',
-      'Unit Break',
-      'Unit Watch',
-      'Budget Reached',
-      'Core Fault',
-      'Replay Failed',
-    ];
-    return reasons[s.reason] || `Stop (${s.reason})`;
-  });
-
-  public quickServeCommand = computed(() => {
-    const raw = this.emu.serverUrl().trim();
-    const hostPort = raw.replace(/^wss?:\/\//i, '') || '127.0.0.1:4567';
-    return `ra8_emulator serve <firmware.elf> --listen tcp:${hostPort}`;
-  });
-
-  constructor() {
-    effect(() => {
-      const open = this.emu.dagDrawerOpen();
-      if (open) {
-        this.drawerTab.set('dag');
-        this.drawerCollapsed.set(false);
-      }
-    });
-
-    effect(() => {
-      const stop = this.lastStopInfo();
-      if (stop) {
-        this.dismissedHalt.set(false);
-      }
-    });
-
-    effect(() => {
-      const memJump = this.emu.requestedMemoryJump();
-      if (memJump !== null) {
-        this.topDeckTab.set('memory');
-      }
-    });
-
-    effect(() => {
-      const diagTick = this.emu.openDiagnosticsTick();
-      if (diagTick > this.lastDiagTick) {
-        this.lastDiagTick = diagTick;
-        this.bottomDeckTab.set('metrics');
-      }
-    });
+  public runCommand(cmd: CommandItem): void {
+    this.commandPaletteOpen.set(false);
+    this.commandQuery.set('');
+    void cmd.run();
   }
 
   @HostListener('window:keydown', ['$event'])
-  public onGlobalKeydown(event: KeyboardEvent): void {
-    const target = event.target as HTMLElement | null;
-    const inInput =
-      !!target &&
-      (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'o') {
-      event.preventDefault();
-      this.emu.requestOpenLoadPopover();
+  public onKeyDown(evt: KeyboardEvent): void {
+    const mod = evt.metaKey || evt.ctrlKey;
+    if (mod && evt.key.toLowerCase() === 'k') {
+      evt.preventDefault();
+      this.commandPaletteOpen.update((v) => !v);
       return;
     }
-
-    if (inInput || !this.isConnected()) return;
-
-    if (event.key === 'F5' && !event.ctrlKey && !event.metaKey) {
-      event.preventDefault();
-      if (this.isRunning()) {
-        void this.emu.pause();
-      } else {
-        void this.emu.run();
-      }
-    } else if (event.key === 'F10') {
-      event.preventDefault();
-      if (!this.isRunning()) void this.emu.stepOver();
-    } else if (event.key === 'F11' && event.shiftKey) {
-      event.preventDefault();
-      if (!this.isRunning()) void this.emu.stepOut();
-    } else if (event.key === 'F11') {
-      event.preventDefault();
-      if (!this.isRunning()) void this.emu.step();
-    }
-  }
-
-  @HostListener('window:dragenter', ['$event'])
-  public onDragEnter(event: DragEvent): void {
-    if (!event.dataTransfer?.types.includes('Files')) return;
-    event.preventDefault();
-    this.dragDepth += 1;
-    this.isDraggingFile.set(true);
-  }
-
-  @HostListener('window:dragover', ['$event'])
-  public onDragOver(event: DragEvent): void {
-    if (!event.dataTransfer?.types.includes('Files')) return;
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
-    }
-    this.isDraggingFile.set(true);
-  }
-
-  @HostListener('window:dragleave', ['$event'])
-  public onDragLeave(event: DragEvent): void {
-    if (!event.dataTransfer?.types.includes('Files')) return;
-    event.preventDefault();
-    this.dragDepth = Math.max(0, this.dragDepth - 1);
-    if (this.dragDepth === 0) {
-      this.isDraggingFile.set(false);
-    }
-  }
-
-  @HostListener('window:drop', ['$event'])
-  public async onDrop(event: DragEvent): Promise<void> {
-    if (!event.dataTransfer?.files?.length) {
-      this.dragDepth = 0;
-      this.isDraggingFile.set(false);
+    if (mod && evt.key.toLowerCase() === 'r' && this.activeTab() === 'debug') {
+      evt.preventDefault();
+      this.debugDrawerOpen.update((v) => !v);
       return;
     }
-    event.preventDefault();
-    this.dragDepth = 0;
-    this.isDraggingFile.set(false);
+    if (evt.key === 'Escape' && this.commandPaletteOpen()) {
+      evt.preventDefault();
+      this.commandPaletteOpen.set(false);
+      return;
+    }
+    if (evt.key === 'F5') {
+      evt.preventDefault();
+      void this.toggleRunPause();
+    } else if (evt.key === 'F10') {
+      evt.preventDefault();
+      void this.emu.stepOver();
+    } else if (evt.key === 'F11') {
+      evt.preventDefault();
+      void this.emu.step();
+    }
+  }
 
-    const file = event.dataTransfer.files[0];
+  public onDragOver(evt: DragEvent): void {
+    evt.preventDefault();
+    this.isDragOver.set(true);
+  }
+
+  public onDragLeave(evt: DragEvent): void {
+    if (evt.currentTarget === evt.target) {
+      this.isDragOver.set(false);
+    }
+  }
+
+  public async onDrop(evt: DragEvent): Promise<void> {
+    evt.preventDefault();
+    this.isDragOver.set(false);
+    const file = evt.dataTransfer?.files?.[0];
     if (!file) return;
-    const buf = await file.arrayBuffer();
-    const core =
-      this.emu.inspectionMode() === 'cpu1' && this.emu.cpu1Attached() ? Core.Cpu1 : Core.Cpu0;
-    await this.emu.loadElfFile(file.name, new Uint8Array(buf), core, {
-      breakAtMainAndRun: true,
-    });
-  }
-
-  public copyQuickCommand(): void {
-    void navigator.clipboard?.writeText(this.quickServeCommand());
-    this.quickCopied.set(true);
-    setTimeout(() => this.quickCopied.set(false), 1800);
-  }
-
-  public retryQuickConnect(): void {
-    void this.emu.connect(this.emu.serverUrl());
-  }
-
-  public openLoadElf(): void {
-    this.emu.requestOpenLoadPopover();
-  }
-
-  public dismissError(): void {
-    this.emu.errorMessage.set(null);
-  }
-
-  public continueFromHalt(): void {
-    void this.emu.run();
-  }
-
-  public skipHaltBkpt(): void {
-    const s = this.lastStopInfo();
-    void this.emu.skipBkpt(s ? s.core : Core.Cpu0);
-  }
-
-  public setTopTab(tab: TopDeckTab): void {
-    this.topDeckTab.set(tab);
-  }
-
-  public setBottomTab(tab: BottomDeckTab): void {
-    this.bottomDeckTab.set(tab);
-  }
-
-  public setDrawerTab(tab: DrawerTab): void {
-    this.drawerTab.set(tab);
-    if (this.drawerCollapsed()) {
-      this.drawerCollapsed.set(false);
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith('.board')) {
+      this.emu.importBoardText(file.name, await file.text());
+    } else if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
+      await this.emu.importTimeTravelArchive(file.name, new Uint8Array(await file.arrayBuffer()));
+      this.setTab('rewind');
+    } else {
+      await this.emu.loadElfFile(file.name, new Uint8Array(await file.arrayBuffer()), Core.Cpu0);
+      this.setTab('debug');
     }
-    if (tab === 'dag') {
-      this.emu.dagDrawerOpen.set(true);
-    }
-  }
-
-  public toggleDrawerCollapse(): void {
-    const next = !this.drawerCollapsed();
-    this.drawerCollapsed.set(next);
-    if (next && this.drawerTab() === 'dag') {
-      this.emu.dagDrawerOpen.set(false);
-    }
-  }
-
-  public setMode(mode: CoreInspectionMode): void {
-    this.emu.setInspectionMode(mode);
-  }
-
-  public onSpeedChange(milli: number): void {
-    void this.emu.setSpeed(milli);
-  }
-
-  public dismissBanner(): void {
-    this.dismissedHalt.set(true);
-  }
-
-  public toHex8(val: number): string {
-    return (val >>> 0).toString(16).padStart(8, '0');
   }
 }

@@ -156,7 +156,7 @@ interface MemoryRow {
     }
 
     .range-pill {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-blue);
       background: var(--accent-blue-subtle);
       padding: 1px 6px;
@@ -164,7 +164,7 @@ interface MemoryRow {
     }
 
     .delta-pill {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-amber);
       background: var(--accent-amber-subtle);
       padding: 1px 6px;
@@ -181,7 +181,7 @@ interface MemoryRow {
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 1px 5px;
       cursor: pointer;
@@ -206,7 +206,7 @@ interface MemoryRow {
       background: transparent;
       border: none;
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 2px 6px;
       width: 108px;
       outline: none;
@@ -217,7 +217,7 @@ interface MemoryRow {
       border: none;
       border-left: 1px solid var(--border-subtle);
       color: var(--text-primary);
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 6px;
       cursor: pointer;
@@ -231,14 +231,14 @@ interface MemoryRow {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .empty-state {
       padding: 30px 14px;
       text-align: center;
       color: var(--text-tertiary);
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .hex-table {
@@ -253,7 +253,7 @@ interface MemoryRow {
       font-weight: 600;
       padding: 3px 6px;
       text-align: left;
-      font-size: 10px;
+      font-size: 12px;
       position: sticky;
       top: 0;
       z-index: 2;
@@ -334,7 +334,7 @@ interface MemoryRow {
       padding: 0 10px;
       background: var(--bg-well);
       border-top: 1px solid var(--border-subtle);
-      font-size: 10px;
+      font-size: 12px;
       flex-shrink: 0;
     }
 
@@ -348,7 +348,7 @@ interface MemoryRow {
       background: var(--bg-surface);
       border: 1px solid var(--accent-amber);
       color: var(--accent-amber);
-      font-size: 10px;
+      font-size: 12px;
       padding: 1px 4px;
       text-align: center;
       border-radius: var(--radius-sm);
@@ -365,7 +365,7 @@ interface MemoryRow {
     .edit-action-btn {
       padding: 2px 7px;
       border-radius: var(--radius-sm);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       border: 1px solid transparent;
       cursor: pointer;

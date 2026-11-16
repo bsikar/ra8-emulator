@@ -9,4 +9,5 @@ export * from "./codec.js";
 export * from "./client.js";
 export * from "./framebuffer.js";
 export * from "./elf.js";
+export * from "./tarball.js";
 

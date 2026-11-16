@@ -384,7 +384,7 @@ import { Core } from 'ra8-rpc-client';
       background: var(--accent-blue);
       color: #ffffff;
       font-weight: 700;
-      font-size: 10px;
+      font-size: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -407,7 +407,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .target-chip {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 1px 5px;
       border-radius: var(--radius-sm);
@@ -433,7 +433,7 @@ import { Core } from 'ra8-rpc-client';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-xl);
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 12px;
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s;
     }
@@ -453,7 +453,7 @@ import { Core } from 'ra8-rpc-client';
       border: 1px solid var(--accent-blue);
       border-radius: var(--radius-md);
       color: var(--accent-blue);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       max-width: 150px;
@@ -477,7 +477,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .load-icon {
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1;
     }
 
@@ -549,19 +549,19 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .hud-core-label {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent-blue);
       letter-spacing: 0.04em;
     }
 
     .hud-value {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-primary);
     }
 
     .hud-src {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-green);
       max-width: 120px;
       overflow: hidden;
@@ -569,7 +569,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .hud-sub {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
 
@@ -590,7 +590,7 @@ import { Core } from 'ra8-rpc-client';
       align-items: center;
       gap: 6px;
       cursor: pointer;
-      font-size: 11px;
+      font-size: 12px;
       white-space: nowrap;
     }
 
@@ -624,7 +624,7 @@ import { Core } from 'ra8-rpc-client';
       color: var(--text-primary);
       padding: 4px 7px;
       border-radius: var(--radius-sm);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
       display: inline-flex;
@@ -740,7 +740,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .input-label {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
       color: var(--text-secondary);
       display: block;
@@ -758,7 +758,7 @@ import { Core } from 'ra8-rpc-client';
       border-radius: var(--radius-sm);
       color: var(--text-primary);
       padding: 5px 8px;
-      font-size: 11px;
+      font-size: 12px;
       font-family: var(--font-mono);
     }
 
@@ -776,7 +776,7 @@ import { Core } from 'ra8-rpc-client';
       background: transparent;
       border: none;
       color: var(--text-secondary);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
       padding: 4px 6px;
       border-radius: 3px;
@@ -790,7 +790,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .warn-note {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-amber);
       background: var(--accent-amber-subtle);
       padding: 5px 7px;
@@ -821,13 +821,13 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .check-title {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .check-sub {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
 
@@ -838,7 +838,7 @@ import { Core } from 'ra8-rpc-client';
       color: #ffffff;
       border: none;
       border-radius: var(--radius-md);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
     }
@@ -857,7 +857,7 @@ import { Core } from 'ra8-rpc-client';
     .prog-row {
       display: flex;
       justify-content: space-between;
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
 
@@ -875,7 +875,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .loaded-summary {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-green);
       background: var(--accent-green-subtle);
       padding: 5px 7px;
@@ -886,7 +886,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .drop-tip {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
       line-height: 1.35;
     }
@@ -900,12 +900,12 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .cmd-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
     }
 
     .cmd-code {
-      font-size: 10px;
+      font-size: 12px;
       font-family: var(--font-mono);
       background: var(--bg-well);
       border: 1px solid var(--border-subtle);
@@ -917,7 +917,7 @@ import { Core } from 'ra8-rpc-client';
     }
 
     .copy-hint {
-      font-size: 9px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -931,13 +931,13 @@ import { Core } from 'ra8-rpc-client';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-primary);
     }
 
     kbd {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 12px;
       padding: 1px 5px;
       border-radius: var(--radius-sm);
       background: var(--bg-well);
@@ -948,7 +948,7 @@ import { Core } from 'ra8-rpc-client';
     .help-tips {
       border-top: 1px solid var(--border-subtle);
       padding-top: 8px;
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       display: flex;
       flex-direction: column;

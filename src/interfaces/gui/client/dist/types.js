@@ -33,7 +33,7 @@ export var ErrorCode;
     ErrorCode[ErrorCode["AppTooLong"] = 258] = "AppTooLong";
     ErrorCode[ErrorCode["AppHistory"] = 259] = "AppHistory";
 })(ErrorCode || (ErrorCode = {}));
-/** All 61 Session RPC Opcodes (Method in rpc.zig) */
+/** All 62 Session RPC Opcodes (Method in rpc.zig) */
 export var Method;
 (function (Method) {
     Method[Method["Load"] = 256] = "Load";
@@ -97,8 +97,13 @@ export var Method;
     Method[Method["MarkerSet"] = 314] = "MarkerSet";
     Method[Method["FrameStatus"] = 315] = "FrameStatus";
     Method[Method["Diff"] = 316] = "Diff";
-    Method[Method["Disasm"] = 317] = "Disasm";
+    Method[Method["SetVar"] = 317] = "SetVar";
+    Method[Method["Disasm"] = 318] = "Disasm";
 })(Method || (Method = {}));
+export const CAP_TRANSPORT = 1 << 15;
+export const CAP_WORKSPACE = 1 << 16;
+export const CAP_BUILD = 1 << 17;
+export const CAP_PROJECT = 1 << 18;
 /** Opcode is an alias for Method */
 export { Method as Opcode };
 /** All 7 Event Topics (Topic in rpc.zig) */

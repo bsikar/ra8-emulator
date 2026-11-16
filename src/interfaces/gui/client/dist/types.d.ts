@@ -31,7 +31,7 @@ export declare enum ErrorCode {
     AppTooLong = 258,
     AppHistory = 259
 }
-/** All 61 Session RPC Opcodes (Method in rpc.zig) */
+/** All 62 Session RPC Opcodes (Method in rpc.zig) */
 export declare enum Method {
     Load = 256,
     Run = 257,
@@ -93,8 +93,13 @@ export declare enum Method {
     MarkerSet = 314,
     FrameStatus = 315,
     Diff = 316,
-    Disasm = 317
+    SetVar = 317,
+    Disasm = 318
 }
+export declare const CAP_TRANSPORT: number;
+export declare const CAP_WORKSPACE: number;
+export declare const CAP_BUILD: number;
+export declare const CAP_PROJECT: number;
 /** Opcode is an alias for Method */
 export { Method as Opcode };
 /** All 7 Event Topics (Topic in rpc.zig) */
@@ -638,5 +643,35 @@ export interface ElfSymbol {
     address: number;
     size: number;
     kind: "func" | "object" | "other";
+}
+export interface TimeTravelBranchRecord {
+    branch: number;
+    parentBranch: number;
+    forkR: bigint;
+    reason: ForkReason;
+    isLive: boolean;
+    isKept: boolean;
+    name: string;
+}
+export interface TimeTravelCheckpointRecord {
+    id: string;
+    label: string;
+    branch: number;
+    round: bigint;
+    virtualNs: bigint;
+    snapshotFile?: string;
+}
+export interface TimeTravelArchiveManifest {
+    version: 1;
+    exportedAtIso: string;
+    boardName: string;
+    boardSpec: string;
+    activeBranchId: number;
+    branches: TimeTravelBranchRecord[];
+    checkpoints: TimeTravelCheckpointRecord[];
+}
+export interface TimeTravelArchiveBundle {
+    manifest: TimeTravelArchiveManifest;
+    snapshots: Record<string, Uint8Array>;
 }
 //# sourceMappingURL=types.d.ts.map

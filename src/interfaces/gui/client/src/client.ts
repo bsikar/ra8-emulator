@@ -99,6 +99,8 @@ import {
   decodeSourceLine,
   encodeCoreFrame,
   decodeLocals,
+  encodePartSpec,
+  encodeStatePath,
   decodeAdvanced,
   decodeU32,
   decodeU64,
@@ -847,6 +849,42 @@ export class RA8RpcClient extends TypedEventEmitter {
     for (const frame of frames) {
       this.processFrame(frame.kind, frame.payload);
     }
+  }
+
+  /** Plug an external off-chip peripheral (`MODEL@ENDPOINT`) */
+  public async plug(spec: string, core: Core = Core.Cpu0): Promise<boolean> {
+    const resp = await this.call(Method.Plug, encodePartSpec(spec, core));
+    return decodeAck(resp).accepted !== 0;
+  }
+
+  /** Unplug an external peripheral attached at `ENDPOINT` */
+  public async unplug(endpoint: string, core: Core = Core.Cpu0): Promise<boolean> {
+    const resp = await this.call(Method.Unplug, encodePartSpec(endpoint, core));
+    return decodeAck(resp).accepted !== 0;
+  }
+
+  /** Inject a deterministic fault rule (`MODEL@ENDPOINT=MODE` or `@ENDPOINT=MODE`) */
+  public async setFault(rule: string, core: Core = Core.Cpu0): Promise<boolean> {
+    const resp = await this.call(Method.SetFault, encodePartSpec(rule, core));
+    return decodeAck(resp).accepted !== 0;
+  }
+
+  /** Clear any active fault rule on `ENDPOINT` */
+  public async clearFault(endpoint: string, core: Core = Core.Cpu0): Promise<boolean> {
+    const resp = await this.call(Method.ClearFault, encodePartSpec(endpoint, core));
+    return decodeAck(resp).accepted !== 0;
+  }
+
+  /** Save a snapshot into the server state directory using a bare filename */
+  public async snapshot(bareName: string): Promise<boolean> {
+    const resp = await this.call(Method.Snapshot, encodeStatePath(bareName));
+    return decodeAck(resp).accepted !== 0;
+  }
+
+  /** Restore a previously saved snapshot using a bare filename */
+  public async restore(bareName: string): Promise<boolean> {
+    const resp = await this.call(Method.Restore, encodeStatePath(bareName));
+    return decodeAck(resp).accepted !== 0;
   }
 
   private processFrame(kind: Kind, payload: Uint8Array): void {

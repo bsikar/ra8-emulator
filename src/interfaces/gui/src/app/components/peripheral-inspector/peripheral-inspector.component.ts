@@ -136,7 +136,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
       background: transparent;
       border: none;
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 2px 7px;
       border-radius: 3px;
@@ -176,7 +176,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 3px 6px;
       outline: none;
     }
@@ -190,7 +190,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
       color: var(--text-secondary);
       border-radius: var(--radius-sm);
       padding: 3px 7px;
-      font-size: 11px;
+      font-size: 12px;
       cursor: pointer;
     }
     .action-btn:hover:not(:disabled) {
@@ -210,7 +210,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       padding: 6px 8px;
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.4;
       color: var(--text-primary);
       white-space: pre;
@@ -219,7 +219,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
     .empty-note {
       padding: 24px 10px;
       text-align: center;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -240,7 +240,7 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
       background: var(--bg-well);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .log-row.fault {
@@ -257,16 +257,16 @@ type PeriphTab = 'mmio' | 'parts' | 'activity';
 
     .part-row code, .log-detail {
       color: var(--accent-blue);
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .log-time {
-      font-size: 9px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
     .log-core {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent-purple);
     }

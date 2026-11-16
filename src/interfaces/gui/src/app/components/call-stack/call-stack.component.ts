@@ -89,7 +89,7 @@ import { StackFrame } from 'ra8-rpc-client';
     }
 
     .sub-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       font-weight: 500;
     }
@@ -132,7 +132,7 @@ import { StackFrame } from 'ra8-rpc-client';
     }
 
     .lane-label {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 4px;
     }
@@ -141,7 +141,7 @@ import { StackFrame } from 'ra8-rpc-client';
 
     .empty-state {
       padding: 16px 8px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-tertiary);
       text-align: center;
     }
@@ -154,7 +154,7 @@ import { StackFrame } from 'ra8-rpc-client';
       background: var(--bg-well);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .frame-item.innermost {
@@ -184,7 +184,7 @@ import { StackFrame } from 'ra8-rpc-client';
     }
 
     .file-info {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       overflow: hidden;
       text-overflow: ellipsis;
@@ -193,7 +193,7 @@ import { StackFrame } from 'ra8-rpc-client';
 
     .frame-pc {
       color: var(--accent-blue);
-      font-size: 10px;
+      font-size: 12px;
     }
   `]
 })

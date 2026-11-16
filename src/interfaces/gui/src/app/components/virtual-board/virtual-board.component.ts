@@ -138,13 +138,13 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .device-title {
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-primary);
     }
 
     .panel-tag {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       background: var(--border-subtle);
       padding: 1px 6px;
@@ -153,7 +153,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .meta-pill {
-      font-size: 10px;
+      font-size: 12px;
       padding: 1px 6px;
       border-radius: var(--radius-sm);
       background: var(--border-subtle);
@@ -236,7 +236,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .standby-hint {
-      font-size: 10px;
+      font-size: 12px;
       color: #98989d;
     }
 
@@ -260,7 +260,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
       color: var(--text-primary);
     }
     .headless-desc {
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-secondary);
       max-width: 260px;
     }
@@ -284,7 +284,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .dock-label {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-tertiary);
       text-transform: uppercase;
@@ -325,7 +325,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .led-name {
-      font-size: 9px;
+      font-size: 12px;
       font-family: var(--font-mono);
       color: var(--text-secondary);
     }
@@ -341,7 +341,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
       border-radius: var(--radius-sm);
       color: var(--text-primary);
       padding: 3px 8px;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
@@ -363,7 +363,7 @@ import { FramebufferRenderer, InputKind, DirtyRect } from 'ra8-rpc-client';
     }
 
     .touch-text {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-blue);
     }
   `]

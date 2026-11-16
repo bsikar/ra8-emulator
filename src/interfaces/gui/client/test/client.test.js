@@ -90,6 +90,14 @@ import {
   decodeUart,
   dirtyRectToRgba,
   detectPixelFormat,
+  CAP_TRANSPORT,
+  CAP_WORKSPACE,
+  CAP_BUILD,
+  CAP_PROJECT,
+  encodePartSpec,
+  encodeStatePath,
+  exportTimeTravelTarball,
+  importTimeTravelTarball,
   RA8RpcClient,
 } from '../dist/index.js';
 
@@ -127,9 +135,9 @@ console.log('=== RA8 TypeScript RPC Client Test Suite ===\n');
 /* -------------------------------------------------------------------------- */
 console.log('--- Test Group 1: Enum & Schema Completeness ---');
 
-runTest('all Method opcodes are defined from 0x0100 through 0x013D', () => {
+runTest('all Method opcodes are defined from 0x0100 through 0x013E', () => {
   const methodValues = Object.values(Method).filter(v => typeof v === 'number');
-  assert.equal(methodValues.length, 61, 'Expected all 61 Method opcodes across 0x0100..0x013D');
+  assert.equal(methodValues.length, 62, 'Expected all 62 Method opcodes across 0x0100..0x013E');
   assert.equal(Method.Load, 0x0100);
   assert.equal(Method.Run, 0x0101);
   assert.equal(Method.Pause, 0x0102);
@@ -190,7 +198,12 @@ runTest('all Method opcodes are defined from 0x0100 through 0x013D', () => {
   assert.equal(Method.MarkerSet, 0x013A);
   assert.equal(Method.FrameStatus, 0x013B);
   assert.equal(Method.Diff, 0x013C);
-  assert.equal(Method.Disasm, 0x013D);
+  assert.equal(Method.SetVar, 0x013D);
+  assert.equal(Method.Disasm, 0x013E);
+  assert.equal(CAP_TRANSPORT, 1 << 15);
+  assert.equal(CAP_WORKSPACE, 1 << 16);
+  assert.equal(CAP_BUILD, 1 << 17);
+  assert.equal(CAP_PROJECT, 1 << 18);
 });
 
 runTest('all 7 Topic event codes are defined from 0x0100 through 0x0106', () => {
@@ -436,6 +449,25 @@ runTest('decodeStackReport, decodeBranchList, decodeForkStatus, and decodeDiff p
   assert.equal(diff.regs.length, 1);
   assert.equal(diff.regs[0].name, 'r0');
   assert.equal(diff.regs[0].valB, 0x42);
+});
+
+runTest('encodePartSpec and encodeStatePath match Zig PartSpec/StatePath wire layout', () => {
+  const spec = encodePartSpec('lsm6dso@riic1', Core.Cpu0);
+  assert.equal(spec.length, 5 + 13);
+  assert.equal(spec[0], Core.Cpu0);
+  assert.equal(new DataView(spec.buffer).getUint32(1, true), 13);
+  assert.equal(new TextDecoder().decode(spec.subarray(5)), 'lsm6dso@riic1');
+  assert.throws(() => encodePartSpec(''), /empty/i);
+  assert.throws(() => encodePartSpec('a'.repeat(257)), /256/);
+
+  const statePath = encodeStatePath('chk_912');
+  assert.equal(statePath.length, 4 + 7);
+  assert.equal(new DataView(statePath.buffer).getUint32(0, true), 7);
+  assert.equal(new TextDecoder().decode(statePath.subarray(4)), 'chk_912');
+  assert.throws(() => encodeStatePath(''), /empty/i);
+  assert.throws(() => encodeStatePath('dir/chk_912'), /bare/i);
+  assert.throws(() => encodeStatePath('dir\\chk_912'), /bare/i);
+  assert.throws(() => encodeStatePath('..'), /bare/i);
 });
 
 runTest('decodeBoardParts parses panel, dimensions, LEDs and switches', () => {
@@ -751,7 +783,13 @@ class MockWebSocketServer {
           case Method.LoadChunk:
           case Method.LoadEnd:
           case Method.ClearWatchpoint:
-          case Method.SkipBkpt: {
+          case Method.SkipBkpt:
+          case Method.Plug:
+          case Method.Unplug:
+          case Method.SetFault:
+          case Method.ClearFault:
+          case Method.Snapshot:
+          case Method.Restore: {
             this.seenMethods = this.seenMethods || [];
             this.seenMethods.push(req.method);
             const resp = encodeResponse(req.id, true, new Uint8Array([1]));
@@ -1016,6 +1054,20 @@ await runAsyncTest('full client RPC workflow against mock WebSocket server', asy
   assert.equal(await client.advance(Core.Cpu0, 1_000_000n), true);
   assert.equal(await client.skipBreakpoint(Core.Cpu0), true);
 
+  // Step 8d: Part plug/unplug/fault & bare-name snapshot/restore
+  assert.equal(await client.plug('lsm6dso@riic1'), true);
+  assert.equal(await client.setFault('lsm6dso@riic1=nack:8'), true);
+  assert.equal(await client.clearFault('riic1'), true);
+  assert.equal(await client.unplug('riic1'), true);
+  assert.equal(await client.snapshot('chk_912'), true);
+  assert.equal(await client.restore('chk_912'), true);
+  assert.ok(activeMockServer.seenMethods.includes(Method.Plug));
+  assert.ok(activeMockServer.seenMethods.includes(Method.SetFault));
+  assert.ok(activeMockServer.seenMethods.includes(Method.ClearFault));
+  assert.ok(activeMockServer.seenMethods.includes(Method.Unplug));
+  assert.ok(activeMockServer.seenMethods.includes(Method.Snapshot));
+  assert.ok(activeMockServer.seenMethods.includes(Method.Restore));
+
   // Step 9: Test subscribe and event emission
   const subAck = await client.subscribe(Core.Cpu0, Topic.LcdDirty);
   assert.equal(subAck, true);
@@ -1047,6 +1099,61 @@ await runAsyncTest('full client RPC workflow against mock WebSocket server', asy
   // Step 10: Disconnect cleanly
   client.disconnect();
   assert.equal(client.isConnected, false);
+
+  // Step 11: Time-travel USTAR .tar.gz export/import round-trip & path traversal guard
+  const snapBytes = new Uint8Array([0x52, 0x41, 0x38, 0x53, 0x01, 0x00, 0xde, 0xad, 0xbe, 0xef]);
+  const tarball = await exportTimeTravelTarball({
+    manifest: {
+      version: 1,
+      exportedAtIso: '2026-11-15T07:00:00.000Z',
+      boardName: 'vision_dual_npu.board',
+      boardSpec: 'version=1\npanel=EK-RA8D2\n',
+      activeBranchId: 1,
+      branches: [
+        { branch: 0, parentBranch: 0, forkR: 0n, reason: ForkReason.Base, isLive: false, isKept: true, name: 'main' },
+        { branch: 1, parentBranch: 0, forkR: 904n, reason: ForkReason.Writes, isLive: true, isKept: true, name: 'branch-1' },
+      ],
+      checkpoints: [
+        { id: 'chk_912', label: 'Chk #15 NACK Fault', branch: 1, round: 912n, virtualNs: 1824110000n, snapshotFile: 'chk_912.snap' },
+      ],
+    },
+    snapshots: {
+      'chk_912.snap': snapBytes,
+    },
+  });
+  assert.ok(tarball.length > 0);
+  assert.equal(tarball[0], 0x1f);
+  assert.equal(tarball[1], 0x8b);
+
+  const imported = await importTimeTravelTarball(tarball);
+  assert.equal(imported.manifest.version, 1);
+  assert.equal(imported.manifest.boardName, 'vision_dual_npu.board');
+  assert.equal(imported.manifest.activeBranchId, 1);
+  assert.equal(imported.manifest.branches.length, 2);
+  assert.equal(imported.manifest.branches[1].forkR, 904n);
+  assert.equal(imported.manifest.checkpoints[0].round, 912n);
+  assert.deepEqual(Array.from(imported.snapshots['chk_912.snap']), Array.from(snapBytes));
+
+  // Verify malicious path traversal in USTAR header is rejected
+  const maliciousHeader = new Uint8Array(1024);
+  const badPath = new TextEncoder().encode('../evil.snap');
+  maliciousHeader.set(badPath, 0);
+  maliciousHeader.set(new TextEncoder().encode('0000644\0'), 100);
+  maliciousHeader.set(new TextEncoder().encode('0000000\0'), 108);
+  maliciousHeader.set(new TextEncoder().encode('0000000\0'), 116);
+  maliciousHeader.set(new TextEncoder().encode('00000000000\0'), 124);
+  maliciousHeader.set(new TextEncoder().encode('00000000000\0'), 136);
+  maliciousHeader.set(new TextEncoder().encode('0'), 156);
+  maliciousHeader.set(new TextEncoder().encode('ustar\0'), 257);
+  maliciousHeader.set(new TextEncoder().encode('00'), 263);
+  for (let i = 148; i < 156; i++) maliciousHeader[i] = 0x20;
+  let sum = 0;
+  for (let i = 0; i < 512; i++) sum += maliciousHeader[i];
+  const chk = sum.toString(8).padStart(6, '0') + '\0 ';
+  maliciousHeader.set(new TextEncoder().encode(chk), 148);
+  const badStream = new Blob([maliciousHeader]).stream().pipeThrough(new CompressionStream('gzip'));
+  const badGz = new Uint8Array(await new Response(badStream).arrayBuffer());
+  await assert.rejects(() => importTimeTravelTarball(badGz), /unsafe|traversal|path/i);
 });
 
 console.log(`\n=== Test Results: ${testsPassed} passed, ${testsFailed} failed ===`);

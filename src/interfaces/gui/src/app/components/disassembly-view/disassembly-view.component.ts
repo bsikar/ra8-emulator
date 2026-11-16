@@ -198,7 +198,7 @@ interface ViewInstruction {
     }
 
     .view-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       font-weight: 500;
       white-space: nowrap;
@@ -209,7 +209,7 @@ interface ViewInstruction {
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--accent-red);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 1px 6px;
       cursor: pointer;
@@ -227,7 +227,7 @@ interface ViewInstruction {
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 2px 7px;
       cursor: pointer;
@@ -259,7 +259,7 @@ interface ViewInstruction {
       background: transparent;
       border: none;
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 2px 6px;
       width: 168px;
       outline: none;
@@ -270,7 +270,7 @@ interface ViewInstruction {
       border: none;
       border-left: 1px solid var(--border-subtle);
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 7px;
       cursor: pointer;
@@ -322,7 +322,7 @@ interface ViewInstruction {
       align-items: center;
       justify-content: space-between;
       padding: 0 8px;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       flex-shrink: 0;
       gap: 6px;
@@ -339,7 +339,7 @@ interface ViewInstruction {
     .lane-header.m33 .lane-title { color: var(--accent-purple); white-space: nowrap; }
 
     .src-pill {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       color: var(--accent-green);
       background: var(--accent-green-subtle);
@@ -353,7 +353,7 @@ interface ViewInstruction {
 
     .lane-pc {
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       white-space: nowrap;
     }
 
@@ -361,14 +361,14 @@ interface ViewInstruction {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .empty-state {
       padding: 30px 14px;
       text-align: center;
       color: var(--text-tertiary);
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.45;
     }
 
@@ -390,7 +390,7 @@ interface ViewInstruction {
       padding: 4px 8px 1px;
       color: var(--accent-green);
       font-weight: 700;
-      font-size: 10px;
+      font-size: 12px;
       background: var(--accent-green-subtle);
       border-top: 1px solid var(--border-subtle);
     }
@@ -421,7 +421,7 @@ interface ViewInstruction {
     .bp-dot {
       color: var(--text-tertiary);
       opacity: 0.3;
-      font-size: 10px;
+      font-size: 12px;
       transition: color 0.12s, opacity 0.12s;
     }
 
@@ -437,7 +437,7 @@ interface ViewInstruction {
 
     .pc-arrow {
       color: var(--accent-blue);
-      font-size: 8px;
+      font-size: 12px;
       margin-left: 1px;
     }
 

@@ -168,13 +168,13 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
     }
 
     .reg-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       font-weight: 500;
     }
 
     .delta-pill {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--accent-amber);
       background: var(--accent-amber-subtle);
       padding: 1px 6px;
@@ -234,7 +234,7 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
       display: flex;
       align-items: center;
       padding: 0 8px;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
     }
 
@@ -243,7 +243,7 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
 
     .gated-note {
       padding: 16px 12px;
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -252,7 +252,7 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
       grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
       gap: 2px 6px;
       padding: 6px 8px;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .reg-cell {
@@ -275,7 +275,7 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
     .reg-name {
       color: var(--text-tertiary);
       font-weight: 600;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .reg-val {
@@ -301,7 +301,7 @@ function getRegSpecs(): Array<{ name: string; reg: Register }> {
       color: var(--accent-amber);
       border: 1px solid var(--accent-amber);
       border-radius: 2px;
-      font-size: 10px;
+      font-size: 12px;
       padding: 0 3px;
       outline: none;
     }

@@ -98,7 +98,7 @@ export declare function decodeU64(data: Uint8Array): bigint;
 export declare function encodePointId(core: Core, id: number): Uint8Array;
 /** Encode DisasmAsk argument (7 bytes: core u8, address u32 LE, count u8, use_pc u8) */
 export declare function encodeDisasmAsk(args: DisasmAsk): Uint8Array;
-/** Decode DisasmReply from Method.Disasm (0x013D) */
+/** Decode DisasmReply from Method.Disasm (0x013E) */
 export declare function decodeDisasmReply(data: Uint8Array): DisasmReply;
 /** Decode StackReport (30 bytes) */
 export declare function decodeStackReport(data: Uint8Array): StackReport;
@@ -160,4 +160,8 @@ export declare function encodeCoreFrame(core: Core, frame: number): Uint8Array;
 export declare function decodeLocals(data: Uint8Array): LocalsResult;
 /** Decode Advanced reply (22 bytes: core u8, from_ns u64 LE, to_ns u64 LE, reason u8, address u32 LE) */
 export declare function decodeAdvanced(data: Uint8Array): AdvancedResult;
+/** Encode PartSpec (core u8, text u32 LE length + UTF-8 up to 256 bytes) */
+export declare function encodePartSpec(spec: string, core?: Core): Uint8Array;
+/** Encode bare StatePath (path u32 LE length + bare filename up to 4096 bytes) */
+export declare function encodeStatePath(bareName: string): Uint8Array;
 //# sourceMappingURL=codec.d.ts.map

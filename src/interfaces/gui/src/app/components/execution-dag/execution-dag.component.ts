@@ -172,7 +172,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .dag-mode-pill {
-      font-size: 10px;
+      font-size: 12px;
       padding: 1px 6px;
       border-radius: var(--radius-sm);
       background: var(--bg-well);
@@ -184,7 +184,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .frame-stats {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -194,7 +194,7 @@ import { Direction } from 'ra8-rpc-client';
       color: var(--text-secondary);
       border-radius: var(--radius-sm);
       padding: 2px 7px;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       cursor: pointer;
     }
@@ -216,7 +216,7 @@ import { Direction } from 'ra8-rpc-client';
       background: transparent;
       border: none;
       color: var(--text-primary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 2px 6px;
       width: 100px;
       outline: none;
@@ -226,7 +226,7 @@ import { Direction } from 'ra8-rpc-client';
       background: var(--accent-blue);
       border: none;
       color: #ffffff;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       padding: 2px 7px;
       cursor: pointer;
@@ -240,7 +240,7 @@ import { Direction } from 'ra8-rpc-client';
       padding: 4px 10px;
       background: var(--accent-amber-subtle);
       border-bottom: 1px solid var(--accent-amber);
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-primary);
       flex-shrink: 0;
     }
@@ -256,7 +256,7 @@ import { Direction } from 'ra8-rpc-client';
       border: none;
       border-radius: var(--radius-sm);
       padding: 2px 6px;
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
     }
@@ -267,7 +267,7 @@ import { Direction } from 'ra8-rpc-client';
       border: none;
       border-radius: var(--radius-sm);
       padding: 2px 6px;
-      font-size: 10px;
+      font-size: 12px;
       cursor: pointer;
     }
 
@@ -299,7 +299,7 @@ import { Direction } from 'ra8-rpc-client';
       align-items: center;
       gap: 6px;
       min-width: 190px;
-      font-size: 11px;
+      font-size: 12px;
     }
 
     .bifurcate-elbow {
@@ -314,7 +314,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .fork-badge {
-      font-size: 9px;
+      font-size: 12px;
       color: var(--accent-amber);
       background: var(--accent-amber-subtle);
       padding: 0 4px;
@@ -322,7 +322,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .head-tag {
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent-blue);
       background: var(--accent-blue-subtle);
@@ -365,7 +365,7 @@ import { Direction } from 'ra8-rpc-client';
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       cursor: pointer;
       white-space: nowrap;
       transition: all 0.12s;
@@ -391,13 +391,13 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .node-badge {
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent-amber);
     }
 
     .range-caption {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -415,7 +415,7 @@ import { Direction } from 'ra8-rpc-client';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .ghost-title {
@@ -429,7 +429,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .ghost-tag {
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--accent-amber);
       background: var(--accent-amber-subtle);
@@ -445,7 +445,7 @@ import { Direction } from 'ra8-rpc-client';
       background: var(--border-subtle);
       border: none;
       color: var(--text-secondary);
-      font-size: 10px;
+      font-size: 12px;
       padding: 1px 6px;
       border-radius: var(--radius-sm);
       cursor: pointer;
@@ -458,7 +458,7 @@ import { Direction } from 'ra8-rpc-client';
     }
 
     .no-deltas {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -470,7 +470,7 @@ import { Direction } from 'ra8-rpc-client';
       border-radius: 2px;
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
-      font-size: 10px;
+      font-size: 12px;
     }
     .d-reg { color: var(--text-secondary); font-weight: 600; }
     .d-old { color: var(--text-tertiary); }

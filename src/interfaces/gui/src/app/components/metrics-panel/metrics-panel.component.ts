@@ -153,18 +153,18 @@ import { EmulatorService } from '../../services/emulator.service';
     }
 
     .sub-label {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-secondary);
       font-weight: 500;
     }
 
     .virt-clock {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
     .pacing-pill {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 500;
       padding: 1px 6px;
       border-radius: var(--radius-sm);
@@ -203,13 +203,13 @@ import { EmulatorService } from '../../services/emulator.service';
     }
 
     .tier-title {
-      font-size: 10px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-secondary);
     }
 
     .meta-tag {
-      font-size: 9px;
+      font-size: 12px;
       color: var(--text-tertiary);
     }
 
@@ -233,7 +233,7 @@ import { EmulatorService } from '../../services/emulator.service';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
+      font-size: 12px;
     }
     .spark-name { color: var(--text-secondary); }
     .spark-val.blue { color: var(--accent-blue); font-weight: 600; }
@@ -265,7 +265,7 @@ import { EmulatorService } from '../../services/emulator.service';
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .core-name { font-weight: 700; }
@@ -278,7 +278,7 @@ import { EmulatorService } from '../../services/emulator.service';
       background: var(--accent-amber-subtle);
       padding: 0 4px;
       border-radius: 2px;
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 700;
     }
 
@@ -302,7 +302,7 @@ import { EmulatorService } from '../../services/emulator.service';
       display: flex;
       justify-content: space-between;
       color: var(--text-secondary);
-      font-size: 9px;
+      font-size: 12px;
     }
 
     .rtos-list {
@@ -315,7 +315,7 @@ import { EmulatorService } from '../../services/emulator.service';
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 10px;
+      font-size: 12px;
     }
     .rtos-name {
       width: 90px;

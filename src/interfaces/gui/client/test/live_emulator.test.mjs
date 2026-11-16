@@ -6,7 +6,8 @@ async function runLiveTest() {
   console.log("=== EMPIRICAL TEST: Live RA8 Emulator WebSocket RPC ===");
 
   const port = 24892;
-  const emulatorPath = resolve(import.meta.dirname, "../../../../../zig-out/bin/ra8_emulator");
+  const binName = process.platform === "win32" ? "ra8_emulator.exe" : "ra8_emulator";
+  const emulatorPath = resolve(import.meta.dirname, "../../../../../zig-out/bin/" + binName);
   const fixtureElf = resolve(import.meta.dirname, "../../../../../tests/fixtures/gpio/blink.elf");
 
   console.log(`Starting emulator: ${emulatorPath} serve --listen tcp:127.0.0.1:${port} ${fixtureElf}`);
@@ -77,7 +78,7 @@ async function runLiveTest() {
       throw new Error(`Expected 16 bytes memory, got ${mem.length}`);
     }
 
-    // 6. Authoritative Backend Disassembly (0x013D)
+    // 6. Authoritative Backend Disassembly (0x013E)
     const disasm = await client.disassemble(Core.Cpu0, { usePc: true, count: 8 });
     console.log(`✓ disassemble(CPU0, usePc=true, count=8): pc=0x${disasm.pc.toString(16)}, rows=${disasm.rows.length}, first="${disasm.rows[0]?.text}"`);
     if (disasm.rows.length === 0 || !disasm.rows[0]?.decoded || !disasm.rows[0]?.text) {
