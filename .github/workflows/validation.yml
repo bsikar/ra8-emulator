@@ -50,6 +50,21 @@ jobs:
           zig build ra8_host_tests-exe
           ./zig-out/bin/ra8_host_tests
 
+      - name: Current firmware signed boot matrix (ReleaseFast)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          zig build ra8_tests -j1 -Doptimize=ReleaseFast -Dtest-filter=session.boot_auth_test 2>&1 | tee /tmp/signed-boot.log
+
+      - name: Preserve signed boot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-boot-releasefast
+          path: /tmp/signed-boot.log
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: GUI link suite
         run: |
           zig build ra8_gui_link_tests-exe
