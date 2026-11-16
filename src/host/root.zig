@@ -27,7 +27,6 @@ pub const workspace = @import("workspace/workspace.zig");
 
 /// Host camera capture backends and file formats (RA8EMU-1011).
 pub const camera = struct {
-    pub const always = @import("camera/webcam/always.zig");
     pub const av_delegate = @import("camera/av/delegate.zig");
     pub const av_frame = @import("camera/av/frame.zig");
     pub const av_info_plist = @import("camera/av/info_plist.zig");

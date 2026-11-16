@@ -7,6 +7,11 @@ build/
 .zig-cache/
 zig-out/
 
+node_modules/
+.angular/
+dist/
+!src/interfaces/gui/client/dist/
+
 .agents/
 .claude/
 .repowise/

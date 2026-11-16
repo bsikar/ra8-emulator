@@ -62,9 +62,6 @@ pub fn libraries(
     });
     const render = library(b, target, optimize, "ra8_render", "src/interfaces/render/root.zig", &.{
         .{ .name = "ra8_session", .module = session },
-        .{ .name = "ra8_widget", .module = firmware.module("ra8_widget") },
-        .{ .name = "ra8_widget_host", .module = firmware.module("ra8_widget_host") },
-        .{ .name = "ra8_gfx", .module = firmware.module("ra8_gfx") },
     });
     const rpc = library(b, target, optimize, "ra8_rpc", "src/interfaces/rpc/root.zig", &.{
         .{ .name = "ra8_snapshot", .module = snapshot },
@@ -133,23 +130,15 @@ fn library(
     );
 }
 
-/// The two applications' own files, each a module so that its executable and
-/// the tests import the same code (ADR 0004 section 1, RA8EMU-1031).
-pub const Apps = struct {
-    cli: *std.Build.Module,
-    gui: *std.Build.Module,
-};
-
-/// The CLI is given every library. The GUI gets the session, the adapters
-/// it talks and draws through, and the host, never ra8_board/ra8_chip (RA8EMU-984).
-pub fn applications(
+/// The CLI application's own files, exposed as a module so the executable
+/// and its tests import the same code (ADR 0004 section 1, RA8EMU-1031).
+pub fn application(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     libs: Libraries,
     firmware: *std.Build.Dependency,
-) Apps {
-    const wire = firmware.module("ra8_rpc");
+) *std.Build.Module {
     const cli = b.createModule(
         .{
             .root_source_file = b.path("src/interfaces/cli/root.zig"),
@@ -159,21 +148,6 @@ pub fn applications(
         },
     );
     libs.importInto(cli);
-    cli.addImport("ra8_rpc_wire", wire);
-    const gui = b.createModule(.{
-        .root_source_file = b.path("src/interfaces/gui/root.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-        .imports = &.{
-            .{ .name = "ra8_session", .module = libs.session },
-            .{ .name = "ra8_rpc", .module = libs.rpc },
-            .{ .name = "ra8_render", .module = libs.render },
-            .{ .name = "ra8_components", .module = libs.components },
-            .{ .name = "ra8_host", .module = libs.host },
-            .{ .name = "ra8_rpc_wire", .module = wire },
-            .{ .name = "ra8_widget", .module = firmware.module("ra8_widget") },
-        },
-    });
-    return .{ .cli = cli, .gui = gui };
+    cli.addImport("ra8_rpc_wire", firmware.module("ra8_rpc"));
+    return cli;
 }

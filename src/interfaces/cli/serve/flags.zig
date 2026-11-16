@@ -12,6 +12,7 @@ pub const ParsedFlags = struct {
     build_zig: ?[]const u8 = null,
     build_toolchain_cache: ?[]const u8 = null,
     workspace: ?[]const u8 = null,
+    discover: bool = false,
     folded: bool = false,
     allow_state: bool = false,
     cpu1: ?[]const u8 = null,
@@ -49,7 +50,9 @@ pub fn parseFlag(flags: *ParsedFlags, argv: []const []const u8, at: *usize) Flag
 fn parseAccess(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagStep {
     const idx = at.*;
     const valued = idx + 1 < argv.len;
-    if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
+    if (std.mem.eql(u8, argv[idx], "--discover") and !flags.discover) {
+        flags.discover = true;
+    } else if (std.mem.eql(u8, argv[idx], "--profile-folded") and !flags.folded) {
         flags.folded = true;
     } else if (std.mem.eql(u8, argv[idx], "--allow-state-files") and !flags.allow_state) {
         flags.allow_state = true;

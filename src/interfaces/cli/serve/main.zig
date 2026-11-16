@@ -9,9 +9,11 @@ const std = @import("std");
 const artifact_service = @import("ra8_rpc").artifacts.service;
 const bindings = @import("bindings.zig");
 const card_setup = @import("../card/setup.zig");
+const discovery = @import("discovery.zig");
 const elf = @import("ra8_board").image.elf;
 const flag_parser = @import("flags.zig");
 const listen = @import("listen.zig");
+const Listener = @import("ra8_rpc").host_listener.Listener;
 const loop = @import("loop.zig");
 const machine_mod = @import("ra8_chip").core.machine;
 const served_camera = @import("ra8_rpc").served_camera;
@@ -22,10 +24,11 @@ const usbip_run = @import("ra8_usbip").exported.run;
 const Workbench = @import("workbench.zig").Workbench;
 
 pub const usage =
-    "usage: ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] --stdio " ++
+    "usage: ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] --stdio " ++
     "<firmware.elf>\n" ++
-    "       ra8_emulator serve [--profile-folded] [--cpu1 CPU1.elf] " ++
+    "       ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] " ++
     "[--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>\n" ++
+    "       --discover publishes per-user RPC/GDB discovery for ctl and IDE clients\n" ++
     "       --profile-folded samples each core's call stacks for `ctl folded`\n" ++
     "       --cpu1 brings CPU1 up from its own image, parked until it is run\n" ++
     "       --sd-dir DIR and --app FILE.ra8app[=MODULE.elf] (repeatable) fill the " ++
@@ -61,6 +64,7 @@ const Asked = struct {
     build_toolchain_cache: ?[]const u8 = null,
     where: Where,
     elf: []const u8,
+    discover: bool = false,
     folded: bool = false,
     cpu1: ?[]const u8 = null,
     machine: ?*const machine_mod.Machine = null,
@@ -104,6 +108,7 @@ pub fn parseWithCatalog(argv: []const []const u8, machines: []const *const machi
     var asked = parseTail(argv, at) orelse return null;
     asked.targets = flags.targets;
     asked.folded = flags.folded;
+    asked.discover = flags.discover;
     asked.workspace = flags.workspace;
     asked.build_zig = flags.build_zig;
     asked.build_toolchain_cache = flags.build_toolchain_cache;
@@ -172,7 +177,12 @@ fn parseWhere(argv: []const []const u8) ?Asked {
 
 /// Each paired app's display name and module ELF, as the session places them.
 /// Serve `argv` (`ra8_emulator serve ...`) and return the exit code.
-pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+pub fn run(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    argv: []const []const u8,
+) !u8 {
     const asked = parse(argv) orelse {
         std.debug.print("{s}", .{usage});
         return 2;
@@ -229,8 +239,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
             .prepareFn = bindings.Bindings.prepare,
         });
     }
-    const done = answer(io, asked.where, &setup, service);
-    done catch |err| {
+    serveWithDiscovery(allocator, io, env, asked, &setup, service) catch |err| {
         std.debug.print("serve: {s}\n", .{@errorName(err)});
         return 1;
     };
@@ -240,6 +249,23 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         return 1;
     };
     return 0;
+}
+
+fn serveWithDiscovery(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    env: *const std.process.Environ.Map,
+    asked: Asked,
+    setup: *served_setup.Served,
+    service: ?*artifact_service.Service,
+) !void {
+    if (asked.discover) listen.catchStops();
+    var hosted = if (asked.discover)
+        try discovery.open(allocator, io, env, asked.elf, setup.context.session)
+    else
+        null;
+    defer if (hosted) |*listener| listener.deinit();
+    try answer(io, asked.where, setup, service, if (hosted) |*listener| listener else null);
 }
 
 fn attachDevices(setup: *served_setup.Served, asked: Asked, allocator: std.mem.Allocator, io: std.Io) bool {
@@ -295,8 +321,14 @@ fn historyOptions(asked: Asked) ?served_setup.HistoryOpts {
         null;
 }
 
-fn answer(io: std.Io, where: Where, setup: *served_setup.Served, service: ?*artifact_service.Service) !void {
-    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx };
+fn answer(
+    io: std.Io,
+    where: Where,
+    setup: *served_setup.Served,
+    service: ?*artifact_service.Service,
+    listener: ?*Listener,
+) !void {
+    const buffers: loop.Buffers = .{ .rx = setup.rx, .tx = setup.tx, .listener = listener };
     const context = &setup.context;
     return if (service) |owner| switch (where) {
         .stdio => loop.answerStdioManaged(io, owner),

@@ -1,7 +1,6 @@
 //! ra8_emulator: the RA8D2 board emulator's command line (#14, the Zig
 //! rewrite; moved here from src/main.zig by RA8EMU-1087, ADR 0004 step 6).
-//! It never links SDL and imports nothing from the GUI: the window and its
-//! debugger shell are ra8_gui (src/interfaces/gui/main.zig).
+//! The CLI and headless daemon expose the emulator independently of the PWA.
 //!
 //! This file opens the ELF and hands the run to the Zig core
 //! (src/interfaces/cli/zig/main.zig). A debugger command line goes to the
@@ -44,7 +43,7 @@ fn dispatch(init: std.process.Init, argv: []const []const u8) !?u8 {
     if (try control(init, argv)) |code| return code;
     if (std.mem.eql(u8, verb, "--map")) return try app.map_main.run(allocator, io, argv);
     if (std.mem.eql(u8, verb, "probe-agent")) return try app.probe_agent.run(allocator, io, argv);
-    if (std.mem.eql(u8, verb, "serve")) return try app.serve.main.run(allocator, io, argv);
+    if (std.mem.eql(u8, verb, "serve")) return try app.serve.main.run(allocator, io, init.environ_map, argv);
     if (std.mem.eql(u8, verb, "dap")) return try app.dap.run(allocator, io, argv);
     if (std.mem.eql(u8, verb, "sweep")) return try app.sweep.cli.run(io, init.environ_map, argv);
     if (std.mem.eql(u8, verb, "history")) return try app.history_cli.run(allocator, io, argv);

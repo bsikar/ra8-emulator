@@ -15,7 +15,8 @@ async function testRawTcpNonInterference() {
   console.log("=== EMPIRICAL TEST: Raw TCP RPC Non-Interference Auto-Detection ===");
 
   const port = 24893;
-  const emulatorPath = resolve(import.meta.dirname, "../../../../../zig-out/bin/ra8_emulator");
+  const binName = process.platform === "win32" ? "ra8_emulator.exe" : "ra8_emulator";
+  const emulatorPath = resolve(import.meta.dirname, "../../../../../zig-out/bin/" + binName);
   const fixtureElf = resolve(import.meta.dirname, "../../../../../tests/fixtures/gpio/blink.elf");
 
   const proc = spawn(emulatorPath, [

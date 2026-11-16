@@ -1,21 +1,20 @@
-//! Host tests for the timeline model and 1-by-1 RTOS trace sequence parity
-//! (RA8EMU-840, RA8EMU-1234): wire `trace` events match `--trace-rtos-out`
-//! files 1-by-1 across dual-core ThreadX, `cpu1_pingpong_ipc`, split vs
-//! unsplit budgets, mid-stretch breakpoint/step pauses, SysTick stretch cuts,
-//! snapshot save/restore continuations, independent concurrent sessions, and
-//! negative controls.
+//! Trace streaming and 1-by-1 RTOS trace sequence parity (RA8EMU-840,
+//! RA8EMU-1234): wire `trace` events match `--trace-rtos-out` files 1-by-1
+//! across dual-core ThreadX, `cpu1_pingpong_ipc`, split vs unsplit budgets,
+//! mid-stretch breakpoint/step pauses, SysTick stretch cuts, snapshot
+//! save/restore continuations, independent concurrent sessions, and negative
+//! controls.
 const std = @import("std");
 const ra8 = @import("ra8");
 const test_paths = @import("test_paths");
-const gui_app = @import("gui_app");
 const rig_mod = @import("timeline_trace_rig.zig");
 
 const proto = rig_mod.proto;
-const timeline_model = rig_mod.timeline_model;
-const pane = gui_app.timeline_pane;
+const rtos_trace = rig_mod.rtos_trace;
 const Rig = rig_mod.Rig;
 const Got = rig_mod.Got;
 const accepted = rig_mod.accepted;
+const eventOf = rig_mod.eventOf;
 const compareSequence = rig_mod.compareSequence;
 const compareWireToWire = rig_mod.compareWireToWire;
 
@@ -26,7 +25,7 @@ const stkof_elf = "tests/fixtures/threadx/threadx_stkof.elf";
 const ipc0_elf = "tests/fixtures/trustzone/cpu1_pingpong_ipc.elf";
 const ipc1_elf = "tests/fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf";
 
-test "the timeline model matches the recorded both-cores trace 1-by-1" {
+test "wire trace matches every recorded event on both cores" {
     const gpa = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -47,57 +46,36 @@ test "the timeline model matches the recorded both-cores trace 1-by-1" {
         try std.testing.expect(s.equal_pos > 0);
     }
 
-    var model = timeline_model.Model.init(gpa);
-    defer model.deinit();
-    var last_ns: u64 = 0;
-    for (rig.wire.got.items) |got| {
-        try model.take(rig_mod.eventOf(got));
-        last_ns = @max(last_ns, got.virtual_ns);
-    }
-    try model.finish(last_ns);
-    const window = model.recorded() orelse return error.NoRecord;
-
-    for (rig.wire.got.items) |one| {
-        const core: u1 = if (one.core == .cpu0) 0 else 1;
-        const owner = rig_mod.ownerOf(one);
-        const lane = model.laneIndex(core, owner.kind, owner.id) orelse return error.MissingLane;
-        var edge = false;
-        for (model.slicesOf(lane)) |slice| {
-            if (slice.start_ns == one.virtual_ns or slice.end_ns == one.virtual_ns) edge = true;
+    // Each core's recorded file must match the wire in order and in all
+    // payload fields, not just the number of trace notifications.
+    for ([_]u1{ 0, 1 }) |core_index| {
+        const got = try rig.recordedCore(gpa, tmp.dir, "dual_wire.txt", core_index);
+        defer gpa.free(got);
+        var cursor: usize = 0;
+        for (rig.wire.got.items) |one| {
+            if ((one.core == .cpu0) != (core_index == 0)) continue;
+            try std.testing.expect(cursor < got.len);
+            try std.testing.expectEqualDeep(got[cursor], eventOf(one));
+            cursor += 1;
         }
-        try std.testing.expect(edge);
+        try std.testing.expectEqual(got.len, cursor);
+        try expectActivity(got);
     }
+}
 
-    var oracle = timeline_model.rtos_load.Load{};
-    for (rig.wire.got.items) |got| oracle.feed(rig_mod.eventOf(got));
-    oracle.finish(last_ns);
-    for ([_]u1{ 0, 1 }) |core| {
-        for (oracle.rows(core)) |slot| {
-            if (slot.owner.kind == .before) continue;
-            const lane = model.laneIndex(core, slot.owner.kind, slot.owner.id) orelse return error.MissingLane;
-            try std.testing.expectEqual(slot.ticks, model.laneTicks(lane, window.from, window.to));
-        }
-    }
-
-    var zoomed: ?usize = null;
-    for (model.lanes.items, 0..) |*row, index| {
-        for (row.slices.items) |slice| {
-            if (slice.end_ns - slice.start_ns < 4) continue;
-            const view = timeline_model.View{
-                .start_ns = slice.start_ns + (slice.end_ns - slice.start_ns) / 4,
-                .span_ns = (slice.end_ns - slice.start_ns) / 2,
-                .width_px = 400,
-            };
-            const area = ra8.render.draw_list.Rect{ .x = 0, .y = 0, .w = 400, .h = pane.ruler_h + pane.header_h + 10 * pane.row_h };
-            const y = pane.header_h + @as(i32, @intCast(index)) * pane.row_h + 2;
-            const hit = pane.hitAt(area, &model, view, pane.col_w + 100, y) orelse continue;
-            try std.testing.expectEqual(slice.start_ns, hit.start_ns);
-            zoomed = index;
-            break;
-        }
-        if (zoomed != null) break;
-    }
-    try std.testing.expect(zoomed != null);
+fn expectActivity(events: []const rtos_trace.Event) !void {
+    var switches: usize = 0;
+    var enters: usize = 0;
+    var idles: usize = 0;
+    for (events) |one| switch (one.kind) {
+        .switch_to => switches += 1,
+        .idle => idles += 1,
+        .enter => enters += 1,
+        .leave => {},
+    };
+    try std.testing.expect(switches > 0);
+    try std.testing.expect(enters > 0);
+    try std.testing.expect(idles > 0);
 }
 
 test "dual-core ThreadX split and unsplit budgets produce identical 1-by-1 sequences" {

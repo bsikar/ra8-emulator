@@ -47,6 +47,7 @@ pub const Method = enum(u16) {
     seek = 0x012C,
     rcont = 0x012D,
     metrics = 0x012E,
+    disasm = 0x012F,
     branch_list = 0x0130,
     branch_switch = 0x0131,
     branch_delete = 0x0132,

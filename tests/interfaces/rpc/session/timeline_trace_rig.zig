@@ -1,15 +1,12 @@
 //! Shared wire rig and 1-by-1 sequence oracle for `timeline_trace_test.zig`.
 const std = @import("std");
 const ra8 = @import("ra8");
-const gui_app = @import("gui_app");
 
 pub const served = ra8.rpc.session.server;
 pub const rpc = served.rpc_lib;
 pub const proto = ra8.rpc.session.rpc;
 pub const setup = ra8.rpc.served_setup;
-pub const timeline_model = gui_app.timeline_model;
-pub const rtos_trace = timeline_model.rtos_trace;
-pub const rtos_load = timeline_model.rtos_load;
+pub const rtos_trace = ra8.session.rtos.trace;
 
 pub const Env = proto.Client.Env;
 
@@ -120,15 +117,6 @@ pub fn accepted(result: Env.Result) !void {
         .ok => {},
         .err => return error.Refused,
     }
-}
-
-pub fn ownerOf(got: Got) rtos_load.Owner {
-    return switch (got.kind) {
-        .rtos_switch => .{ .kind = .thread, .id = got.thread },
-        .rtos_idle => .{ .kind = .idle },
-        .isr_enter, .isr_leave => .{ .kind = .exception, .id = got.exception },
-        else => unreachable,
-    };
 }
 
 pub fn eventOf(got: Got) rtos_trace.Event {

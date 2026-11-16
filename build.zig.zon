@@ -4,22 +4,9 @@
     .fingerprint = 0xd7a6ec1532845ea,
     .minimum_zig_version = "0.17.0",
     .dependencies = .{
-        .aro = .{
-            .url = "git+https://github.com/Vexu/arocc#d0c8c4d9c55daa7ef6e40cf0f630a5b5e900989b",
-            .hash = "aro-0.0.0-JSD1QtuBNwCASyBtNF3pqTl_W3oAJQGEVyFAtrBSE_Pa",
-        },
         .ra8_firmware = .{
             .url = "https://github.com/bsikar/ra8-firmware/archive/c258cd9326b2c3f4a64cf81c8211a3ff88dbfd6b.tar.gz",
             .hash = "ra8_firmware-0.1.0-HagwjdUPCwr40zx3eP1hnxDxA5eV-6kdq36QOJKZ2yN1",
-        },
-        .sdl = .{
-            .url = "git+https://github.com/castholm/SDL.git?ref=v0.5.4+3.4.16#b72b3671502a70e109350ecac90afdc480dcfcc6",
-            .hash = "sdl-0.5.4+3.4.16-SDL--sQ4qAH3kwC19Zs1kxdHplaSDnWl2MUptZD4AItI",
-            .lazy = true,
-        },
-        .translate_c = .{
-            .url = "git+https://github.com/ziglang/translate-c#875969d3493e245e01bf5d7860f792d8f3eb9ef5",
-            .hash = "translate_c-0.0.0-Q_BUWoFOBwAhz77Zd15HCVuhTKzdUKc94kezmCeJ7IC_",
         },
         .zlinter = .{
             .url = "https://github.com/KurtWagner/zlinter/archive/625c00333d1c28fb102bd7f83e38bc40ba0be137.tar.gz",
