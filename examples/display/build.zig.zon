@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Brighton Sikarskie
+.{
+    .name = .ra8_ui,
+    .version = "0.1.0",
+    .fingerprint = 0x6723be18608c3384,
+    .minimum_zig_version = "0.14.1",
+    .dependencies = .{
+        // The firmware submodule. Its build.zig is imported for the rules
+        // that say which sources, flags and archives a board image links.
+        .ra8_firmware = .{ .path = "ra8-firmware" },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "image_build.zig", "app", "board" },
+}
