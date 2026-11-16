@@ -26,6 +26,7 @@ const session_branch = @import("branch.zig");
 const session_camera = @import("camera.zig");
 const session_chunks = @import("load_chunks.zig");
 const session_diff = @import("diff.zig");
+const session_disasm = @import("disasm.zig");
 const session_files = @import("files.zig");
 const session_folded = @import("folded.zig");
 const session_input = @import("input.zig");
@@ -124,6 +125,7 @@ const session_routes = .{
     .{ @backingInt(M.frame_status), session_nav.frameStatus },
     .{ @backingInt(M.diff), session_diff.diff },
     .{ @backingInt(M.set_var), session_set_var.setVar },
+    .{ @backingInt(M.disasm), session_disasm.disasm },
 };
 
 pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++

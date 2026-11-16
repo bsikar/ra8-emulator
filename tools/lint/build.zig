@@ -48,7 +48,6 @@ fn reportStep(b: *std.Build, comptime zlinter: type) *std.Build.Step {
         .include_dirs = &.{ b.path("src"), b.path("tools") },
         .include_files = &.{b.path("build.zig")},
         .exclude_dirs = &.{ b.path("src/interfaces/gui"), b.path("src/interfaces/render") },
-        .exclude_files = &.{b.path("tools/gui_smoke.zig")},
     });
     return lint.build();
 }
