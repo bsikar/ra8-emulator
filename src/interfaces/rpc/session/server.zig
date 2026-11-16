@@ -128,6 +128,7 @@ const session_routes = .{
     .{ @backingInt(M.diff), session_diff.diff },
     .{ @backingInt(M.set_var), session_set_var.setVar },
     .{ @backingInt(M.list_cores), session_cores.listCores },
+    .{ @backingInt(M.disasm), session_disasm.disasm },
 };
 
 pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++

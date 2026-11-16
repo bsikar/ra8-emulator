@@ -86,6 +86,7 @@ fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Bu
     }
     while (!loop.stopping.load(.acquire)) {
         const active = if (service) |owner| &owner.active.context else context.?;
+        try buffers.pump(active);
         if (active.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
         if (!try server.ready(io)) continue;
         const client = server.accept(io) catch |err| switch (err) {
@@ -99,7 +100,7 @@ fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Bu
 /// SIGINT, SIGTERM, SIGHUP and SIGQUIT end the serve cleanly at the next idle
 /// check, so the exit is 0 and a Unix socket path is removed. Windows
 /// has no POSIX signals, so Ctrl+C, Ctrl+Break and console close do it there.
-fn catchStops() void {
+pub fn catchStops() void {
     if (builtin.os.tag == .windows) {
         _ = win32.SetConsoleCtrlHandler(onConsoleStop, .TRUE);
         return;
