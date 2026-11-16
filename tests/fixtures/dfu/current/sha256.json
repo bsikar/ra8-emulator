@@ -1,0 +1,12 @@
+{
+  "body_a.bin": "93e2015fe6f54ec34b2e98048d0bb87d0a3cb97dca29336c8991e11a40f97a46",
+  "body_b.bin": "f928c28ea6719e18d8f7dccd388df8ea233194564d449542e15a288f581142d6",
+  "bootloader.elf": "9bc965d61d7908b70d7ceed64597455b9757c75819420d4c7e20330b38ab473a",
+  "rebuild.py": "d619122143cf46fbcdb639536296dbee3cd87703d4ebc27ddb45672ffe64244f",
+  "root-public.bin": "948d34b43f468430ae5d050356e9ef4f2aae976cd33d33deba6eab4d039470e6",
+  "signed_a.bin": "09bfbd130ce9aae06f35337d367d2350eb5c7c11b17bd31074af0f06ee7a4d13",
+  "signed_b.bin": "5974cb64b19a242899dd41222d24cbba220b160d60a23e4a63bd20dc9d70b4d6",
+  "test-build.patch": "9c7d475dd576e7f8a67ff6e48026f4f9e2caedc80d96d980f903e71aa0aa3e49",
+  "wrong-root-public.bin": "42e2cee1c85acee93cf82240691f42fa605a35510a13353e6a9bef5b9d2ab71b",
+  "wrong_root_b.bin": "328e23189cec3e8f2bfa7aeb75788cae918559bb1820c6a485a3e8bdd789a995"
+}
