@@ -100,6 +100,14 @@ jobs:
             throw "SeCreateSymbolicLinkPrivilege missing from runner token"
           }
 
+      - name: Unix socket regression suite
+        shell: pwsh
+        run: |
+          zig build ra8_host_tests-exe -j1 '-Dtest-filter=host.sock.unix_test'
+          if ($LASTEXITCODE -ne 0) { throw "Socket test build failed with exit code $LASTEXITCODE" }
+          .\zig-out\bin\ra8_host_tests.exe
+          if ($LASTEXITCODE -ne 0) { throw "Socket tests failed with exit code $LASTEXITCODE" }
+
       - name: Host history session suite (Debug)
         shell: pwsh
         run: |
