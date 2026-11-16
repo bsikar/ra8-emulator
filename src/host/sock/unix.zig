@@ -3,6 +3,7 @@
 //! raw \Device\Afd\Endpoint open, which exits AddressFamilyUnsupported on
 //! Windows releases without AFD AF_UNIX support. POSIX delegates to std.Io.net.
 const builtin = @import("builtin");
+const posix_connect = @import("posix_connect.zig");
 const sock_common = @import("sock.zig");
 const sock_path = @import("path.zig");
 const sock_ready = @import("ready.zig");
@@ -106,10 +107,7 @@ pub const Listener = struct {
 pub fn connect(io: std.Io, raw_path: []const u8) !std.Io.net.Stream {
     var scratch: [std.fs.max_path_bytes]u8 = undefined;
     const path = try resolvePath(io, raw_path, &scratch);
-    if (!on_windows) {
-        const address = try std.Io.net.UnixAddress.init(path);
-        return address.connect(io);
-    }
+    if (!on_windows) return posix_connect.connect(io, path);
     const addr = try buildSockaddr(path);
     const s = try win_sock.openSocket(win.af_unix, win.sock_stream);
     errdefer win_sock.close(s);
