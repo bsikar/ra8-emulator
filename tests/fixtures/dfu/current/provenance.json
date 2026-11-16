@@ -1,0 +1,45 @@
+{
+  "firmware_revision": "506703b68104c4fa630a08ba3c12b457e0da8ef1",
+  "tools": {
+    "arm-none-eabi-gcc": {
+      "version": "arm-none-eabi-gcc (Arm GNU Toolchain 13.3.Rel1 (Build arm-13.24)) 13.3.1 20240614",
+      "sha256": "2a447f8b93af6369ca0d165e713dd100f89b0681f98757f878e1e473fdc30f5f"
+    },
+    "zig": {
+      "version": "0.17.0",
+      "sha256": "9fb480d3398506f5e2bef77f175766a8de0ee191dbdfbfb0c117a1150f141c91"
+    },
+    "cmake": {
+      "version": "cmake version 4.4.2",
+      "sha256": "b4a1a844d905fd77839a88db9083422f8246a6aa10d4ce72b0cf223b5cb438a3"
+    },
+    "ninja": {
+      "version": "1.13.2",
+      "sha256": "48761628046784f59bd789f5a72b88da99205c5849e5d19ae4d317854ae09e83"
+    },
+    "openssl": {
+      "version": "OpenSSL 4.1.0 23 Oct 2026 (Library: OpenSSL 4.1.0 23 Oct 2026)",
+      "sha256": "da101a01999a93ea6eddfe1392752bce2b5a91a41e4b00e1d9656fc682a1dc85"
+    }
+  },
+  "original_sources": {
+    "examples/ek_ra8d2/hw_validated/hil/dfu_bootloader/src/main.c": "0d704af44a569e6352b07004a3934719a2719a1fd113e18afff4714e9c016bb1",
+    "examples/ek_ra8d2/hw_validated/hil/dfu_bootloader/CMakeLists.txt": "21622b9e20fd272717d1bfef35d0bec4106d407e6a99bf1031c2a9a3f8ba26c2",
+    "build.zig.zon": "587137e5ac64a66ce5c7ada52f99cb9b840d25d17ebeb7230650166e2e8225c4",
+    "libs/ra8_rot/src/rot_abi.zig": "a69bd705ec9b548521d7744fa01991d67f1133e172eba398fc73c302a307521e",
+    "libs/ra8_rot/src/internal/rot.zig": "67a92548210c547d0de16722fa9b7cf372dfef434436ad9a9dd89aa19d6860e4",
+    "libs/ra8_rot_launch/src/launch_gate_abi.zig": "d371685414ad885828573dabb30a303ef13914bc2b9d5a15c9ea0ca5a24b7d5a",
+    "scripts/secrets/rot_sign.py": "8577db4e3ad48bc327bb5d949dd642d6eab476ce5fac58faab277ae9e4e85ee0"
+  },
+  "built_sources": {
+    "examples/ek_ra8d2/hw_validated/hil/dfu_bootloader/src/main.c": "0d704af44a569e6352b07004a3934719a2719a1fd113e18afff4714e9c016bb1",
+    "examples/ek_ra8d2/hw_validated/hil/dfu_bootloader/CMakeLists.txt": "c9cc192a39cb5cebc5d2355de5c5423c9ece096343587b0e16fd4bb9511cdebd",
+    "build.zig.zon": "587137e5ac64a66ce5c7ada52f99cb9b840d25d17ebeb7230650166e2e8225c4",
+    "libs/ra8_rot/src/rot_abi.zig": "33528182b3f7780902ace38376c18adb81dba532df92bc3a4f9bb637af03567f",
+    "libs/ra8_rot/src/internal/rot.zig": "67a92548210c547d0de16722fa9b7cf372dfef434436ad9a9dd89aa19d6860e4",
+    "libs/ra8_rot_launch/src/launch_gate_abi.zig": "d371685414ad885828573dabb30a303ef13914bc2b9d5a15c9ea0ca5a24b7d5a",
+    "scripts/secrets/rot_sign.py": "8577db4e3ad48bc327bb5d949dd642d6eab476ce5fac58faab277ae9e4e85ee0"
+  },
+  "firmware_mode": "MinSizeRel / Zig ReleaseSmall",
+  "emulator_required_mode": "ReleaseFast"
+}
