@@ -1,0 +1,161 @@
+<div
+  class="es-shell"
+  (dragover)="onDragOver($event)"
+  (dragleave)="onDragLeave($event)"
+  (drop)="onDrop($event)"
+  (click)="cmdMode.activeMenu.set(null)"
+>
+  <header class="es-topbar" data-testid="shell-topbar">
+    <div class="topbar-left">
+      <div class="window-dots" aria-hidden="true">
+        <span class="window-dot" data-testid="window-dot"></span>
+        <span class="window-dot" data-testid="window-dot"></span>
+        <span class="window-dot" data-testid="window-dot"></span>
+      </div>
+
+      <nav class="menu-strip" aria-label="Application menus">
+        @for (menu of cmdMode.menus(); track menu.id) {
+          <div class="menu-wrap">
+            <button
+              type="button"
+              class="menu-trigger"
+              [class.is-open]="cmdMode.activeMenu() === menu.id"
+              [attr.aria-expanded]="cmdMode.activeMenu() === menu.id"
+              [attr.data-testid]="'menu-' + menu.id"
+              (click)="$event.stopPropagation(); cmdMode.toggleMenu(menu.id)"
+            >
+              {{ menu.label }}
+            </button>
+
+            @if (cmdMode.activeMenu() === menu.id) {
+              <div class="menu-dropdown" role="menu" (click)="$event.stopPropagation()">
+                @for (item of menu.items; track item.action.id) {
+                  <button
+                    type="button"
+                    role="menuitem"
+                    class="dropdown-item"
+                    [disabled]="!item.enabled"
+                    (click)="cmdMode.execute(item)"
+                  >
+                    <span>{{ item.action.label }}</span>
+                    @if (item.shortcutLabel) {
+                      <kbd class="es-kbd" data-allow-11px>{{ item.shortcutLabel }}</kbd>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        }
+      </nav>
+
+      <span class="topbar-sep" aria-hidden="true"></span>
+
+      <nav class="view-strip" aria-label="Workspace views">
+        @for (view of viewLinks; track view.path) {
+          <a
+            class="view-link"
+            [routerLink]="view.path"
+            routerLinkActive="is-active"
+            [attr.data-testid]="'nav-' + view.label.toLowerCase()"
+          >
+            {{ view.label }}
+          </a>
+        }
+      </nav>
+    </div>
+
+    <div class="topbar-right">
+      <button
+        type="button"
+        class="es-ghost-link cmd-trigger"
+        data-testid="command-palette-trigger"
+        (click)="cmdMode.openPalette()"
+      >
+        <span>Command Mode</span>
+        <kbd class="es-kbd" data-allow-11px>{{ commandChordLabel }}</kbd>
+      </button>
+
+      @if (rpc.isConnected()) {
+        <button type="button" class="es-ghost-link" data-testid="topbar-run-toggle" (click)="toggleRunPause()">
+          {{ execution.isRunning() ? 'Pause' : 'Continue' }}
+        </button>
+        <button
+          type="button"
+          class="es-ghost-link"
+          data-testid="topbar-step"
+          [disabled]="execution.isRunning()"
+          (click)="execution.step()"
+        >
+          Step
+        </button>
+      }
+    </div>
+  </header>
+
+  <main class="es-main">
+    <router-outlet />
+  </main>
+
+  <footer class="es-statusbar" data-testid="shell-statusbar">
+    <div class="status-left">
+      <app-status-dot [tone]="statusTone()" [label]="rpc.isConnected() ? rpc.serverUrl() : 'Offline'" />
+      <span class="status-sep">·</span>
+      <span class="mono">t = {{ execution.virtualTimeLabel() }}</span>
+      <span class="status-sep">·</span>
+      <span class="mono">{{ coreSummary() }}</span>
+    </div>
+
+    <button
+      type="button"
+      class="gear-btn"
+      aria-label="Settings"
+      data-testid="settings-trigger"
+      (click)="cmdMode.settingsOpen.set(true)"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.4.31.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"
+          fill="currentColor"
+        />
+      </svg>
+    </button>
+  </footer>
+
+  @if (cmdMode.settingsOpen()) {
+    <div class="sheet-backdrop" (click)="cmdMode.settingsOpen.set(false)">
+      <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Session settings" (click)="$event.stopPropagation()">
+        <div class="sheet-head">
+          <app-section-kicker label="SETTINGS" />
+          <app-tonal-button variant="ghost" (pressed)="cmdMode.settingsOpen.set(false)">Close</app-tonal-button>
+        </div>
+        <div class="sheet-row">
+          <span class="es-meta">Endpoint</span>
+          <span class="mono">{{ rpc.serverUrl() }}</span>
+        </div>
+        <div class="sheet-row">
+          <span class="es-meta">Capabilities</span>
+          <span class="mono">{{ rpc.capabilitiesSummary() }}</span>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (cmdMode.helpOpen()) {
+    <div class="sheet-backdrop" (click)="cmdMode.helpOpen.set(false)">
+      <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" (click)="$event.stopPropagation()">
+        <div class="sheet-head">
+          <app-section-kicker label="SHORTCUTS" />
+          <app-tonal-button variant="ghost" (pressed)="cmdMode.helpOpen.set(false)">Close</app-tonal-button>
+        </div>
+        <div class="sheet-row"><span class="es-meta">Command Mode</span><span class="mono">{{ commandChordLabel }}</span></div>
+        <div class="sheet-row"><span class="es-meta">Continue / Pause</span><span class="mono">F5</span></div>
+        <div class="sheet-row"><span class="es-meta">Step Over / Into</span><span class="mono">F10 / F11</span></div>
+      </div>
+    </div>
+  }
+
+  <app-command-palette />
+  <app-drop-veil [visible]="dragActive()" />
+  <app-toast-region />
+</div>

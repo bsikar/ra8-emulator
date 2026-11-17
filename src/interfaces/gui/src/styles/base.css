@@ -1,0 +1,147 @@
+/* Editorial Slate Base Typography, Surfaces & Primitives */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--es-canvas);
+  color: var(--es-text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 1px solid var(--es-signal-cursor);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--es-chrome);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--es-interactive-highest);
+  border-radius: var(--es-radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--es-text-muted);
+}
+
+.es-kicker {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 0.875rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--es-text-kicker);
+}
+
+.es-title {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.375rem;
+  letter-spacing: -0.01em;
+  color: var(--es-text-primary);
+}
+
+.es-meta {
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 1.125rem;
+  color: var(--es-text-muted);
+}
+
+.es-subline {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.125rem;
+  color: var(--es-text-muted);
+}
+
+.es-ghost-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--es-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.es-ghost-link:hover:not(:disabled) {
+  color: var(--es-text-primary);
+}
+
+.es-ghost-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.es-tonal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  background: var(--es-interactive);
+  border: 1px solid var(--es-interactive-highest);
+  border-radius: var(--es-radius);
+  color: var(--es-text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.es-tonal-btn:hover:not(:disabled) {
+  background: var(--es-interactive-high);
+}
+
+.es-tonal-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

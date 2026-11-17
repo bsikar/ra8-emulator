@@ -88,8 +88,11 @@ jobs:
         working-directory: src/interfaces/gui
         run: |
           npm ci
+          npm run gate
           npm run build
-          npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox
+          npm test
+          npx playwright install --with-deps chromium
+          npm run test:e2e
 
       - name: Test logs
         if: always()

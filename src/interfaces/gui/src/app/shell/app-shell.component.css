@@ -1,0 +1,221 @@
+.es-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--es-canvas);
+  color: var(--es-text-primary);
+  overflow: hidden;
+}
+
+.es-topbar {
+  height: var(--es-topbar-height);
+  min-height: var(--es-topbar-height);
+  padding: 0 24px;
+  background: var(--es-chrome-alpha);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--es-rule-chrome);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 30;
+}
+
+.topbar-left,
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.window-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+}
+
+.window-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--es-radius-full);
+  background: var(--es-window-dot);
+}
+
+.menu-strip,
+.view-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.menu-wrap {
+  position: relative;
+}
+
+.menu-trigger,
+.view-link {
+  border: 0;
+  background: transparent;
+  color: var(--es-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  text-decoration: none;
+  padding: 4px 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 1px solid transparent;
+}
+
+.menu-trigger:hover,
+.view-link:hover,
+.view-link.is-active,
+.menu-trigger.is-open {
+  color: var(--es-text-primary);
+}
+
+.view-link.is-active {
+  border-bottom-color: var(--es-signal-cursor);
+}
+
+.topbar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--es-border);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  min-width: 220px;
+  background: var(--es-container);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-md);
+  padding: 4px 0;
+  z-index: 50;
+}
+
+.dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--es-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: var(--es-interactive);
+  color: var(--es-text-primary);
+}
+
+.dropdown-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cmd-trigger {
+  font-size: 12px;
+}
+
+.es-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--es-text-muted);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-sm);
+  padding: 1px 5px;
+  background: var(--es-chrome);
+}
+
+.es-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--es-canvas);
+}
+
+.es-statusbar {
+  height: var(--es-statusbar-height);
+  min-height: var(--es-statusbar-height);
+  padding: 0 24px;
+  background: var(--es-chrome-alpha);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--es-rule-chrome);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--es-text-muted);
+  font-size: 12px;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.status-sep {
+  color: var(--es-border-strong);
+}
+
+.gear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--es-icon-footer);
+  padding: 4px;
+  cursor: pointer;
+}
+
+.gear-btn:hover {
+  color: var(--es-text-primary);
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 14, 21, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 68;
+}
+
+.sheet-card {
+  width: min(460px, calc(100vw - 32px));
+  background: var(--es-container);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-xl);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sheet-head,
+.sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sheet-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--es-divider);
+  font-size: 12px;
+}
