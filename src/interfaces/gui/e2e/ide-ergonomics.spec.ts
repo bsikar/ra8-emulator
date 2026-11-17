@@ -121,6 +121,14 @@ test.describe('IDE Ergonomics: Shift+Shift, Vim, and Web Worker Extensions', () 
       }
     }
 
+    // Pressing Enter on a workspace result invokes SearchJumpHandlers.onWorkspace
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeHidden();
+    await expect(page.getByTestId('launch-error')).toContainText('ws://127.0.0.1:4567');
+
+    await page.keyboard.press('Shift');
+    await page.keyboard.press('Shift');
+    await expect(dialog).toBeVisible();
     await input.fill(':42');
     await expect(dialog).toContainText('Go to line 42');
     await input.fill('0x20001000');
@@ -171,6 +179,17 @@ test.describe('IDE Ergonomics: Shift+Shift, Vim, and Web Worker Extensions', () 
     await page.getByTestId('vim-ex-input').fill('vim on');
     await page.keyboard.press('Enter');
     await expect(vimBadge).toHaveText('VIM: NORMAL');
+
+    // Opening + New Workspace must suppress Vim keys (j / :) even on buttons, and Escape anywhere closes it
+    await page.getByTestId('launch-action-new').click();
+    await expect(page.getByTestId('new-workspace-dialog')).toBeVisible();
+    await page.getByTestId('preset-fpb-ra4t1').focus();
+    await page.keyboard.press('j');
+    await page.keyboard.press(':');
+    await expect(page.getByTestId('vim-ex-input')).toBeHidden();
+    await expect(page.getByTestId('workspace-row-ws-ra8p1')).toHaveClass(/is-selected/);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('new-workspace-dialog')).toBeHidden();
   });
 
   test('installs, runs, disables, and uninstalls real Web Worker extensions with Vim active', async ({ page }) => {

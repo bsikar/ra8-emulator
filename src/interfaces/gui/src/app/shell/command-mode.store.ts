@@ -83,6 +83,17 @@ export class CommandModeStore {
   public readonly context = signal<CommandContext>(DEFAULT_CTX);
   private readonly actions = signal<CommandAction[]>([]);
   private readonly macMode = signal<boolean>(isMacPlatform());
+  private readonly routeModalDismiss = signal<(() => void) | null>(null);
+
+  public readonly routeModalOpen = computed<boolean>(() => this.routeModalDismiss() !== null);
+  public readonly hasOpenOverlay = computed<boolean>(
+    () =>
+      this.paletteOpen() ||
+      this.settingsOpen() ||
+      this.helpOpen() ||
+      this.extensionsOpen() ||
+      this.routeModalOpen()
+  );
 
   public readonly resolvedCommands = computed<ResolvedCommand[]>(() => {
     const ctx = this.context();
@@ -134,6 +145,10 @@ export class CommandModeStore {
     this.context.update((prev) => ({ ...prev, ...patch }));
   }
 
+  public setRouteModalDismiss(dismiss: (() => void) | null): void {
+    this.routeModalDismiss.set(dismiss);
+  }
+
   public openPalette(initialQuery = ''): void {
     this.activeMenu.set(null);
     this.extensionsOpen.set(false);
@@ -147,6 +162,11 @@ export class CommandModeStore {
     this.settingsOpen.set(false);
     this.helpOpen.set(false);
     this.extensionsOpen.set(false);
+    const dismiss = this.routeModalDismiss();
+    if (dismiss) {
+      this.routeModalDismiss.set(null);
+      dismiss();
+    }
   }
 
   public toggleMenu(id: TopMenuId): void {
@@ -176,10 +196,7 @@ export class CommandModeStore {
       return true;
     }
 
-    if (
-      event.key === 'Escape' &&
-      (this.paletteOpen() || this.activeMenu() || this.settingsOpen() || this.helpOpen() || this.extensionsOpen())
-    ) {
+    if (event.key === 'Escape' && (this.hasOpenOverlay() || this.activeMenu() !== null)) {
       event.preventDefault();
       this.closeOverlays();
       return true;

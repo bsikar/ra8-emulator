@@ -14,7 +14,9 @@ describe('LaunchCommandListComponent', () => {
         description: 'Select board profile',
         shortcut: 'Ctrl + Shift + N',
         keywords: [],
-        run: () => executed.push('cmd-1'),
+        run: () => {
+          executed.push('cmd-1');
+        },
       },
       {
         id: 'cmd-2',
@@ -24,7 +26,9 @@ describe('LaunchCommandListComponent', () => {
         description: 'Install extensions',
         shortcut: 'Ctrl + Shift + X',
         keywords: [],
-        run: () => executed.push('cmd-2'),
+        run: () => {
+          executed.push('cmd-2');
+        },
       },
     ];
     const sections: LaunchCommandSection[] = [

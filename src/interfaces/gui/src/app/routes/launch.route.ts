@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  OnDestroy,
   OnInit,
   computed,
   effect,
@@ -40,6 +41,7 @@ import { CommandModeStore, formatShortcut, isEditableEventTarget } from '../shel
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:keydown.enter)': 'onWindowEnter($event)',
+    '(window:keydown.escape)': 'onWindowEscape($event)',
   },
   imports: [
     LaunchIconComponent,
@@ -51,7 +53,7 @@ import { CommandModeStore, formatShortcut, isEditableEventTarget } from '../shel
   templateUrl: './launch.route.html',
   styleUrl: './launch.route.css',
 })
-export class LaunchRouteComponent implements OnInit {
+export class LaunchRouteComponent implements OnInit, OnDestroy {
   protected readonly rpc = inject(RpcConnectionStore);
   protected readonly execution = inject(ExecutionStore);
   protected readonly workspace = inject(WorkspaceStore);
@@ -103,6 +105,13 @@ export class LaunchRouteComponent implements OnInit {
       const line = Math.max(0, Math.min(list.length - 1, this.vim.cursor().line));
       this.selectedIndex.set(line);
     });
+    effect(() => {
+      if (this.newDialogOpen()) {
+        this.cmdMode.setRouteModalDismiss(() => this.newDialogOpen.set(false));
+      } else {
+        this.cmdMode.setRouteModalDismiss(null);
+      }
+    });
   }
 
   public ngOnInit(): void {
@@ -115,24 +124,27 @@ export class LaunchRouteComponent implements OnInit {
     }
   }
 
+  public ngOnDestroy(): void {
+    this.cmdMode.setRouteModalDismiss(null);
+  }
+
+  protected onWindowEscape(event: KeyboardEvent): void {
+    if (event.defaultPrevented || this.cmdMode.hasOpenOverlay() || this.searchEverywhere.open() || this.newDialogOpen()) {
+      return;
+    }
+    this.closeWorkspaceMenus();
+    if (this.inCommandMode()) {
+      event.preventDefault();
+      this.exitCommandMode();
+      this.searchInputEl()?.nativeElement.focus();
+    }
+  }
+
   protected onWindowEnter(event: KeyboardEvent): void {
-    if (
-      !this.vim.enabled() ||
-      this.vim.mode() !== 'normal' ||
-      this.inCommandMode() ||
-      this.newDialogOpen() ||
-      this.cmdMode.paletteOpen() ||
-      this.cmdMode.settingsOpen() ||
-      this.cmdMode.helpOpen() ||
-      this.cmdMode.extensionsOpen() ||
-      this.searchEverywhere.open()
-    ) {
-      return;
-    }
+    if (!this.vim.enabled() || this.vim.mode() !== 'normal' || this.inCommandMode() || this.newDialogOpen()) return;
+    if (this.cmdMode.hasOpenOverlay() || this.searchEverywhere.open()) return;
     const target = event.target;
-    if (isEditableEventTarget(target) || target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) {
-      return;
-    }
+    if (isEditableEventTarget(target) || target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) return;
     const entry = this.filteredWorkspaces()[this.selectedIndex()];
     if (entry) {
       event.preventDefault();
@@ -159,6 +171,7 @@ export class LaunchRouteComponent implements OnInit {
   protected onSearchKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Escape' && this.inCommandMode()) {
       event.preventDefault();
+      event.stopPropagation();
       this.exitCommandMode();
       return;
     }
