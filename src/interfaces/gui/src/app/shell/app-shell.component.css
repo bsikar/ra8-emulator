@@ -57,16 +57,14 @@
 .menu-trigger,
 .view-link {
   border: 0;
+  border-bottom: 1px solid transparent;
   background: transparent;
   color: var(--es-text-secondary);
-  font-family: var(--font-sans);
   font-size: 12px;
-  font-weight: 400;
   text-decoration: none;
   padding: 4px 2px;
   cursor: pointer;
   white-space: nowrap;
-  border-bottom: 1px solid transparent;
 }
 
 .menu-trigger:hover,
@@ -108,7 +106,6 @@
   border: 0;
   background: transparent;
   color: var(--es-text-secondary);
-  font-family: var(--font-sans);
   font-size: 12px;
   cursor: pointer;
 }
@@ -159,7 +156,8 @@
   font-size: 12px;
 }
 
-.status-left {
+.status-left,
+.status-right {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -168,6 +166,57 @@
 
 .status-sep {
   color: var(--es-border-strong);
+}
+
+.vim-badge {
+  border: 1px solid transparent;
+  border-radius: var(--es-radius-sm);
+  background: transparent;
+  color: var(--es-text-muted);
+  font-size: 12px;
+  padding: 1px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vim-badge:hover,
+.vim-badge.is-enabled {
+  color: var(--es-text-primary);
+}
+
+.vim-badge.is-enabled {
+  border-color: var(--es-border-strong);
+  background: var(--es-container);
+}
+
+.vim-ex-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--es-text-primary);
+  font-size: 12px;
+}
+
+.vim-ex-input {
+  width: 200px;
+  border: 0;
+  border-bottom: 1px solid var(--es-signal-cursor);
+  background: transparent;
+  color: var(--es-text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+.vim-msg {
+  font-size: 12px;
+  color: var(--es-text-kicker);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vim-msg.is-fault {
+  color: var(--es-signal-fault);
 }
 
 .gear-btn {

@@ -104,22 +104,60 @@
       <span class="mono">t = {{ execution.virtualTimeLabel() }}</span>
       <span class="status-sep">·</span>
       <span class="mono">{{ coreSummary() }}</span>
+
+      @if (vim.mode() === 'command') {
+        <span class="status-sep">·</span>
+        <label class="vim-ex-wrap mono" data-testid="vim-ex-bar">
+          <span>:</span>
+          <input
+            #vimExInputEl
+            type="text"
+            class="vim-ex-input mono"
+            data-testid="vim-ex-input"
+            aria-label="Vim ex command"
+            [value]="vim.commandBuffer()"
+            (input)="onVimExInput($event)"
+            placeholder="vim on | ext | help | connect ws://..."
+          />
+        </label>
+      } @else if (vim.lastMessage()) {
+        <span class="status-sep">·</span>
+        <span
+          class="vim-msg mono"
+          [class.is-fault]="vim.lastMessageTone() === 'fault'"
+          data-testid="vim-status-msg"
+        >
+          {{ vim.lastMessage() }}
+        </span>
+      }
     </div>
 
-    <button
-      type="button"
-      class="gear-btn"
-      aria-label="Settings"
-      data-testid="settings-trigger"
-      (click)="cmdMode.settingsOpen.set(true)"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path
-          d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.4.31.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"
-          fill="currentColor"
-        />
-      </svg>
-    </button>
+    <div class="status-right">
+      <button
+        type="button"
+        class="vim-badge mono"
+        [class.is-enabled]="vim.enabled()"
+        data-testid="statusbar-vim"
+        (click)="vim.toggleEnabled()"
+      >
+        {{ vim.statusLabel() }}
+      </button>
+
+      <button
+        type="button"
+        class="gear-btn"
+        aria-label="Settings"
+        data-testid="settings-trigger"
+        (click)="cmdMode.settingsOpen.set(true)"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.61.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.4.31.61.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.09.48 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2Z"
+            fill="currentColor"
+          />
+        </svg>
+      </button>
+    </div>
   </footer>
 
   @if (cmdMode.settingsOpen()) {
@@ -137,6 +175,26 @@
           <span class="es-meta">Capabilities</span>
           <span class="mono">{{ rpc.capabilitiesSummary() }}</span>
         </div>
+        <div class="sheet-row">
+          <span class="es-meta">Vim Keybindings</span>
+          <app-tonal-button
+            testId="settings-vim-toggle"
+            [active]="vim.enabled()"
+            (pressed)="vim.toggleEnabled()"
+          >
+            {{ vim.enabled() ? 'Enabled' : 'Disabled' }}
+          </app-tonal-button>
+        </div>
+        <div class="sheet-row">
+          <span class="es-meta">Extensions ({{ extStore.extensions().length }})</span>
+          <app-tonal-button
+            variant="ghost"
+            testId="settings-open-extensions"
+            (pressed)="cmdMode.settingsOpen.set(false); cmdMode.extensionsOpen.set(true)"
+          >
+            Manage Extensions
+          </app-tonal-button>
+        </div>
       </div>
     </div>
   }
@@ -149,12 +207,17 @@
           <app-tonal-button variant="ghost" (pressed)="cmdMode.helpOpen.set(false)">Close</app-tonal-button>
         </div>
         <div class="sheet-row"><span class="es-meta">Command Mode</span><span class="mono">{{ commandChordLabel }}</span></div>
+        <div class="sheet-row"><span class="es-meta">Search Everywhere</span><span class="mono">Shift+Shift</span></div>
+        <div class="sheet-row"><span class="es-meta">Extensions</span><span class="mono">{{ extensionsChordLabel }}</span></div>
+        <div class="sheet-row"><span class="es-meta">Vim :ex Prompt</span><span class="mono">:vim on|off / :ext / :help</span></div>
         <div class="sheet-row"><span class="es-meta">Continue / Pause</span><span class="mono">F5</span></div>
         <div class="sheet-row"><span class="es-meta">Step Over / Into</span><span class="mono">F10 / F11</span></div>
       </div>
     </div>
   }
 
+  <app-extensions-sheet [open]="cmdMode.extensionsOpen()" (closed)="cmdMode.extensionsOpen.set(false)" />
+  <app-search-everywhere />
   <app-command-palette />
   <app-drop-veil [visible]="dragActive()" />
   <app-toast-region />

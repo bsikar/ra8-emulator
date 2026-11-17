@@ -1,0 +1,164 @@
+<div class="launch-canvas" (click)="closeWorkspaceMenus()">
+  <div class="launch-column">
+    <div class="launch-toolbar" [class.is-command]="inCommandMode()">
+      <label class="search-field">
+        @if (inCommandMode()) {
+          <span class="cmd-glyph mono" aria-hidden="true">&gt;</span>
+        } @else {
+          <app-launch-icon name="search" [size]="18" class="search-icon" />
+        }
+
+        <input
+          #searchInputEl
+          type="text"
+          class="search-input"
+          data-testid="launch-search-input"
+          [value]="searchQuery()"
+          [placeholder]="
+            inCommandMode()
+              ? 'Run command, switch target, or attach probe...'
+              : 'Search workspaces or type > for commands'
+          "
+          aria-label="Search workspaces or type > for commands"
+          (input)="onSearchInput($event)"
+          (keydown)="onSearchKeyDown($event)"
+        />
+      </label>
+
+      @if (inCommandMode()) {
+        <button
+          type="button"
+          class="esc-back-btn"
+          data-testid="launch-cmd-back"
+          (click)="exitCommandMode()"
+        >
+          <kbd class="es-kbd" data-allow-11px>ESC</kbd>
+          <span>Back to Workspaces</span>
+        </button>
+      } @else {
+        <div class="ghost-actions">
+          <kbd class="es-kbd toolbar-kbd" data-allow-11px>{{ commandChordLabel }}</kbd>
+
+          <button
+            type="button"
+            class="es-ghost-link"
+            data-testid="launch-action-open"
+            (click)="openWorkspacePicker()"
+          >
+            <app-launch-icon name="open-folder" [size]="15" />
+            <span>Open Workspace</span>
+          </button>
+
+          <button
+            type="button"
+            class="es-ghost-link"
+            data-testid="launch-action-connect"
+            (click)="toggleConnectRemote()"
+          >
+            <app-launch-icon name="connect-remote" [size]="15" />
+            <span>Connect Remote</span>
+          </button>
+
+          <button
+            type="button"
+            class="es-ghost-link"
+            data-testid="launch-action-import"
+            (click)="openImportArchivePicker()"
+          >
+            <app-launch-icon name="import-archive" [size]="15" />
+            <span>Import Archive</span>
+          </button>
+
+          <button
+            type="button"
+            class="es-ghost-link is-primary-ghost"
+            data-testid="launch-action-new"
+            (click)="newDialogOpen.set(true)"
+          >
+            <span>+ New Workspace</span>
+          </button>
+        </div>
+      }
+    </div>
+
+    @if (!inCommandMode() && connectBarOpen() && workspace.recentWorkspaces().length > 0) {
+      <app-launch-connect-bar
+        [autoFocus]="true"
+        [wsUrl]="wsInput()"
+        [connected]="rpc.isConnected()"
+        [hasError]="rpc.errorMessage() !== null"
+        [connectionState]="rpc.connectionState()"
+        [savedHosts]="workspace.savedHosts()"
+        (wsUrlChange)="wsInput.set($event)"
+        (connectPressed)="connectNow()"
+        (disconnectPressed)="rpc.disconnect(true)"
+        (connectHost)="connectSavedHost($event)"
+        (closed)="connectBarOpen.set(false)"
+      />
+    }
+
+    @if (rpc.errorMessage()) {
+      <p class="error-line" data-testid="launch-error">{{ rpc.errorMessage() }}</p>
+    }
+
+    @if (inCommandMode()) {
+      <app-launch-command-list
+        [sections]="commandSections()"
+        [selectedIndex]="selectedIndex()"
+        [query]="searchQuery()"
+        (selectedChange)="selectedIndex.set($event)"
+        (execute)="runCommandItem($event)"
+      />
+    } @else {
+      <app-launch-workspace-list
+        [workspaces]="filteredWorkspaces()"
+        [totalCount]="workspace.recentWorkspaces().length"
+        [selectedIndex]="selectedIndex()"
+        [filterQuery]="searchQuery()"
+        [savedHosts]="workspace.savedHosts()"
+        [wsUrl]="wsInput()"
+        [connected]="rpc.isConnected()"
+        [hasError]="rpc.errorMessage() !== null"
+        [connectionState]="rpc.connectionState()"
+        (selectedChange)="selectedIndex.set($event)"
+        (openWorkspace)="openRecentWorkspace($event)"
+        (togglePin)="workspace.togglePinWorkspace($event)"
+        (removeWorkspace)="workspace.removeWorkspace($event)"
+        (clearFilter)="searchQuery.set('')"
+        (wsUrlChange)="wsInput.set($event)"
+        (connectPressed)="connectNow()"
+        (disconnectPressed)="rpc.disconnect(true)"
+        (connectHost)="connectSavedHost($event)"
+        (openArtifact)="openWorkspacePicker()"
+        (createWorkspace)="newDialogOpen.set(true)"
+      />
+    }
+  </div>
+
+  <input
+    #openFileInputEl
+    type="file"
+    class="hidden-file-input"
+    accept=".elf,.board,.json"
+    tabindex="-1"
+    aria-hidden="true"
+    (change)="onOpenFileSelected($event)"
+  />
+
+  <input
+    #importArchiveInputEl
+    type="file"
+    class="hidden-file-input"
+    accept=".tar,.tar.gz,.tgz"
+    tabindex="-1"
+    aria-hidden="true"
+    (change)="onImportArchiveSelected($event)"
+  />
+
+  <app-launch-new-workspace-dialog
+    [open]="newDialogOpen()"
+    [defaultWsUrl]="wsInput()"
+    (closed)="newDialogOpen.set(false)"
+    (created)="onWorkspaceCreated($event)"
+  />
+</div>

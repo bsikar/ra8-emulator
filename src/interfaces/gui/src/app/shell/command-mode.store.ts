@@ -1,7 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 export type TopMenuId = 'file' | 'edit' | 'view' | 'terminal' | 'help';
-export type CommandCategory = 'navigation' | 'session' | 'execution' | 'file' | 'help';
+export type CommandCategory = 'navigation' | 'session' | 'execution' | 'file' | 'extensions' | 'help';
 
 export interface ShortcutChord {
   mod?: boolean;
@@ -79,6 +79,7 @@ export class CommandModeStore {
   public readonly activeMenu = signal<TopMenuId | null>(null);
   public readonly settingsOpen = signal<boolean>(false);
   public readonly helpOpen = signal<boolean>(false);
+  public readonly extensionsOpen = signal<boolean>(false);
   public readonly context = signal<CommandContext>(DEFAULT_CTX);
   private readonly actions = signal<CommandAction[]>([]);
   private readonly macMode = signal<boolean>(isMacPlatform());
@@ -135,6 +136,7 @@ export class CommandModeStore {
 
   public openPalette(initialQuery = ''): void {
     this.activeMenu.set(null);
+    this.extensionsOpen.set(false);
     this.query.set(initialQuery);
     this.paletteOpen.set(true);
   }
@@ -144,6 +146,7 @@ export class CommandModeStore {
     this.activeMenu.set(null);
     this.settingsOpen.set(false);
     this.helpOpen.set(false);
+    this.extensionsOpen.set(false);
   }
 
   public toggleMenu(id: TopMenuId): void {
@@ -173,7 +176,10 @@ export class CommandModeStore {
       return true;
     }
 
-    if (event.key === 'Escape' && (this.paletteOpen() || this.activeMenu() || this.settingsOpen() || this.helpOpen())) {
+    if (
+      event.key === 'Escape' &&
+      (this.paletteOpen() || this.activeMenu() || this.settingsOpen() || this.helpOpen() || this.extensionsOpen())
+    ) {
       event.preventDefault();
       this.closeOverlays();
       return true;
