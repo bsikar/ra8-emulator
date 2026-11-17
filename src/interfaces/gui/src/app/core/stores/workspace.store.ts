@@ -26,6 +26,12 @@ export interface RecentWorkspaceEntry {
   wsUrl: string;
   pinned: boolean;
   lastOpenedIso: string;
+  targetModel?: string;
+  archSummary?: string;
+  modeLabel?: string;
+  artifactSummary?: string;
+  checkpointCount?: number;
+  entryAddress?: string;
 }
 
 const RECENT_KEY = 'ra8.recentWorkspaces.v1';

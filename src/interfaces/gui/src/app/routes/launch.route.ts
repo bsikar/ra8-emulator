@@ -1,179 +1,109 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { Router } from '@angular/router';
 import { RpcConnectionStore, resolveWsUrlFromSearch } from '../core/rpc/rpc-connection.store';
+import { SearchEverywhereStore } from '../core/search/search-everywhere.store';
+import { BoardStore } from '../core/stores/board.store';
 import { ExecutionStore } from '../core/stores/execution.store';
-import { WorkspaceStore } from '../core/stores/workspace.store';
-import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
-import { StatusDotComponent } from '../shared/ui/status-dot.component';
-import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
+import { RewindStore } from '../core/stores/rewind.store';
+import { type RecentWorkspaceEntry, WorkspaceStore } from '../core/stores/workspace.store';
+import { VimStore } from '../core/vim/vim.store';
+import { importLaunchArchiveFile, importLaunchArtifactFile } from '../features/launch/launch-artifact';
+import {
+  type LaunchCommandItem,
+  buildLaunchCommands,
+  filterLaunchCommands,
+  filterRecentWorkspaces,
+  formatPresetArchSummary,
+} from '../features/launch/launch-commands';
+import { LaunchCommandListComponent } from '../features/launch/launch-command-list.component';
+import { LaunchConnectBarComponent } from '../features/launch/launch-connect-bar.component';
+import { LaunchIconComponent } from '../features/launch/launch-icons.component';
+import {
+  LaunchNewWorkspaceDialogComponent,
+  type NewWorkspacePayload,
+} from '../features/launch/launch-new-workspace-dialog.component';
+import { LaunchWorkspaceListComponent } from '../features/launch/launch-workspace-list.component';
+import { CommandModeStore, formatShortcut, isEditableEventTarget } from '../shell/command-mode.store';
 
 @Component({
   selector: 'app-launch-route',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, SectionKickerComponent, StatusDotComponent, TonalButtonComponent],
-  template: `
-    <div class="launch-canvas">
-      <section class="launch-panel" aria-label="Session launch">
-        <div class="panel-head">
-          <app-section-kicker label="SESSION TARGET" />
-          <app-status-dot
-            [tone]="rpc.isConnected() ? 'nominal' : rpc.errorMessage() ? 'fault' : 'muted'"
-            [label]="rpc.isConnected() ? 'Connected' : rpc.connectionState()"
-          />
-        </div>
-
-        <h1 class="es-title panel-title">Connect Target Session</h1>
-        <p class="es-meta panel-desc">WebSocket RPC · ARM Cortex-M85 / M33</p>
-
-        <div class="connect-row">
-          <input
-            type="text"
-            class="ws-input mono"
-            data-testid="launch-ws-input"
-            aria-label="WebSocket RPC URL"
-            [value]="wsInput()"
-            (input)="onUrlInput($event)"
-            (keydown.enter)="connectNow()"
-            placeholder="ws://127.0.0.1:4567"
-          />
-          @if (rpc.isConnected()) {
-            <app-tonal-button testId="launch-disconnect-btn" (pressed)="rpc.disconnect(true)">
-              Disconnect
-            </app-tonal-button>
-          } @else {
-            <app-tonal-button testId="launch-connect-btn" (pressed)="connectNow()">
-              Connect
-            </app-tonal-button>
-          }
-        </div>
-
-        @if (rpc.errorMessage()) {
-          <p class="error-line" data-testid="launch-error">{{ rpc.errorMessage() }}</p>
-        }
-
-        <div class="quick-links">
-          <a class="es-ghost-link" routerLink="/debug">Open Debug</a>
-          <a class="es-ghost-link" routerLink="/hardware">Open Hardware</a>
-          <a class="es-ghost-link" routerLink="/rewind">Open Rewind</a>
-          <a class="es-ghost-link" routerLink="/profile">Open Profile</a>
-          <a class="es-ghost-link" routerLink="/console">Open Console</a>
-        </div>
-
-        @if (workspace.recentWorkspaces().length > 0) {
-          <div class="recent-list">
-            <app-section-kicker label="WORKSPACE INDEX" />
-            @for (item of workspace.recentWorkspaces(); track item.id) {
-              <button type="button" class="recent-row" (click)="connectSaved(item.wsUrl)">
-                <span class="recent-name">{{ item.name }}</span>
-                <span class="es-subline">{{ item.wsUrl }}</span>
-              </button>
-            }
-          </div>
-        } @else {
-          <p class="es-subline drop-hint">Drop .elf, .board, or .tar.gz anywhere to begin.</p>
-        }
-      </section>
-    </div>
-  `,
-  styles: [
-    `
-      .launch-canvas {
-        min-height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 32px 24px;
-        background: var(--es-canvas);
-      }
-      .launch-panel {
-        width: min(720px, 100%);
-        background: var(--es-container);
-        border: 1px solid var(--es-border);
-        border-radius: var(--es-radius-xl);
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      .panel-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-      .panel-title,
-      .panel-desc,
-      .error-line,
-      .drop-hint {
-        margin: 0;
-      }
-      .connect-row {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .ws-input {
-        flex: 1;
-        min-width: 0;
-        height: 32px;
-        border: 0;
-        border-bottom: 1px solid var(--es-border);
-        background: transparent;
-        color: var(--es-text-primary);
-        font-size: 13px;
-        outline: none;
-      }
-      .ws-input:focus {
-        border-bottom-color: var(--es-text-kicker);
-      }
-      .error-line {
-        font-size: 12px;
-        color: var(--es-signal-fault);
-      }
-      .quick-links {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        padding-top: 8px;
-        border-top: 1px solid var(--es-divider);
-      }
-      .recent-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        padding-top: 8px;
-        border-top: 1px solid var(--es-divider);
-      }
-      .recent-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 8px;
-        border: 0;
-        border-bottom: 1px solid var(--es-divider);
-        background: transparent;
-        color: var(--es-text-primary);
-        text-align: left;
-        cursor: pointer;
-      }
-      .recent-row:hover {
-        background: var(--es-interactive);
-      }
-      .recent-name {
-        font-size: 13px;
-        font-weight: 500;
-      }
-    `,
+  host: {
+    '(window:keydown.enter)': 'onWindowEnter($event)',
+  },
+  imports: [
+    LaunchIconComponent,
+    LaunchWorkspaceListComponent,
+    LaunchCommandListComponent,
+    LaunchConnectBarComponent,
+    LaunchNewWorkspaceDialogComponent,
   ],
+  templateUrl: './launch.route.html',
+  styleUrl: './launch.route.css',
 })
 export class LaunchRouteComponent implements OnInit {
   protected readonly rpc = inject(RpcConnectionStore);
   protected readonly execution = inject(ExecutionStore);
   protected readonly workspace = inject(WorkspaceStore);
+  protected readonly board = inject(BoardStore);
+  protected readonly rewind = inject(RewindStore);
+  protected readonly cmdMode = inject(CommandModeStore);
+  protected readonly searchEverywhere = inject(SearchEverywhereStore);
+  protected readonly vim = inject(VimStore);
   private readonly router = inject(Router);
 
+  private readonly searchInputEl = viewChild<ElementRef<HTMLInputElement>>('searchInputEl');
+  private readonly openFileInputEl = viewChild<ElementRef<HTMLInputElement>>('openFileInputEl');
+  private readonly importArchiveInputEl = viewChild<ElementRef<HTMLInputElement>>('importArchiveInputEl');
+  private readonly workspaceListRef = viewChild(LaunchWorkspaceListComponent);
+  private readonly connectBarRef = viewChild(LaunchConnectBarComponent);
+
   protected readonly wsInput = signal<string>(this.rpc.serverUrl());
+  protected readonly searchQuery = signal<string>('');
+  protected readonly inCommandMode = signal<boolean>(false);
+  protected readonly selectedIndex = signal<number>(0);
+  protected readonly connectBarOpen = signal<boolean>(false);
+  protected readonly newDialogOpen = signal<boolean>(false);
+  protected readonly commandChordLabel = formatShortcut({ mod: true, key: 'k' });
+
+  protected readonly filteredWorkspaces = computed(() =>
+    filterRecentWorkspaces(this.workspace.recentWorkspaces(), this.searchQuery())
+  );
+
+  protected readonly commandSections = computed(() =>
+    filterLaunchCommands(this.buildLaunchCommands(), this.searchQuery())
+  );
+
+  protected readonly flatCommands = computed(() =>
+    this.commandSections().flatMap((section) => section.items)
+  );
+
+  constructor() {
+    effect(() => {
+      const lines = this.filteredWorkspaces().map(
+        (w) => `${w.name} ${w.targetModel ?? ''} ${w.path}`.trim()
+      );
+      this.vim.updateLines(lines.length > 0 ? lines : [''], true);
+    });
+
+    effect(() => {
+      if (!this.vim.enabled() || this.inCommandMode() || this.newDialogOpen()) return;
+      const list = this.filteredWorkspaces();
+      if (list.length === 0) return;
+      const line = Math.max(0, Math.min(list.length - 1, this.vim.cursor().line));
+      this.selectedIndex.set(line);
+    });
+  }
 
   public ngOnInit(): void {
     if (typeof window === 'undefined') return;
@@ -185,27 +115,211 @@ export class LaunchRouteComponent implements OnInit {
     }
   }
 
-  protected onUrlInput(event: Event): void {
+  protected onWindowEnter(event: KeyboardEvent): void {
+    if (
+      !this.vim.enabled() ||
+      this.vim.mode() !== 'normal' ||
+      this.inCommandMode() ||
+      this.newDialogOpen() ||
+      this.cmdMode.paletteOpen() ||
+      this.cmdMode.settingsOpen() ||
+      this.cmdMode.helpOpen() ||
+      this.cmdMode.extensionsOpen() ||
+      this.searchEverywhere.open()
+    ) {
+      return;
+    }
     const target = event.target;
-    if (target instanceof HTMLInputElement) this.wsInput.set(target.value);
+    if (isEditableEventTarget(target) || target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) {
+      return;
+    }
+    const entry = this.filteredWorkspaces()[this.selectedIndex()];
+    if (entry) {
+      event.preventDefault();
+      void this.openRecentWorkspace(entry);
+    }
+  }
+
+  protected onSearchInput(event: Event): void {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const val = target.value;
+    if (!this.inCommandMode() && val.startsWith('>')) {
+      this.inCommandMode.set(true);
+      const rest = val.slice(1).replace(/^\s+/, '');
+      this.searchQuery.set(rest);
+      target.value = rest;
+      this.selectedIndex.set(0);
+      return;
+    }
+    this.searchQuery.set(val);
+    this.selectedIndex.set(0);
+  }
+
+  protected onSearchKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this.inCommandMode()) {
+      event.preventDefault();
+      this.exitCommandMode();
+      return;
+    }
+    if (event.key === 'Backspace' && this.inCommandMode() && this.searchQuery().length === 0) {
+      event.preventDefault();
+      this.exitCommandMode();
+      return;
+    }
+    const count = this.inCommandMode() ? this.flatCommands().length : this.filteredWorkspaces().length;
+    if (count === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.selectedIndex.update((i) => (i + 1) % count);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.selectedIndex.update((i) => (i - 1 + count) % count);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      this.executeActiveItem();
+    }
+  }
+
+  protected exitCommandMode(): void {
+    this.inCommandMode.set(false);
+    this.searchQuery.set('');
+    this.selectedIndex.set(0);
+    const el = this.searchInputEl()?.nativeElement;
+    if (el) el.value = '';
+  }
+
+  protected openWorkspacePicker(): void {
+    this.openFileInputEl()?.nativeElement.click();
+  }
+
+  protected openImportArchivePicker(): void {
+    this.importArchiveInputEl()?.nativeElement.click();
+  }
+
+  protected toggleConnectRemote(): void {
+    if (this.workspace.recentWorkspaces().length === 0) {
+      this.connectBarRef()?.focusInput();
+      return;
+    }
+    const next = !this.connectBarOpen();
+    this.connectBarOpen.set(next);
+    if (next) queueMicrotask(() => this.connectBarRef()?.focusInput());
+  }
+
+  protected async onOpenFileSelected(event: Event): Promise<void> {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    await importLaunchArtifactFile(file, this.buildArtifactContext());
+  }
+
+  protected async onImportArchiveSelected(event: Event): Promise<void> {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    await importLaunchArchiveFile(file, this.buildArtifactContext());
+  }
+
+  protected onWorkspaceCreated(payload: NewWorkspacePayload): void {
+    this.board.selectBoardPreset(payload.preset.targetId);
+    this.wsInput.set(payload.wsUrl);
+    this.workspace.recordRecentWorkspace({
+      id: `ws:${Date.now().toString(36)}`,
+      name: payload.name,
+      path: payload.path,
+      wsUrl: payload.wsUrl,
+      pinned: false,
+      targetModel: payload.preset.targetId.toUpperCase(),
+      archSummary: formatPresetArchSummary(payload.preset),
+      modeLabel: payload.modeLabel,
+      artifactSummary: `${payload.preset.targetId.replace('-', '_')}.board`,
+    });
+    this.newDialogOpen.set(false);
+    this.selectedIndex.set(0);
+    this.rpc.pushToast(`Created workspace ${payload.name}`);
+  }
+
+  protected async openRecentWorkspace(entry: RecentWorkspaceEntry): Promise<void> {
+    this.wsInput.set(entry.wsUrl);
+    this.workspace.recordRecentWorkspace({ ...entry });
+    const ok = await this.connectAndRecord(entry.wsUrl);
+    if (ok) {
+      await this.router.navigateByUrl('/debug');
+    } else if (this.workspace.recentWorkspaces().length > 0) {
+      this.connectBarOpen.set(true);
+    }
   }
 
   protected connectNow(): void {
     void this.connectAndRecord(this.wsInput());
   }
 
-  protected connectSaved(url: string): void {
+  protected connectSavedHost(url: string): void {
     this.wsInput.set(url);
     void this.connectAndRecord(url);
   }
 
-  private async connectAndRecord(url: string): Promise<void> {
+  protected runCommandItem(item: LaunchCommandItem): void {
+    this.exitCommandMode();
+    void item.run();
+  }
+
+  protected closeWorkspaceMenus(): void {
+    this.workspaceListRef()?.closeMenus();
+  }
+
+  private executeActiveItem(): void {
+    if (this.inCommandMode()) {
+      const cmd = this.flatCommands()[this.selectedIndex()] ?? this.flatCommands()[0];
+      if (cmd) this.runCommandItem(cmd);
+      return;
+    }
+    const entry = this.filteredWorkspaces()[this.selectedIndex()] ?? this.filteredWorkspaces()[0];
+    if (entry) void this.openRecentWorkspace(entry);
+  }
+
+  private buildArtifactContext() {
+    return {
+      wsUrl: this.wsInput(),
+      rpc: this.rpc,
+      board: this.board,
+      rewind: this.rewind,
+      workspace: this.workspace,
+      navigate: (url: string) => this.router.navigateByUrl(url),
+      onNeedConnect: () => this.connectBarOpen.set(true),
+    };
+  }
+
+  private async connectAndRecord(url: string): Promise<boolean> {
     const ok = await this.rpc.connect(url);
     if (ok) {
       this.workspace.addSavedHost(url);
-      if (this.router.url.startsWith('/launch')) {
-        void this.execution.refreshClock();
-      }
+      if (this.router.url.startsWith('/launch')) void this.execution.refreshClock();
+    } else if (this.workspace.recentWorkspaces().length > 0) {
+      this.connectBarOpen.set(true);
     }
+    return ok;
+  }
+
+  private buildLaunchCommands(): LaunchCommandItem[] {
+    return buildLaunchCommands({
+      commandChordLabel: this.commandChordLabel,
+      createWorkspace: () => this.newDialogOpen.set(true),
+      openWorkspace: () => this.openWorkspacePicker(),
+      importArchive: () => this.openImportArchivePicker(),
+      connectRemote: () => this.toggleConnectRemote(),
+      openMonitor: () => void this.router.navigateByUrl('/console'),
+      openBoardComposer: () => void this.router.navigateByUrl('/hardware'),
+      openSettings: () => this.cmdMode.settingsOpen.set(true),
+      openPalette: () => this.cmdMode.openPalette(),
+      openSearchEverywhere: () => this.searchEverywhere.openSearch(),
+      openExtensions: () => this.cmdMode.extensionsOpen.set(true),
+      toggleVim: () => this.vim.toggleEnabled(),
+    });
   }
 }
