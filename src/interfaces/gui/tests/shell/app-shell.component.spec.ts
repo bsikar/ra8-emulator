@@ -33,4 +33,34 @@ describe('AppShellComponent and lazy router', () => {
     await harness.navigateByUrl('/console');
     expect(harness.routeNativeElement?.textContent).toContain('UART SERIAL STREAM');
   });
+
+  it('wires Vim statusbar pill, settings toggle, :ex prompt, and Extensions shortcut', async () => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideRouter(appRoutes)],
+    });
+    const fixture = TestBed.createComponent(AppShellComponent);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const vimBtn = el.querySelector('[data-testid="statusbar-vim"]') as HTMLButtonElement;
+    expect(vimBtn.textContent?.trim()).toBe('VIM: OFF');
+
+    vimBtn.click();
+    await fixture.whenStable();
+    expect(vimBtn.textContent?.trim()).toBe('VIM: NORMAL');
+
+    // Open :ex prompt via keyboard
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ':' }));
+    await fixture.whenStable();
+    const exInput = el.querySelector('[data-testid="vim-ex-input"]') as HTMLInputElement;
+    expect(exInput).toBeTruthy();
+
+    exInput.value = 'ext';
+    exInput.dispatchEvent(new Event('input'));
+    exInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="extensions-sheet-dialog"]')).toBeTruthy();
+  });
 });
