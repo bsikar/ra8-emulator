@@ -1,12 +1,13 @@
 //! Control command syntax; transport options are parsed by session_ctl.
-const std = @import("std");
-
 const command_types = @import("command.zig");
+
 const ctl_branch = @import("branch.zig");
+const ctl_disasm = @import("disasm.zig");
 const ctl_nav = @import("nav.zig");
 const ctl_write = @import("write.zig");
 const events = @import("events.zig");
 const proto = @import("ra8_rpc").session.rpc;
+const std = @import("std");
 const targets = @import("targets.zig");
 
 const Command = command_types.Command;
@@ -67,6 +68,7 @@ const Word = enum {
     snapshot,
     restore,
     mem,
+    disasm,
 };
 
 pub fn command(allocator: std.mem.Allocator, name: []const u8, args: []const []const u8) !Command {
@@ -106,6 +108,7 @@ pub fn command(allocator: std.mem.Allocator, name: []const u8, args: []const []c
         .snapshot => files(.snapshot, args),
         .restore => files(.restore, args),
         .mem => parseMem(args),
+        .disasm => .{ .disasm = try ctl_disasm.parse(args) },
     };
 }
 

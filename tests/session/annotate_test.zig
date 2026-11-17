@@ -123,3 +123,42 @@ test "an address no symbol and no local carries stays alone" {
     annotate.line(image, &into);
     try std.testing.expectEqualStrings("ldr r0, #0x2004", into.slice());
 }
+
+test "constant names apply without an ELF image even before trailing punctuation" {
+    var into: text.Text = .{};
+    into.put("movw r2, #0x5fa", .{});
+    annotate.at(null, 0x100, &into);
+    try std.testing.expectEqualStrings("movw r2, #0x5fa ; SCB.VECTKEY", into.slice());
+
+    into = .{};
+    into.put("add r0, [r1, #0x5fa]!", .{});
+    annotate.at(null, 0x102, &into);
+    try std.testing.expectEqualStrings("add r0, [r1, #0x5fa]! ; SCB.VECTKEY", into.slice());
+}
+
+test "Thumb functions match without bit 0 while file section and mapping symbols are ignored" {
+    var buffer: [2048]u8 = undefined;
+    const bytes = Builder.buildSized(
+        &buffer,
+        &.{ "vector_table.c", ".text", "$t", "$t.0", "$d", "main" },
+        &.{ 0x0000_0000, 0x0800_0100, 0x0800_0100, 0x0800_0100, 0x0800_0100, 0x0800_0101 },
+        &.{ 0, 0, 0, 0, 0, 0 },
+    );
+    const symbols = ra8.session.symbols;
+    const kinds = [_]u8{
+        symbols.symbol_type.file,
+        symbols.symbol_type.section,
+        symbols.symbol_type.none,
+        symbols.symbol_type.none,
+        symbols.symbol_type.none,
+        symbols.symbol_type.func,
+    };
+    for (kinds, 0..) |kind, index| {
+        const at = Builder.sym_off + @sizeOf(symbols.Symbol) * index;
+        const entry = std.mem.bytesAsValue(symbols.Symbol, buffer[at..][0..@sizeOf(symbols.Symbol)]);
+        entry.st_info = kind;
+    }
+    const image = try elf.Image.init(bytes);
+    try std.testing.expect(annotate.symbolAt(image, 0x0000_0000) == null);
+    try std.testing.expectEqualStrings("main", annotate.symbolAt(image, 0x0800_0100).?);
+}

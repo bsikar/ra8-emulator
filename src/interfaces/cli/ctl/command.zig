@@ -22,6 +22,7 @@ pub const Command = union(enum) {
     pause,
     regs: []const proto.Register,
     mem: struct { address: u32, length: u32 },
+    disasm: proto.Disassemble,
     /// Thousandths of the default rate; zero is `max`.
     speed: u64,
     set_break: u32,

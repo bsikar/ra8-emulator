@@ -63,4 +63,5 @@ pub const Method = enum(u16) {
     set_var = 0x013D,
     undo_write = 0x013E,
     reset_image = 0x013F,
+    disassemble = 0x01A0,
 };

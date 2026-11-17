@@ -3,9 +3,7 @@
 //! src/session/session.zig decides what to print; this file decides how, so
 //! the formats sit in one place and a transcript changes only when one of
 //! them does.
-const std = @import("std");
 
-const annotate = @import("annotate.zig");
 const core_view = @import("core_view.zig");
 const disasm = @import("disasm.zig");
 const elf = @import("ra8_board").image.elf;
@@ -58,23 +56,7 @@ pub fn word(out: anytype, core: core_view.View, text: []const u8, address: u32) 
 /// The instruction at `address`, named by the image when the image puts a
 /// name on where it goes, and how many bytes it takes.
 pub fn instruction(out: anytype, core: core_view.View, image: ?elf.Image, address: u32) !u32 {
-    var bytes: [4]u8 = undefined;
-    core.read(address, bytes[0..2]) catch {
-        try out.print("<unreadable>", .{});
-        return encoding.narrow;
-    };
-    const first = std.mem.readInt(u16, bytes[0..2], .little);
-    const width: u32 = if (first >= encoding.wide_first) encoding.wide else encoding.narrow;
-    if (width == encoding.wide) core.read(address + 2, bytes[2..4]) catch {
-        try out.print("<unreadable>", .{});
-        return width;
-    };
-    const decoded = disasm.one(address, bytes[0..width]) catch {
-        try out.print("<undecoded 0x{X:0>4}>", .{first});
-        return width;
-    };
-    var named = decoded;
-    if (image) |found| annotate.line(found, &named);
-    try out.print("{s}", .{named.slice()});
-    return width;
+    const row = disasm.read(core, image, address);
+    try out.print("{s}", .{row.text.slice()});
+    return row.size;
 }

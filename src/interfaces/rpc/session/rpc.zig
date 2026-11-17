@@ -10,7 +10,8 @@ pub const protocol_version: u16 = 1;
 /// Bit 15: the transport topic and advance_async (RA8EMU-1196, slice 14):
 /// host answers advance_async by queueing and reports on transport topic.
 /// Bit 19: debugger write undo and clean image reset.
-pub const capabilities: u32 = 0x0008_7FFF;
+/// Bit 22: bounded annotated disassembly, shared with CLI/embedding views.
+pub const capabilities: u32 = 0x0048_7FFF;
 pub const recovery_cap: u32 = 1 << 19;
 /// Capability bit 15, the transport topic (ORed in when frame loop pumps).
 pub const transport_cap: u32 = 0x0000_8000;
@@ -389,3 +390,6 @@ pub const Client = rpc.Client(pending_slots, max_payload);
 pub const Error = rpc.Error;
 pub const encode = rpc.codec.encode;
 pub const decode = rpc.codec.decode;
+
+pub const Disassemble = @import("disasm_wire.zig").Request;
+pub const Disassembly = @import("disasm_wire.zig").Reply;
