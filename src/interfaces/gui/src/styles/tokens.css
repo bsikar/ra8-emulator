@@ -1,0 +1,66 @@
+/* Editorial Slate Design Tokens (src/interfaces/gui/DESIGN.md) */
+:root {
+  /* Window Chrome & Canvas Stack */
+  --es-chrome: #0b0e15;
+  --es-chrome-deep: #0a0d12;
+  --es-chrome-alpha: rgba(11, 14, 21, 0.9);
+  --es-canvas: #10131a;
+  --es-container: #161920;
+  --es-container-alpha: rgba(22, 25, 32, 0.7);
+  --es-interactive: #1c2028;
+  --es-interactive-high: #222630;
+  --es-interactive-highest: #2a2f3a;
+
+  /* Hairlines, Dividers & Window Dots */
+  --es-border: #21242b;
+  --es-border-strong: #23262d;
+  --es-divider: #1f2229;
+  --es-rule-chrome: #171c22;
+  --es-window-dot: #242b35;
+
+  /* Text & Icon Hierarchy */
+  --es-text-primary: #f2f5fc;
+  --es-text-secondary: #dce0ec;
+  --es-text-kicker: #989ca7;
+  --es-text-muted: #80848d;
+  --es-icon-footer: #a9adb8;
+
+  /* Restrained Technical Micro-Signals (5px-6px dots / 1px-2px strokes only) */
+  --es-signal-cursor: #b8c4d9;
+  --es-signal-fault: #d9776c;
+  --es-signal-fault-bg: #2a1a1a;
+  --es-signal-fault-text: #f2d6d3;
+  --es-signal-nominal: #7fa88d;
+
+  /* Code Buffer Only Highlight Tokens */
+  --es-code-active-bg: #181c24;
+  --es-code-gutter: #4e535e;
+  --es-tok-kw: #95a6c8;
+  --es-tok-type: #7faab8;
+  --es-tok-fn: #f2f5fc;
+  --es-tok-num: #c4aa84;
+  --es-tok-id: #c8cdd8;
+  --es-tok-cmt: #5a606d;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Code', Consolas, monospace;
+
+  /* Frame Geometry & Spacing */
+  --es-topbar-height: 48px;
+  --es-statusbar-height: 32px;
+  --es-space-xs: 0.25rem;
+  --es-space-sm: 0.375rem;
+  --es-space-md: 0.5rem;
+  --es-space-lg: 0.75rem;
+  --es-space-xl: 1rem;
+  --es-space-2xl: 1.5rem;
+
+  /* Radii */
+  --es-radius-sm: 0.125rem;
+  --es-radius: 0.25rem;
+  --es-radius-md: 0.375rem;
+  --es-radius-lg: 0.5rem;
+  --es-radius-xl: 0.75rem;
+  --es-radius-full: 9999px;
+}

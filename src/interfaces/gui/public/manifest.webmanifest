@@ -1,8 +1,8 @@
 {
-  "name": "RA8 Emulator Debugger",
-  "short_name": "RA8 Debugger",
-  "theme_color": "#0a0c10",
-  "background_color": "#0a0c10",
+  "name": "Workbench",
+  "short_name": "Workbench",
+  "theme_color": "#0B0E15",
+  "background_color": "#10131A",
   "display": "standalone",
   "scope": "./",
   "start_url": "./",
