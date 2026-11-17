@@ -55,4 +55,20 @@ describe('RpcConnectionStore', () => {
     rpc.noteOptionalError(new RpcCallError(ErrorCode.Failed, 0x0128, 6), 'History');
     expect(rpc.errorMessage()).toContain('History:');
   });
+
+  it('tracks observeOnly mode, activeProfileName, and manual disconnect reset', () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+
+    expect(rpc.observeOnly()).toBe(false);
+    rpc.setObserveOnly(true);
+    rpc.activeProfileName.set('ci-runner-arm-02');
+    rpc.lastHandshakeMs.set(1.4);
+    expect(rpc.observeOnly()).toBe(true);
+
+    rpc.disconnect(true);
+    expect(rpc.observeOnly()).toBe(false);
+    expect(rpc.activeProfileName()).toBeNull();
+    expect(rpc.lastHandshakeMs()).toBeNull();
+  });
 });

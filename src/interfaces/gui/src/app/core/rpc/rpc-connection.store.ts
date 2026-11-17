@@ -127,10 +127,26 @@ export class RpcConnectionStore implements OnDestroy {
     this.pushToast(msg, 'fault', 4500);
   }
 
-  public async connect(url = this.serverUrl(), silent = false): Promise<boolean> {
+  public readonly observeOnly = signal<boolean>(false);
+  public readonly activeProfileName = signal<string | null>(null);
+  public readonly lastHandshakeMs = signal<number | null>(null);
+
+  public setObserveOnly(observe: boolean): void {
+    this.observeOnly.set(observe);
+  }
+
+  public async connect(
+    url = this.serverUrl(),
+    silent = false,
+    opts?: { observeOnly?: boolean; profileName?: string | null; handshakeMs?: number | null }
+  ): Promise<boolean> {
     this.cleanupClient();
     this.manualDisconnect = false;
     this.serverUrl.set(url.trim());
+    if (opts?.observeOnly !== undefined) this.observeOnly.set(opts.observeOnly);
+    else if (!silent) this.observeOnly.set(false);
+    if (opts?.profileName !== undefined) this.activeProfileName.set(opts.profileName);
+    else if (!silent) this.activeProfileName.set(null);
     if (!silent) {
       this.connectionState.set('connecting');
       this.errorMessage.set(null);
@@ -139,9 +155,15 @@ export class RpcConnectionStore implements OnDestroy {
     const client = new RA8RpcClient({ timeoutMs: silent ? 2500 : 5000 });
     this.client = client;
     this.wireClientEvents(client, silent);
+    const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     try {
       const hello = await client.connect(this.serverUrl());
+      const measuredMs = Math.max(
+        0.1,
+        Math.round((((typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0) * 10)) / 10
+      );
+      this.lastHandshakeMs.set(opts?.handshakeMs ?? measuredMs);
       this.serverCaps.set(hello.caps);
       this.connectionState.set('connected');
       this.errorMessage.set(null);
@@ -176,6 +198,9 @@ export class RpcConnectionStore implements OnDestroy {
     if (manual) {
       this.stopReconnectLoop();
       this.sessionEverConnected = false;
+      this.observeOnly.set(false);
+      this.activeProfileName.set(null);
+      this.lastHandshakeMs.set(null);
     }
     this.cleanupClient();
     this.connectionState.set('disconnected');

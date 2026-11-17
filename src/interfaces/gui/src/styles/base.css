@@ -145,3 +145,28 @@ pre,
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+.status-conn-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: var(--es-radius-sm);
+  background: transparent;
+  padding: 2px 5px;
+  margin-left: -5px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.status-conn-btn:hover {
+  background: var(--es-interactive);
+}
+
+.status-observe-pill {
+  padding: 1px 6px;
+  border-radius: var(--es-radius-sm);
+  border: 1px solid var(--es-signal-cursor);
+  color: var(--es-signal-cursor);
+  font-size: 12px;
+  font-weight: 500;
+}

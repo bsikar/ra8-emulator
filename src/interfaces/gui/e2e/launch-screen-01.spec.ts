@@ -118,11 +118,13 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
     await page.getByRole('menuitem', { name: 'Remove from Index' }).click();
     await expect(page.getByTestId('workspace-row-ws-ra8e1')).toBeHidden();
 
-    // Toggle Connect Remote bar
+    // Navigate to Screen 02 (/connect) via Connect Remote button and return via back arrow
     await page.getByTestId('launch-action-connect').click();
-    await expect(page.getByTestId('launch-ws-input')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen01-connect-bar');
-    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page).toHaveURL(/\/connect$/);
+    await expect(page.getByTestId('connect-url-input')).toBeVisible();
+    await auditEditorialSlateScreen(page, 'screen01-to-screen02');
+    await page.getByTestId('connect-back-btn').click();
+    await expect(page).toHaveURL(/\/launch$/);
 
     // Open + New Workspace modal and create an entry
     await page.getByTestId('launch-action-new').click();

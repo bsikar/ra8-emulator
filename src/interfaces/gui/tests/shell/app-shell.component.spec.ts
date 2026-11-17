@@ -32,6 +32,27 @@ describe('AppShellComponent and lazy router', () => {
 
     await harness.navigateByUrl('/console');
     expect(harness.routeNativeElement?.textContent).toContain('UART SERIAL STREAM');
+
+    await harness.navigateByUrl('/connect');
+    expect(harness.routeNativeElement?.textContent).toContain('LIVE SESSIONS');
+  });
+
+  it('opens statusbar GDB/ctl connection popover and displays OBSERVE pill when read-only', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter(appRoutes)],
+    });
+    const fixture = TestBed.createComponent(AppShellComponent);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+
+    const el: HTMLElement = fixture.nativeElement;
+    (el.querySelector('[data-testid="statusbar-connection-btn"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="connection-popover"]')).toBeTruthy();
+    (el.querySelector('[data-testid="popover-observe-toggle"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="statusbar-observe-pill"]')?.textContent?.trim()).toBe('OBSERVE');
   });
 
   it('wires Vim statusbar pill, settings toggle, :ex prompt, and Extensions shortcut', async () => {

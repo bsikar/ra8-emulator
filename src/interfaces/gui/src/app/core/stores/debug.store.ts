@@ -133,6 +133,10 @@ export class DebugStore {
   }
 
   public writeRegister(register: Register, value: number, core: Core = this.activeCore()): Promise<boolean> {
+    if (this.rpc.observeOnly()) {
+      this.rpc.pushToast('Observe mode is read-only: Write Register disabled', 'neutral');
+      return Promise.resolve(false);
+    }
     return this.runRpc('Register write failed', false, async (client) => {
       const ok = await client.writeRegister(core, register, value >>> 0);
       if (ok) this.execution.inspectionEpoch.update((n) => n + 1);
@@ -141,6 +145,10 @@ export class DebugStore {
   }
 
   public setVar(name: string, value: string, frame = this.selectedFrameIndex(), core: Core = this.activeCore()): Promise<SetVarReply | null> {
+    if (this.rpc.observeOnly()) {
+      this.rpc.pushToast('Observe mode is read-only: Set Variable disabled', 'neutral');
+      return Promise.resolve(null);
+    }
     const cleanName = name.trim();
     if (!cleanName) return Promise.resolve(null);
     return this.runRpc(`setVar(${cleanName}) failed`, null, async (client) => {
@@ -158,6 +166,10 @@ export class DebugStore {
   }
 
   public undoWrite(core: Core = this.activeCore()): Promise<boolean> {
+    if (this.rpc.observeOnly()) {
+      this.rpc.pushToast('Observe mode is read-only: Undo Write disabled', 'neutral');
+      return Promise.resolve(false);
+    }
     return this.runRpc('Undo write failed', false, async (client) => {
       const ok = await client.undoWrite(core);
       if (ok) {
@@ -184,6 +196,10 @@ export class DebugStore {
   }
 
   public writeMemoryBytes(address: number, bytes: Uint8Array, core: Core = this.activeCore()): Promise<boolean> {
+    if (this.rpc.observeOnly()) {
+      this.rpc.pushToast('Observe mode is read-only: Write Memory disabled', 'neutral');
+      return Promise.resolve(false);
+    }
     return this.runRpc('Memory write failed', false, async (client) => {
       const ok = await client.writeMemory(core, address >>> 0, bytes);
       if (ok) await this.readMemoryPage(this.memoryAddress(), Math.max(128, this.memoryBytes().length), core);

@@ -4,6 +4,7 @@ import type { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import type { SearchCandidate, SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import type { BoardStore } from '../core/stores/board.store';
 import type { DebugStore } from '../core/stores/debug.store';
+import type { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import type { WorkspaceStore } from '../core/stores/workspace.store';
 import type { VimStore } from '../core/vim/vim.store';
 import type { CommandModeStore } from './command-mode.store';
@@ -14,6 +15,7 @@ export interface ShellBridgeDeps {
   board: BoardStore;
   debug: DebugStore;
   workspace: WorkspaceStore;
+  remoteHosts?: RemoteHostsStore;
   cmdMode: CommandModeStore;
   searchEverywhere: SearchEverywhereStore;
   vim: VimStore;
@@ -86,6 +88,19 @@ export function registerShellSearchProviders(deps: ShellBridgeDeps): () => void 
   );
   const unsubSymbols = deps.searchEverywhere.registerProvider('shell-symbols', () => collectSymbolCandidates(deps));
   const unsubText = deps.searchEverywhere.registerProvider('shell-text', () => collectTextCandidates(deps));
+  const unsubHosts = deps.searchEverywhere.registerProvider('shell-hosts', () =>
+    (deps.remoteHosts?.profiles() ?? []).map((host) => ({
+      id: `host:${host.id}`,
+      category: 'actions' as const,
+      title: `Connect: ${host.name}`,
+      subtitle: `${host.transportLabel} · ${host.endpointUrl}`,
+      onSelect: async () => {
+        const ok = await deps.rpc.connect(host.wsUrl, false, { profileName: host.name });
+        if (ok) await deps.router.navigateByUrl('/debug');
+        else await deps.router.navigateByUrl('/connect');
+      },
+    }))
+  );
 
   deps.searchEverywhere.registerJumpHandlers({
     onAddress: async (address) => {
@@ -116,6 +131,7 @@ export function registerShellSearchProviders(deps: ShellBridgeDeps): () => void 
     unsubActions();
     unsubSymbols();
     unsubText();
+    unsubHosts();
   };
 }
 
@@ -130,7 +146,11 @@ export function registerShellExHandlers(deps: ShellBridgeDeps): () => void {
     }),
     deps.vim.registerExHandler('connect', async (cmd) => {
       if (cmd.kind !== 'connect') return false;
-      const targetUrl = cmd.url.trim() || deps.rpc.serverUrl();
+      const targetUrl = cmd.url.trim();
+      if (!targetUrl) {
+        await deps.router.navigateByUrl('/connect');
+        return true;
+      }
       const ok = await deps.rpc.connect(targetUrl);
       if (ok) deps.workspace.addSavedHost(targetUrl);
       return true;

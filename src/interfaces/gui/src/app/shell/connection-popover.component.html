@@ -1,0 +1,98 @@
+@if (open()) {
+  <section
+    class="conn-popover"
+    role="dialog"
+    aria-label="Active connection, GDB and ctl attach endpoints"
+    data-testid="connection-popover"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="pop-head">
+      <app-section-kicker label="SESSION &amp; ATTACH ENDPOINTS" />
+      <app-status-dot
+        [tone]="rpc.isConnected() ? (rpc.observeOnly() ? 'cursor' : 'nominal') : 'muted'"
+        [label]="rpc.isConnected() ? (rpc.observeOnly() ? 'Observe' : 'Connected') : 'Offline'"
+      />
+    </div>
+
+    <div class="pop-row">
+      <span class="es-meta">RPC Endpoint</span>
+      <span class="mono val-text">{{ rpc.serverUrl() }}</span>
+    </div>
+
+    <div class="pop-row">
+      <span class="es-meta">Handshake / Sync</span>
+      <span class="mono val-text">
+        {{ rpc.lastHandshakeMs() !== null ? rpc.lastHandshakeMs()!.toFixed(1) + ' ms' : '—' }}
+        · {{ execution.externalSyncCount() }} syncs
+      </span>
+    </div>
+
+    <div class="pop-row">
+      <span class="es-meta">Client Role</span>
+      <app-tonal-button
+        testId="popover-observe-toggle"
+        [active]="rpc.observeOnly()"
+        (pressed)="toggleObserve()"
+      >
+        {{ rpc.observeOnly() ? 'Observe Only (Read-Only)' : 'Full Control' }}
+      </app-tonal-button>
+    </div>
+
+    <div class="pop-cmd-block">
+      <div class="cmd-head">
+        <span class="es-meta">GDB Remote Target</span>
+        <div class="port-wrap">
+          <span class="es-meta">Port</span>
+          <input
+            type="number"
+            class="port-input mono"
+            data-testid="popover-gdb-port-input"
+            placeholder="3333"
+            min="1"
+            max="65535"
+            [value]="customGdbPort() ?? ''"
+            (input)="onGdbPortInput($event)"
+          />
+          <button
+            type="button"
+            class="copy-mini"
+            data-testid="popover-copy-gdb"
+            (click)="copyCommand(gdbCommand(), 'GDB attach')"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+      <div class="cmd-line mono" data-testid="popover-gdb-command">{{ gdbCommand() }}</div>
+    </div>
+
+    <div class="pop-cmd-block">
+      <div class="cmd-head">
+        <span class="es-meta">Headless CLI Control</span>
+        <button
+          type="button"
+          class="copy-mini"
+          data-testid="popover-copy-ctl"
+          (click)="copyCommand(ctlCommand(), 'ctl discovery')"
+        >
+          Copy
+        </button>
+      </div>
+      <div class="cmd-line mono" data-testid="popover-ctl-command">{{ ctlCommand() }}</div>
+    </div>
+
+    <div class="pop-foot">
+      <app-tonal-button
+        testId="popover-open-connect"
+        (pressed)="openConnectManager.emit(); closed.emit()"
+      >
+        Connect Manager (/connect)
+      </app-tonal-button>
+      @if (rpc.isConnected()) {
+        <app-tonal-button variant="ghost" testId="popover-disconnect" (pressed)="disconnectSession()">
+          Disconnect
+        </app-tonal-button>
+      }
+    </div>
+  </section>
+}

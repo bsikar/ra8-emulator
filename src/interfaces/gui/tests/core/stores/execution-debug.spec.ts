@@ -3,6 +3,7 @@ import {
   CAP_TRANSPORT,
   CAP_WORKSPACE,
   Core,
+  EventKind,
   LocalWhereKind,
   SetVarScope,
   SetVarStatus,
@@ -135,5 +136,46 @@ describe('ExecutionStore and DebugStore', () => {
 
     expect(await debug.undoWrite()).toBe(true);
     expect(debug.canUndoWrite()).toBe(false);
+  });
+
+  it('enforces Observe read-only mode on execution/debug mutations and syncs external SessionEvent stops', async () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const execution = TestBed.inject(ExecutionStore);
+    const debug = TestBed.inject(DebugStore);
+
+    let stepCalls = 0;
+    let regWriteCalls = 0;
+    let nowValue = 500_000n;
+    const fakeClient = {
+      step: async () => {
+        stepCalls += 1;
+        return { core: Core.Cpu0, reason: StopReason.Stepped, address: 0x0200_0002 };
+      },
+      writeRegister: async () => {
+        regWriteCalls += 1;
+        return true;
+      },
+      now: async () => nowValue,
+    };
+
+    rpc.connectionState.set('connected');
+    rpc.setObserveOnly(true);
+    Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
+
+    await execution.step();
+    await execution.run();
+    expect(await debug.writeRegister(0, 123)).toBe(false);
+    expect(stepCalls).toBe(0);
+    expect(regWriteCalls).toBe(0);
+    expect(rpc.toasts().some((t) => t.message.includes('Observe mode is read-only'))).toBe(true);
+
+    const beforeEpoch = execution.inspectionEpoch();
+    nowValue = 950_000n;
+    rpc.session$.next({ core: Core.Cpu0, kind: EventKind.Stopped, address: 0x0200_0140 });
+    await Promise.resolve();
+    expect(execution.inspectionEpoch()).toBe(beforeEpoch + 1);
+    expect(execution.externalSyncCount()).toBe(1);
+    expect(execution.virtualTimeNs()).toBe(950_000n);
   });
 });

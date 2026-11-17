@@ -1,0 +1,130 @@
+<div class="connect-canvas">
+  <div class="connect-column">
+    <div class="connect-toolbar">
+      <div class="toolbar-left">
+        <button
+          type="button"
+          class="back-btn"
+          data-testid="connect-back-btn"
+          aria-label="Back to Launch"
+          (click)="goBack()"
+        >
+          <app-launch-icon name="arrow-left" [size]="16" />
+        </button>
+
+        <app-launch-icon name="network" [size]="17" class="network-icon" />
+
+        <input
+          #urlInputEl
+          type="text"
+          class="url-input mono"
+          data-testid="connect-url-input"
+          placeholder="Enter ws://, wss://, or ssh://user@host..."
+          aria-label="Remote RPC endpoint or SSH host URL"
+          [value]="endpointInput()"
+          (input)="onEndpointInput($event)"
+          (keydown)="onUrlKeyDown($event)"
+        />
+      </div>
+
+      <div class="toolbar-actions">
+        <button
+          type="button"
+          class="es-ghost-link"
+          [class.is-active]="authOpen() || authMode() !== 'none'"
+          data-testid="connect-auth-toggle"
+          (click)="toggleAuthDrawer()"
+        >
+          <app-launch-icon name="key" [size]="14" />
+          <span>Auth</span>
+        </button>
+
+        <button
+          type="button"
+          class="es-ghost-link"
+          [class.is-active]="sshOpen()"
+          data-testid="connect-ssh-toggle"
+          (click)="toggleSshDrawer()"
+        >
+          <app-launch-icon name="terminal" [size]="14" />
+          <span>SSH Tunnel</span>
+        </button>
+
+        <button
+          type="button"
+          class="connect-submit-btn"
+          data-testid="connect-submit-btn"
+          [disabled]="rpc.connectionState() === 'connecting'"
+          (click)="connectFromInput()"
+        >
+          <app-launch-icon name="arrow-right" [size]="14" />
+          <span>{{ rpc.connectionState() === 'connecting' ? 'Connecting...' : 'Connect' }}</span>
+        </button>
+      </div>
+    </div>
+
+    @if (validationError() || rpc.errorMessage()) {
+      <p class="error-line" data-testid="connect-error">{{ validationError() ?? rpc.errorMessage() }}</p>
+    }
+
+    <app-connect-drawers
+      [authOpen]="authOpen()"
+      [sshOpen]="sshOpen()"
+      [authMode]="authMode()"
+      [profileName]="profileName()"
+      [tokenHint]="tokenHint()"
+      [observeOnly]="observeOnly()"
+      [sshHost]="sshHost()"
+      [sshRemotePort]="sshRemotePort()"
+      [sshLocalPort]="sshLocalPort()"
+      (authModeChange)="authMode.set($event)"
+      (profileNameChange)="profileName.set($event)"
+      (tokenHintChange)="tokenHint.set($event)"
+      (observeOnlyChange)="observeOnly.set($event)"
+      (sshHostChange)="sshHost.set($event)"
+      (sshRemotePortChange)="sshRemotePort.set($event)"
+      (sshLocalPortChange)="sshLocalPort.set($event)"
+      (saveProfile)="saveCurrentProfile()"
+      (copySshCommand)="copyText($event, 'Copied SSH tunnel command')"
+    />
+
+    <section class="connect-card" data-testid="connect-card">
+      <app-connect-live-sessions
+        [sessions]="remoteHosts.liveSessions()"
+        [rescanning]="remoteHosts.rescanning()"
+        [selectedIndex]="selectedIndex()"
+        (selectedChange)="selectedIndex.set($event)"
+        (rescan)="rescan()"
+        (attach)="attachLiveSession($event)"
+        (togglePin)="remoteHosts.togglePinProfile($event)"
+        (saveAsProfile)="saveSessionAsProfile($event)"
+        (copyUrl)="copyText($event, 'Copied endpoint URL')"
+      />
+
+      <app-connect-saved-hosts
+        [profiles]="remoteHosts.profiles()"
+        [liveCount]="remoteHosts.liveSessions().length"
+        [selectedIndex]="selectedIndex()"
+        (selectedChange)="selectedIndex.set($event)"
+        (connectProfile)="connectSavedHost($event)"
+        (openTunnel)="openTunnelDrawerForProfile($event)"
+        (togglePin)="remoteHosts.togglePinProfile($event)"
+        (remove)="remoteHosts.removeProfile($event)"
+      />
+    </section>
+
+    <div class="connect-footer-hint" data-testid="connect-footer-hint">
+      <span class="es-meta">Click any live session to attach, or press Enter above to connect to a new host</span>
+      <button
+        type="button"
+        class="serve-cmd-pill mono"
+        data-testid="connect-copy-serve-btn"
+        aria-label="Copy daemon launch command"
+        (click)="copyText(serveCommand, 'Copied daemon launch command')"
+      >
+        <span>{{ serveCommand }}</span>
+        <app-launch-icon name="copy" [size]="12" />
+      </button>
+    </div>
+  </div>
+</div>

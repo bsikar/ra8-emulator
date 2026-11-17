@@ -74,6 +74,35 @@ import type { LaunchIconName } from './launch-commands';
         @case ('palette') {
           <path d="m7 8 4 4-4 4M13 16h5" />
         }
+        @case ('arrow-left') {
+          <path d="M19 12H5M11 6l-6 6 6 6" />
+        }
+        @case ('arrow-right') {
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        }
+        @case ('network') {
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        }
+        @case ('key') {
+          <circle cx="8" cy="14" r="3.5" />
+          <path d="M10.8 11.5 20 3M17 6l2.5 2.5M14.5 8.5l2 2" />
+        }
+        @case ('terminal') {
+          <path d="m4 7 5 5-5 5M11 17h9" />
+        }
+        @case ('eye') {
+          <path d="M2 12s3.8-6 10-6 10 6 10 6-3.8 6-10 6-10-6-10-6Z" />
+          <circle cx="12" cy="12" r="2.5" />
+        }
+        @case ('copy') {
+          <rect x="9" y="9" width="11" height="11" rx="1.5" />
+          <path d="M5 15H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 3h9a1.5 1.5 0 0 1 1.5 1.5V6" />
+        }
+        @case ('refresh') {
+          <path d="M20 6v5h-5M4 18v-5h5" />
+          <path d="M19.2 11a7.5 7.5 0 0 0-12.7-4L4 9.5M4.8 13a7.5 7.5 0 0 0 12.7 4L20 14.5" />
+        }
       }
     </svg>
   `,
