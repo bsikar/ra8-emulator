@@ -118,6 +118,10 @@
       @if (rpc.observeOnly()) {
         <span class="status-observe-pill" data-testid="statusbar-observe-pill">OBSERVE</span>
       }
+      @if (board.uploadProgress(); as up) {
+        <span class="status-sep">·</span>
+        <span class="mono" data-testid="statusbar-upload-pill">{{ up.statusText }}</span>
+      }
       <span class="status-sep">·</span>
       <span class="mono">t = {{ execution.virtualTimeLabel() }}</span>
       <span class="status-sep">·</span>

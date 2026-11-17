@@ -35,6 +35,15 @@ describe('AppShellComponent and lazy router', () => {
 
     await harness.navigateByUrl('/connect');
     expect(harness.routeNativeElement?.textContent).toContain('LIVE SESSIONS');
+
+    await harness.navigateByUrl('/open');
+    expect(harness.routeNativeElement?.textContent).toContain('WORKSPACE DIRECTORY');
+
+    await harness.navigateByUrl('/import');
+    expect(harness.routeNativeElement?.textContent).toContain('STAGED BUNDLE');
+
+    await harness.navigateByUrl('/workspace/new');
+    expect(harness.routeNativeElement?.textContent).toContain('TARGET BOARD PROFILE');
   });
 
   it('opens statusbar GDB/ctl connection popover and displays OBSERVE pill when read-only', async () => {

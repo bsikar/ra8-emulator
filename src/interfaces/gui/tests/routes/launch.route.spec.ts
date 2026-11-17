@@ -133,4 +133,23 @@ describe('LaunchRouteComponent (Screen 01)', () => {
     await fixture.whenStable();
     expect(router.url).toBe('/connect');
   });
+
+  it('navigates to /open and /import from launch action buttons', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter(appRoutes)],
+    });
+    const router = TestBed.inject(Router);
+    const fixture = TestBed.createComponent(LaunchRouteComponent);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+
+    (fixture.nativeElement.querySelector('[data-testid="launch-action-open"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/open');
+
+    await router.navigateByUrl('/launch');
+    (fixture.nativeElement.querySelector('[data-testid="launch-action-import"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/import');
+  });
 });

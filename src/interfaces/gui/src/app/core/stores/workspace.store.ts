@@ -100,8 +100,9 @@ export class WorkspaceStore {
   }
 
   public async listWorkspace(path: string, offset = 0, limit = 64): Promise<WorkspacePage | null> {
+    const clampedLimit = Math.min(Math.max(1, limit), 64);
     return this.callCap(CAP_WORKSPACE, 'Workspace list failed', null, async (c) => {
-      const page = await c.workspaceList({ path, offset, limit });
+      const page = await c.workspaceList({ path, offset, limit: clampedLimit });
       this.workspacePage.set(page);
       return page;
     });

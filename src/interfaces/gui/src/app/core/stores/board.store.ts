@@ -20,6 +20,7 @@ import {
 } from 'ra8-rpc-client';
 import { formatHex32 } from '../../shared/utils/hex';
 import { RpcConnectionStore } from '../rpc/rpc-connection.store';
+import { loadSavedBoards, saveSavedBoards } from './board-storage';
 import { ExecutionStore } from './execution.store';
 
 export interface UploadProgressState {
@@ -57,6 +58,10 @@ export class BoardStore implements OnDestroy {
   public readonly cpu1ElfSymbols = signal<ElfSymbol[]>([]);
   public readonly cpu0HasDwarf = signal<boolean>(false);
   public readonly cpu1HasDwarf = signal<boolean>(false);
+  public readonly memoryMapText = signal<string>('');
+  public readonly savedBoards = signal<BoardPreset[]>(
+    loadSavedBoards((err, ctx) => this.rpc.noteOptionalError(err, ctx))
+  );
   public readonly boardPresets: readonly BoardPreset[] = OFFICIAL_BOARD_PRESETS;
   public readonly selectedPreset = signal<BoardPreset | null>(findBoardPreset('ra8d2') ?? null);
   public readonly boardProfile = signal<BoardProfile | null>(findBoardPreset('ra8d2')?.profile ?? null);
@@ -98,7 +103,11 @@ export class BoardStore implements OnDestroy {
   }
 
   public selectBoardPreset(idOrPartNumber: string): BoardPreset | null {
-    const preset = findBoardPreset(idOrPartNumber);
+    const preset =
+      findBoardPreset(idOrPartNumber) ??
+      this.savedBoards().find(
+        (b) => b.id.toLowerCase() === idOrPartNumber.trim().toLowerCase() || b.targetId.toLowerCase() === idOrPartNumber.trim().toLowerCase()
+      );
     if (!preset) return null;
     this.selectedPreset.set(preset);
     this.boardProfileName.set(preset.targetId);
@@ -106,6 +115,39 @@ export class BoardStore implements OnDestroy {
     this.boardProfileRaw.set(serializeBoardProfile(preset.profile));
     this.rpc.pushToast(`Selected preset ${preset.name}`);
     return preset;
+  }
+
+  public duplicateBoardPreset(preset: BoardPreset): BoardPreset {
+    const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
+    const copy: BoardPreset = {
+      ...preset,
+      id,
+      partNumber: 'CUSTOM',
+      targetId: `${preset.silicon}-${id.slice(-4)}`,
+      name: `${preset.name.split('(')[0]!.trim()} Custom`,
+      profile: {
+        ...preset.profile,
+        leds: preset.profile.leds.map((l) => ({ ...l })),
+        switches: preset.profile.switches.map((s) => ({ ...s })),
+        sensors: [...preset.profile.sensors],
+        companions: [...preset.profile.companions],
+      },
+    };
+    this.savedBoards.update((prev) => {
+      const next = [copy, ...prev];
+      saveSavedBoards(next, (msg) => this.rpc.errorMessage.set(msg));
+      return next;
+    });
+    this.selectBoardPreset(copy.id);
+    return copy;
+  }
+
+  public removeCustomBoard(id: string): void {
+    this.savedBoards.update((prev) => {
+      const next = prev.filter((b) => b.id !== id);
+      saveSavedBoards(next, (msg) => this.rpc.errorMessage.set(msg));
+      return next;
+    });
   }
 
   public exportBoardProfileText(): string {
@@ -133,6 +175,10 @@ export class BoardStore implements OnDestroy {
     core: Core = Core.Cpu0,
     options: LoadElfOptions = { breakAtMain: false }
   ): Promise<boolean> {
+    if (this.rpc.observeOnly()) {
+      this.rpc.pushToast('Observe mode is read-only: ELF upload disabled', 'neutral');
+      return false;
+    }
     const client = this.rpc.activeClient;
     if (!client) {
       this.rpc.reportError('ELF upload skipped', new Error('Not connected to emulator RPC'));
@@ -166,6 +212,14 @@ export class BoardStore implements OnDestroy {
         return false;
       }
       this.recordLoadedElfMetadata(core, fileName, bytes, header.hasDebugInfo);
+      try {
+        this.memoryMapText.set(await client.getMap(core, true));
+      } catch (err) {
+        this.rpc.noteOptionalError(err);
+      }
+      if (core === Core.Cpu0 && typeof document !== 'undefined') {
+        document.title = `${fileName} — RA8 Emulator`;
+      }
       this.execution.inspectionEpoch.update((n) => n + 1);
 
       if (options.breakAtMain) {
@@ -270,5 +324,9 @@ export class BoardStore implements OnDestroy {
     this.boardParts.set(null);
     this.ledStates.set(Array<boolean>(8).fill(false));
     this.uploadProgress.set(null);
+    this.memoryMapText.set('');
+    if (typeof document !== 'undefined') {
+      document.title = 'RA8 Emulator';
+    }
   }
 }

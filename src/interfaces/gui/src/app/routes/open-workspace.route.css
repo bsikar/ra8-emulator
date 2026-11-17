@@ -1,0 +1,36 @@
+.open-canvas { min-height: 100%; background: var(--es-canvas); display: flex; justify-content: center; padding: 36px 24px; }
+.open-column { width: min(1040px, 100%); display: flex; flex-direction: column; gap: 14px; }
+.open-toolbar, .filter-bar, .section-head, .core-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.open-toolbar { padding: 8px 12px; background: var(--es-chrome-deep); border: 1px solid var(--es-border); border-radius: var(--es-radius-xl); }
+.toolbar-left { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.back-btn { width: 28px; height: 28px; border: 0; border-radius: var(--es-radius-md); background: transparent; color: var(--es-text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.back-btn:hover, .entry-row:hover { background: var(--es-interactive); color: var(--es-text-primary); }
+.path-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--es-text-primary); font-size: 13px; outline: none; }
+.toolbar-actions, .filter-pills, .core-pills, .dir-meta { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.open-submit-btn, .filter-pill { border: 1px solid var(--es-border); border-radius: var(--es-radius-md); background: var(--es-container); color: var(--es-text-muted); font-size: 12px; padding: 5px 11px; cursor: pointer; }
+.open-submit-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-color: var(--es-border-strong); background: var(--es-interactive-high); color: var(--es-text-primary); font-weight: 500; }
+.open-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.filter-pill.is-active { background: var(--es-interactive-high); border-color: var(--es-border-strong); color: var(--es-text-primary); }
+.split-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.panel-card { background: var(--es-container); border: 1px solid var(--es-border); border-radius: var(--es-radius-xl); overflow: hidden; }
+.section-head { padding: 13px 20px; border-bottom: 1px solid var(--es-divider); }
+.section-head.is-sub { border-top: 1px solid var(--es-divider); }
+.entry-list { max-height: 440px; overflow-y: auto; }
+.entry-row, .recent-entry-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; padding: 10px 20px; border: 0; border-bottom: 1px solid var(--es-divider); background: transparent; color: var(--es-text-primary); font-size: 13px; cursor: pointer; }
+.empty-note { padding: 16px 20px; font-size: 12px; color: var(--es-text-muted); }
+.error-banner { padding: 14px 20px; background: var(--es-signal-fault-bg); color: var(--es-signal-fault-text); border-bottom: 1px solid var(--es-divider); font-size: 12px; }
+.error-title { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.kv-row { display: flex; justify-content: space-between; gap: 14px; padding: 10px 20px; border-bottom: 1px solid var(--es-divider); font-size: 12px; }
+.kv-k { color: var(--es-text-muted); }
+.kv-v { color: var(--es-text-secondary); text-align: right; word-break: break-word; }
+.options-block { display: flex; flex-direction: column; padding: 16px 20px; gap: 12px; }
+.field-label { display: flex; flex-direction: column; gap: 6px; }
+.host-combo { display: grid; grid-template-columns: 140px 1fr; gap: 8px; }
+.line-input, .line-select { height: 34px; border: 1px solid var(--es-border); border-radius: var(--es-radius-md); background: var(--es-chrome-deep); color: var(--es-text-primary); font-size: 12px; padding: 0 10px; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--es-text-secondary); }
+.upload-bar-wrap { padding: 12px 20px; border-top: 1px solid var(--es-divider); }
+.upload-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--es-text-secondary); margin-bottom: 6px; }
+.upload-track { height: 6px; border-radius: 99px; background: var(--es-chrome-deep); overflow: hidden; }
+.upload-fill { height: 100%; background: var(--es-signal-nominal); }
+.hidden-file-input { display: none; }
+@media (max-width: 860px) { .split-grid, .host-combo { grid-template-columns: 1fr; } .open-toolbar, .filter-bar { flex-direction: column; align-items: stretch; } }

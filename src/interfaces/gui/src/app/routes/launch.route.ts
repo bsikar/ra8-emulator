@@ -11,14 +11,13 @@ import {
   viewChild,
 } from '@angular/core';
 import { Router } from '@angular/router';
+import { Core } from 'ra8-rpc-client';
 import { RpcConnectionStore, resolveWsUrlFromSearch } from '../core/rpc/rpc-connection.store';
 import { SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import { BoardStore } from '../core/stores/board.store';
 import { ExecutionStore } from '../core/stores/execution.store';
-import { RewindStore } from '../core/stores/rewind.store';
 import { type RecentWorkspaceEntry, WorkspaceStore } from '../core/stores/workspace.store';
 import { VimStore } from '../core/vim/vim.store';
-import { importLaunchArchiveFile, importLaunchArtifactFile } from '../features/launch/launch-artifact';
 import {
   type LaunchCommandItem,
   buildLaunchCommands,
@@ -58,15 +57,12 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
   protected readonly execution = inject(ExecutionStore);
   protected readonly workspace = inject(WorkspaceStore);
   protected readonly board = inject(BoardStore);
-  protected readonly rewind = inject(RewindStore);
   protected readonly cmdMode = inject(CommandModeStore);
   protected readonly searchEverywhere = inject(SearchEverywhereStore);
   protected readonly vim = inject(VimStore);
   private readonly router = inject(Router);
 
   private readonly searchInputEl = viewChild<ElementRef<HTMLInputElement>>('searchInputEl');
-  private readonly openFileInputEl = viewChild<ElementRef<HTMLInputElement>>('openFileInputEl');
-  private readonly importArchiveInputEl = viewChild<ElementRef<HTMLInputElement>>('importArchiveInputEl');
   private readonly workspaceListRef = viewChild(LaunchWorkspaceListComponent);
 
   protected readonly wsInput = signal<string>(this.rpc.serverUrl());
@@ -202,33 +198,15 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
   }
 
   protected openWorkspacePicker(): void {
-    this.openFileInputEl()?.nativeElement.click();
+    void this.router.navigateByUrl('/open');
   }
 
   protected openImportArchivePicker(): void {
-    this.importArchiveInputEl()?.nativeElement.click();
+    void this.router.navigateByUrl('/import');
   }
 
   protected toggleConnectRemote(): void {
     void this.router.navigateByUrl('/connect');
-  }
-
-  protected async onOpenFileSelected(event: Event): Promise<void> {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    await importLaunchArtifactFile(file, this.buildArtifactContext());
-  }
-
-  protected async onImportArchiveSelected(event: Event): Promise<void> {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) return;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) return;
-    await importLaunchArchiveFile(file, this.buildArtifactContext());
   }
 
   protected onWorkspaceCreated(payload: NewWorkspacePayload): void {
@@ -248,6 +226,13 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
     this.newDialogOpen.set(false);
     this.selectedIndex.set(0);
     this.rpc.pushToast(`Created workspace ${payload.name}`);
+    if (payload.cpu0ElfFile && this.rpc.isConnected()) {
+      void this.board
+        .loadElfFile(payload.cpu0ElfFile.name, payload.cpu0ElfFile.bytes, Core.Cpu0)
+        .then((ok) => {
+          if (ok) void this.router.navigateByUrl('/debug');
+        });
+    }
   }
 
   protected async openRecentWorkspace(entry: RecentWorkspaceEntry): Promise<void> {
@@ -287,18 +272,6 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
     }
     const entry = this.filteredWorkspaces()[this.selectedIndex()] ?? this.filteredWorkspaces()[0];
     if (entry) void this.openRecentWorkspace(entry);
-  }
-
-  private buildArtifactContext() {
-    return {
-      wsUrl: this.wsInput(),
-      rpc: this.rpc,
-      board: this.board,
-      rewind: this.rewind,
-      workspace: this.workspace,
-      navigate: (url: string) => this.router.navigateByUrl(url),
-      onNeedConnect: () => this.connectBarOpen.set(true),
-    };
   }
 
   private async connectAndRecord(url: string): Promise<boolean> {

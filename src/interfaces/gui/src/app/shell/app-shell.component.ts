@@ -237,11 +237,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
       return;
     }
     if (lower.endsWith('.tar') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
-      const preview = await this.rewind.previewStagedArchive(new Uint8Array(await file.arrayBuffer()));
+      const preview = await this.rewind.previewStagedArchive(new Uint8Array(await file.arrayBuffer()), file.name);
       if (preview) {
         this.rpc.pushToast(`Staged archive ${file.name} (${preview.entries.length} entries)`);
-        await this.router.navigateByUrl('/rewind');
       }
+      await this.router.navigateByUrl('/import');
       return;
     }
     const ok = await this.board.loadElfFile(file.name, new Uint8Array(await file.arrayBuffer()), Core.Cpu0);
@@ -263,6 +263,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private syncCommands(extCmds: ReturnType<ExtensionStore['contributedCommands']>): void {
     const base: CommandAction[] = [
       { id: 'nav-launch', label: 'Go to Launch', category: 'navigation', menu: 'view', shortcut: { key: '1' }, run: () => this.router.navigateByUrl('/launch') },
+      { id: 'nav-new-ws', label: 'New Workspace...', category: 'session', menu: 'file', shortcut: { mod: true, shift: true, key: 'n' }, run: () => this.router.navigateByUrl('/workspace/new') },
+      { id: 'nav-open', label: 'Open ELF or Workspace...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'o' }, run: () => this.router.navigateByUrl('/open') },
+      { id: 'nav-import', label: 'Import Session Bundle (.tar)...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'i' }, run: () => this.router.navigateByUrl('/import') },
       { id: 'nav-connect', label: 'Connect Remote Host...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'r' }, run: () => this.router.navigateByUrl('/connect') },
       { id: 'nav-debug', label: 'Go to Debug', category: 'navigation', menu: 'view', shortcut: { key: '2' }, run: () => this.router.navigateByUrl('/debug') },
       { id: 'nav-hw', label: 'Go to Hardware', category: 'navigation', menu: 'view', shortcut: { key: '3' }, run: () => this.router.navigateByUrl('/hardware') },
