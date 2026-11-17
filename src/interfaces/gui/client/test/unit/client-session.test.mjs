@@ -101,10 +101,11 @@ async function checkHistoryLoadAndEvents(client, srv) {
   assert.ok(srv.seenMethods.includes(Method.LoadChunk));
   assert.ok(srv.seenMethods.includes(Method.LoadEnd));
 
-  assert.equal(await client.plug("sensor@i2c:1", Core.Cpu0), true);
-  assert.equal(await client.unplug("i2c:1", Core.Cpu0), true);
-  assert.equal(await client.setFault("i2c:1:nack", Core.Cpu0), true);
-  assert.equal(await client.clearFault("i2c:1", Core.Cpu0), true);
+  assert.equal(await client.plug("lsm6dso@i2c:riic@0x6a", Core.Cpu0), true);
+  assert.equal(await client.setFault("lsm6dso@i2c:riic@0x6a=nack:2", Core.Cpu0), true);
+  assert.equal(await client.setFault("@i2c:riic@0x6a=disconnected", Core.Cpu0), true);
+  assert.equal(await client.clearFault("i2c:riic@0x6a", Core.Cpu0), true);
+  assert.equal(await client.unplug("i2c:riic@0x6a", Core.Cpu0), true);
   assert.equal(await client.snapshot("boot"), true);
   assert.equal(await client.restore("boot"), true);
 
