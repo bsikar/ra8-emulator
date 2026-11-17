@@ -1,4 +1,5 @@
 test {
+    _ = @import("interfaces/cli/ctl/disasm_test.zig");
     _ = @import("host/targets_test.zig");
     _ = @import("interfaces/cli/ctl/targets_test.zig");
     _ = @import("interfaces/rpc/targets_test.zig");

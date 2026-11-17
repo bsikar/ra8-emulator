@@ -10,6 +10,10 @@
 //! and input types the Session API speaks. It never imports the host or opens
 //! host files: bytes and state storage come through caller slices or `file_ops`.
 pub const annotate = @import("annotate.zig");
+pub const annotation_literal = @import("annotation_literal.zig");
+pub const annotation_locals = @import("annotation_locals.zig");
+pub const annotation_names = @import("annotation_names.zig");
+pub const annotation_operands = @import("annotation_operands.zig");
 pub const api = @import("api.zig");
 pub const board = @import("board/board.zig");
 pub const boot_slots = @import("boot_slots.zig");
@@ -19,6 +23,7 @@ pub const call_decode = @import("call_decode.zig");
 pub const commands = @import("commands.zig");
 pub const core_view = @import("core_view.zig");
 pub const cpu1 = @import("cpu1/cpu1.zig");
+pub const device_metrics = @import("device_metrics.zig");
 pub const disasm = @import("disasm.zig");
 pub const display = @import("display.zig");
 pub const duration = @import("duration.zig");
@@ -147,12 +152,11 @@ pub const transport_marker_scan = @import("transport/marker_scan.zig");
 pub const transport_play = @import("transport/play.zig");
 pub const txm = @import("txm/txm.zig");
 pub const unwind = @import("unwind/unwind.zig");
+pub const var_write = @import("var_write.zig");
 pub const view = @import("view.zig");
+
 pub const watch = @import("watch/watch.zig");
 pub const watchpoint = @import("watchpoint.zig");
 pub const widget_tree = @import("widget_tree.zig");
 pub const write_undo = @import("write_undo.zig");
 pub const zig = @import("zig/zig.zig");
-
-pub const device_metrics = @import("device_metrics.zig");
-pub const var_write = @import("var_write.zig");

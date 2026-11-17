@@ -17,6 +17,8 @@ test {
     _ = @import("event_feed_test.zig");
     _ = @import("backtrace_test.zig");
     _ = @import("locals_test.zig");
+    _ = @import("disasm_test.zig");
+    _ = @import("disasm_wire_test.zig");
     _ = @import("source_line_test.zig");
     _ = @import("periph_test.zig");
     _ = @import("folded_test.zig");

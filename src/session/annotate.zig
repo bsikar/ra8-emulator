@@ -12,12 +12,20 @@
 //! an image carries a few thousand symbols, a disassembly pane asks for one
 //! per line, and nothing here needs an allocator. Every name is a slice into
 //! the image's own bytes, valid as long as the image is.
-const std = @import("std");
-
 const dwarf = @import("dwarf/dwarf.zig");
+
 const elf = @import("ra8_board").image.elf;
+const known = @import("annotation_names.zig");
+const local_names = @import("annotation_locals.zig");
+const std = @import("std");
 const symbols = @import("symbols.zig");
 const text = @import("ra8_chip").core.cpu.text.text;
+
+fn mappingSymbol(name: []const u8) bool {
+    if (name.len < 2 or name[0] != '$') return false;
+    if (name[1] != 't' and name[1] != 'd' and name[1] != 'a') return false;
+    return name.len == 2 or name[2] == '.';
+}
 
 /// The name the image puts on `address`, or null when none matches. An
 /// exact symbol wins whichever kind it is: a branch target needs a
@@ -25,10 +33,25 @@ const text = @import("ra8_chip").core.cpu.text.text;
 /// which is which.
 pub fn symbolAt(image: elf.Image, address: u32) ?[]const u8 {
     var walk = symbols.Walk.init(image);
+    var fallback: ?[]const u8 = null;
     while (walk.next()) |named| {
-        if (named.value == address) return named.name;
+        if (named.kind == symbols.symbol_type.section or named.kind == symbols.symbol_type.file) continue;
+        if (mappingSymbol(named.name)) continue;
+        const target = if (named.kind == symbols.symbol_type.func) named.value & ~@as(u32, 1) else named.value;
+        if (target != address) continue;
+        if (named.kind == symbols.symbol_type.func or named.kind == symbols.symbol_type.object) return named.name;
+        if (fallback == null) fallback = named.name;
     }
-    return null;
+    return fallback;
+}
+
+fn hexImmediate(slice: []const u8) ?u32 {
+    const mark = std.mem.lastIndexOf(u8, slice, "#0x") orelse return null;
+    const digits = mark + "#0x".len;
+    var end: usize = digits;
+    while (end < slice.len and std.ascii.isHex(slice[end])) : (end += 1) {}
+    if (end == digits or end - digits > 8) return null;
+    return std.fmt.parseInt(u32, slice[digits..end], 16) catch null;
 }
 
 /// Append the name of the address `into` already prints, if the image
@@ -40,13 +63,7 @@ pub fn symbolAt(image: elf.Image, address: u32) ?[]const u8 {
 /// immediate, or an immediate the table does not name, is returned
 /// untouched, so an unannotated line and a failed lookup look the same.
 pub fn line(image: elf.Image, into: *text.Text) void {
-    const slice = into.slice();
-    const mark = std.mem.lastIndexOf(u8, slice, "#0x") orelse return;
-    const digits = mark + "#0x".len;
-    var end: usize = digits;
-    while (end < slice.len and std.ascii.isHex(slice[end])) : (end += 1) {}
-    if (end == digits or end - digits > 8) return;
-    const address = std.fmt.parseInt(u32, slice[digits..end], 16) catch return;
+    const address = hexImmediate(into.slice()) orelse return;
     if (symbolAt(image, address)) |name| {
         into.put(" ; {s}", .{name});
         return;
@@ -63,5 +80,18 @@ pub fn line(image: elf.Image, into: *text.Text) void {
     // an image without debug sections answers null at once.
     if (dwarf.locals.atAddress(dwarf.locals.ofImage(image), address) catch null) |name| {
         into.put(" ; {s}", .{name});
+        return;
+    }
+    if (known.find(address)) |name| into.put(" ; {s}", .{name});
+}
+
+/// Locals are matched only within the instruction's own active DWARF scope.
+pub fn at(image: ?elf.Image, address: u32, into: *text.Text) void {
+    if (image) |loaded| {
+        line(loaded, into);
+        local_names.append(loaded, address, into);
+    } else {
+        const value = hexImmediate(into.slice()) orelse return;
+        if (known.find(value)) |name| into.put(" ; {s}", .{name});
     }
 }
