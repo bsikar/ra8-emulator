@@ -6,9 +6,15 @@ test "toolchain baseline names complete pinned host archives and refuses unvalid
         try std.testing.expectEqualStrings("0.17.0", artifact.version);
         try std.testing.expectEqual(@as(usize, 64), artifact.sha256.len);
         for (artifact.sha256) |c| try std.testing.expect(std.ascii.isHex(c));
+        const manifest_sha = artifacts.manifestSha256(artifact) orelse return error.MissingManifestDigest;
+        try std.testing.expectEqual(@as(usize, 64), manifest_sha.len);
+        for (manifest_sha) |c| try std.testing.expect(std.ascii.isHex(c));
         try std.testing.expect(std.mem.startsWith(u8, artifact.url, "https://ziglang.org/download/0.17.0/"));
         try std.testing.expect(artifact.archive_bytes > 50_000_000);
     }
+    var synthetic = artifacts.zig[0];
+    synthetic.sha256 = "0000000000000000000000000000000000000000000000000000000000000000";
+    try std.testing.expectEqual(@as(?[]const u8, null), artifacts.manifestSha256(synthetic));
     try std.testing.expectEqual(@as(u64, 57_332_648), (try artifacts.forHost("x86_64-linux")).archive_bytes);
     try std.testing.expectEqual(@as(u64, 100_268_137), (try artifacts.forHost("x86_64-windows")).archive_bytes);
     try std.testing.expectError(error.UnsupportedHost, artifacts.forHost("aarch64-linux"));

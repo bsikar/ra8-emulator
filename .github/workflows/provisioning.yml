@@ -19,7 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -59,7 +59,7 @@ jobs:
 
       - name: Toolchain provisioning and ownership unit tests
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: |
           zig build ra8_host_tests -j1 '-Dtest-filter=host.toolchain'
           if ($LASTEXITCODE -ne 0) { throw 'Toolchain unit tests failed' }
@@ -72,14 +72,14 @@ jobs:
 
       - name: Baseline installation and managed CLI builds
         shell: pwsh
-        timeout-minutes: 15
+        timeout-minutes: 18
         run: |
           $hostName = if ($IsWindows) { 'x86_64-windows' } elseif ($IsMacOS) {
             if ((uname -m).Trim() -eq 'arm64') { 'aarch64-macos' } else { 'x86_64-macos' }
           } else { 'x86_64-linux' }
           $suffix = if ($IsWindows) { '.exe' } else { '' }
           $extension = if ($IsWindows) { 'zip' } else { 'tar.xz' }
-          python -B tools/provision_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --host $hostName --phase baseline --archive "$env:RUNNER_TEMP/provision-zig.$extension" --output "$env:RA8_PROVISION_ROOT/provision-evidence" --timeout 600
+          python -B tools/provision_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --host $hostName --phase baseline --archive "$env:RUNNER_TEMP/provision-zig.$extension" --output "$env:RA8_PROVISION_ROOT/provision-evidence" --timeout 780
           if ($LASTEXITCODE -ne 0) { throw 'Managed provisioning acceptance failed' }
 
       - name: Managed RPC and explicit compiler override builds

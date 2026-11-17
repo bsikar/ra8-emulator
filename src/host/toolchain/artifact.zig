@@ -40,6 +40,24 @@ pub const zig = [_]Artifact{
     },
 };
 
+const manifest_hashes = [zig.len][]const u8{
+    "505bfccec93f487e103711bd51cc9b05d8910c106af4450ed6369c1c23be06ef",
+    "8719331aa989d630b5ea4c5bd3ef3af10eb7c7d698d1c875b1776bf04ee25283",
+    "c73d50c2f8465f9448a84bae9290b03d61e6e61f635ec2eb1eaaf52193786e2d",
+    "7e9c5761490d6efb67cbf25b058e9b5315ce5a2e790f5cf405d0e0bee3c37b01",
+};
+
+pub fn manifestSha256(artifact: Artifact) ?[]const u8 {
+    for (zig, manifest_hashes) |entry, hash| {
+        if (std.mem.eql(u8, artifact.host, entry.host) and
+            std.mem.eql(u8, artifact.sha256, entry.sha256))
+        {
+            return hash;
+        }
+    }
+    return null;
+}
+
 /// Reference pin for a future RA board profile, not a declaration of compatibility
 /// or permission to redistribute all packages contained in this vendor archive.
 pub const fsp_candidate = .{
