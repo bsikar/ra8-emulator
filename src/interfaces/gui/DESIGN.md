@@ -181,4 +181,19 @@ Use **Inter** for UI chrome and **JetBrains Mono** (`tabular-nums`) for paths, a
 - **Ghost Action Links (Default):** Zero background, zero border (`15px` `#80848D` icon + `13px` `#DCE0EC` text -> `#F2F5FC` on hover).
 - **Tonal Action Trigger (When a Single Commit Action Is Required):** `#1C2028` background, `1px` `#2A2F3A` hairline, `#F2F5FC` text, `4px` radius (`rounded`), `28px` height — never bright blue filled CTAs.
 - **Segmented Mode Switches:** Text-only inline tabs or whisper-quiet `#161920` strips with a `1px` `#B8C4D9` bottom indicator on the active option.
-- **Lists, Code Buffers & Tables:** Rows separated solely by `1px` `#1F2229` horizontal rules (`divide-y`), generous `16px` vertical padding (`py-4`) in index/setup lists and crisp `24px` tabular rows in code/disassembly/register views. Changed registers or diff rows are denoted by `#F2F5FC` text and a `2px` `#B8C4D9` left edge tick rather than colored pill badges or yellow row boxes.
+- **Lists, Code Buffers & Tables:** Rows separated solely by `1px` `#1F2229` horizontal rules (`divide-y`), generous `16px` vertical padding (`py-4`) in index/setup lists and crisp `24px` tabular rows in code/disassembly/register views. Changed registers or diff rows are denoted by `#F2F5FC` value text and a `2px` `#B8C4D9` left edge tick rather than colored pill badges or yellow row boxes.
+
+---
+
+## Code Buffer Syntax Highlighting (Only)
+
+All chrome, headers, dropdowns, docks, call stacks, locals/watch and register tables, board previews, checkboxes, switches, and serial/telemetry consoles remain **100% monochromatic `Editorial Slate`** (zero additional color themes, zero colored badges, zero amber/brown/red/blue banner boxes). **Only** source and disassembly code inside the active editor buffer uses calm, low-saturation syntax contrast so declarations, types, literals, and control flow do not blend together:
+
+- **Keywords (`const`, `if`, `return`, `static`, `void`):** `#95A6C8`
+- **Types (`status_t`, `npu_tensor_t`, `uint32_t`):** `#7FAAB8`
+- **Functions & Symbols (`npu_run_layer`, `npu_dispatch_cmd`):** `#F2F5FC`
+- **Numeric / Hex Literals & Constants (`307200U`, `0x01U`, `NPU_OK`):** `#C4AA84`
+- **Identifiers & Fields (`scores`, `R_NPU`, `STATUS`):** `#C8CDD8`
+- **Comments:** `#5A606D`
+- **Line Numbers & Zero Gutter:** `#4E535E`
+- **Active Execution Line Highlight:** Flat neutral `#181C24` wash with a `2px` `#B8C4D9` left bar and `5px` `#D9776C` muted coral breakpoint dot in the gutter (no amber/yellow PC pill or row wash).

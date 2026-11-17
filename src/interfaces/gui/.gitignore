@@ -36,6 +36,11 @@ yarn-error.log
 /libpeerconnection.log
 testem.log
 /typings
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+/.vitest
 
 # System files
 .DS_Store
