@@ -5,6 +5,7 @@ import { RpcConnectionStore } from '../../src/app/core/rpc/rpc-connection.store'
 import { SearchEverywhereStore } from '../../src/app/core/search/search-everywhere.store';
 import { BoardStore } from '../../src/app/core/stores/board.store';
 import { DebugStore } from '../../src/app/core/stores/debug.store';
+import { RemoteHostsStore } from '../../src/app/core/stores/remote-hosts.store';
 import { WorkspaceStore } from '../../src/app/core/stores/workspace.store';
 import { VimStore } from '../../src/app/core/vim/vim.store';
 import { CommandModeStore } from '../../src/app/shell/command-mode.store';
@@ -19,6 +20,7 @@ describe('shell-ide-bridge', () => {
       board: TestBed.inject(BoardStore),
       debug: TestBed.inject(DebugStore),
       workspace: TestBed.inject(WorkspaceStore),
+      remoteHosts: TestBed.inject(RemoteHostsStore),
       cmdMode: TestBed.inject(CommandModeStore),
       searchEverywhere: TestBed.inject(SearchEverywhereStore),
       vim: TestBed.inject(VimStore),
@@ -61,6 +63,17 @@ describe('shell-ide-bridge', () => {
     deps.searchEverywhere.setQuery('JumpTarget');
     await deps.searchEverywhere.executeResult();
     expect(connectedUrl).toBe('ws://127.0.0.1:4777');
+
+    deps.remoteHosts.saveProfile({
+      endpointUrl: 'wss://hil-rack-04.lab:8443/rpc',
+      name: 'hil-bench-04.local',
+      authMode: 'token',
+    });
+    deps.searchEverywhere.setQuery('hil-bench-04');
+    expect(deps.searchEverywhere.results().some((r) => r.title.includes('hil-bench-04.local'))).toBe(true);
+
+    await deps.vim.executeExCommand(':connect');
+    expect(deps.router.url).toBe('/connect');
 
     unsubSearch();
     unsubEx();

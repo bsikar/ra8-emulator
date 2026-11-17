@@ -1,0 +1,93 @@
+.conn-popover {
+  position: fixed;
+  left: 20px;
+  bottom: 40px;
+  width: min(540px, calc(100vw - 32px));
+  background: var(--es-container);
+  border: 1px solid var(--es-border-strong);
+  border-radius: var(--es-radius-xl);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 65;
+}
+
+.pop-head,
+.pop-row,
+.cmd-head,
+.pop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pop-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--es-divider);
+  font-size: 12px;
+}
+
+.val-text {
+  color: var(--es-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pop-cmd-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--es-divider);
+}
+
+.port-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.port-input {
+  width: 66px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--es-border-strong);
+  border-radius: var(--es-radius-sm);
+  background: var(--es-chrome);
+  color: var(--es-text-primary);
+  font-size: 12px;
+}
+
+.copy-mini {
+  border: 1px solid var(--es-border-strong);
+  border-radius: var(--es-radius-sm);
+  background: var(--es-interactive);
+  color: var(--es-text-secondary);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.copy-mini:hover {
+  background: var(--es-interactive-highest);
+  color: var(--es-text-primary);
+}
+
+.cmd-line {
+  background: var(--es-chrome);
+  border: 1px solid var(--es-divider);
+  border-radius: var(--es-radius-md);
+  padding: 6px 9px;
+  font-size: 12px;
+  color: var(--es-text-secondary);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.pop-foot {
+  padding-top: 8px;
+  border-top: 1px solid var(--es-divider);
+}

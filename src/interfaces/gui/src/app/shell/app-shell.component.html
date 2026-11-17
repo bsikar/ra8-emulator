@@ -3,7 +3,7 @@
   (dragover)="onDragOver($event)"
   (dragleave)="onDragLeave($event)"
   (drop)="onDrop($event)"
-  (click)="cmdMode.activeMenu.set(null)"
+  (click)="cmdMode.activeMenu.set(null); connectionPopoverOpen.set(false)"
 >
   <header class="es-topbar" data-testid="shell-topbar">
     <div class="topbar-left">
@@ -77,14 +77,20 @@
       </button>
 
       @if (rpc.isConnected()) {
-        <button type="button" class="es-ghost-link" data-testid="topbar-run-toggle" (click)="toggleRunPause()">
+        <button
+          type="button"
+          class="es-ghost-link"
+          data-testid="topbar-run-toggle"
+          [disabled]="rpc.observeOnly()"
+          (click)="toggleRunPause()"
+        >
           {{ execution.isRunning() ? 'Pause' : 'Continue' }}
         </button>
         <button
           type="button"
           class="es-ghost-link"
           data-testid="topbar-step"
-          [disabled]="execution.isRunning()"
+          [disabled]="execution.isRunning() || rpc.observeOnly()"
           (click)="execution.step()"
         >
           Step
@@ -99,7 +105,19 @@
 
   <footer class="es-statusbar" data-testid="shell-statusbar">
     <div class="status-left">
-      <app-status-dot [tone]="statusTone()" [label]="rpc.isConnected() ? rpc.serverUrl() : 'Offline'" />
+      <button
+        type="button"
+        class="status-conn-btn"
+        data-testid="statusbar-connection-btn"
+        aria-haspopup="dialog"
+        [attr.aria-expanded]="connectionPopoverOpen()"
+        (click)="$event.stopPropagation(); connectionPopoverOpen.set(!connectionPopoverOpen())"
+      >
+        <app-status-dot [tone]="statusTone()" [label]="rpc.isConnected() ? rpc.serverUrl() : 'Offline'" />
+      </button>
+      @if (rpc.observeOnly()) {
+        <span class="status-observe-pill" data-testid="statusbar-observe-pill">OBSERVE</span>
+      }
       <span class="status-sep">·</span>
       <span class="mono">t = {{ execution.virtualTimeLabel() }}</span>
       <span class="status-sep">·</span>
@@ -216,6 +234,11 @@
     </div>
   }
 
+  <app-connection-popover
+    [open]="connectionPopoverOpen()"
+    (closed)="connectionPopoverOpen.set(false)"
+    (openConnectManager)="openConnectRoute()"
+  />
   <app-extensions-sheet [open]="cmdMode.extensionsOpen()" (closed)="cmdMode.extensionsOpen.set(false)" />
   <app-search-everywhere />
   <app-command-palette />

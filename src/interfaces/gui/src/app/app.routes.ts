@@ -7,6 +7,10 @@ export const appRoutes: Routes = [
     loadComponent: () => import('./routes/launch.route').then((m) => m.LaunchRouteComponent),
   },
   {
+    path: 'connect',
+    loadComponent: () => import('./routes/connect.route').then((m) => m.ConnectRouteComponent),
+  },
+  {
     path: 'debug',
     loadComponent: () => import('./routes/debug.route').then((m) => m.DebugRouteComponent),
   },

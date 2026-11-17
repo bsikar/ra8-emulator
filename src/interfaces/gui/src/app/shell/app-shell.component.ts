@@ -19,6 +19,7 @@ import { SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import { BoardStore } from '../core/stores/board.store';
 import { DebugStore } from '../core/stores/debug.store';
 import { ExecutionStore } from '../core/stores/execution.store';
+import { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import { RewindStore } from '../core/stores/rewind.store';
 import { WorkspaceStore } from '../core/stores/workspace.store';
 import { VimStore } from '../core/vim/vim.store';
@@ -32,6 +33,7 @@ import {
   isEditableEventTarget,
 } from './command-mode.store';
 import { CommandPaletteComponent } from './command-palette.component';
+import { ConnectionPopoverComponent } from './connection-popover.component';
 import { DropVeilComponent } from './drop-veil.component';
 import { ExtensionsSheetComponent } from './extensions-sheet.component';
 import { SearchEverywhereComponent } from './search-everywhere.component';
@@ -56,6 +58,7 @@ interface NavRouteItem {
     RouterLink,
     RouterLinkActive,
     CommandPaletteComponent,
+    ConnectionPopoverComponent,
     SearchEverywhereComponent,
     ExtensionsSheetComponent,
     DropVeilComponent,
@@ -74,6 +77,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   protected readonly debug = inject(DebugStore);
   protected readonly rewind = inject(RewindStore);
   protected readonly workspace = inject(WorkspaceStore);
+  protected readonly remoteHosts = inject(RemoteHostsStore);
   protected readonly cmdMode = inject(CommandModeStore);
   protected readonly searchEverywhere = inject(SearchEverywhereStore);
   protected readonly extStore = inject(ExtensionStore);
@@ -84,6 +88,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private cleanups: Array<() => void> = [];
 
   protected readonly dragActive = signal<boolean>(false);
+  protected readonly connectionPopoverOpen = signal<boolean>(false);
   protected readonly commandChordLabel = formatShortcut({ mod: true, key: 'k' });
   protected readonly extensionsChordLabel = formatShortcut({ mod: true, shift: true, key: 'x' });
   protected readonly viewLinks: readonly NavRouteItem[] = [
@@ -139,6 +144,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       board: this.board,
       debug: this.debug,
       workspace: this.workspace,
+      remoteHosts: this.remoteHosts,
       cmdMode: this.cmdMode,
       searchEverywhere: this.searchEverywhere,
       vim: this.vim,
@@ -158,6 +164,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   protected onWindowKeyDown(event: KeyboardEvent): void {
+    if (this.connectionPopoverOpen() && event.key === 'Escape') {
+      event.preventDefault();
+      this.connectionPopoverOpen.set(false);
+      return;
+    }
     this.searchEverywhere.handleWindowKeyDown(event);
     if (this.searchEverywhere.open() && event.key === 'Escape') {
       event.preventDefault();
@@ -237,6 +248,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (ok) await this.router.navigateByUrl('/debug');
   }
 
+  protected openConnectRoute(): void {
+    void this.router.navigateByUrl('/connect');
+  }
+
   protected toggleRunPause(): void {
     if (this.execution.isRunning()) {
       void this.execution.pause();
@@ -248,6 +263,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private syncCommands(extCmds: ReturnType<ExtensionStore['contributedCommands']>): void {
     const base: CommandAction[] = [
       { id: 'nav-launch', label: 'Go to Launch', category: 'navigation', menu: 'view', shortcut: { key: '1' }, run: () => this.router.navigateByUrl('/launch') },
+      { id: 'nav-connect', label: 'Connect Remote Host...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'r' }, run: () => this.router.navigateByUrl('/connect') },
       { id: 'nav-debug', label: 'Go to Debug', category: 'navigation', menu: 'view', shortcut: { key: '2' }, run: () => this.router.navigateByUrl('/debug') },
       { id: 'nav-hw', label: 'Go to Hardware', category: 'navigation', menu: 'view', shortcut: { key: '3' }, run: () => this.router.navigateByUrl('/hardware') },
       { id: 'nav-rewind', label: 'Go to Rewind', category: 'navigation', menu: 'view', shortcut: { key: '4' }, run: () => this.router.navigateByUrl('/rewind') },

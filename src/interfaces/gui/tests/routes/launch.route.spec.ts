@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { appRoutes } from '../../src/app/app.routes';
 import { WorkspaceStore } from '../../src/app/core/stores/workspace.store';
 import { LaunchRouteComponent } from '../../src/app/routes/launch.route';
@@ -117,5 +117,20 @@ describe('LaunchRouteComponent (Screen 01)', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="launch-command-card"]')).toBeNull();
+  });
+
+  it('navigates to /connect (Screen 02) when clicking Connect Remote', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter(appRoutes)],
+    });
+    const router = TestBed.inject(Router);
+    const fixture = TestBed.createComponent(LaunchRouteComponent);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+
+    const btn = fixture.nativeElement.querySelector('[data-testid="launch-action-connect"]') as HTMLButtonElement;
+    btn.click();
+    await fixture.whenStable();
+    expect(router.url).toBe('/connect');
   });
 });
