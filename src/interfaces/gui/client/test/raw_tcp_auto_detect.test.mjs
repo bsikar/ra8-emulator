@@ -1,81 +1,55 @@
 import net from "node:net";
-import { spawn } from "node:child_process";
-import { resolve } from "node:path";
 import {
-  encodeFrame,
-  encodeHello,
-  decodeHello,
-  splitFrames,
   Kind,
   PROTOCOL_MAGIC,
-  PROTOCOL_VERSION
+  PROTOCOL_VERSION,
+  decodeHello,
+  encodeFrame,
+  encodeHello,
+  splitFrames,
 } from "../dist/index.js";
+import { resolveFixtureElf, startEmulatorServe } from "./helpers/emulator-bin.mjs";
+
+function connectRawTcp(port) {
+  return new Promise((resolveSocket, rejectSocket) => {
+    const socket = new net.Socket();
+    socket.on("error", rejectSocket);
+    socket.connect(port, "127.0.0.1", () => resolveSocket(socket));
+  });
+}
+
+function readNextRawFrame(socket, timeoutMs = 3000) {
+  const receivedChunks = [];
+  return new Promise((resolveFrame, rejectFrame) => {
+    const timer = setTimeout(() => rejectFrame(new Error("Timeout waiting for raw TCP response")), timeoutMs);
+    socket.on("data", (chunk) => {
+      receivedChunks.push(chunk);
+      const { frames } = splitFrames(new Uint8Array(Buffer.concat(receivedChunks)));
+      if (frames.length > 0) {
+        clearTimeout(timer);
+        resolveFrame(frames[0]);
+      }
+    });
+    socket.on("error", (err) => {
+      clearTimeout(timer);
+      rejectFrame(err);
+    });
+  });
+}
 
 async function testRawTcpNonInterference() {
   console.log("=== EMPIRICAL TEST: Raw TCP RPC Non-Interference Auto-Detection ===");
 
   const port = 24893;
-  const binName = process.platform === "win32" ? "ra8_emulator.exe" : "ra8_emulator";
-  const emulatorPath = resolve(import.meta.dirname, "../../../../../zig-out/bin/" + binName);
-  const fixtureElf = resolve(import.meta.dirname, "../../../../../tests/fixtures/gpio/blink.elf");
-
-  const proc = spawn(emulatorPath, [
-    "serve",
-    "--listen",
-    `tcp:127.0.0.1:${port}`,
-    fixtureElf,
-  ], {
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  let serverStarted = false;
-  proc.stderr.on("data", (data) => {
-    const text = data.toString();
-    if (text.includes("serve: listening on tcp:")) {
-      serverStarted = true;
-    }
-  });
-
-  const start = Date.now();
-  while (!serverStarted && Date.now() - start < 5000) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-
-  if (!serverStarted) {
-    proc.kill();
-    throw new Error("Server failed to start");
-  }
+  const fixtureElf = resolveFixtureElf("tests/fixtures/gpio/blink.elf");
+  const server = await startEmulatorServe(port, fixtureElf);
 
   try {
-    // Connect using RAW TCP socket (NOT WebSocket)
-    const socket = new net.Socket();
-    await new Promise((resolve, reject) => {
-      socket.connect(port, "127.0.0.1", resolve);
-      socket.on("error", reject);
-    });
-
+    const socket = await connectRawTcp(port);
     console.log("Connected raw TCP socket. Sending raw Kind.Hello frame...");
-    const helloPayload = encodeHello(0x0000ffff);
-    const helloFrame = encodeFrame(Kind.Hello, helloPayload);
+    socket.write(encodeFrame(Kind.Hello, encodeHello(0x0000ffff)));
 
-    // Send raw bytes directly (no HTTP GET, no WebSocket masking)
-    socket.write(helloFrame);
-
-    const receivedChunks = [];
-    const responsePromise = new Promise((resolve, reject) => {
-      socket.on("data", (chunk) => {
-        receivedChunks.push(chunk);
-        const combined = Buffer.concat(receivedChunks);
-        const { frames } = splitFrames(new Uint8Array(combined));
-        if (frames.length > 0) {
-          resolve(frames[0]);
-        }
-      });
-      socket.on("error", reject);
-      setTimeout(() => reject(new Error("Timeout waiting for raw TCP response")), 3000);
-    });
-
-    const respFrame = await responsePromise;
+    const respFrame = await readNextRawFrame(socket);
     console.log(`Received raw frame: kind=${respFrame.kind}`);
     if (respFrame.kind !== Kind.Hello) {
       throw new Error(`Expected Kind.Hello (1), got ${respFrame.kind}`);
@@ -90,9 +64,8 @@ async function testRawTcpNonInterference() {
 
     socket.end();
     console.log("✓ Raw TCP non-interference verified successfully!");
-
   } finally {
-    proc.kill("SIGTERM");
+    server.stop();
   }
 }
 
