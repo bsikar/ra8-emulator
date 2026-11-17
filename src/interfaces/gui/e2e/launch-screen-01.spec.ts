@@ -164,6 +164,8 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
     await expect(page.getByTestId('launch-cmd-board-composer')).toBeVisible();
     await expect(page.getByTestId('launch-cmd-device-monitor')).toBeHidden();
 
+    // Move focus onto a command button (away from search input) and press Escape
+    await page.getByTestId('launch-cmd-board-composer').focus();
     await page.keyboard.press('Escape');
     await expect(page.getByTestId('launch-command-card')).toBeHidden();
     await expect(page.getByTestId('workspace-index-card')).toBeVisible();

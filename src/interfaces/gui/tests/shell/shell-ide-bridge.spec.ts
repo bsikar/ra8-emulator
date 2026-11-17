@@ -46,6 +46,22 @@ describe('shell-ide-bridge', () => {
     expect(deps.cmdMode.extensionsOpen()).toBe(false);
     expect(deps.cmdMode.helpOpen()).toBe(false);
 
+    let connectedUrl = '';
+    deps.rpc.connect = async (url = '') => {
+      connectedUrl = url;
+      return false;
+    };
+    deps.workspace.recordRecentWorkspace({
+      id: 'ws-jump',
+      name: 'JumpTarget',
+      path: '~/work/jump',
+      wsUrl: 'ws://127.0.0.1:4777',
+      pinned: false,
+    });
+    deps.searchEverywhere.setQuery('JumpTarget');
+    await deps.searchEverywhere.executeResult();
+    expect(connectedUrl).toBe('ws://127.0.0.1:4777');
+
     unsubSearch();
     unsubEx();
   });
