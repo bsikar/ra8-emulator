@@ -167,13 +167,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (this.cmdMode.handleKeyDown(event)) {
       return;
     }
-    if (
-      this.cmdMode.paletteOpen() ||
-      this.cmdMode.settingsOpen() ||
-      this.cmdMode.helpOpen() ||
-      this.cmdMode.extensionsOpen() ||
-      this.searchEverywhere.open()
-    ) {
+    if (this.cmdMode.hasOpenOverlay() || this.searchEverywhere.open()) {
       return;
     }
     const target = event.target;

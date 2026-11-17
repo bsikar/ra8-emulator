@@ -100,6 +100,16 @@ export function registerShellSearchProviders(deps: ShellBridgeDeps): () => void 
       deps.rpc.pushToast(`Jumped to line ${line}`);
       await deps.router.navigateByUrl('/debug');
     },
+    onWorkspace: async (ws) => {
+      deps.workspace.recordRecentWorkspace({ ...ws });
+      const ok = await deps.rpc.connect(ws.wsUrl);
+      if (ok) {
+        deps.workspace.addSavedHost(ws.wsUrl);
+        await deps.router.navigateByUrl('/debug');
+      } else {
+        await deps.router.navigateByUrl('/launch');
+      }
+    },
   });
 
   return () => {

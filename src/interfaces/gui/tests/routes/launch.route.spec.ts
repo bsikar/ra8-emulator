@@ -96,4 +96,26 @@ describe('LaunchRouteComponent (Screen 01)', () => {
     expect(store.recentWorkspaces().length).toBe(1);
     expect(store.recentWorkspaces()[0]?.targetModel).toBe('RA8P1');
   });
+
+  it('exits > Command Mode on window Escape even when a command button has focus', async () => {
+    TestBed.configureTestingModule({
+      providers: [provideRouter(appRoutes)],
+    });
+    const fixture = TestBed.createComponent(LaunchRouteComponent);
+    fixture.autoDetectChanges(true);
+    await fixture.whenStable();
+
+    const el: HTMLElement = fixture.nativeElement;
+    const searchInput = el.querySelector('[data-testid="launch-search-input"]') as HTMLInputElement;
+    searchInput.value = '>';
+    searchInput.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="launch-command-card"]')).toBeTruthy();
+
+    const cmdBtn = el.querySelector('[data-testid="launch-cmd-new-workspace"]') as HTMLButtonElement;
+    cmdBtn.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+    await fixture.whenStable();
+    expect(el.querySelector('[data-testid="launch-command-card"]')).toBeNull();
+  });
 });

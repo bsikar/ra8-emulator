@@ -68,4 +68,16 @@ describe('CommandModeStore (RA8EMU-957 / RA8EMU-967)', () => {
     store.query.set('>debug');
     expect(store.filteredCommands().map((c) => c.action.id)).toEqual(['b']);
   });
+
+  it('tracks and dismisses registered route modals on Escape', () => {
+    const store = new CommandModeStore();
+    let dismissed = false;
+    store.setRouteModalDismiss(() => {
+      dismissed = true;
+    });
+    expect(store.hasOpenOverlay()).toBe(true);
+    expect(store.handleKeyDown(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))).toBe(true);
+    expect(dismissed).toBe(true);
+    expect(store.hasOpenOverlay()).toBe(false);
+  });
 });
