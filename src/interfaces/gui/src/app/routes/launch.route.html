@@ -135,26 +135,6 @@
     }
   </div>
 
-  <input
-    #openFileInputEl
-    type="file"
-    class="hidden-file-input"
-    accept=".elf,.board,.json"
-    tabindex="-1"
-    aria-hidden="true"
-    (change)="onOpenFileSelected($event)"
-  />
-
-  <input
-    #importArchiveInputEl
-    type="file"
-    class="hidden-file-input"
-    accept=".tar,.tar.gz,.tgz"
-    tabindex="-1"
-    aria-hidden="true"
-    (change)="onImportArchiveSelected($event)"
-  />
-
   <app-launch-new-workspace-dialog
     [open]="newDialogOpen()"
     [defaultWsUrl]="wsInput()"

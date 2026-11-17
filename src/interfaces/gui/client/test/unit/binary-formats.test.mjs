@@ -162,6 +162,7 @@ async function registerBundlePreviewTests(t) {
     const badSum = buildUstarEntry("good.bin", new Uint8Array(1));
     badSum[0] ^= 0xff;
     assert.throws(() => parseUstarEntries(badSum), /checksum/i);
+    assert.throws(() => parseUstarEntries(new Uint8Array([0xde, 0xad, 0xbe, 0xef])), /truncated/i);
   });
 }
 

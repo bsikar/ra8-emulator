@@ -28,6 +28,7 @@ export interface LiveSessionItem {
   title: string;
   archSummary: string;
   wsUrl: string;
+  endpointLabel?: string;
   elfName: string;
   checkpointCount?: number;
   latencyMs: number;

@@ -117,6 +117,9 @@ export function parseUstarEntries(
   tarBytes: Uint8Array,
   maxEntries = DEFAULT_MAX_ENTRIES
 ): UstarEntry[] {
+  if (tarBytes.length < TAR_BLOCK) {
+    throw new Error("Invalid TAR archive: truncated below 512-byte USTAR header block");
+  }
   const entries: UstarEntry[] = [];
   let offset = 0;
 
@@ -200,6 +203,9 @@ export async function previewBundleArchive(bytes: Uint8Array): Promise<BundlePre
   const compressed = isGzipBuffer(bytes);
   const tarBytes = compressed ? await gunzipBuffer(bytes) : bytes;
   const parsed = parseUstarEntries(tarBytes);
+  if (parsed.length === 0) {
+    throw new Error("Invalid session bundle: archive contains no USTAR entries");
+  }
   const manifestEntry = parsed.find((entry) => entry.path === "manifest.json");
   const manifest = manifestEntry ? parseBundleManifest(manifestEntry.data) : null;
 

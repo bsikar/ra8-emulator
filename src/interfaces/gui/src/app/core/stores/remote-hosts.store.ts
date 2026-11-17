@@ -254,14 +254,16 @@ export class RemoteHostsStore {
     const profile = this.profiles().find((p) => p.wsUrl === wsUrl);
     const recent = this.workspace.recentWorkspaces().find((w) => w.wsUrl === wsUrl);
     const parsed = parseRemoteEndpoint(wsUrl);
+    const isTunnel = Boolean(profile?.sshHost);
     const isActiveObserved = this.rpc.isConnected() && this.rpc.serverUrl() === wsUrl && this.rpc.observeOnly();
     const status: LiveSessionItem['status'] =
-      probe.reserved || isActiveObserved ? 'in-use' : parsed.isLoopback ? 'loopback' : 'online';
+      probe.reserved || isActiveObserved ? 'in-use' : isTunnel || !parsed.isLoopback ? 'online' : 'loopback';
     return {
       id: profile?.id ?? `live-${wsUrl}`,
       title: probe.title ?? profile?.name ?? recent?.name ?? deriveProfileName(parsed),
       archSummary: probe.archSummary ?? profile?.archSummary ?? recent?.archSummary ?? 'Cortex-M85 + State',
       wsUrl,
+      endpointLabel: isTunnel && profile ? `${profile.endpointUrl} -> ${wsUrl}` : undefined,
       elfName: probe.elfName ?? profile?.lastElf ?? recent?.artifactSummary ?? 'live RPC session',
       checkpointCount: recent?.checkpointCount,
       latencyMs: probe.latencyMs,
@@ -280,7 +282,9 @@ export class RemoteHostsStore {
         if (!res) return profile;
         if (!res.reachable) return { ...profile, lastStatus: 'offline' as const };
         const parsed = parseRemoteEndpoint(profile.wsUrl);
-        const status: RemoteSessionStatus = res.reserved ? 'in-use' : parsed.isLoopback ? 'loopback' : 'online';
+        const isTunnel = Boolean(profile.sshHost);
+        const status: RemoteSessionStatus =
+          res.reserved ? 'in-use' : isTunnel || !parsed.isLoopback ? 'online' : 'loopback';
         return { ...profile, lastStatus: status, latencyMs: res.latencyMs };
       });
       this.persistProfiles(next);
