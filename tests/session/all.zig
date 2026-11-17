@@ -5,6 +5,10 @@ test {
     _ = @import("disasm_test.zig");
     _ = @import("symbols_test.zig");
     _ = @import("annotate_test.zig");
+    _ = @import("annotation_names_test.zig");
+    _ = @import("annotation_literal_test.zig");
+    _ = @import("annotation_locals_test.zig");
+    _ = @import("annotation_operands_test.zig");
     _ = @import("run_policy_test.zig");
     _ = @import("breakpoint_test.zig");
     _ = @import("history_test.zig");

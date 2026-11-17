@@ -26,6 +26,7 @@ const session_branch = @import("branch.zig");
 const session_camera = @import("camera.zig");
 const session_chunks = @import("load_chunks.zig");
 const session_diff = @import("diff.zig");
+const session_disasm = @import("disasm.zig");
 const session_files = @import("files.zig");
 const session_folded = @import("folded.zig");
 const session_input = @import("input.zig");
@@ -72,6 +73,7 @@ const session_routes = .{
     .{ @backingInt(M.read_register), handlers.readRegister },
     .{ @backingInt(M.write_register), handlers.writeRegister },
     .{ @backingInt(M.read_memory), handlers.readMemory },
+    .{ @backingInt(M.disassemble), session_disasm.read },
     .{ @backingInt(M.write_memory), handlers.writeMemory },
     .{ @backingInt(M.set_breakpoint), handlers.setBreakpoint },
     .{ @backingInt(M.set_breakpoint_name), handlers.setBreakpointNamed },

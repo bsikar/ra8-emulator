@@ -6,6 +6,7 @@ pub const branch = @import("branch.zig");
 pub const camera = @import("camera.zig");
 pub const diff = @import("diff.zig");
 pub const diff_wire = @import("diff_wire.zig");
+pub const disasm = @import("disasm.zig");
 pub const event_feed = @import("event_feed.zig");
 pub const files = @import("files.zig");
 pub const folded = @import("folded.zig");

@@ -17,6 +17,7 @@ const targets = @import("ctl/targets.zig");
 const Client = ctl_client.Client;
 const ctl_branch = @import("ctl/branch.zig");
 const ctl_diff = @import("ctl/diff.zig");
+const ctl_disasm = @import("ctl/disasm.zig");
 const ctl_nav = @import("ctl/nav.zig");
 const ctl_write = @import("ctl/write.zig");
 pub const events = @import("ctl/events.zig");
@@ -29,7 +30,7 @@ pub const usage =
     "       ra8_emulator ctl --host NAME [--hosts FILE] --image ELF [--json] " ++
     "COMMAND\n" ++
     "  commands: load ELF | run [--budget N] | step | pause | regs [NAME...] | mem " ++
-    "ADDRESS LENGTH\n" ++
+    "ADDRESS LENGTH | disasm ADDRESS [COUNT]\n" ++
     "            speed FACTOR|max | break ADDRESS|NAME | break --clear ID\n" ++
     "            watch ADDRESS read|write|access | watch --clear ID\n" ++
     "            events [--topic uart|stop]... [--until TEXT] [--timeout 500ms|30s]\n" ++
@@ -168,6 +169,7 @@ fn perform(allocator: std.mem.Allocator, io: std.Io, client: *Client, request: R
         },
         .regs => |regs| try readRegs(client, w, json, regs),
         .mem => |at| try readMem(client, w, json, at.address, at.length),
+        .disasm => |args| try ctl_disasm.run(client, w, json, args),
         .speed => |milli| {
             _ = try client.call(proto.Ack, proto.SetSpeed, .set_speed, .{ .core = .cpu0, .milli = milli });
             try out.speed(w, json, milli);
