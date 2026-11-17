@@ -21,7 +21,8 @@ pub fn walk(file: std.Io.File, artifact: artifacts.Artifact, tree: *Tree) !void 
         var cd = file.reader(tree.io, &cd_buffer);
         try zip(&cd, &reader, tree);
     } else {
-        var decompress = try std.compress.xz.Decompress.init(&reader.interface, tree.allocator, &.{});
+        var xz_buffer: [65536]u8 = undefined;
+        var decompress = try std.compress.xz.Decompress.init(&reader.interface, tree.allocator, &xz_buffer);
         defer decompress.deinit();
         try tar(&decompress.reader, tree);
         var tail: [4096]u8 = undefined;

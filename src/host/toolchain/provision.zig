@@ -6,6 +6,7 @@ const archive = @import("archive.zig");
 const artifacts = @import("artifact.zig");
 const check = @import("check.zig");
 const digest = @import("digest.zig");
+const manifests = @import("manifest.zig");
 const ownership = @import("ownership.zig");
 const paths = @import("paths.zig");
 const planning = @import("plan.zig");
@@ -160,6 +161,11 @@ fn install(
     var tree = Tree.init(gpa, io, stage, true, prefix);
     defer tree.deinit();
     try archive.walk(file, artifact, &tree);
+    if (artifacts.manifestSha256(artifact)) |expected| {
+        if (!std.mem.eql(u8, &digest.bytes(tree.manifest.items), expected)) {
+            return error.CacheManifestMismatch;
+        }
+    }
     {
         const manifest = try stage.createFile(io, ".manifest", .{
             .read = true,
@@ -237,17 +243,21 @@ pub fn admit(gpa: std.mem.Allocator, io: std.Io, root: []const u8, artifact: art
     defer installed.close(io);
     const file = try paths.regular(io, installed, ".archive");
     defer file.close(io);
-    var tree = Tree.init(gpa, io, installed, false, std.fs.path.dirname(artifact.executable).?);
-    defer tree.deinit();
-    try archive.walk(file, artifact, &tree);
     const record = try paths.regular(io, installed, ".manifest");
     defer record.close(io);
-    const size = (try record.stat(io)).size;
-    if (size != tree.manifest.items.len) return error.CacheManifestMismatch;
-    const bytes = try gpa.alloc(u8, @intCast(size));
-    defer gpa.free(bytes);
-    if (try record.readPositionalAll(io, bytes, 0) != size or
-        !std.mem.eql(u8, bytes, tree.manifest.items)) return error.CacheManifestMismatch;
+    var tree = Tree.init(gpa, io, installed, false, std.fs.path.dirname(artifact.executable).?);
+    defer tree.deinit();
+    if (artifacts.manifestSha256(artifact)) |expected| {
+        try archive.verify(io, file, artifact);
+        const bytes = try manifests.read(gpa, io, record);
+        defer gpa.free(bytes);
+        try manifests.verify(bytes, expected, &tree);
+    } else {
+        try archive.walk(file, artifact, &tree);
+        const bytes = try manifests.read(gpa, io, record);
+        defer gpa.free(bytes);
+        if (!std.mem.eql(u8, bytes, tree.manifest.items)) return error.CacheManifestMismatch;
+    }
     const path = try std.fmt.allocPrint(gpa, "{s}/{s}/{s}", .{ root, relative, artifact.executable });
     errdefer gpa.free(path);
     try check.version(io, installed, path, artifact.version);

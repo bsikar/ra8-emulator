@@ -141,7 +141,7 @@ pub const Tree = struct {
         return self.overflow_dir orelse if (self.depth == 0) self.root else self.stack[self.depth - 1].dir;
     }
 
-    pub fn accept(self: *Tree, entry: Entry, source: anytype) !void {
+    fn prepare(self: *Tree, entry: Entry) !struct { path: []const u8, parent_dir: std.Io.Dir, leaf: []const u8 } {
         const path = try paths.name(entry.name);
         if (!std.mem.eql(u8, path, self.prefix) and
             !(std.mem.startsWith(u8, path, self.prefix) and path.len > self.prefix.len and
@@ -151,24 +151,64 @@ pub const Tree = struct {
         }
         if (entry.size > 512_000_000 or self.bytes + entry.size > 2_000_000_000) return error.ArchiveSizeLimit;
         try self.remember(path, entry.kind, true);
-        const parent_dir = try self.parent(path);
-        const leaf = std.fs.path.basename(path);
+        return .{
+            .path = path,
+            .parent_dir = try self.parent(path),
+            .leaf = std.fs.path.basename(path),
+        };
+    }
+
+    pub fn accept(self: *Tree, entry: Entry, source: anytype) !void {
+        const loc = try self.prepare(entry);
         const hash = switch (entry.kind) {
             .directory => blk: {
                 if (entry.size != 0) return error.BadArchiveDirectory;
-                var dir = try paths.enter(self.io, parent_dir, leaf, self.install);
+                var dir = try paths.enter(self.io, loc.parent_dir, loc.leaf, self.install);
                 dir.close(self.io);
                 break :blk @as([64]u8, @splat('-'));
             },
-            .file => try self.file(parent_dir, leaf, entry, source),
+            .file => try self.file(loc.parent_dir, loc.leaf, entry, source),
         };
         self.bytes += entry.size;
         self.entries += 1;
         const mode = entry.mode & 0o777;
-        const line = try std.fmt.allocPrint(self.allocator, "{o} {d} {s} {s}\n", .{ mode, entry.size, hash, path });
+        const line = try std.fmt.allocPrint(self.allocator, "{o} {d} {s} {s}\n", .{ mode, entry.size, hash, loc.path });
         defer self.allocator.free(line);
         if (self.manifest.items.len + line.len > 16_000_000) return error.ManifestLimit;
         try self.manifest.appendSlice(self.allocator, line);
+    }
+
+    pub fn verifyRecorded(self: *Tree, entry: Entry, wanted: *const [64]u8) !void {
+        if (self.install) return error.CacheIntegrityMismatch;
+        const loc = try self.prepare(entry);
+        switch (entry.kind) {
+            .directory => {
+                if (entry.size != 0) return error.BadArchiveDirectory;
+                var dir = try paths.enter(self.io, loc.parent_dir, loc.leaf, false);
+                dir.close(self.io);
+            },
+            .file => try self.checkInstalledFile(loc.parent_dir, loc.leaf, entry, wanted),
+        }
+        self.bytes += entry.size;
+        self.entries += 1;
+    }
+
+    fn checkInstalledFile(
+        self: *Tree,
+        dir: std.Io.Dir,
+        leaf: []const u8,
+        entry: Entry,
+        wanted: *const [64]u8,
+    ) !void {
+        const installed = try paths.regular(self.io, dir, leaf);
+        defer installed.close(self.io);
+        const info = try installed.stat(self.io);
+        if (info.size != entry.size or !(try samePermissions(installed, info.permissions, permissions(entry.mode)))) {
+            return error.CacheIntegrityMismatch;
+        }
+        if (!std.mem.eql(u8, wanted, &try digest.file(self.io, installed, entry.size))) {
+            return error.CacheIntegrityMismatch;
+        }
     }
 
     fn file(self: *Tree, dir: std.Io.Dir, leaf: []const u8, entry: Entry, source: anytype) ![64]u8 {
@@ -196,15 +236,7 @@ pub const Tree = struct {
         try source.writeTo(&expected.writer);
         try expected.writer.flush();
         const wanted = std.fmt.bytesToHex(expected.hasher.finalResult(), .lower);
-        const installed = try paths.regular(self.io, dir, leaf);
-        defer installed.close(self.io);
-        const info = try installed.stat(self.io);
-        if (info.size != entry.size or !(try samePermissions(installed, info.permissions, permissions(entry.mode)))) {
-            return error.CacheIntegrityMismatch;
-        }
-        if (!std.mem.eql(u8, &wanted, &try digest.file(self.io, installed, entry.size))) {
-            return error.CacheIntegrityMismatch;
-        }
+        try self.checkInstalledFile(dir, leaf, entry, &wanted);
         return wanted;
     }
 
