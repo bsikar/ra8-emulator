@@ -54,6 +54,9 @@ describe('SearchEverywhereStore', () => {
       onLine: (line) => {
         jumped.push(`line:${line}`);
       },
+      onWorkspace: (ws) => {
+        jumped.push(`ws:${ws.id}`);
+      },
     });
     const unreg = search.registerProvider('symbols', () => [
       { id: 'sym-main', category: 'symbols', title: 'main_loop', subtitle: '0x02000100' },
@@ -88,6 +91,10 @@ describe('SearchEverywhereStore', () => {
     search.openSearch('all', ':88');
     await search.executeResult();
     expect(jumped).toEqual(['addr:0x2000100', 'line:88']);
+
+    search.openSearch('files', 'Blink');
+    await search.executeResult();
+    expect(jumped).toEqual(['addr:0x2000100', 'line:88', 'ws:ws-ra8']);
 
     unreg();
   });
