@@ -20,7 +20,15 @@ export type LaunchIconName =
   | 'search-everywhere'
   | 'extensions'
   | 'vim'
-  | 'palette';
+  | 'palette'
+  | 'arrow-left'
+  | 'arrow-right'
+  | 'network'
+  | 'key'
+  | 'terminal'
+  | 'eye'
+  | 'copy'
+  | 'refresh';
 
 export interface LaunchCommandItem {
   id: string;

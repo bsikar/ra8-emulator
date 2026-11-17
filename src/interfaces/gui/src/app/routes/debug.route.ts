@@ -44,18 +44,21 @@ const REG_KEYS = ['pc', 'sp', 'lr', 'xpsr', 'r0', 'r1', 'r2', 'r3'] as const;
               [tone]="rpc.isConnected() ? (execution.isRunning() ? 'cursor' : 'nominal') : 'muted'"
               [label]="execution.executionStatus()"
             />
+            @if (rpc.observeOnly()) {
+              <span class="observe-pill" data-testid="debug-observe-pill">OBSERVE · Read-Only</span>
+            }
           </div>
           <div class="head-actions">
             <app-tonal-button
               testId="debug-step-btn"
-              [disabled]="!rpc.isConnected() || execution.isRunning()"
+              [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
               (pressed)="execution.step()"
             >
               Step
             </app-tonal-button>
             <app-tonal-button
               testId="debug-run-btn"
-              [disabled]="!rpc.isConnected()"
+              [disabled]="!rpc.isConnected() || rpc.observeOnly()"
               (pressed)="toggleRun()"
             >
               {{ execution.isRunning() ? 'Pause' : 'Continue' }}
@@ -129,6 +132,15 @@ const REG_KEYS = ['pc', 'sp', 'lr', 'xpsr', 'r0', 'r1', 'r2', 'r3'] as const;
       .empty-note {
         margin: 0;
         padding: 12px 0;
+      }
+      .observe-pill {
+        padding: 2px 8px;
+        border-radius: var(--es-radius-sm);
+        border: 1px solid var(--es-signal-cursor);
+        background: var(--es-interactive);
+        color: var(--es-signal-cursor);
+        font-size: 12px;
+        font-weight: 500;
       }
     `,
   ],

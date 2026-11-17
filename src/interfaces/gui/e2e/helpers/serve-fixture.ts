@@ -38,7 +38,8 @@ function resolveEmulatorBinary(repoRoot: string): string {
 
 export async function startServeFixture(
   relativeElfPath = path.join('tests', 'fixtures', 'gpio', 'blink.elf'),
-  extraArgs: readonly string[] = []
+  extraArgs: readonly string[] = [],
+  extraEnv: Record<string, string> = {}
 ): Promise<ServedEmulatorHandle> {
   const repoRoot = resolveRepoRoot();
   const bin = resolveEmulatorBinary(repoRoot);
@@ -49,6 +50,7 @@ export async function startServeFixture(
 
   const proc = spawn(bin, ['serve', ...extraArgs, '--listen', 'tcp:127.0.0.1:0', elf], {
     cwd: repoRoot,
+    env: { ...process.env, ...extraEnv },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 

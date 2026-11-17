@@ -68,7 +68,6 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
   private readonly openFileInputEl = viewChild<ElementRef<HTMLInputElement>>('openFileInputEl');
   private readonly importArchiveInputEl = viewChild<ElementRef<HTMLInputElement>>('importArchiveInputEl');
   private readonly workspaceListRef = viewChild(LaunchWorkspaceListComponent);
-  private readonly connectBarRef = viewChild(LaunchConnectBarComponent);
 
   protected readonly wsInput = signal<string>(this.rpc.serverUrl());
   protected readonly searchQuery = signal<string>('');
@@ -211,13 +210,7 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
   }
 
   protected toggleConnectRemote(): void {
-    if (this.workspace.recentWorkspaces().length === 0) {
-      this.connectBarRef()?.focusInput();
-      return;
-    }
-    const next = !this.connectBarOpen();
-    this.connectBarOpen.set(next);
-    if (next) queueMicrotask(() => this.connectBarRef()?.focusInput());
+    void this.router.navigateByUrl('/connect');
   }
 
   protected async onOpenFileSelected(event: Event): Promise<void> {
