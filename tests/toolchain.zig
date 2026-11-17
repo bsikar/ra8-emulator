@@ -6,6 +6,7 @@ test {
     _ = @import("host/toolchain/artifact_test.zig");
     _ = @import("host/toolchain/tree_test.zig");
     _ = @import("host/toolchain/digest_test.zig");
+    _ = @import("host/toolchain/manifest_test.zig");
     _ = @import("host/toolchain/provision_test.zig");
     _ = @import("host/toolchain/target_test.zig");
     _ = @import("host/toolchain/plan_test.zig");

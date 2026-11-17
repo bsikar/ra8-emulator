@@ -360,8 +360,8 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=600)
     args = parser.parse_args()
-    if sys.flags.optimize or not 0 < args.timeout <= 600:
-        parser.error("assertions required; timeout must be positive and <=600")
+    if sys.flags.optimize or not 0 < args.timeout <= 800:
+        parser.error("assertions required; timeout must be positive and <=800")
     if args.offline_replay:
         if args.phase != "baseline" or args.archive or args.prior_evidence:
             parser.error("--offline-replay is separate from --phase/--archive/--prior-evidence")
