@@ -183,6 +183,8 @@ export class CommandModeStore {
       return false;
     }
 
+    if (event.altKey) return false;
+
     const match = this.resolvedCommands().find((cmd) => {
       const s = cmd.action.shortcut;
       if (!s) return false;

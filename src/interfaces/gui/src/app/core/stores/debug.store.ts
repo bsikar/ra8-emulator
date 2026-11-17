@@ -64,9 +64,7 @@ export class DebugStore {
 
   constructor() {
     effect(() => {
-      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected()) {
-        void this.refreshAll();
-      }
+      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected()) void this.refreshAll();
     });
   }
 
@@ -118,19 +116,19 @@ export class DebugStore {
       else if (!sl.found) this.sourceFileLines.set([]);
     } catch (err) {
       this.sourceLine.set(null);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
     try {
       const locRes = frameIndex === 0 ? await client.getLocals(core) : await client.getLocalsAt(core, frameIndex);
       const regs = core === Core.Cpu1 ? this.cpu1Registers() : this.cpu0Registers();
-      const evaluated = await evaluateLocals(locRes.locals, regs, (addr, len) => this.readMemoryPage(addr, len, core), {
+      const evaluated = await evaluateLocals(locRes.locals, regs, (addr, len) => this.readLocalMemory(client, core, addr, len), {
         frameIndex,
         frameBase,
       });
       this.locals.set(evaluated);
     } catch (err) {
       this.locals.set([]);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
   }
 
@@ -142,12 +140,7 @@ export class DebugStore {
     });
   }
 
-  public setVar(
-    name: string,
-    value: string,
-    frame = this.selectedFrameIndex(),
-    core: Core = this.activeCore()
-  ): Promise<SetVarReply | null> {
+  public setVar(name: string, value: string, frame = this.selectedFrameIndex(), core: Core = this.activeCore()): Promise<SetVarReply | null> {
     const cleanName = name.trim();
     if (!cleanName) return Promise.resolve(null);
     return this.runRpc(`setVar(${cleanName}) failed`, null, async (client) => {
@@ -181,10 +174,8 @@ export class DebugStore {
     if (!client) return null;
     try {
       const bytes = await client.readMemory(core, address >>> 0, length);
-      if (length >= 64) {
-        this.memoryAddress.set(address >>> 0);
-        this.memoryBytes.set(bytes);
-      }
+      this.memoryAddress.set(address >>> 0);
+      this.memoryBytes.set(bytes);
       return bytes;
     } catch (err) {
       this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
@@ -241,7 +232,7 @@ export class DebugStore {
       }
     } catch (err) {
       if (core === Core.Cpu0) this.rpc.reportError('CPU0 register read failed', err);
-      else this.rpc.errorMessage.set(`CPU1 register read skipped: ${err instanceof Error ? err.message : String(err)}`);
+      else this.rpc.noteOptionalError(err, 'CPU1 register read skipped');
     }
   }
 
@@ -253,7 +244,18 @@ export class DebugStore {
       target.set(await client.getBacktrace(core));
     } catch (err) {
       target.set(null);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
+    }
+  }
+
+  private async readLocalMemory(
+    client: RA8RpcClient, core: Core, address: number, length: number
+  ): Promise<Uint8Array | null> {
+    try {
+      return await client.readMemory(core, address >>> 0, length);
+    } catch (err) {
+      this.rpc.noteOptionalError(err);
+      return null;
     }
   }
 
@@ -265,7 +267,7 @@ export class DebugStore {
       this.sourceFileLines.set(new TextDecoder().decode(res.bytes).split(/\r?\n/));
     } catch (err) {
       this.sourceFileLines.set([]);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
   }
 }

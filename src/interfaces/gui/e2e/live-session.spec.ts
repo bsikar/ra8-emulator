@@ -17,6 +17,7 @@ test.describe('Live ra8_emulator serve WebSocket session', () => {
 
     await page.goto(`/launch?ws=${encodeURIComponent(server.wsUrl)}`);
     await expect(page.getByTestId('shell-statusbar')).toContainText(server.wsUrl, { timeout: 10_000 });
+    await expect(page.getByTestId('launch-error')).toBeHidden();
     await auditEditorialSlateScreen(page, 'live-launch-connected');
 
     await page.getByTestId('nav-debug').click();

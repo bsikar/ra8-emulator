@@ -180,6 +180,7 @@ export class LaunchRouteComponent implements OnInit {
     const queryUrl = resolveWsUrlFromSearch(window.location.search);
     if (queryUrl) {
       this.wsInput.set(queryUrl);
+      if (this.rpc.isConnected() && this.rpc.serverUrl() === queryUrl) return;
       void this.connectAndRecord(queryUrl);
     }
   }

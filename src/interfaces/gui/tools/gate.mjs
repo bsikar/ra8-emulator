@@ -11,7 +11,16 @@ const TS_JS_EXTS = new Set(['.ts', '.mjs', '.js']);
 const BANNED_ANYWHERE = ['mas' + 'ter', 'sla' + 've'];
 const BANNED_WORDS = ['MO' + 'SI', 'MI' + 'SO'];
 const LEGACY_NEON_HEXES = ['#0A' + '84FF', '#30' + 'D158', '#FF' + 'D60A', '#FF' + '453A', '#BF' + '5AF2'];
-const LEGACY_DECORATORS = new Set(['Input', 'Output', 'ViewChild']);
+const LEGACY_DECORATORS = new Set([
+  'Input',
+  'Output',
+  'ViewChild',
+  'ViewChildren',
+  'ContentChild',
+  'ContentChildren',
+  'HostListener',
+  'HostBinding',
+]);
 
 function countLines(text) {
   if (text.length === 0) return 0;

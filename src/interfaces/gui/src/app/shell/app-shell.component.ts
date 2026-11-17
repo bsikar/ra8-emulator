@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
   OnInit,
   computed,
   effect,
@@ -32,6 +31,9 @@ interface NavRouteItem {
 @Component({
   selector: 'app-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(window:keydown)': 'onWindowKeyDown($event)',
+  },
   imports: [
     RouterOutlet,
     RouterLink,
@@ -96,7 +98,6 @@ export class AppShellComponent implements OnInit {
     this.registerCommands();
   }
 
-  @HostListener('window:keydown', ['$event'])
   protected onWindowKeyDown(event: KeyboardEvent): void {
     this.cmdMode.handleKeyDown(event);
   }

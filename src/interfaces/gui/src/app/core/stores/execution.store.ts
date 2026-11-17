@@ -57,7 +57,7 @@ export class ExecutionStore implements OnDestroy {
     try {
       await client.interrupt(Core.Cpu0);
     } catch (err) {
-      this.rpc.errorMessage.set(`Interrupt note: ${err instanceof Error ? err.message : String(err)}`);
+      this.rpc.noteOptionalError(err, 'Interrupt note');
     }
     try {
       await client.pause(Core.Cpu0);
@@ -210,7 +210,7 @@ export class ExecutionStore implements OnDestroy {
       await this.rpc.subscribeCoreTopics(client, Core.Cpu1);
     } catch (err) {
       this.cpu1Attached.set(false);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
   }
 

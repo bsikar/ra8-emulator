@@ -92,6 +92,7 @@ describe('ExecutionStore and DebugStore', () => {
     expect(requestedFrame).toBe(2);
     expect(debug.selectedFrameIndex()).toBe(2);
     expect(debug.locals()[0]?.valueDec).toBe('42');
+    expect(debug.memoryBytes().length).toBe(0);
     expect(workspacePath).toBe('src/main.c');
     expect(debug.sourceFileLines()[0]).toBe('int main(void) {');
   });

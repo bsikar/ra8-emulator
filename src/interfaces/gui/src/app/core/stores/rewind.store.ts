@@ -60,19 +60,19 @@ export class RewindStore implements OnDestroy {
       this.historySupported.set(true);
     } catch (err) {
       this.historySupported.set(false);
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
     try {
       const status = await client.getForkStatus();
       this.forkStatus.set(status);
       this.pendingForkPrompt.set(status.pending);
     } catch (err) {
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
     try {
       this.frameStatus.set(await client.getFrameStatus());
     } catch (err) {
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      this.rpc.noteOptionalError(err);
     }
   }
 

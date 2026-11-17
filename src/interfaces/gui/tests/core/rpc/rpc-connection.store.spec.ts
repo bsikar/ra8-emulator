@@ -1,6 +1,17 @@
 import { TestBed } from '@angular/core/testing';
-import { CAP_BUILD, CAP_PROJECT, CAP_TRANSPORT, CAP_WORKSPACE } from 'ra8-rpc-client';
-import { RpcConnectionStore, resolveWsUrlFromSearch } from '../../../src/app/core/rpc/rpc-connection.store';
+import {
+  CAP_BUILD,
+  CAP_PROJECT,
+  CAP_TRANSPORT,
+  CAP_WORKSPACE,
+  ErrorCode,
+  RpcCallError,
+} from 'ra8-rpc-client';
+import {
+  RpcConnectionStore,
+  isExpectedRefusal,
+  resolveWsUrlFromSearch,
+} from '../../../src/app/core/rpc/rpc-connection.store';
 
 describe('RpcConnectionStore', () => {
   it('parses valid ws:// and wss:// URLs from query parameters', () => {
@@ -25,5 +36,23 @@ describe('RpcConnectionStore', () => {
     const id = rpc.toasts()[0]!.id;
     rpc.dismissToast(id);
     expect(rpc.toasts().length).toBe(0);
+  });
+
+  it('ignores expected AppRefused / AppNoCore / AppHistory / UnknownMethod capability refusals', () => {
+    expect(isExpectedRefusal(new RpcCallError(ErrorCode.AppRefused, 0x012f, 1))).toBe(true);
+    expect(isExpectedRefusal(new RpcCallError(ErrorCode.AppNoCore, 0x0105, 2))).toBe(true);
+    expect(isExpectedRefusal(new RpcCallError(ErrorCode.AppHistory, 0x0128, 3))).toBe(true);
+    expect(isExpectedRefusal(new RpcCallError(ErrorCode.UnknownMethod, 0x0190, 4))).toBe(true);
+    expect(isExpectedRefusal(new Error('RPC error code 256 for call id 13'))).toBe(true);
+    expect(isExpectedRefusal(new Error('RPC error code 259 for call id 9'))).toBe(true);
+    expect(isExpectedRefusal(new RpcCallError(ErrorCode.Failed, 0x0100, 5))).toBe(false);
+
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.noteOptionalError(new RpcCallError(ErrorCode.AppRefused, 0x0128, 5), 'History');
+    expect(rpc.errorMessage()).toBeNull();
+
+    rpc.noteOptionalError(new RpcCallError(ErrorCode.Failed, 0x0128, 6), 'History');
+    expect(rpc.errorMessage()).toContain('History:');
   });
 });

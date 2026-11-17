@@ -11,8 +11,10 @@ import {
   Core,
   DEFAULT_RPC_URL,
   DirtyRect,
+  ErrorCode,
   Hello,
   RA8RpcClient,
+  RpcCallError,
   SessionEvent,
   Stopped,
   Topic,
@@ -20,6 +22,28 @@ import {
   TransportEvent,
   UartEvent,
 } from 'ra8-rpc-client';
+
+const EXPECTED_REFUSAL_CODES = new Set<number>([
+  ErrorCode.UnknownMethod,
+  ErrorCode.AppRefused,
+  ErrorCode.AppNoCore,
+  ErrorCode.AppHistory,
+]);
+
+export function isExpectedRefusal(err: unknown): boolean {
+  if (err instanceof RpcCallError) {
+    return EXPECTED_REFUSAL_CODES.has(err.code);
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/\bcode (1|256|257|259)\b/.test(msg)) return true;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes('unknownmethod') ||
+    lower.includes('apprefused') ||
+    lower.includes('appnocore') ||
+    lower.includes('apphistory')
+  );
+}
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -88,6 +112,12 @@ export class RpcConnectionStore implements OnDestroy {
 
   public dismissToast(id: number): void {
     this.toasts.update((items) => items.filter((item) => item.id !== id));
+  }
+
+  public noteOptionalError(err: unknown, context?: string): void {
+    if (isExpectedRefusal(err)) return;
+    const detail = err instanceof Error ? err.message : String(err);
+    this.errorMessage.set(context ? `${context}: ${detail}` : detail);
   }
 
   public reportError(context: string, err: unknown): void {
@@ -162,7 +192,7 @@ export class RpcConnectionStore implements OnDestroy {
     try {
       await client.subscribe(core, topic, rate);
     } catch (err) {
-      this.errorMessage.set(`Optional topic 0x${topic.toString(16)} unavailable: ${err instanceof Error ? err.message : String(err)}`);
+      this.noteOptionalError(err, `Optional topic 0x${topic.toString(16)} unavailable`);
     }
   }
 
