@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 @Component({
   selector: 'app-section-kicker',
@@ -10,20 +10,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
         display: inline-flex;
         align-items: center;
       }
-      .kicker {
-        font-family: var(--font-sans);
-        font-size: 11px;
-        font-weight: 500;
-        line-height: 0.875rem;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        color: var(--es-text-kicker);
-      }
     `,
   ],
 })
 export class SectionKickerComponent {
   public readonly label = input.required<string>();
   public readonly testId = input<string | null>(null);
-  protected readonly hasLabel = computed(() => this.label().trim().length > 0);
 }
