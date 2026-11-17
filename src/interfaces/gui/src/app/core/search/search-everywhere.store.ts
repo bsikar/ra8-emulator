@@ -6,7 +6,7 @@
 
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { formatHex32 } from '../../shared/utils/hex';
-import { WorkspaceStore } from '../stores/workspace.store';
+import { type RecentWorkspaceEntry, WorkspaceStore } from '../stores/workspace.store';
 import { DoubleShiftDetector, type DoubleShiftKeyInput } from './double-shift';
 
 export type SearchCategory = 'files' | 'symbols' | 'text' | 'actions';
@@ -39,6 +39,7 @@ export type SearchJumpTarget =
 export interface SearchJumpHandlers {
   onAddress?: (address: number) => void | Promise<void>;
   onLine?: (line: number, filePath?: string) => void | Promise<void>;
+  onWorkspace?: (ws: RecentWorkspaceEntry) => void | Promise<void>;
 }
 
 const RECENT_SEARCH_KEY = 'ra8.search.recent.v1';
@@ -283,6 +284,7 @@ export class SearchEverywhereStore {
 
   private collectWorkspaceCandidates(): SearchCandidate[] {
     const out: SearchCandidate[] = [];
+    const onWorkspace = this.jumpHandlers().onWorkspace;
     for (const ws of this.workspace.recentWorkspaces()) {
       out.push({
         id: `workspace:${ws.id}`,
@@ -291,6 +293,7 @@ export class SearchEverywhereStore {
         subtitle: ws.path || ws.wsUrl,
         path: ws.path,
         baseScore: ws.pinned ? 20 : 10,
+        onSelect: onWorkspace ? () => onWorkspace(ws) : undefined,
       });
     }
     const page = this.workspace.workspacePage();
