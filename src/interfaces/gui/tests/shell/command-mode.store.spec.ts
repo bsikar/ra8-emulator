@@ -49,6 +49,10 @@ describe('CommandModeStore (RA8EMU-957 / RA8EMU-967)', () => {
     expect(store.handleKeyDown(cmdKInsideInput)).toBe(true);
     expect(store.paletteOpen()).toBe(true);
 
+    const altF10 = new KeyboardEvent('keydown', { key: 'F10', altKey: true, cancelable: true });
+    expect(store.handleKeyDown(altF10)).toBe(false);
+    expect(stepCount).toBe(0);
+
     const f10Ready = new KeyboardEvent('keydown', { key: 'F10', cancelable: true });
     expect(store.handleKeyDown(f10Ready)).toBe(true);
     expect(stepCount).toBe(1);
