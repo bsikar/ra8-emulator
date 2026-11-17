@@ -1,0 +1,321 @@
+<div class="open-canvas">
+  <div class="open-column">
+    <div class="open-toolbar">
+      <div class="toolbar-left">
+        <button
+          type="button"
+          class="back-btn"
+          data-testid="open-back-btn"
+          aria-label="Back to Launch"
+          (click)="goBack()"
+        >
+          <app-launch-icon name="arrow-left" [size]="16" />
+        </button>
+
+        <app-launch-icon name="open-folder" [size]="17" class="folder-icon" />
+
+        <input
+          type="text"
+          class="path-input mono"
+          data-testid="open-path-input"
+          placeholder="Filter remote workspace files or pick a local .elf / .board artifact..."
+          aria-label="Filter workspace path or file name"
+          [value]="pathQuery()"
+          (input)="onPathInput($event)"
+        />
+      </div>
+
+      <div class="toolbar-actions">
+        <button
+          type="button"
+          class="es-ghost-link"
+          data-testid="open-browse-local-btn"
+          (click)="browseLocalFile()"
+        >
+          <span>Browse Local File...</span>
+        </button>
+
+        <button
+          type="button"
+          class="open-submit-btn"
+          data-testid="open-submit-btn"
+          [disabled]="!canSubmit()"
+          (click)="openStagedArtifact()"
+        >
+          <app-launch-icon name="arrow-right" [size]="14" />
+          <span>{{ opening() ? 'Opening...' : 'Open' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-pills" role="tablist" aria-label="Workspace file filters">
+        <button
+          type="button"
+          class="filter-pill"
+          [class.is-active]="activeFilter() === 'all'"
+          data-testid="open-filter-all"
+          (click)="activeFilter.set('all')"
+        >
+          All
+        </button>
+        <button
+          type="button"
+          class="filter-pill"
+          [class.is-active]="activeFilter() === 'folders'"
+          data-testid="open-filter-folders"
+          (click)="activeFilter.set('folders')"
+        >
+          Folders
+        </button>
+        <button
+          type="button"
+          class="filter-pill"
+          [class.is-active]="activeFilter() === 'elf'"
+          data-testid="open-filter-elf"
+          (click)="activeFilter.set('elf')"
+        >
+          .elf
+        </button>
+        <button
+          type="button"
+          class="filter-pill"
+          [class.is-active]="activeFilter() === 'board'"
+          data-testid="open-filter-board"
+          (click)="activeFilter.set('board')"
+        >
+          .board
+        </button>
+      </div>
+
+      @if (workspace.hasWorkspaceCap()) {
+        <div class="dir-meta">
+          <span class="es-meta mono">{{ currentDir() }}</span>
+          <button
+            type="button"
+            class="es-ghost-link"
+            data-testid="open-refresh-btn"
+            (click)="refreshDirectory()"
+          >
+            Refresh
+          </button>
+        </div>
+      } @else {
+        <app-status-dot tone="muted" label="LOCAL STAGING ONLY" data-testid="open-cap-status" />
+      }
+    </div>
+
+    <div class="split-grid">
+      <section class="panel-card" data-testid="open-browser-card">
+        <div class="section-head">
+          <app-section-kicker label="WORKSPACE DIRECTORY" />
+          <span class="es-meta">
+            {{ workspace.hasWorkspaceCap() ? 'CAP_WORKSPACE READY' : 'OFFLINE / NO --WORKSPACE' }}
+          </span>
+        </div>
+
+        @if (workspace.hasWorkspaceCap()) {
+          <div class="entry-list">
+            @if (!isRootDir()) {
+              <button
+                type="button"
+                class="entry-row is-dir"
+                data-testid="open-parent-dir-btn"
+                (click)="goUpDirectory()"
+              >
+                <span class="entry-name mono">..</span>
+                <span class="es-meta">Parent Directory</span>
+              </button>
+            }
+
+            @if (loadingDir()) {
+              <div class="empty-note">Loading workspace directory...</div>
+            } @else if (filteredEntries().length === 0) {
+              <div class="empty-note" data-testid="open-dir-empty">
+                No matching files or folders in <span class="mono">{{ currentDir() }}</span>.
+              </div>
+            } @else {
+              @for (entry of filteredEntries(); track entry.name) {
+                <button
+                  type="button"
+                  class="entry-row"
+                  [class.is-dir]="entry.kind === 'directory'"
+                  [attr.data-testid]="'open-entry-' + entry.name"
+                  (click)="openEntry(entry)"
+                >
+                  <span class="entry-name mono">{{ entry.name }}</span>
+                  <span class="es-meta">{{ entry.kind === 'directory' ? 'DIR' : 'FILE' }}</span>
+                </button>
+              }
+            }
+          </div>
+        } @else {
+          <div class="empty-note" data-testid="open-no-workspace-cap">
+            Connect to an emulator daemon started with <span class="mono">--workspace &lt;dir&gt;</span> to browse
+            remote files, or select a local <span class="mono">.elf</span> / <span class="mono">.board</span> file above.
+          </div>
+        }
+
+        @if (recentArtifactRows().length > 0) {
+          <div class="section-head is-sub">
+            <app-section-kicker label="RECENT WORKSPACES &amp; ELFS" />
+          </div>
+          <div class="entry-list">
+            @for (item of recentArtifactRows(); track item.id) {
+              <div class="recent-entry-row">
+                <div class="recent-entry-main">
+                  <span class="entry-name">{{ item.name }}</span>
+                  <span class="es-subline mono">{{ item.path }}</span>
+                </div>
+                <span class="es-meta">{{ formatAge(item.lastOpenedIso) }}</span>
+              </div>
+            }
+          </div>
+        }
+      </section>
+
+      <section class="panel-card" data-testid="open-inspector-card">
+        <div class="section-head">
+          <app-section-kicker label="ARTIFACT INSPECTOR &amp; TARGET" />
+          @if (stagedElf()) {
+            <app-status-dot tone="nominal" label="ARM32 ELF VALID" data-testid="open-stage-status" />
+          } @else if (stagedBoard()) {
+            <app-status-dot tone="nominal" label="BOARD PROFILE VALID" data-testid="open-stage-status" />
+          } @else if (validationError()) {
+            <app-status-dot tone="fault" label="REJECTED ARTIFACT" data-testid="open-stage-status" />
+          } @else {
+            <app-status-dot tone="muted" label="IDLE" data-testid="open-stage-status" />
+          }
+        </div>
+
+        @if (validationError(); as err) {
+          <div class="error-banner" data-testid="open-error-banner">
+            <span class="error-title">Artifact validation failed (session unchanged)</span>
+            <span class="error-detail mono">{{ err }}</span>
+          </div>
+        }
+
+        @if (stagedElf(); as elf) {
+          <div class="kv-list" data-testid="open-elf-summary">
+            <div class="kv-row"><span class="kv-k">Image</span><span class="kv-v mono">{{ elf.name }}</span></div>
+            <div class="kv-row"><span class="kv-k">Payload Size</span><span class="kv-v mono">{{ formatBytes(elf.bytes.length) }}</span></div>
+            <div class="kv-row"><span class="kv-k">Reset / Entry</span><span class="kv-v mono">{{ elf.entryHex }}</span></div>
+            <div class="kv-row">
+              <span class="kv-k">Symbols &amp; DWARF</span>
+              <span class="kv-v mono">{{ elf.symbolCount }} symbols · {{ elf.hasDebugInfo ? 'DWARF present' : 'Stripped DWARF' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-k">RPC Transport</span>
+              <span class="kv-v mono">
+                {{ elf.chunkedTransfer ? 'Chunked CRC32 (LoadBegin/Chunk/End 0x0124..0x0126)' : 'Single-frame Load (0x0100)' }}
+              </span>
+            </div>
+          </div>
+        } @else {
+          @if (stagedBoard(); as brd) {
+            <div class="kv-list" data-testid="open-board-summary">
+              <div class="kv-row"><span class="kv-k">Board File</span><span class="kv-v mono">{{ brd.name }}</span></div>
+              <div class="kv-row"><span class="kv-k">Panel</span><span class="kv-v mono">{{ brd.profile.panel ?? 'Headless' }}</span></div>
+              <div class="kv-row">
+                <span class="kv-k">LEDs / Switches</span>
+                <span class="kv-v mono">{{ brd.profile.leds.length }} LEDs · {{ brd.profile.switches.length }} switches</span>
+              </div>
+            </div>
+          } @else if (!validationError()) {
+            <div class="empty-note">Select a remote entry or browse locally to inspect headers and symbols before upload.</div>
+          }
+        }
+
+        <div class="options-block">
+          <label class="field-label">
+            <span class="es-meta">Target Host</span>
+            <div class="host-combo">
+              <select class="line-select" aria-label="Saved host profile" (change)="onHostPresetSelect($event)">
+                <option value="">Select host...</option>
+                <option value="ws://127.0.0.1:4567">Local (ws://127.0.0.1:4567)</option>
+                @for (p of remoteHosts.profiles(); track p.id) {
+                  <option [value]="p.wsUrl">{{ p.name }} ({{ p.endpointUrl }})</option>
+                }
+              </select>
+              <input
+                type="text"
+                class="line-input mono"
+                data-testid="open-ws-input"
+                [value]="wsUrl()"
+                (input)="onWsUrlInput($event)"
+              />
+            </div>
+          </label>
+
+          <label class="field-label">
+            <span class="es-meta">Target Board Profile</span>
+            <select
+              class="line-select"
+              data-testid="open-board-select"
+              [value]="selectedBoardId()"
+              (change)="onBoardSelect($event)"
+            >
+              @for (preset of allBoards(); track preset.id) {
+                <option [value]="preset.id">{{ preset.targetId.toUpperCase() }} — {{ preset.name }}</option>
+              }
+            </select>
+          </label>
+
+          <div class="core-row">
+            <span class="es-meta">Target Core</span>
+            <div class="core-pills">
+              <button
+                type="button"
+                class="filter-pill"
+                [class.is-active]="selectedCore() === 0"
+                data-testid="open-core-cpu0"
+                (click)="selectedCore.set(0)"
+              >
+                CPU0 (Primary)
+              </button>
+              <button
+                type="button"
+                class="filter-pill"
+                [class.is-active]="selectedCore() === 1"
+                data-testid="open-core-cpu1"
+                (click)="selectedCore.set(1)"
+              >
+                CPU1 (Secondary)
+              </button>
+            </div>
+          </div>
+
+          <label class="check-row">
+            <input
+              type="checkbox"
+              data-testid="open-break-main-toggle"
+              [checked]="breakAtMain()"
+              (change)="onBreakToggle($event)"
+            />
+            <span>Run to <span class="mono">main</span> after load (unchecked = halt at reset)</span>
+          </label>
+        </div>
+
+        @if (board.uploadProgress(); as prog) {
+          <div class="upload-bar-wrap" data-testid="open-upload-progress">
+            <div class="upload-meta">
+              <span class="mono">{{ prog.statusText }}</span>
+              <span class="mono">{{ prog.percent }}%</span>
+            </div>
+            <div class="upload-track">
+              <div class="upload-fill" [style.width.%]="prog.percent"></div>
+            </div>
+          </div>
+        }
+      </section>
+    </div>
+  </div>
+
+  <input
+    type="file"
+    class="hidden-file-input"
+    data-testid="open-file-input"
+    accept=".elf,.axf,.board,.bin"
+    (change)="onFallbackFileSelected($event)"
+  />
+</div>

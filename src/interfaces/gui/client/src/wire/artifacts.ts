@@ -169,13 +169,12 @@ export async function streamArtifactExport(
       throw new Error("Exported artifact SHA-256 checksum mismatch");
     }
     return { bytes: out, sha256: desc.sha256, total: desc.total };
-  } catch (err) {
+  } finally {
     try {
       await call(Method.ArtifactsAbort, encodeArtifactId(desc.id), 5_000);
     } catch (abortErr) {
       console.warn("Artifact export abort failed during cleanup:", abortErr);
     }
-    throw err;
   }
 }
 

@@ -24,8 +24,11 @@ import {
   isPendingForkError,
   mapDiffRows,
 } from './rewind-helpers';
+import type { RecentBundleEntry } from '../../features/bundles/bundle-summary';
 
-export { formatSeekPoint, isPendingForkError, mapDiffRows, type DiffStateRow };
+export { formatSeekPoint, isPendingForkError, mapDiffRows, type DiffStateRow, type RecentBundleEntry };
+
+const RECENT_BUNDLES_KEY = 'ra8.recentBundles.v1';
 
 @Injectable({ providedIn: 'root' })
 export class RewindStore implements OnDestroy {
@@ -42,6 +45,10 @@ export class RewindStore implements OnDestroy {
   public readonly lastNavResult = signal<NavQueryResult | null>(null);
   public readonly stagedBundlePreview = signal<BundlePreview | null>(null);
   public readonly stagedBundleBytes = signal<Uint8Array | null>(null);
+  public readonly stagedBundleFileName = signal<string | null>(null);
+  public readonly stagedBundleSizeBytes = signal<number>(0);
+  public readonly stagedBundleError = signal<string | null>(null);
+  public readonly recentBundles = signal<RecentBundleEntry[]>(this.loadRecentBundles());
   public readonly diffRows = computed<DiffStateRow[]>(() =>
     this.activeDiff() ? mapDiffRows(this.activeDiff()!) : []
   );
@@ -208,18 +215,54 @@ export class RewindStore implements OnDestroy {
     }
   }
 
-  public async previewStagedArchive(bytes: Uint8Array): Promise<BundlePreview | null> {
+  public async previewStagedArchive(bytes: Uint8Array, fileName = 'session.tar'): Promise<BundlePreview | null> {
+    this.stagedBundleFileName.set(fileName);
+    this.stagedBundleSizeBytes.set(bytes.length);
     try {
       const preview = await previewBundleArchive(bytes);
+      this.stagedBundleError.set(null);
       this.stagedBundleBytes.set(bytes);
       this.stagedBundlePreview.set(preview);
       return preview;
     } catch (err) {
       this.stagedBundleBytes.set(null);
       this.stagedBundlePreview.set(null);
+      this.stagedBundleError.set(err instanceof Error ? err.message : String(err));
       this.rpc.reportError('Invalid session bundle archive', err);
       return null;
     }
+  }
+
+  public recordRecentBundle(preview: BundlePreview, fileName: string, sizeBytes: number, path?: string): RecentBundleEntry {
+    const cleanName = fileName.trim() || 'session.tar';
+    const m = preview.manifest;
+    const entry: RecentBundleEntry = {
+      id: `bun:${cleanName}:${sizeBytes}`,
+      name: cleanName.replace(/\.(tar\.gz|tgz|tar)$/i, ''),
+      path: path?.trim() || cleanName,
+      sizeBytes,
+      compressed: preview.compressed,
+      board: m?.board ?? 'Custom Session',
+      elfSummary: m?.elf1 ? `${m.elf0.name} + ${m.elf1.name}` : (m?.elf0.name ?? `${preview.entries.length} entries`),
+      hasSaveState: preview.entries.some((e) => e.path.endsWith('.ra8snap')),
+      recording: m?.recording ?? false,
+      entryCount: preview.entries.length,
+      importedIso: new Date().toISOString(),
+    };
+    this.recentBundles.update((prev) => {
+      const next = [entry, ...prev.filter((b) => b.id !== entry.id)].slice(0, 12);
+      this.saveRecentBundles(next);
+      return next;
+    });
+    return entry;
+  }
+
+  public removeRecentBundle(id: string): void {
+    this.recentBundles.update((prev) => {
+      const next = prev.filter((b) => b.id !== id);
+      this.saveRecentBundles(next);
+      return next;
+    });
   }
 
   public async exportArtifactBundle(recording = false): Promise<ArtifactExportResult | null> {
@@ -275,5 +318,30 @@ export class RewindStore implements OnDestroy {
     this.lastNavResult.set(null);
     this.stagedBundlePreview.set(null);
     this.stagedBundleBytes.set(null);
+    this.stagedBundleFileName.set(null);
+    this.stagedBundleSizeBytes.set(0);
+    this.stagedBundleError.set(null);
+  }
+
+  private loadRecentBundles(): RecentBundleEntry[] {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(RECENT_BUNDLES_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as RecentBundleEntry[]) : [];
+    } catch (err) {
+      this.rpc.noteOptionalError(err, 'Recent bundles storage');
+      return [];
+    }
+  }
+
+  private saveRecentBundles(list: readonly RecentBundleEntry[]): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(RECENT_BUNDLES_KEY, JSON.stringify(list));
+    } catch (err) {
+      this.rpc.errorMessage.set(`Bundle storage write failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }

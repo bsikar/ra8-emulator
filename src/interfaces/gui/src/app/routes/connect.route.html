@@ -81,9 +81,9 @@
       (profileNameChange)="profileName.set($event)"
       (tokenHintChange)="tokenHint.set($event)"
       (observeOnlyChange)="observeOnly.set($event)"
-      (sshHostChange)="sshHost.set($event)"
-      (sshRemotePortChange)="sshRemotePort.set($event)"
-      (sshLocalPortChange)="sshLocalPort.set($event)"
+      (sshHostChange)="onSshHostChange($event)"
+      (sshRemotePortChange)="onSshRemotePortChange($event)"
+      (sshLocalPortChange)="onSshLocalPortChange($event)"
       (saveProfile)="saveCurrentProfile()"
       (copySshCommand)="copyText($event, 'Copied SSH tunnel command')"
     />

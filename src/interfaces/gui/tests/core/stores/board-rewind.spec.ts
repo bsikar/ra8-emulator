@@ -151,7 +151,37 @@ describe('BoardStore and RewindStore fixed wire semantics', () => {
       })
     );
     expect(preview?.manifest?.board).toBe('ek_ra8d2');
+    expect(rewind.stagedBundleError()).toBeNull();
+    expect(rewind.stagedBundleFileName()).toBe('session.tar');
+
+    const bad = await rewind.previewStagedArchive(new Uint8Array([1, 2, 3, 4]), 'corrupt.tar');
+    expect(bad).toBeNull();
+    expect(rewind.stagedBundleError()).toBeTruthy();
+
+    rewind.recordRecentBundle(preview!, 'capture.tar', 2048);
+    expect(rewind.recentBundles().length).toBe(1);
+    rewind.removeRecentBundle(rewind.recentBundles()[0]!.id);
+    expect(rewind.recentBundles().length).toBe(0);
+
     expect((await rewind.importArtifactBundle(new Uint8Array([9, 9])))?.accepted).toBe(true);
     expect(rewind.stagedBundlePreview()).toBeNull();
+  });
+
+  it('guards loadElfFile against Observe read-only mode and supports custom board duplication', async () => {
+    localStorage.clear();
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const board = TestBed.inject(BoardStore);
+
+    rpc.setObserveOnly(true);
+    expect(await board.loadElfFile('app.elf', new Uint8Array(64), Core.Cpu0)).toBe(false);
+    expect(rpc.toasts().some((t) => t.message.includes('Observe mode is read-only'))).toBe(true);
+
+    const ra8p1 = board.boardPresets[1]!;
+    const copy = board.duplicateBoardPreset(ra8p1);
+    expect(board.savedBoards().length).toBe(1);
+    expect(copy.partNumber).toBe('CUSTOM');
+    board.removeCustomBoard(copy.id);
+    expect(board.savedBoards().length).toBe(0);
   });
 });

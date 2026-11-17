@@ -1,0 +1,221 @@
+@if (open() || standalone()) {
+  <div [class.sheet-backdrop]="!standalone()" [class.standalone-canvas]="standalone()" (click)="standalone() ? null : closed.emit()">
+    <div
+      [class.sheet-card]="!standalone()"
+      [class.standalone-card]="standalone()"
+      [attr.role]="standalone() ? null : 'dialog'"
+      [attr.aria-modal]="standalone() ? null : 'true'"
+      aria-label="New Workspace"
+      data-testid="new-workspace-dialog"
+      (click)="$event.stopPropagation()"
+      (keydown.escape)="closed.emit()"
+    >
+      <div class="sheet-head">
+        <app-section-kicker label="NEW WORKSPACE" />
+        <button type="button" class="es-ghost-link" data-testid="new-ws-cancel-btn" (click)="closed.emit()">Cancel</button>
+      </div>
+
+      <div class="field-group">
+        <div class="board-head-row">
+          <app-section-kicker label="TARGET BOARD PROFILE" />
+          <div class="board-tools">
+            <input
+              type="text"
+              class="board-search"
+              data-testid="new-ws-board-search"
+              placeholder="Search boards..."
+              [value]="boardQuery()"
+              (input)="onSearchInput($event)"
+            />
+            <button
+              type="button"
+              class="es-ghost-link"
+              data-testid="new-ws-import-board-btn"
+              (click)="importBoardFile()"
+            >
+              Import .board
+            </button>
+          </div>
+        </div>
+
+        <div class="preset-list">
+          @for (preset of filteredBoards(); track preset.id) {
+            <div class="preset-item" [class.is-active]="preset.id === selectedPresetId()">
+              <button
+                type="button"
+                class="preset-main"
+                [attr.data-testid]="'preset-' + preset.targetId"
+                (click)="selectPreset(preset)"
+              >
+                <div class="preset-line-top">
+                  <span class="preset-name">{{ preset.targetId.toUpperCase() }}</span>
+                  <span class="es-meta mono">{{ preset.partNumber }}</span>
+                  <span class="es-meta">{{ presetMeta(preset) }}</span>
+                </div>
+                <span class="es-subline">{{ boardSpecSubline(preset) }}</span>
+              </button>
+
+              <div class="preset-actions">
+                <span class="es-meta">{{ preset.partNumber === 'CUSTOM' ? 'Custom' : 'Default' }}</span>
+                <button
+                  type="button"
+                  class="mini-btn"
+                  [attr.data-testid]="'board-details-btn-' + preset.targetId"
+                  (click)="inspectedBoard.set(preset)"
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  class="mini-btn"
+                  [attr.data-testid]="'board-duplicate-btn-' + preset.targetId"
+                  (click)="duplicateBoard(preset)"
+                >
+                  Duplicate
+                </button>
+                @if (preset.partNumber === 'CUSTOM') {
+                  <button
+                    type="button"
+                    class="mini-btn is-danger"
+                    [attr.data-testid]="'board-remove-btn-' + preset.targetId"
+                    (click)="boardStore.removeCustomBoard(preset.id)"
+                  >
+                    Remove
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="config-grid">
+        <div class="config-row">
+          <span class="es-meta">Execution Target</span>
+          <div class="mode-strip" role="radiogroup" aria-label="Execution mode">
+            @for (mode of modes; track mode) {
+              <button
+                type="button"
+                role="radio"
+                class="mode-tab"
+                [class.is-active]="mode === selectedMode()"
+                [attr.aria-checked]="mode === selectedMode()"
+                (click)="selectedMode.set(mode)"
+              >
+                {{ mode }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="config-row">
+          <span class="es-meta">Project Source</span>
+          <div class="source-strip" role="radiogroup" aria-label="Project source">
+            @for (src of sources; track src) {
+              <button
+                type="button"
+                role="radio"
+                class="source-tab"
+                [class.is-active]="src === selectedSource()"
+                [attr.aria-checked]="src === selectedSource()"
+                (click)="selectedSource.set(src)"
+              >
+                {{ src }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="config-row">
+          <span class="es-meta">Firmware Image (.elf)</span>
+          <div class="elf-pick-wrap">
+            @if (pickedElf(); as elf) {
+              <span class="mono val-text">{{ elf.name }} ({{ formatBytes(elf.bytes.length) }} · Entry {{ elf.entryHex }})</span>
+            } @else {
+              <span class="es-meta">Optional prebuilt ELF to upload on attach</span>
+            }
+            <button type="button" class="mini-btn" data-testid="new-ws-pick-elf-btn" (click)="pickCpu0Elf()">
+              Choose .elf...
+            </button>
+          </div>
+        </div>
+      </div>
+
+      @if (elfError()) {
+        <p class="error-inline">{{ elfError() }}</p>
+      }
+
+      <div class="inputs-grid">
+        <label class="field-label">
+          <span class="es-meta">Workspace Name</span>
+          <input
+            type="text"
+            class="line-input"
+            data-testid="new-ws-name"
+            [value]="name()"
+            (input)="onNameInput($event)"
+            placeholder="EK-RA8D2 Debug Session"
+          />
+        </label>
+
+        <label class="field-label">
+          <span class="es-meta">Workspace Path or Artifact</span>
+          <input
+            type="text"
+            class="line-input mono"
+            data-testid="new-ws-path"
+            [value]="path()"
+            (input)="onPathInput($event)"
+            placeholder="~/work/ra8d2-session"
+          />
+        </label>
+      </div>
+
+      <div class="inputs-grid">
+        <label class="field-label">
+          <span class="es-meta">Host &amp; WebSocket RPC Endpoint</span>
+          <div class="host-combo">
+            <select class="host-select" aria-label="Saved hosts" (change)="onHostPresetSelect($event)">
+              <option value="">Host preset...</option>
+              <option value="ws://127.0.0.1:4567">Local (ws://127.0.0.1:4567)</option>
+              @for (p of remoteHosts.profiles(); track p.id) {
+                <option [value]="p.wsUrl">{{ p.name }} ({{ p.endpointUrl }})</option>
+              }
+            </select>
+            <input
+              type="text"
+              class="line-input mono"
+              data-testid="new-ws-url"
+              [value]="wsUrl()"
+              (input)="onUrlInput($event)"
+              placeholder="ws://127.0.0.1:4567"
+            />
+          </div>
+        </label>
+
+        <label class="check-row">
+          <input
+            type="checkbox"
+            data-testid="new-ws-recording-toggle"
+            [checked]="recording()"
+            (change)="onRecordingToggle($event)"
+          />
+          <span>Session Recording (64-round checkpoints)</span>
+        </label>
+      </div>
+
+      <div class="sheet-actions">
+        <app-tonal-button variant="ghost" (pressed)="closed.emit()">Cancel</app-tonal-button>
+        <app-tonal-button testId="new-ws-create-btn" [disabled]="!canSubmit()" (pressed)="submit()">
+          Create Workspace
+        </app-tonal-button>
+      </div>
+    </div>
+  </div>
+
+  <app-board-details-modal
+    [preset]="inspectedBoard()"
+    (closed)="inspectedBoard.set(null)"
+    (duplicate)="duplicateBoard($event)"
+  />
+}

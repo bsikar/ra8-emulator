@@ -69,17 +69,18 @@ export async function importLaunchArtifactFile(file: ArtifactFileLike, ctx: Arti
 /** Stages a `.tar`/`.tar.gz` bundle into `RewindStore`, records it, and navigates to `/rewind`. */
 export async function importLaunchArchiveFile(file: ArtifactFileLike, ctx: ArtifactImportContext): Promise<void> {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const preview = await ctx.rewind.previewStagedArchive(bytes);
-  if (!preview) return;
-  ctx.workspace.recordRecentWorkspace({
-    id: `arc:${file.name}`,
-    name: file.name.replace(/\.(tar\.gz|tgz|tar)$/i, ''),
-    path: file.name,
-    wsUrl: ctx.wsUrl,
-    pinned: false,
-    modeLabel: 'Session Archive',
-    artifactSummary: `${preview.entries.length} entries`,
-  });
-  ctx.rpc.pushToast(`Staged archive ${file.name} (${preview.entries.length} entries)`);
-  await ctx.navigate('/rewind');
+  const preview = await ctx.rewind.previewStagedArchive(bytes, file.name);
+  if (preview) {
+    ctx.workspace.recordRecentWorkspace({
+      id: `arc:${file.name}`,
+      name: file.name.replace(/\.(tar\.gz|tgz|tar)$/i, ''),
+      path: file.name,
+      wsUrl: ctx.wsUrl,
+      pinned: false,
+      modeLabel: 'Session Archive',
+      artifactSummary: `${preview.entries.length} entries`,
+    });
+    ctx.rpc.pushToast(`Staged archive ${file.name} (${preview.entries.length} entries)`);
+  }
+  await ctx.navigate('/import');
 }

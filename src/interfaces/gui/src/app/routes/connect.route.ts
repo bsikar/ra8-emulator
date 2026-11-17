@@ -120,6 +120,28 @@ export class ConnectRouteComponent implements OnInit {
     this.sshOpen.update((v) => !v);
   }
 
+  protected onSshHostChange(host: string): void {
+    this.sshHost.set(host);
+    const clean = host.trim();
+    const cur = this.endpointInput().trim().toLowerCase();
+    if (clean && (!cur || cur.startsWith('ssh://'))) {
+      this.endpointInput.set(`ssh://${clean}:${this.sshRemotePort()}`);
+    }
+  }
+
+  protected onSshRemotePortChange(port: number): void {
+    this.sshRemotePort.set(port);
+    const clean = this.sshHost().trim();
+    const cur = this.endpointInput().trim().toLowerCase();
+    if (clean && (!cur || cur.startsWith('ssh://'))) {
+      this.endpointInput.set(`ssh://${clean}:${port}`);
+    }
+  }
+
+  protected onSshLocalPortChange(port: number): void {
+    this.sshLocalPort.set(port);
+  }
+
   protected rescan(): void {
     const parsed = parseRemoteEndpoint(this.endpointInput(), this.sshLocalPort());
     const extra = parsed.valid ? [parsed.wsUrl] : [];

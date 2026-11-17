@@ -7,6 +7,18 @@ export const appRoutes: Routes = [
     loadComponent: () => import('./routes/launch.route').then((m) => m.LaunchRouteComponent),
   },
   {
+    path: 'open',
+    loadComponent: () => import('./routes/open-workspace.route').then((m) => m.OpenWorkspaceRouteComponent),
+  },
+  {
+    path: 'import',
+    loadComponent: () => import('./routes/import-archive.route').then((m) => m.ImportArchiveRouteComponent),
+  },
+  {
+    path: 'workspace/new',
+    loadComponent: () => import('./routes/new-workspace.route').then((m) => m.NewWorkspaceRouteComponent),
+  },
+  {
     path: 'connect',
     loadComponent: () => import('./routes/connect.route').then((m) => m.ConnectRouteComponent),
   },

@@ -78,4 +78,26 @@ describe('RemoteHostsStore', () => {
     expect(refreshedUp?.lastStatus).toBe('loopback');
     expect(refreshedDown?.lastStatus).toBe('offline');
   });
+
+  it('classifies SSH tunnel profiles (dev, neo) as online with remote->local endpoint labels', async () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.connectionState.set('disconnected');
+    const store = TestBed.inject(RemoteHostsStore);
+
+    store.saveProfile({ endpointUrl: 'ssh://dev:4571', name: 'dev (Linux)', sshLocalPort: 14571 });
+    store.saveProfile({ endpointUrl: 'ssh://neo:4572', name: 'neo (macOS)', sshLocalPort: 14572 });
+    store.setProbeForTest(async (wsUrl) => {
+      if (wsUrl.endsWith(':14571') || wsUrl.endsWith(':14572')) {
+        return { reachable: true, latencyMs: 4.2, caps: CAP_TRANSPORT };
+      }
+      return { reachable: false, latencyMs: 0, caps: 0 };
+    });
+
+    const live = await store.rescanLiveSessions();
+    expect(live.length).toBe(2);
+    expect(live.every((s) => s.status === 'online')).toBe(true);
+    expect(live.some((s) => s.endpointLabel === 'ssh://dev:4571 -> ws://127.0.0.1:14571')).toBe(true);
+    expect(live.some((s) => s.endpointLabel === 'ssh://neo:4572 -> ws://127.0.0.1:14572')).toBe(true);
+  });
 });

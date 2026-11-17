@@ -1,0 +1,150 @@
+<div class="import-canvas">
+  <div class="import-column">
+    <div class="import-toolbar">
+      <div class="toolbar-left">
+        <button
+          type="button"
+          class="back-btn"
+          data-testid="import-back-btn"
+          aria-label="Back to Launch"
+          (click)="goBack()"
+        >
+          <app-launch-icon name="arrow-left" [size]="16" />
+        </button>
+
+        <app-launch-icon name="import-archive" [size]="17" class="archive-icon" />
+
+        <input
+          type="text"
+          class="path-input mono"
+          data-testid="import-path-input"
+          placeholder="Select or drop a .tar / .tar.gz RA8 session bundle..."
+          aria-label="Session bundle archive path"
+          [value]="archivePath()"
+          (input)="onPathInput($event)"
+        />
+      </div>
+
+      <div class="toolbar-actions">
+        <button
+          type="button"
+          class="es-ghost-link"
+          data-testid="import-browse-btn"
+          (click)="browseArchive()"
+        >
+          <app-launch-icon name="open-folder" [size]="14" />
+          <span>Browse</span>
+        </button>
+
+        @if (canExportActive()) {
+          <button
+            type="button"
+            class="es-ghost-link"
+            data-testid="import-export-btn"
+            (click)="exportActiveBundle()"
+          >
+            <span>Export Active</span>
+          </button>
+        }
+
+        <button
+          type="button"
+          class="import-submit-btn"
+          data-testid="import-submit-btn"
+          [disabled]="rewind.stagedBundlePreview() === null || importing()"
+          (click)="importStaged()"
+        >
+          <app-launch-icon name="arrow-right" [size]="14" />
+          <span>{{ importing() ? 'Importing...' : 'Import Session' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <section class="import-card" data-testid="import-card">
+      <div class="section-head">
+        <app-section-kicker label="STAGED BUNDLE · RA8-SESSION-BUNDLE V1" />
+        @if (rewind.stagedBundlePreview()) {
+          <app-status-dot tone="nominal" label="ADMISSION VERIFIED" data-testid="import-admission-status" />
+        } @else if (rewind.stagedBundleError()) {
+          <app-status-dot tone="fault" label="INVALID ARCHIVE" data-testid="import-admission-status" />
+        } @else {
+          <app-status-dot tone="muted" label="NO BUNDLE STAGED" data-testid="import-admission-status" />
+        }
+      </div>
+
+      @if (rewind.stagedBundlePreview()) {
+        <div class="summary-rows" data-testid="import-staged-summary">
+          @for (row of summaryRows(); track row.label) {
+            <div class="kv-row">
+              <span class="kv-label">{{ row.label }}</span>
+              <span class="kv-val mono">{{ row.value }}</span>
+            </div>
+          }
+        </div>
+      } @else if (rewind.stagedBundleError()) {
+        <div class="error-row" data-testid="import-error">
+          <span class="error-title">Bundle admission failed</span>
+          <span class="error-detail mono">{{ rewind.stagedBundleError() }}</span>
+        </div>
+      } @else {
+        <div class="empty-row" data-testid="import-empty-staged">
+          <div class="empty-copy">
+            <span class="empty-title">Stage a <span class="mono">.tar</span> or <span class="mono">.tar.gz</span> bundle to inspect manifest &amp; save state.</span>
+            <span class="empty-hint">Verifies POSIX USTAR headers, path traversal safety, and embedded board / ELF metadata before upload.</span>
+          </div>
+          <button type="button" class="es-tonal-btn" (click)="browseArchive()">Choose Bundle...</button>
+        </div>
+      }
+
+      <div class="section-head is-secondary">
+        <app-section-kicker label="RECENT &amp; STAGED BUNDLES" />
+        <app-section-kicker label="TYPE" />
+      </div>
+
+      <div class="recent-list" data-testid="import-recent-list">
+        @if (rewind.recentBundles().length === 0) {
+          <div class="empty-row" data-testid="import-recent-empty">
+            <div class="empty-copy">
+              <span class="empty-title">No imported session bundles yet.</span>
+              <span class="empty-hint">Imported recording bundles and snapshot archives appear here automatically.</span>
+            </div>
+          </div>
+        } @else {
+          @for (bundle of rewind.recentBundles(); track bundle.id) {
+            <div class="recent-row" [attr.data-testid]="'bundle-row-' + bundle.id">
+              <div class="recent-main">
+                <div class="recent-top">
+                  <span class="recent-name">{{ bundle.name }}</span>
+                  <span class="es-meta">{{ bundle.board }} · {{ bundle.elfSummary }}</span>
+                </div>
+                <div class="es-subline">{{ bundle.path }} · {{ formatBytes(bundle.sizeBytes) }}</div>
+              </div>
+              <div class="recent-right">
+                <span class="es-meta mono">
+                  {{ bundle.recording ? 'Full Recording' : bundle.hasSaveState ? 'Snapshot Only' : 'Archive' }}
+                  · {{ formatAge(bundle.importedIso) }}
+                </span>
+                <button
+                  type="button"
+                  class="remove-btn"
+                  [attr.data-testid]="'bundle-remove-' + bundle.id"
+                  (click)="rewind.removeRecentBundle(bundle.id)"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  </div>
+
+  <input
+    type="file"
+    class="hidden-file-input"
+    data-testid="import-file-input"
+    accept=".tar,.tar.gz,.tgz"
+    (change)="onFallbackFileSelected($event)"
+  />
+</div>

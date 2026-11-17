@@ -65,7 +65,7 @@ import { LaunchIconComponent } from '../launch/launch-icons.component';
                 <span class="connect-meta es-meta">{{ session.archSummary }}</span>
               </div>
               <div class="connect-subline es-subline">
-                {{ session.wsUrl }} · {{ session.elfName }}
+                {{ session.endpointLabel ?? session.wsUrl }} · {{ session.elfName }}
                 @if (session.checkpointCount !== undefined && session.checkpointCount > 0) {
                   <span> · {{ session.checkpointCount }} checkpoints</span>
                 }
