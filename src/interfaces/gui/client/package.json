@@ -20,8 +20,10 @@
     "src"
   ],
   "scripts": {
+    "prepare": "tsc",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm run build",
     "test": "node test/client.test.js"
   },
   "dependencies": {},
