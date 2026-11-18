@@ -154,7 +154,7 @@ These use pinned zlinter rules plus import-style, 120-column line-width,
 and per-function complexity rules in `tools/lint/`.
 Keep imports in named namespace declarations, followed by a blank line before
 other declarations. Namespace reexports and test-root comptime registration
-are supported. The lint scope excludes GUI/render code, tools/gui_smoke.zig, and fetched packages.
+are supported. The lint scope excludes GUI/render code and fetched packages.
 The checked-in baseline records existing findings; new findings fail CI.
 Complexity is limited to branch score 15 and nesting depth 3; README.md
 defines the metric. An increased score changes the diagnostic fingerprint
