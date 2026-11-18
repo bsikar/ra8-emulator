@@ -114,6 +114,8 @@ test {
     _ = @import("icu/irqcr_test.zig");
     _ = @import("icu/intsel_test.zig");
     _ = @import("icu/nmi_test.zig");
+    _ = @import("icu/source_test.zig");
+    _ = @import("irq_source_test.zig");
     _ = @import("lanes_test.zig");
     _ = @import("lvd/field_lock_test.zig");
     _ = @import("lvd/interlock_test.zig");
@@ -152,6 +154,7 @@ test {
     _ = @import("itm_test.zig");
     _ = @import("dcb_test.zig");
     _ = @import("dwt_test.zig");
+    _ = @import("fpb_test.zig");
     _ = @import("ipc/ipc_test.zig");
     _ = @import("ipc/sync_test.zig");
     _ = @import("ipc/attr_test.zig");

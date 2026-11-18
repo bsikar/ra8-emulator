@@ -9,7 +9,6 @@ const std = @import("std");
 const Board = @import("ra8_board").board.Board;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const debug_session = @import("../session.zig");
-const dwt = @import("ra8_chip").periph.dwt;
 const elf = @import("ra8_board").image.elf;
 pub const files = @import("files.zig");
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
@@ -123,10 +122,7 @@ pub const Harness = struct {
         into.unwatch(0, &self.state.cpu);
     }
 
-    /// Publish ThreadX module loads, unloads and faults on the session's event
-    /// stream (RA8EMU-1139), read from the Module Manager's list at each
-    /// chunk boundary. False when the image has no Module Manager; call
-    /// once, after open.
+    /// Publish ThreadX module loads, unloads and faults on the event stream.
     pub fn watchModules(self: *Harness) bool {
         const state = self.state;
         const head = symbols.addressOf(state.image, txm_modules.list_symbol) orelse return false;
@@ -246,23 +242,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     const vector = state.image.vectorBaseFor(state.board.desc().memory) orelse return error.NoVectorTable;
     option_memory.apply(&state.board.heartbeat, state.cpu0.own());
     const primary = chosen.primary();
-    state.memory = .{
-        .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } },
-        .periph = &state.board.bus,
-        .scs = .{
-            .partitions = if (primary.security) &state.board.partitions else null,
-            .regions = &state.board.regions,
-            .clears = &state.board.clears,
-        },
-    };
-    // The MPU check, as a plain run arms it (boot.zig), before any view copies
-    // the direct path; without it a session core refused nothing (RA8EMU-1148).
-    state.check = .{ .unit = &state.board.regions, .state = &state.cpu.banked.current };
-    state.memory.armCheck(&state.check);
-    state.machine = .{ .dwt = .{ .numcomp = dwt.numcompOf(primary.cpuid) } };
-    state.driver = .{ .machine = &state.machine };
-    state.watching = .{ .inner = state.memory.view(), .driver = &state.driver };
-    state.pending = .{};
+    wirePrimaryScs(state, primary);
     state.quiet = .{ .inner = state.pending.source(), .memory = state.watching.view() };
     state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
     state.cpu.profile = primary.profile;
@@ -274,8 +254,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.formed = try block_cache.form(state.cpu0.own().store.fanMut());
     errdefer block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
     state.cpu.blocks = state.formed;
-    // CPACR and the FP context words reach the core's FP state (boot.zig), else NOCP (RA8EMU-950).
-    state.memory.scs.fp = &state.cpu.fp;
+    state.memory.scs.attachFp(&state.cpu.fp, primary.hasFpu() or primary.mve);
     try state.cpu.reset(vector);
     state.loading = .{ .allocator = allocator };
     errdefer state.loading.deinit();
@@ -284,6 +263,38 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.reboot = .{ .vector_base = vector };
     try wire(state, allocator, io, options);
     return .{ .state = state };
+}
+
+fn wirePrimaryScs(state: *State, primary: anytype) void {
+    const numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m);
+    state.memory = .{
+        .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } },
+        .periph = &state.board.bus,
+        .scs = .{
+            .partitions = if (primary.security) &state.board.partitions else null,
+            .regions = &state.board.regions,
+            .regions_ns = if (primary.security) &state.board.regions_ns else null,
+            .clears = &state.board.clears,
+            .config = primary.scs,
+            .systicks = primary.systicks,
+            .has_security = primary.security,
+            .dwt_numcomp = numcomp,
+        },
+    };
+    state.check = .{
+        .unit = &state.board.regions,
+        .unit_ns = if (primary.security) &state.board.regions_ns else null,
+        .state = &state.cpu.banked.current,
+    };
+    state.memory.armCheck(&state.check);
+    state.machine = .{ .dwt = .{ .numcomp = numcomp }, .fpb = .{ .num_code = primary.scs.fpb_code } };
+    state.driver = .{ .machine = &state.machine };
+    state.watching = .{ .inner = state.memory.view(), .driver = &state.driver };
+    state.pending = .{ .model = .{
+        .irq_lines = primary.scs.irq_lines,
+        .prio_bits = primary.scs.prio_bits,
+        .systicks = primary.systicks,
+    } };
 }
 
 /// Assemble the session around the wired cores: hooks, history, display, and

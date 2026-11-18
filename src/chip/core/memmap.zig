@@ -235,6 +235,7 @@ pub const syst = struct {
 /// src/chip/periph/nvic/nvic.zig folds the clear side into the set side at the
 /// chunk boundary.
 pub const nvic = struct {
+    pub const ictr: u32 = 0xE000_E004;
     pub const iser: u32 = 0xE000_E100;
     pub const icer: u32 = 0xE000_E180;
     pub const ispr: u32 = 0xE000_E200;

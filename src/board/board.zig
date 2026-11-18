@@ -47,6 +47,7 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const i2c = @import("i2c.zig");
 const icu = @import("ra8_chip").periph.icu;
 const ipc = @import("ra8_chip").periph.ipc;
+const irq_source = @import("ra8_chip").periph.irq_source;
 const iwdt = @import("ra8_chip").periph.iwdt;
 const lpm = @import("ra8_chip").periph.lpm;
 const lvd = @import("ra8_chip").periph.lvd;
@@ -346,7 +347,6 @@ pub const Board = struct {
     /// The SAU window, third PPB block: TYPE is hardwired like the MPU's.
     partitions: sau.Sau,
     /// Where a reset this board decides on is left for the engine to perform.
-    /// main.zig points it at the run's seam; a test's board leaves it null.
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.
     event_sink: ?event_sink_api.EventSink = null,
@@ -356,6 +356,7 @@ pub const Board = struct {
     part: part.Part = .ra8d2,
     /// Explicit machine description; null uses the catalog entry for `part`.
     machine: ?*const machine_mod.Machine = null,
+    irq_override: [2]?irq_source.IrqSource = .{ null, null },
 
     pub fn desc(self: *const Board) *const machine_mod.Machine {
         return self.machine orelse machine_mod.catalog.ofPart(self.part);
@@ -387,6 +388,8 @@ pub const Board = struct {
     pub const tick = boundary.tick;
     pub const tickFrom = boundary.tickFrom;
     pub const raise = boundary.raise;
+    pub const irqSource = boundary.irqSource;
+    pub const clearIrqLatches = boundary.clearIrqLatches;
     pub const takeResetRequests = boundary.takeResetRequests;
     pub const requestReset = boundary.resetFor;
     pub const requestResetFrom = boundary.resetForFrom;

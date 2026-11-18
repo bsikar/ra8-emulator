@@ -36,19 +36,29 @@ pub const idau = @import("../idau.zig");
 
 /// The window's fixed shape: how many regions this core reports out of TYPE.
 pub const geometry = struct {
-    /// Regions the modelled core implements. dev's emu_console.h seeds
-    /// SAU_TYPE with 0x0000_0008 and calls it "SAU_TYPE.SREGION: M85
-    /// implements 8", which is the count the C emulator has been handing
-    /// this same firmware all along.
+    /// Regions the modelled core implements by default.
     pub const regions: u8 = 8;
+    /// Maximum configurable SAU regions supported by the table.
+    pub const max_regions: usize = 16;
     /// What a read of TYPE gives back: SREGION sits in the low byte and the
     /// rest of the word is reserved.
     pub const type_value: u32 = regions;
 
-    /// The region a select value names, wrapped into the implemented set the
-    /// way a 3-bit RNR field does with 8 regions.
+    /// TYPE word for an arbitrary configured SAU region count.
+    pub fn typeValueFor(count: u8) u32 {
+        return @min(count, @as(u8, max_regions));
+    }
+
+    /// The region a select value names, wrapped into the default 8-region set.
     pub fn selects(rnr: u32) u8 {
-        return @intCast(rnr % regions);
+        return selectsIn(rnr, regions);
+    }
+
+    /// The region a select value names, wrapped into `count` regions.
+    pub fn selectsIn(rnr: u32, count: u8) u8 {
+        const active = @min(count, @as(u8, max_regions));
+        if (active == 0) return 0;
+        return @intCast(rnr % active);
     }
 };
 
@@ -114,7 +124,9 @@ pub const Region = struct {
 /// The SAU window: the hardwired count the firmware reads out of it, and the
 /// region map it programmes into it.
 pub const Sau = struct {
-    table: [geometry.regions]Region = @splat(.{}),
+    table: [geometry.max_regions]Region = @splat(.{}),
+    /// Implemented SAU region count advertised in SAU_TYPE.SREGION (0..max_regions).
+    region_count: u8 = geometry.regions,
     /// RNR as the firmware last left it.
     selected: u8 = 0,
     /// CTRL as the firmware last left it, so the report can say whether the
@@ -130,21 +142,30 @@ pub const Sau = struct {
         return .{};
     }
 
+    pub fn setRegions(self: *Sau, count: u8) void {
+        self.region_count = @min(count, @as(u8, geometry.max_regions));
+        self.selected = geometry.selectsIn(self.selected, self.region_count);
+        if (self.region_count == 0) self.ctrl = 0;
+    }
+
+    pub fn typeValue(self: *const Sau) u32 {
+        return geometry.typeValueFor(self.region_count);
+    }
+
     /// Put the hardwired count in place, so the firmware's first read of
     /// TYPE is this core's region count rather than the zero the mapping
-    /// starts at. This one write is what lets the secure boot past its
-    /// capability check.
+    /// starts at.
     pub fn prime(self: *Sau, core: anytype) !void {
-        _ = self;
-        try core.writeWord(memmap.sau.type_, geometry.type_value);
+        try core.writeWord(memmap.sau.type_, self.typeValue());
     }
 
     /// Keep TYPE read-only. A store that lands on it is counted and the
     /// count put back, the same rule the MPU window keeps over its own TYPE.
     pub fn poll(self: *Sau, core: anytype) !void {
-        if (try core.readWord(memmap.sau.type_) != geometry.type_value) {
+        const expected = self.typeValue();
+        if (try core.readWord(memmap.sau.type_) != expected) {
             self.refused +%= 1;
-            try core.writeWord(memmap.sau.type_, geometry.type_value);
+            try core.writeWord(memmap.sau.type_, expected);
         }
     }
 
@@ -153,13 +174,15 @@ pub const Sau = struct {
     pub const Cue = enum { none, rebank };
 
     /// File one store into the window under the region RNR names, and say
-    /// whether the selection moved. CTRL is taken here rather than left for
-    /// the next poll because a run can end between the store and the poll,
-    /// and then the report would call an enabled SAU disabled.
+    /// whether the selection moved.
     pub fn observe(self: *Sau, address: u32, value: u32) Cue {
+        if (self.region_count == 0) {
+            if (address == memmap.sau.ctrl) self.ctrl = value & field.ctrl_allns;
+            return .none;
+        }
         switch (address) {
             memmap.sau.rnr => {
-                self.selected = geometry.selects(value);
+                self.selected = geometry.selectsIn(value, self.region_count);
                 return .rebank;
             },
             memmap.sau.ctrl => self.ctrl = value,
@@ -180,22 +203,25 @@ pub const Sau = struct {
 
     /// The pair the firmware should read back for the selected region.
     pub fn bankedPair(self: *const Sau) Region {
+        if (self.region_count == 0) return .{};
         return self.table[self.selected];
     }
 
     pub fn on(self: *const Sau) bool {
-        return self.ctrl & field.ctrl_enable != 0;
+        return self.region_count > 0 and self.ctrl & field.ctrl_enable != 0;
     }
 
-    /// Whether the firmware asked for memory outside every region to be
-    /// treated as Non-Secure.
+    /// Whether memory outside every enabled SAU region is treated as
+    /// Non-secure. With zero SAU regions configured, the SAU contributes
+    /// Non-secure so attribution defers purely to the IDAU.
     pub fn outsideIsNonSecure(self: *const Sau) bool {
+        if (self.region_count == 0) return true;
         return self.ctrl & field.ctrl_allns != 0;
     }
 
     pub fn programmed(self: *const Sau) u8 {
         var count: u8 = 0;
-        for (self.table) |region| {
+        for (self.table[0..@min(self.region_count, @as(u8, geometry.max_regions))]) |region| {
             if (region.enabled) count += 1;
         }
         return count;
@@ -203,7 +229,7 @@ pub const Sau = struct {
 
     pub fn callable(self: *const Sau) u8 {
         var count: u8 = 0;
-        for (self.table) |region| {
+        for (self.table[0..@min(self.region_count, @as(u8, geometry.max_regions))]) |region| {
             if (region.enabled and region.callable) count += 1;
         }
         return count;

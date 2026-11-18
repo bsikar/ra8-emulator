@@ -20,15 +20,28 @@ pub const Feature = enum {
     lob,
 };
 
+/// The floating-point unit a core implements.
+pub const Fpu = enum {
+    none,
+    /// FPv5 single precision, as a Cortex-M33 carries it.
+    single,
+    /// FPv5 single and double precision, as a Cortex-M85 carries it.
+    double,
+};
+
 pub const Profile = struct {
     v8_1m: bool,
     mve: bool,
     lob: bool,
+    fpu: Fpu = .double,
+    prio_bits: u4 = 4,
+    irq_lines: u16 = 96,
+    init_vtor: ?u32 = null,
 
     /// Cortex-M85: everything the decode table has.
-    pub const m85: Profile = .{ .v8_1m = true, .mve = true, .lob = true };
+    pub const m85: Profile = .{ .v8_1m = true, .mve = true, .lob = true, .fpu = .double };
     /// Cortex-M33: Armv8.0-M Mainline, DSP, FPv5-SP.
-    pub const m33: Profile = .{ .v8_1m = false, .mve = false, .lob = false };
+    pub const m33: Profile = .{ .v8_1m = false, .mve = false, .lob = false, .fpu = .single };
 
     pub fn has(self: Profile, feature: Feature) bool {
         return switch (feature) {
@@ -37,5 +50,12 @@ pub const Profile = struct {
             .mve => self.mve,
             .lob => self.lob,
         };
+    }
+
+    /// Mask of implemented priority bits in an 8-bit priority byte.
+    pub fn prioMask(self: Profile) u8 {
+        if (self.prio_bits == 0) return 0;
+        if (self.prio_bits >= 8) return 0xFF;
+        return @as(u8, 0xFF) << @intCast(8 - @as(u5, self.prio_bits));
     }
 };

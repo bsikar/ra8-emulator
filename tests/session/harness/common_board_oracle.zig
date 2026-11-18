@@ -39,6 +39,7 @@ pub const board_excluded = .{
     .{ .name = "input_landing", .reason = "History input landing observer callback" },
     .{ .name = "panel_vsync", .reason = "Root vsync config; live phase is in display.output.vsync" },
     .{ .name = "machine", .reason = "Root machine topology; hashed by name alongside board.part" },
+    .{ .name = "irq_override", .reason = "Optional embedder external interrupt source wiring" },
 };
 
 comptime {
