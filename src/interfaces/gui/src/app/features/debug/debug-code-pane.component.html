@@ -16,7 +16,7 @@
         <button type="button" class="mini-btn" [class.is-active]="splitCores()" data-testid="debug-split-cores-btn" (click)="splitCores.set(!splitCores())">Split CPU0 | CPU1</button>
       }
       @if (canSkipBkpt()) {
-        <button type="button" class="mini-btn" data-testid="debug-skip-bkpt-btn" [disabled]="rpc.observeOnly()" (click)="execution.skipBkpt()">Skip BKPT</button>
+        <button type="button" class="mini-btn" data-testid="debug-skip-bkpt-btn" [disabled]="rpc.observeOnly()" (click)="execution.skipBkpt(debug.activeCore())">Skip BKPT</button>
       }
       <form class="jump-form" (submit)="onJumpSubmit($event)">
         <input
@@ -39,12 +39,29 @@
     </div>
   </div>
 
+  @if (openTabs().length > 0 && (mode() === 'source' || mode() === 'mixed')) {
+    <div class="file-tab-strip mono" data-testid="debug-file-tabs">
+      @for (tab of openTabs(); track tab) {
+        <button
+          type="button"
+          class="file-tab"
+          [class.is-active]="selectedTabPath() === tab"
+          (click)="selectTab(tab)"
+        >
+          {{ tabTitle(tab) }}
+        </button>
+      }
+    </div>
+  }
+
   @if (vim.enabled()) {
     <div class="vim-strip mono" data-testid="debug-vim-strip">
       <span>{{ vim.statusLabel() }}</span>
       <span>Ln {{ vim.cursor().line + 1 }}, Col {{ vim.cursor().col + 1 }}</span>
       @if (vim.searchPromptActive()) {
         <span>Search: {{ vim.searchBuffer() }}</span>
+      } @else if (vim.bufferState().lastSearchPattern) {
+        <span>Match: {{ vim.bufferState().lastSearchPattern }}</span>
       }
     </div>
   }
@@ -64,6 +81,7 @@
             class="es-code-line"
             [class.is-active]="line.isActive"
             [class.is-vim-cursor]="vimCursorLine() === $index"
+            [class.is-search-hit]="isSearchMatch(line.text)"
             [attr.data-vim-line]="$index"
             [attr.data-addr]="line.address !== null ? hex(line.address) : null"
           >
@@ -77,14 +95,17 @@
             >
               <span class="es-bp-dot" [class.is-set]="line.hasBreakpoint"></span>
             </button>
-            <span class="es-code-ln mono">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
+            @if (markLabelsByLine()[$index]; as markTag) {
+              <span class="vim-mark mono" data-testid="debug-vim-mark">'{{ markTag }}</span>
+            }
+            <span class="es-code-ln mono" [class.is-wide]="mode() !== 'source'">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
             @if (line.rawHex) {
               <span class="raw-bytes mono">{{ line.rawHex }}</span>
             }
             @if (line.symbol) {
               <span class="sym-tag mono">&lt;{{ line.symbol }}&gt;</span>
             }
-            <span class="code-tokens">
+            <span class="code-tokens mono">
               @for (tok of line.tokens; track $index) {
                 <span [class]="'tok-' + tok.kind">{{ tok.text }}</span>
               }
@@ -100,10 +121,24 @@
       <div class="es-code-buffer code-col split-right">
         <div class="split-core-hdr mono">CPU1 · Cortex-M33</div>
         @for (line of cpu1Lines(); track line.key) {
-          <div class="es-code-line" [class.is-active]="line.isActive">
-            <span class="es-bp-dot" [class.is-set]="line.hasBreakpoint"></span>
-            <span class="es-code-ln mono">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
-            <span class="code-tokens">
+          <div class="es-code-line" [class.is-active]="line.isActive" [attr.data-addr]="line.address !== null ? hex(line.address) : null">
+            <button
+              type="button"
+              class="gutter-btn"
+              [disabled]="line.address === null || rpc.observeOnly()"
+              (click)="toggleLineBreakpoint(line.address, cpu1)"
+              aria-label="Toggle CPU1 breakpoint"
+            >
+              <span class="es-bp-dot" [class.is-set]="line.hasBreakpoint"></span>
+            </button>
+            <span class="es-code-ln mono is-wide">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
+            @if (line.rawHex) {
+              <span class="raw-bytes mono">{{ line.rawHex }}</span>
+            }
+            @if (line.symbol) {
+              <span class="sym-tag mono">&lt;{{ line.symbol }}&gt;</span>
+            }
+            <span class="code-tokens mono">
               @for (tok of line.tokens; track $index) {
                 <span [class]="'tok-' + tok.kind">{{ tok.text }}</span>
               }

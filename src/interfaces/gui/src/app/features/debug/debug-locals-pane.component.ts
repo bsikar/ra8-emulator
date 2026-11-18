@@ -1,10 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { SetVarStatus } from 'ra8-rpc-client';
 import { RpcConnectionStore } from '../../core/rpc/rpc-connection.store';
 import { BoardStore } from '../../core/stores/board.store';
 import { DebugStore } from '../../core/stores/debug.store';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { type EvaluatedLocal } from '../../shared/utils/dwarf-eval';
-import { evaluateWatchExpressions } from './debug-view';
+import { evaluateWatchExpressions, parseRegisterOrMemoryValue } from './debug-view';
+
+function encodeScalarBytes(value: number, size: number): Uint8Array {
+  const byteLen = size === 1 ? 1 : size === 2 ? 2 : 4;
+  const out = new Uint8Array(byteLen);
+  const view = new DataView(out.buffer);
+  if (byteLen === 1) view.setUint8(0, value & 0xff);
+  else if (byteLen === 2) view.setUint16(0, value & 0xffff, true);
+  else view.setUint32(0, value >>> 0, true);
+  return out;
+}
 
 @Component({
   selector: 'app-debug-locals-pane',
@@ -21,7 +32,7 @@ import { evaluateWatchExpressions } from './debug-view';
               class="mini-btn"
               data-testid="debug-undo-write-btn"
               [disabled]="rpc.observeOnly()"
-              (click)="debug.undoWrite()"
+              (click)="debug.undoWrite(debug.activeCore())"
             >
               Undo Write
             </button>
@@ -33,9 +44,9 @@ import { evaluateWatchExpressions } from './debug-view';
               data-testid="debug-watch-input"
               [value]="watchDraft()"
               (input)="onWatchInput($event)"
-              placeholder="+ Watch"
+              placeholder="symbol or 0x..."
             />
-            <button type="submit" class="mini-btn" data-testid="debug-watch-add-btn">Add</button>
+            <button type="submit" class="mini-btn" data-testid="debug-watch-add-btn">+ Add Watch</button>
           </form>
         </div>
       </div>
@@ -44,16 +55,17 @@ import { evaluateWatchExpressions } from './debug-view';
         @for (local of debug.locals(); track local.name) {
           <div class="var-row" [attr.data-testid]="'debug-local-' + local.name">
             <span class="var-name mono ellipsis">{{ local.name }}</span>
-            <span class="var-type es-meta ellipsis">{{ local.typeName }}</span>
+            <span class="var-type es-meta mono ellipsis">{{ local.typeName }}</span>
             <span class="var-where es-meta mono ellipsis">{{ local.locationLabel }}</span>
             @if (editingLocal() === local.name) {
-              <form class="inline-edit" (submit)="commitLocal($event, local.name)">
+              <form class="inline-edit" (submit)="commitLocal($event, local)">
                 <input
                   type="text"
                   class="edit-input mono"
                   data-testid="debug-local-edit-input"
                   [value]="editDraft()"
                   (input)="onEditInput($event)"
+                  (keydown.escape)="editingLocal.set(null)"
                   aria-label="Edit local variable value"
                 />
                 <button type="submit" class="mini-btn" data-testid="debug-local-save-btn">Set</button>
@@ -70,7 +82,8 @@ import { evaluateWatchExpressions } from './debug-view';
               </button>
             } @else {
               <span class="ro-val mono" [title]="readOnlyReason(local)">
-                {{ local.valueHex }} · read-only
+                {{ local.valueHex }}
+                <span class="ro-badge">{{ readOnlyBadge(local) }}</span>
               </span>
             }
           </div>
@@ -79,9 +92,10 @@ import { evaluateWatchExpressions } from './debug-view';
         @for (w of evaluatedWatches(); track w.expr) {
           <div class="var-row" [attr.data-testid]="'debug-watch-row-' + w.expr">
             <span class="var-name mono ellipsis">{{ w.expr }}</span>
-            <span class="var-type es-meta ellipsis">{{ w.detail }}</span>
+            <span class="var-type es-meta mono ellipsis">watch</span>
+            <span class="var-where es-meta mono ellipsis">{{ w.detail }}</span>
             <span class="var-val mono">{{ w.valueHex }}</span>
-            <button type="button" class="rm-btn" (click)="debug.removeWatchExpression(w.expr)">×</button>
+            <button type="button" class="rm-btn" aria-label="Remove watch" (click)="debug.removeWatchExpression(w.expr)">×</button>
           </div>
         }
 
@@ -97,7 +111,7 @@ import { evaluateWatchExpressions } from './debug-view';
       .locals-pane { display: flex; flex-direction: column; height: 100%; min-width: 0; }
       .pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--es-border); flex-wrap: wrap; }
       .head-actions, .watch-form, .inline-edit { display: inline-flex; align-items: center; gap: 6px; }
-      .watch-input, .edit-input { background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; width: 96px; padding: 2px 4px; }
+      .watch-input, .edit-input { background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; width: 104px; padding: 2px 4px; }
       .mini-btn, .val-btn, .rm-btn { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 6px; cursor: pointer; }
       .val-btn { border-color: transparent; color: var(--es-text-primary); text-align: right; }
       .val-btn:hover { border-color: var(--es-border); background: var(--es-interactive); }
@@ -106,7 +120,8 @@ import { evaluateWatchExpressions } from './debug-view';
       .var-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; border-bottom: 1px solid var(--es-divider); font-size: 12px; min-width: 0; }
       .var-name { color: var(--es-text-primary); min-width: 64px; }
       .var-type, .var-where { flex: 1; }
-      .ro-val, .var-val { color: var(--es-text-muted); white-space: nowrap; }
+      .ro-val, .var-val { color: var(--es-text-muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+      .ro-badge { border: 1px solid var(--es-border); border-radius: var(--es-radius-sm); padding: 0 4px; font-size: 12px; color: var(--es-text-muted); }
       .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
       .note { margin: 8px 0; }
     `,
@@ -133,12 +148,21 @@ export class DebugLocalsPaneComponent {
   protected isWritable(local: EvaluatedLocal): boolean {
     if (this.rpc.observeOnly()) return false;
     if (local.locationLabel === 'optimized out' || local.locationLabel.includes('unwound')) return false;
+    if (local.valueHex === '—' || local.size > 8) return false;
     return true;
+  }
+
+  protected readOnlyBadge(local: EvaluatedLocal): string {
+    if (this.rpc.observeOnly()) return 'read-only';
+    if (local.locationLabel.includes('unwound')) return 'unwound';
+    if (local.size > 8) return 'read-only';
+    return 'read-only';
   }
 
   protected readOnlyReason(local: EvaluatedLocal): string {
     if (this.rpc.observeOnly()) return 'Read-only in Observe mode';
     if (local.locationLabel.includes('unwound')) return 'Register local unavailable on unwound caller frame';
+    if (local.size > 8) return 'Composite variable editing is disabled';
     return 'Optimized out by compiler';
   }
 
@@ -161,11 +185,19 @@ export class DebugLocalsPaneComponent {
     this.editDraft.set((event.target as HTMLInputElement).value);
   }
 
-  protected async commitLocal(event: Event, name: string): Promise<void> {
+  protected async commitLocal(event: Event, local: EvaluatedLocal): Promise<void> {
     event.preventDefault();
     const val = this.editDraft().trim();
     if (!val) return;
-    await this.debug.setVar(name, val);
+    const reply = await this.debug.setVar(local.name, val, this.debug.selectedFrameIndex(), this.debug.activeCore());
+    if ((!reply || reply.status !== SetVarStatus.Ok) && local.address !== null) {
+      const parsed = parseRegisterOrMemoryValue(val);
+      if (parsed !== null) {
+        const bytes = encodeScalarBytes(parsed, local.size || 4);
+        const ok = await this.debug.writeMemoryBytes(local.address, bytes, this.debug.activeCore());
+        if (ok) await this.debug.refreshSourceAndLocals(this.debug.selectedFrameIndex());
+      }
+    }
     this.editingLocal.set(null);
   }
 }

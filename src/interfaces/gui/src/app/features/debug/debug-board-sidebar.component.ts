@@ -5,6 +5,7 @@ import {
   ElementRef,
   OnDestroy,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -29,14 +30,16 @@ import { observeHiDpiCanvas } from '../../shared/utils/hidpi-canvas';
         </div>
 
         @if (hasPanel()) {
-          <div class="canvas-frame">
+          <div class="canvas-frame" [style.aspectRatio]="panelAspectRatio()">
             <canvas #lcdCanvas class="lcd-canvas" data-testid="debug-board-canvas"></canvas>
           </div>
           <div class="cam-row">
             <span class="es-meta">Camera</span>
+            <span class="es-meta mono">{{ panelResolution() }}</span>
             <select class="es-select mono" aria-label="Camera source" [value]="board.cameraSource()" (change)="onCameraChange($event)">
               <option value="none">none</option>
               <option value="gradient">gradient</option>
+              <option value="checker">checker</option>
             </select>
           </div>
         } @else {
@@ -81,7 +84,7 @@ import { observeHiDpiCanvas } from '../../shared/utils/hidpi-canvas';
           />
           <button type="submit" class="sw-btn" [disabled]="!rpc.isConnected() || rpc.observeOnly()">Send</button>
         </form>
-        <div class="uart-tail mono">
+        <div #uartTailEl class="uart-tail mono">
           @if (uartTail().length > 0) {
             @for (entry of uartTail(); track entry.id) {
               <div class="uart-line">{{ entry.text }}</div>
@@ -99,7 +102,7 @@ import { observeHiDpiCanvas } from '../../shared/utils/hidpi-canvas';
       .panel-sec { padding: 10px 12px; border-bottom: 1px solid var(--es-border); display: flex; flex-direction: column; gap: 8px; }
       .uart-sec { flex: 1; min-height: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
       .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-      .canvas-frame { border: 1px solid var(--es-border); background: var(--es-chrome); border-radius: var(--es-radius); overflow: hidden; aspect-ratio: 16 / 10; }
+      .canvas-frame { border: 1px solid var(--es-border); background: var(--es-chrome); border-radius: var(--es-radius); overflow: hidden; }
       .lcd-canvas { width: 100%; height: 100%; display: block; }
       .headless-card { padding: 12px; background: var(--es-container); border: 1px solid var(--es-border); border-radius: var(--es-radius); }
       .cam-row, .io-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
@@ -125,6 +128,7 @@ export class DebugBoardSidebarComponent implements AfterViewInit, OnDestroy {
   protected readonly console = inject(ConsoleStore);
 
   private readonly lcdCanvas = viewChild<ElementRef<HTMLCanvasElement>>('lcdCanvas');
+  private readonly uartTailEl = viewChild<ElementRef<HTMLElement>>('uartTailEl');
   private stopCanvasObserver: (() => void) | null = null;
   protected readonly txDraft = signal<string>('');
 
@@ -135,6 +139,23 @@ export class DebugBoardSidebarComponent implements AfterViewInit, OnDestroy {
     return profile !== null && profile.panel !== null;
   });
 
+  protected readonly panelDimensions = computed(() => {
+    const parts = this.board.boardParts();
+    const w = parts && parts.panelWidth > 0 ? parts.panelWidth : 800;
+    const h = parts && parts.panelHeight > 0 ? parts.panelHeight : 480;
+    return { w, h };
+  });
+
+  protected readonly panelAspectRatio = computed(() => {
+    const { w, h } = this.panelDimensions();
+    return `${w} / ${h}`;
+  });
+
+  protected readonly panelResolution = computed(() => {
+    const { w, h } = this.panelDimensions();
+    return `${w}x${h}`;
+  });
+
   protected readonly boardLabel = computed(() => {
     const name = this.board.selectedPreset()?.partNumber || this.board.boardProfileName();
     return this.board.lcdFrames() > 0 ? `${name} · ${this.board.lcdFps()} FPS` : name;
@@ -143,12 +164,22 @@ export class DebugBoardSidebarComponent implements AfterViewInit, OnDestroy {
   protected readonly ledPreview = computed(() => this.board.ledStates().slice(0, 4));
   protected readonly uartTail = computed(() => this.console.filteredEntries().slice(-12));
 
+  constructor() {
+    effect(() => {
+      const count = this.uartTail().length;
+      const el = this.uartTailEl()?.nativeElement;
+      if (count > 0 && el) {
+        queueMicrotask(() => {
+          el.scrollTop = el.scrollHeight;
+        });
+      }
+    });
+  }
+
   public ngAfterViewInit(): void {
     const canvas = this.lcdCanvas()?.nativeElement;
     if (!canvas) return;
-    const parts = this.board.boardParts();
-    const w = parts && parts.panelWidth > 0 ? parts.panelWidth : 800;
-    const h = parts && parts.panelHeight > 0 ? parts.panelHeight : 480;
+    const { w, h } = this.panelDimensions();
     this.board.attachCanvas(canvas, w, h);
     this.stopCanvasObserver = observeHiDpiCanvas(canvas, () => undefined);
   }

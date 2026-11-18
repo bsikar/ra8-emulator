@@ -45,8 +45,23 @@ describe('DebugCodePaneComponent', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector('[data-testid="debug-disasm"]')?.textContent).toContain('bkpt #0');
+    let skippedCore = Core.Cpu0;
+    execution.skipBkpt = async (core = Core.Cpu0) => {
+      skipped = true;
+      skippedCore = core;
+    };
+    debug.activeCore.set(Core.Cpu1);
+    debug.cpu1Registers.set({ pc: 0x0200_0100 });
+    debug.cpu1Disasm.set([
+      { address: 0x0200_0100, size: 2, decoded: true, raw: new Uint8Array([0x00, 0xbe]), text: 'bkpt #0', symbol: 'main' },
+    ]);
+    execution.lastStop.set({ core: Core.Cpu1, reason: StopReason.Breakpoint, address: 0x0200_0100, detail: 0 });
+    fixture.detectChanges();
     (el.querySelector('[data-testid="debug-skip-bkpt-btn"]') as HTMLButtonElement).click();
     expect(skipped).toBe(true);
+    expect(skippedCore).toBe(Core.Cpu1);
+    debug.activeCore.set(Core.Cpu0);
+    fixture.detectChanges();
 
     (el.querySelector('[data-testid="debug-gutter-0x02000102"]') as HTMLButtonElement).click();
     expect(toggledAddr).toBe(0x0200_0102);
