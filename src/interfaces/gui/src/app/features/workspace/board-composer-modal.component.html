@@ -1,0 +1,275 @@
+@if (open()) {
+  <div class="composer-backdrop" (click)="onBackdropClick()" (keydown.escape)="onEscape($event)">
+    @switch (subModal()) {
+      @case ('cores') {
+        <app-board-composer-cores-modal
+          [socket]="editingSocket()"
+          (cancelled)="subModal.set('none')"
+          (applied)="applyCoresConfig($event)"
+        />
+      }
+      @case ('preset-mcu') {
+        <app-board-composer-mcu-modals
+          mode="preset-mcu"
+          [existingCount]="draft().mcus.length"
+          (cancelled)="subModal.set('none')"
+          (switchMode)="switchMcuSubModal($event)"
+          (mcuAdded)="addMcuSocket($event)"
+        />
+      }
+      @case ('custom-silicon') {
+        <app-board-composer-mcu-modals
+          mode="custom-silicon"
+          [existingCount]="draft().mcus.length"
+          (cancelled)="subModal.set('none')"
+          (switchMode)="switchMcuSubModal($event)"
+          (mcuAdded)="addMcuSocket($event)"
+        />
+      }
+      @case ('memory') {
+        <app-board-composer-memory-modal
+          [mcus]="draft().mcus"
+          (cancelled)="subModal.set('none')"
+          (added)="addMemoryRegion($event)"
+        />
+      }
+      @case ('catalog-component') {
+        <app-board-composer-component-modals
+          mode="catalog-component"
+          [mcus]="draft().mcus"
+          (cancelled)="subModal.set('none')"
+          (switchMode)="switchComponentSubModal($event)"
+          (componentAdded)="addComponent($event)"
+        />
+      }
+      @case ('custom-component') {
+        <app-board-composer-component-modals
+          mode="custom-component"
+          [mcus]="draft().mcus"
+          (cancelled)="subModal.set('none')"
+          (switchMode)="switchComponentSubModal($event)"
+          (componentAdded)="addComponent($event)"
+        />
+      }
+      @default {
+        <div
+          class="composer-card"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Configure Target Board"
+          data-testid="board-composer-modal"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="composer-head">
+            <div>
+              <app-section-kicker label="BOARD COMPOSER (.BOARD)" />
+              <h2 class="composer-title">Configure Target Board</h2>
+            </div>
+            <button type="button" class="icon-btn" aria-label="Close board composer" (click)="closed.emit()">x</button>
+          </div>
+
+          <div class="field-grid-2">
+            <label class="field-stack">
+              <app-section-kicker label="BOARD NAME" />
+              <input
+                type="text"
+                class="box-input"
+                data-testid="composer-board-name"
+                [value]="draft().boardName"
+                (input)="onBoardNameInput($event)"
+              />
+            </label>
+
+            <label class="field-stack">
+              <app-section-kicker label="PROFILE FILE" />
+              <input
+                type="text"
+                class="box-input mono"
+                data-testid="composer-profile-file"
+                [value]="draft().profileFile"
+                (input)="onProfileFileInput($event)"
+              />
+            </label>
+          </div>
+
+          <div class="sec-block">
+            <div class="sec-head">
+              <app-section-kicker label="MCUS &amp; COMPUTE TOPOLOGY" />
+              <div class="sec-actions">
+                <button
+                  type="button"
+                  class="es-ghost-link"
+                  data-testid="composer-open-preset-mcu"
+                  (click)="subModal.set('preset-mcu')"
+                >
+                  + Add Preset MCU
+                </button>
+                <button
+                  type="button"
+                  class="es-ghost-link"
+                  data-testid="composer-open-custom-silicon"
+                  (click)="subModal.set('custom-silicon')"
+                >
+                  + Custom Silicon
+                </button>
+              </div>
+            </div>
+
+            <div class="item-table">
+              @for (mcu of draft().mcus; track mcu.id; let idx = $index) {
+                <div class="item-row" [attr.data-testid]="'composer-mcu-row-' + mcu.designator">
+                  <div class="row-inline">
+                    <span class="row-title">{{ mcu.designator }} · {{ mcu.role }}</span>
+                    <span class="chip-pill mono">{{ mcu.silicon.toUpperCase() }}</span>
+                    <span class="es-meta mono">{{ mcuSummary(mcu) }}</span>
+                  </div>
+                  <div class="row-inline">
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      aria-label="Edit MCU cores and memory"
+                      [attr.data-testid]="'composer-edit-mcu-' + mcu.designator"
+                      (click)="openCoresModal(idx)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" fill="currentColor" />
+                      </svg>
+                    </button>
+                    @if (draft().mcus.length > 1) {
+                      <button
+                        type="button"
+                        class="icon-btn"
+                        aria-label="Remove MCU socket"
+                        [attr.data-testid]="'composer-remove-mcu-' + mcu.designator"
+                        (click)="removeMcu(idx)"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                        </svg>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="sec-block">
+            <div class="sec-head">
+              <app-section-kicker label="EXTERNAL MEMORY &amp; TIMING" />
+              <button
+                type="button"
+                class="es-ghost-link"
+                data-testid="composer-open-add-memory"
+                (click)="subModal.set('memory')"
+              >
+                + Add Memory Region
+              </button>
+            </div>
+
+            <div class="item-table">
+              @for (reg of draft().memoryRegions; track reg.id; let idx = $index) {
+                <div class="item-row">
+                  <div class="row-inline">
+                    <span class="chip-pill">{{ reg.kind }}</span>
+                    <span class="es-meta mono">SIZE {{ reg.sizeMib }} MiB · WIDTH {{ reg.widthModeLabel }} · CLOCK {{ reg.clockMhz }} MHz · LATENCY {{ reg.latencyCycles }} cyc · MOUNT {{ reg.mountSocket }}</span>
+                  </div>
+                  @if (draft().memoryRegions.length > 2) {
+                    <button type="button" class="icon-btn" aria-label="Remove memory region" (click)="removeMemoryRegion(idx)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                      </svg>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="sec-block">
+            <div class="sec-head">
+              <app-section-kicker label="COMPONENTS &amp; PIN MAPPING" />
+              <div class="sec-actions">
+                <button
+                  type="button"
+                  class="es-ghost-link"
+                  data-testid="composer-open-add-component"
+                  (click)="subModal.set('catalog-component')"
+                >
+                  + Add Component
+                </button>
+                <button
+                  type="button"
+                  class="es-ghost-link"
+                  data-testid="composer-open-custom-component"
+                  (click)="subModal.set('custom-component')"
+                >
+                  + Custom Component
+                </button>
+              </div>
+            </div>
+
+            <div class="item-table">
+              @for (comp of draft().components; track comp.id; let idx = $index) {
+                <div class="item-row">
+                  <div class="row-inline">
+                    <span class="row-title">{{ comp.name }}</span>
+                    @if (comp.isCustom) {
+                      <span class="chip-pill">Custom</span>
+                    }
+                    <span class="chip-pill mono">{{ comp.mountSocket }} · {{ comp.endpointLabel }}</span>
+                    <span class="es-meta">Pins:</span>
+                    @for (p of comp.pins; track p.signal) {
+                      <span class="chip-pill mono">{{ p.signal }}: {{ p.pin }}</span>
+                    }
+                  </div>
+                  <button
+                    type="button"
+                    class="icon-btn"
+                    aria-label="Remove attached component"
+                    (click)="removeComponent(idx)"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                    </svg>
+                  </button>
+                </div>
+              } @empty {
+                <div class="item-row">
+                  <span class="es-meta">Headless minimal board — click + Add Component or + Custom Component to wire peripherals.</span>
+                </div>
+              }
+            </div>
+          </div>
+
+          <div class="composer-foot">
+            <div class="sec-actions">
+              @if (draft().isExistingCustom) {
+                <button
+                  type="button"
+                  class="es-ghost-link"
+                  data-testid="composer-remove-board-btn"
+                  (click)="removeCurrentBoard()"
+                >
+                  Remove Board
+                </button>
+              }
+              <button
+                type="button"
+                class="es-ghost-link"
+                data-testid="composer-export-btn"
+                (click)="exportBoardFile()"
+              >
+                Export .board
+              </button>
+            </div>
+            <div class="sec-actions">
+              <app-tonal-button variant="ghost" (pressed)="closed.emit()">Cancel</app-tonal-button>
+              <app-tonal-button testId="composer-save-btn" (pressed)="saveBoard()">Save Board</app-tonal-button>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  </div>
+}

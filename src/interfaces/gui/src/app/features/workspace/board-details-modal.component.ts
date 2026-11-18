@@ -70,6 +70,9 @@ import { buildBoardDetailsViewModel } from './board-details-spec';
               <app-tonal-button variant="ghost" testId="board-details-duplicate-btn" (pressed)="duplicate.emit(board)">
                 Duplicate Board
               </app-tonal-button>
+              <app-tonal-button variant="ghost" testId="board-details-edit-btn" (pressed)="edit.emit(board)">
+                Edit Board
+              </app-tonal-button>
               <app-tonal-button testId="board-details-close-btn" (pressed)="closed.emit()">Close</app-tonal-button>
             </div>
           </div>
@@ -161,6 +164,7 @@ export class BoardDetailsModalComponent {
   public readonly preset = input<BoardPreset | null>(null);
   public readonly closed = output<void>();
   public readonly duplicate = output<BoardPreset>();
+  public readonly edit = output<BoardPreset>();
   public readonly exported = output<string>();
 
   protected readonly vm = computed(() => {

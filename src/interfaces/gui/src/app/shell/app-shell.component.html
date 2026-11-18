@@ -34,6 +34,7 @@
                     type="button"
                     role="menuitem"
                     class="dropdown-item"
+                    [attr.data-testid]="'menuitem-' + item.action.id"
                     [disabled]="!item.enabled"
                     (click)="cmdMode.execute(item)"
                   >
@@ -182,43 +183,12 @@
     </div>
   </footer>
 
-  @if (cmdMode.settingsOpen()) {
-    <div class="sheet-backdrop" (click)="cmdMode.settingsOpen.set(false)">
-      <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Session settings" (click)="$event.stopPropagation()">
-        <div class="sheet-head">
-          <app-section-kicker label="SETTINGS" />
-          <app-tonal-button variant="ghost" (pressed)="cmdMode.settingsOpen.set(false)">Close</app-tonal-button>
-        </div>
-        <div class="sheet-row">
-          <span class="es-meta">Endpoint</span>
-          <span class="mono">{{ rpc.serverUrl() }}</span>
-        </div>
-        <div class="sheet-row">
-          <span class="es-meta">Capabilities</span>
-          <span class="mono">{{ rpc.capabilitiesSummary() }}</span>
-        </div>
-        <div class="sheet-row">
-          <span class="es-meta">Vim Keybindings</span>
-          <app-tonal-button
-            testId="settings-vim-toggle"
-            [active]="vim.enabled()"
-            (pressed)="vim.toggleEnabled()"
-          >
-            {{ vim.enabled() ? 'Enabled' : 'Disabled' }}
-          </app-tonal-button>
-        </div>
-        <div class="sheet-row">
-          <span class="es-meta">Extensions ({{ extStore.extensions().length }})</span>
-          <app-tonal-button
-            variant="ghost"
-            testId="settings-open-extensions"
-            (pressed)="cmdMode.settingsOpen.set(false); cmdMode.extensionsOpen.set(true)"
-          >
-            Manage Extensions
-          </app-tonal-button>
-        </div>
-      </div>
-    </div>
+  @defer (when cmdMode.settingsOpen()) {
+    <app-settings-modal
+      [open]="cmdMode.settingsOpen()"
+      (closed)="cmdMode.settingsOpen.set(false)"
+      (openExtensions)="cmdMode.settingsOpen.set(false); cmdMode.extensionsOpen.set(true)"
+    />
   }
 
   @if (cmdMode.helpOpen()) {
@@ -232,8 +202,8 @@
         <div class="sheet-row"><span class="es-meta">Search Everywhere</span><span class="mono">Shift+Shift</span></div>
         <div class="sheet-row"><span class="es-meta">Extensions</span><span class="mono">{{ extensionsChordLabel }}</span></div>
         <div class="sheet-row"><span class="es-meta">Vim :ex Prompt</span><span class="mono">:vim on|off / :ext / :help</span></div>
-        <div class="sheet-row"><span class="es-meta">Continue / Pause</span><span class="mono">F5</span></div>
-        <div class="sheet-row"><span class="es-meta">Step Over / Into</span><span class="mono">F10 / F11</span></div>
+        <div class="sheet-row"><span class="es-meta">Full Screen</span><span class="mono">F11 / Ctrl+Cmd+F</span></div>
+        <div class="sheet-row"><span class="es-meta">Continue / Step</span><span class="mono">F5 / F10 / Shift+F11</span></div>
       </div>
     </div>
   }
@@ -243,7 +213,9 @@
     (closed)="connectionPopoverOpen.set(false)"
     (openConnectManager)="openConnectRoute()"
   />
-  <app-extensions-sheet [open]="cmdMode.extensionsOpen()" (closed)="cmdMode.extensionsOpen.set(false)" />
+  @defer (when cmdMode.extensionsOpen()) {
+    <app-extensions-sheet [open]="cmdMode.extensionsOpen()" (closed)="cmdMode.extensionsOpen.set(false)" />
+  }
   <app-search-everywhere />
   <app-command-palette />
   <app-drop-veil [visible]="dragActive()" />
