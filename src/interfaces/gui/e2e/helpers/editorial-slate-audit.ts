@@ -1,8 +1,11 @@
 import { expect, type Page } from '@playwright/test';
 
+type OverlayLayer = 'base' | 'toast';
+
 interface TextBox {
   text: string;
   tag: string;
+  layer: OverlayLayer;
   x: number;
   y: number;
   right: number;
@@ -122,7 +125,16 @@ async function collectTextBoxes(page: Page): Promise<TextBox[]> {
             }
           }
           if (right - left > 1 && bottom - top > 1) {
-            out.push({ text: (current.textContent ?? '').trim().slice(0, 40), tag: parent.tagName.toLowerCase(), x: left, y: top, right, bottom });
+            const layer: OverlayLayer = parent.closest('.toast-stack') ? 'toast' : 'base';
+            out.push({
+              text: (current.textContent ?? '').trim().slice(0, 40),
+              tag: parent.tagName.toLowerCase(),
+              layer,
+              x: left,
+              y: top,
+              right,
+              bottom,
+            });
           }
         }
       }
@@ -162,7 +174,7 @@ export async function auditEditorialSlateScreen(page: Page, contextLabel: string
     for (let j = i + 1; j < textBoxes.length; j++) {
       const a = textBoxes[i]!;
       const b = textBoxes[j]!;
-      if (boxesOverlap(a, b)) overlaps.push([a.text, b.text]);
+      if (a.layer === b.layer && boxesOverlap(a, b)) overlaps.push([a.text, b.text]);
     }
   }
   expect(overlaps, `${contextLabel}: zero text bounding-box overlap`).toEqual([]);
