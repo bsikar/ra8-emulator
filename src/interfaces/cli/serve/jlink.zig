@@ -1,17 +1,22 @@
-//! Onboard J-Link targets: presence and the UART come from a USB scan keyed
-//! by the operator-pinned probe serial, ownership from a host-wide lease, and
-//! every operation names the probe by serial and checks the expected core.
+//! Onboard J-Link targets: presence and the probe CDC interface come from a
+//! USB scan keyed by the operator-pinned probe serial, ownership from a
+//! host-wide lease, and every operation names the probe by serial and checks
+//! the expected core.
+const builtin = @import("builtin");
 const std = @import("std");
 
 const host = @import("ra8_host");
 
 const commander = host.jlink.commander;
 const emu_list = host.jlink.emu_list;
+const identity = host.jlink.identity;
 const model = host.targets;
+const serial_port = host.jlink.serial;
 const target_lease = host.target_lease;
 
 pub const transport = "jlink-usb";
-pub const operations: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset };
+pub const operations_debug: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset };
+pub const operations_uart: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset, .uart };
 
 pub const Probe = struct {
     io: std.Io,
@@ -19,7 +24,9 @@ pub const Probe = struct {
     tool: commander.Tool,
     device: []const u8,
     cpuid: u32,
+    uart_wired: bool = true,
     lease: ?target_lease.Lease = null,
+    vcom: ?serial_port.Port = null,
     fence: target_lease.Fence = .{},
     uart: [2][64]u8 = undefined,
 
@@ -31,9 +38,40 @@ pub const Probe = struct {
         const self: *Probe = @ptrCast(@alignCast(context));
         const lease = self.lease orelse return error.NotReserved;
         try self.fence.admit(lease.token);
+        if (action == .uart) return self.readUart(lease.token, out);
+        if (action == .reset and self.uart_wired) {
+            self.closeVcom();
+            self.vcom = serial_port.Port.openBySerial(self.io, self.serial) catch null;
+        }
         var text: [16384]u8 = undefined;
         const outcome = try commander.operate(self.io, self.tool, self.serial, self.device, self.cpuid, action, &text);
         return formatOutcome(action, outcome, lease.token, out);
+    }
+
+    fn readUart(self: *Probe, token: u64, out: []u8) ![]const u8 {
+        if (!self.uart_wired) return error.Unsupported;
+        var text: [16384]u8 = undefined;
+        const found = try commander.identify(self.io, self.tool, self.serial, self.device, &text);
+        try identity.check(found, self.serial, self.cpuid);
+        var vcom = self.vcom orelse ((try serial_port.Port.openBySerial(self.io, self.serial)) orelse
+            return error.NoUart);
+        self.vcom = null;
+        defer vcom.close();
+        var captured: [2048]u8 = undefined;
+        const count = try vcom.readBounded(self.io, &captured, 1_000, 120, self.tool.cancel);
+        var digits: [20]u8 = undefined;
+        var cpuid_buf: [12]u8 = undefined;
+        const cpuid_hex = try std.fmt.bufPrint(&cpuid_buf, "0x{X:0>8}", .{found.cpuid});
+        var writer: std.Io.Writer = .fixed(out);
+        try std.json.Stringify.value(.{
+            .serial = emu_list.format(found.serial, &digits),
+            .cpuid = cpuid_hex,
+            .uart = vcom.name(),
+            .bytes = count,
+            .text = captured[0..count],
+            .lease = token,
+        }, .{}, &writer);
+        return writer.buffered();
     }
 
     fn claim(context: *anyopaque) !void {
@@ -46,11 +84,16 @@ pub const Probe = struct {
 
     fn release(context: *anyopaque) void {
         const self: *Probe = @ptrCast(@alignCast(context));
+        self.closeVcom();
         if (self.lease) |*lease| lease.close(self.io);
         self.lease = null;
     }
 
-    /// The port for this probe, written to the buffer `current` does not use.
+    fn closeVcom(self: *Probe) void {
+        if (self.vcom) |*vcom| vcom.close();
+        self.vcom = null;
+    }
+
     fn port(self: *Probe, current: []const u8) []const u8 {
         const side: usize = if (current.len != 0 and @intFromPtr(current.ptr) == @intFromPtr(&self.uart[0])) 1 else 0;
         const found = host.jlink.uart.find(self.io, self.serial, &self.uart[side]) catch null;
@@ -88,7 +131,7 @@ fn formatOutcome(action: model.Action, outcome: commander.Outcome, token: u64, o
             "{{\"reset\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"lease\":{d}}}",
             .{ serial, cpuid, token },
         ),
-        .flash => error.Unsupported,
+        .flash, .uart => error.Unsupported,
     };
 }
 
@@ -101,7 +144,6 @@ pub fn scanProbes(probes: []Probe, registry: *model.Registry) void {
     apply(registry, probes, listed);
 }
 
-/// Marks each J-Link entry present exactly when its serial was listed.
 pub fn apply(registry: *model.Registry, probes: []Probe, listed: []const emu_list.Probe) void {
     for (&registry.entries) |*slot| {
         if (slot.*) |*entry| applyEntry(registry, probes, listed, entry);
@@ -132,7 +174,10 @@ fn owned(probes: []Probe, context: *anyopaque) ?*Probe {
     return null;
 }
 
-/// Validates an operator binding's J-Link fields.
+pub fn hostSupportsUart() bool {
+    return builtin.os.tag == .windows or builtin.os.tag == .linux;
+}
+
 pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
     if (!std.mem.eql(u8, target.transport, transport)) return error.InvalidEndpoint;
     if (fields.program.len == 0 or fields.scratch.len == 0 or fields.device.len == 0) return error.InvalidEndpoint;
@@ -144,5 +189,6 @@ pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
         .tool = .{ .program = fields.program, .scratch = fields.scratch },
         .device = fields.device,
         .cpuid = std.fmt.parseInt(u32, hex, 16) catch return error.InvalidEndpoint,
+        .uart_wired = fields.uart_wired and hostSupportsUart(),
     };
 }

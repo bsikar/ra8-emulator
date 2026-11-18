@@ -1,9 +1,9 @@
-//! Native probe-host listener (`ra8_emulator probe-agent`): mutually
-//! authenticates backend peers with an operator-provisioned HMAC-SHA256 secret,
-//! publishes local probe targets for its pinned `host_id`, gives each peer a
-//! claim token checked on every later request, and drops a peer's reservation
-//! immediately on disconnect. Only the handshake is authenticated: later frames
-//! carry no MAC, so the link belongs on loopback, SSH or a trusted segment.
+//! Native probe-host agent (`ra8_emulator probe-agent`): supports TCP listener
+//! mode (`--listen tcp:HOST:PORT`), host-profile spawned pipe mode (`--stdio`),
+//! and OS/probe/transport matrix inspection (`--matrix`). Every frame after the
+//! `RA8PH2` handshake carries a directional HMAC-SHA256 and monotonic sequence
+//! number, operations stream progress chunks before the finite reply, and peer
+//! disconnect drops reservations immediately.
 const builtin = @import("builtin");
 const std = @import("std");
 
@@ -13,20 +13,25 @@ const loop = @import("serve/loop.zig");
 const target_bindings = @import("serve/targets.zig");
 
 const auth = host.probe_host.auth;
+const matrix = host.probe_host.matrix;
 const model = host.targets;
 const sock_ready = host.sock.ready;
 const win32 = host.win32;
 const wire = host.probe_host.wire;
 
-pub const Args = struct {
-    targets: []const u8,
-    secret_file: []const u8,
-    host_id: []const u8,
-    address: std.Io.net.IpAddress,
+pub const Mode = union(enum) {
+    matrix,
+    serve: struct {
+        targets: []const u8,
+        secret_file: []const u8,
+        host_id: []const u8,
+        where: union(enum) { stdio, tcp: std.Io.net.IpAddress },
+    },
 };
 
 pub const Peer = struct {
     stream: std.Io.net.Stream = undefined,
+    session: auth.Session = .{ .tx_key = @splat(0), .rx_key = @splat(0) },
     owner: u8 = 0,
     token: u64 = 0,
 };
@@ -36,27 +41,36 @@ const RawFlags = struct {
     secret: ?[]const u8 = null,
     host_id: ?[]const u8 = null,
     spec: ?listen.Spec = null,
+    stdio: bool = false,
 };
 
-pub fn parse(argv: []const []const u8) !Args {
-    if (argv.len != 10 or !std.mem.eql(u8, argv[1], "probe-agent")) return error.BadArguments;
+pub fn parse(argv: []const []const u8) !Mode {
+    if (argv.len < 3 or !std.mem.eql(u8, argv[1], "probe-agent")) return error.BadArguments;
+    if (argv.len == 3 and std.mem.eql(u8, argv[2], "--matrix")) return .matrix;
     var raw: RawFlags = .{};
     var index: usize = 2;
-    while (index < argv.len) : (index += 2) {
+    while (index < argv.len) {
+        if (std.mem.eql(u8, argv[index], "--stdio") and !raw.stdio) {
+            raw.stdio = true;
+            index += 1;
+            continue;
+        }
+        if (index + 1 >= argv.len) return error.BadArguments;
         try applyFlag(&raw, argv[index], argv[index + 1]);
+        index += 2;
     }
-    const tcp = switch (raw.spec orelse return error.BadArguments) {
-        .tcp => |addr| addr,
-        .unix => return error.BadArguments,
-    };
+    if (raw.stdio == (raw.spec != null)) return error.BadArguments;
     const id = raw.host_id orelse return error.BadArguments;
     if (id.len == 0) return error.BadArguments;
-    return .{
+    return .{ .serve = .{
         .targets = raw.targets orelse return error.BadArguments,
         .secret_file = raw.secret orelse return error.BadArguments,
         .host_id = id,
-        .address = tcp,
-    };
+        .where = if (raw.stdio) .stdio else .{ .tcp = switch (raw.spec.?) {
+            .tcp => |addr| addr,
+            .unix => return error.BadArguments,
+        } },
+    } };
 }
 
 fn applyFlag(raw: *RawFlags, flag: []const u8, value: []const u8) !void {
@@ -72,10 +86,24 @@ fn applyFlag(raw: *RawFlags, flag: []const u8, value: []const u8) !void {
 }
 
 pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
-    const args = parse(argv) catch |err| {
+    const mode = parse(argv) catch |err| {
         std.debug.print("probe-agent: {s}\n", .{@errorName(err)});
         return 2;
     };
+    switch (mode) {
+        .matrix => {
+            var buf: [4096]u8 = undefined;
+            var stdout = std.Io.File.stdout().writerStreaming(io, &buf);
+            try matrix.writeJson(&stdout.interface);
+            try stdout.interface.writeByte('\n');
+            try stdout.interface.flush();
+            return 0;
+        },
+        .serve => |args| return runAgent(allocator, io, args),
+    }
+}
+
+fn runAgent(allocator: std.mem.Allocator, io: std.Io, args: anytype) !u8 {
     const key = auth.readKey(io, args.secret_file) catch |err| {
         std.debug.print("probe-agent: secret: {s}\n", .{@errorName(err)});
         return 1;
@@ -86,7 +114,11 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         std.debug.print("probe-agent: targets: {s}\n", .{@errorName(err)});
         return 1;
     };
-    serve(allocator, io, args, key, &inventory.registry) catch |err| {
+    const outcome = switch (args.where) {
+        .stdio => serveStdio(allocator, io, args.host_id, key, &inventory.registry),
+        .tcp => |addr| serveTcp(allocator, io, args.host_id, addr, key, &inventory.registry),
+    };
+    outcome catch |err| {
         std.debug.print("probe-agent: {s}\n", .{@errorName(err)});
         return 1;
     };
@@ -109,23 +141,64 @@ pub const State = struct {
     }
 };
 
-fn serve(
+fn serveStdio(
     allocator: std.mem.Allocator,
     io: std.Io,
-    args: Args,
+    host_id: []const u8,
     key: auth.Key,
     registry: *model.Registry,
 ) !void {
-    var addr = args.address;
+    const stdin = std.Io.File.stdin();
+    var tx: [4096]u8 = undefined;
+    var writer = std.Io.File.stdout().writerStreaming(io, &tx);
+    var peer: Peer = .{
+        .session = try auth.authenticateAgentFrom(
+            io,
+            .{ .pipe = .{ .file = stdin } },
+            &writer.interface,
+            host_id,
+            key,
+        ),
+    };
+    var state: State = .{ .io = io, .host_id = host_id, .registry = registry };
+    defer state.registry.release(&peer.owner);
+    while (true) {
+        var scratch: [wire.max_line]u8 = undefined;
+        const parsed = wire.receivePipe(
+            wire.Request,
+            allocator,
+            io,
+            stdin,
+            &peer.session,
+            &scratch,
+            300_000,
+        ) catch |err| {
+            if (err == error.AgentDisconnected) return;
+            return err;
+        };
+        defer parsed.deinit();
+        try answerPeer(&state, &peer, parsed.value, &writer.interface);
+    }
+}
+
+fn serveTcp(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    host_id: []const u8,
+    address: std.Io.net.IpAddress,
+    key: auth.Key,
+    registry: *model.Registry,
+) !void {
+    var addr = address;
     var server = try addr.listen(io, .{ .reuse_address = true });
     defer server.deinit(io);
     catchStops();
     std.debug.print("probe-agent: listening on tcp:{f}\n", .{server.socket.address});
-    var state: State = .{ .io = io, .host_id = args.host_id, .registry = registry };
+    var state: State = .{ .io = io, .host_id = host_id, .registry = registry };
     defer state.closeAll();
     while (!loop.stopping.load(.acquire)) {
         if ((try sock_ready.wait(io, server.socket.handle, 10)).any()) {
-            acceptOne(io, &server, args.host_id, key, &state);
+            acceptOne(io, &server, host_id, key, &state);
         }
         stepPeers(allocator, &state);
     }
@@ -135,14 +208,18 @@ fn acceptOne(io: std.Io, server: *std.Io.net.Server, host_id: []const u8, key: a
     var client = server.accept(io) catch return;
     for (&state.peers) |*slot| if (slot.* == null) {
         var tx: [1024]u8 = undefined;
-        var rx: [1024]u8 = undefined;
         var writer = client.writer(io, &tx);
-        var reader = client.reader(io, &rx);
-        auth.authenticateAgent(io, &reader.interface, &writer.interface, host_id, key) catch {
+        const session = auth.authenticateAgentFrom(
+            io,
+            .{ .socket = .{ .handle = client.socket.handle } },
+            &writer.interface,
+            host_id,
+            key,
+        ) catch {
             client.close(io);
             return;
         };
-        slot.* = .{ .stream = client };
+        slot.* = .{ .stream = client, .session = session };
         return;
     };
     client.close(io);
@@ -176,17 +253,29 @@ fn handleOne(allocator: std.mem.Allocator, state: *State, peer: *Peer) !void {
         allocator,
         state.io,
         peer.stream.socket.handle,
+        &peer.session,
         &scratch,
         5_000,
     );
     defer parsed.deinit();
+    try answerPeer(state, peer, parsed.value, &writer.interface);
+}
+
+fn answerPeer(state: *State, peer: *Peer, req: wire.Request, writer: *std.Io.Writer) !void {
+    if (req.op == .perform) {
+        try wire.send(writer, &peer.session, wire.Reply{
+            .ok = true,
+            .chunk = true,
+            .stream = @tagName(req.action),
+        });
+    }
     var out: [16384]u8 = undefined;
     var snaps: [32]wire.Snapshot = undefined;
-    const reply = dispatch(state, peer, parsed.value, &snaps, &out) catch |err| wire.Reply{
+    const reply = dispatch(state, peer, req, &snaps, &out) catch |err| wire.Reply{
         .ok = false,
         .err = @errorName(err),
     };
-    try wire.send(&writer.interface, reply);
+    try wire.send(writer, &peer.session, reply);
 }
 
 pub fn dispatch(
@@ -219,8 +308,6 @@ fn claimTarget(state: *State, peer: *Peer, req: wire.Request) !wire.Reply {
     state.registry.refresh();
     const sel = try selectionFor(state.registry, state.host_id, req.probe_id, req.board_id);
     try state.registry.reserve(&peer.owner, sel);
-    // A per-connection claim token, not a fence: the persisted J-Link lease
-    // counter in the provider is what fences the probe across processes.
     state.next_token += 1;
     peer.token = state.next_token;
     return .{ .ok = true, .token = peer.token };

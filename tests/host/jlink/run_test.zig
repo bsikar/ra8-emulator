@@ -21,3 +21,25 @@ test "bounded probe runner captures output and enforces timeout" {
         &.{ "/bin/sh", "-c", "sleep 30" };
     try std.testing.expectError(error.ProbeTimeout, host.jlink.run.run(std.testing.io, slow, &out, 40));
 }
+
+fn triggerCancel(io: std.Io, flag: *std.atomic.Value(bool)) void {
+    std.Io.sleep(io, .fromMilliseconds(40), .awake) catch return;
+    flag.store(true, .release);
+}
+
+test "bounded probe runner terminates subprocess promptly when cancelled" {
+    if (!host.build.process.supported) return error.SkipZigTest;
+    const on_windows = builtin.os.tag == .windows;
+    const slow: []const []const u8 = if (on_windows)
+        &.{ "cmd.exe", "/d", "/c", "ping -n 30 127.0.0.1 >NUL" }
+    else
+        &.{ "/bin/sh", "-c", "sleep 30" };
+    var cancel_flag: std.atomic.Value(bool) = .init(false);
+    const thread = try std.Thread.spawn(.{}, triggerCancel, .{ std.testing.io, &cancel_flag });
+    defer thread.join();
+    var out: [256]u8 = undefined;
+    try std.testing.expectError(
+        error.Canceled,
+        host.jlink.run.runWithCancel(std.testing.io, slow, &out, 10_000, &cancel_flag),
+    );
+}

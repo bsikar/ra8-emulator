@@ -1,9 +1,11 @@
-//! Authenticated probe-host adapter: connects to an operator-pinned native
-//! probe-host over a mutually-authenticated HMAC-SHA256 session, mirrors its
-//! target presence into the host Registry, forwards fenced claims/actions, and
-//! calls `Registry.disconnect(host_id)` whenever the agent link is lost.
+//! Authenticated probe-host adapter (`RA8PH2` per-frame HMAC-SHA256): connects
+//! over TCP or a `ra8_host.profiles` (`local` / `ssh`) `probe-agent --stdio`
+//! session, mirrors remote target presence into `Registry`, consumes bounded
+//! streamed progress/UART chunks, and calls `Registry.disconnect(host_id)`
+//! whenever the agent link fails or disconnects.
 const std = @import("std");
 
+const agent_link = @import("agent_link.zig");
 const host = @import("ra8_host");
 
 const auth = host.probe_host.auth;
@@ -13,16 +15,15 @@ const wire = host.probe_host.wire;
 pub const Host = struct {
     io: std.Io,
     host_id: []const u8,
-    address: []const u8,
-    port: u16,
+    spec: agent_link.Spec,
     secret_file: []const u8,
     key: auth.Key,
-    stream: ?std.Io.net.Stream = null,
+    link: agent_link.Link = .closed,
     lost: bool = false,
+    chunks_seen: usize = 0,
 
     pub fn close(self: *Host) void {
-        if (self.stream) |stream| stream.close(self.io);
-        self.stream = null;
+        self.link.close(self.io);
     }
 
     pub fn request(
@@ -31,25 +32,12 @@ pub const Host = struct {
         req: wire.Request,
         scratch: []u8,
     ) !std.json.Parsed(wire.Reply) {
-        try self.ensureConnected();
+        try self.link.connect(self.io, self.spec, self.host_id, self.key);
         return self.exchange(allocator, req, scratch) catch |err| {
             self.lost = true;
             self.close();
             return err;
         };
-    }
-
-    fn ensureConnected(self: *Host) !void {
-        if (self.stream != null) return;
-        const remote = try std.Io.net.HostName.init(self.address);
-        var stream = try remote.connect(self.io, self.port, .{ .mode = .stream });
-        errdefer stream.close(self.io);
-        var tx_buf: [1024]u8 = undefined;
-        var rx_buf: [1024]u8 = undefined;
-        var writer = stream.writer(self.io, &tx_buf);
-        var reader = stream.reader(self.io, &rx_buf);
-        try auth.authenticateClient(self.io, &reader.interface, &writer.interface, self.host_id, self.key);
-        self.stream = stream;
     }
 
     fn exchange(
@@ -58,11 +46,18 @@ pub const Host = struct {
         req: wire.Request,
         scratch: []u8,
     ) !std.json.Parsed(wire.Reply) {
-        var stream = self.stream orelse return error.AgentDisconnected;
-        var tx_buf: [2048]u8 = undefined;
-        var writer = stream.writer(self.io, &tx_buf);
-        wire.send(&writer.interface, req) catch return error.AgentDisconnected;
-        return wire.receiveSocket(wire.Reply, allocator, self.io, stream.socket.handle, scratch, 20_000);
+        try self.link.send(self.io, req);
+        var chunks: usize = 0;
+        while (true) {
+            const parsed = try self.link.receive(allocator, self.io, scratch, 25_000);
+            if (!parsed.value.chunk) {
+                self.chunks_seen += chunks;
+                return parsed;
+            }
+            parsed.deinit();
+            chunks += 1;
+            if (chunks > wire.max_chunks) return error.TooManyChunks;
+        }
     }
 };
 
@@ -71,7 +66,7 @@ pub const Target = struct {
     peer: *Host,
     token: u64 = 0,
     uart: [2][64]u8 = undefined,
-    ops: [6]model.Action = undefined,
+    ops: [7]model.Action = undefined,
 
     pub fn provider(self: *Target) model.Provider {
         return .{ .context = self, .performFn = perform, .claimFn = claim, .releaseFn = release };
@@ -95,7 +90,7 @@ pub const Target = struct {
         const self: *Target = @ptrCast(@alignCast(context));
         const token = self.token;
         self.token = 0;
-        if (token == 0 or self.peer.stream == null) return;
+        if (token == 0 or !self.peer.link.isOpen()) return;
         var scratch: [4096]u8 = undefined;
         const parsed = self.peer.request(std.heap.page_allocator, .{
             .op = .release,
