@@ -68,7 +68,7 @@ import { buildBoardDetailsViewModel } from './board-details-spec';
             </app-tonal-button>
             <div class="foot-actions">
               <app-tonal-button variant="ghost" testId="board-details-duplicate-btn" (pressed)="duplicate.emit(board)">
-                Duplicate Board
+                Duplicate &amp; Customize
               </app-tonal-button>
               <app-tonal-button variant="ghost" testId="board-details-edit-btn" (pressed)="edit.emit(board)">
                 Edit Board

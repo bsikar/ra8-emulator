@@ -42,9 +42,7 @@
   border-radius: 0 var(--es-radius) var(--es-radius) 0;
 }
 
-.nav-btn:hover {
-  color: var(--es-text-primary);
-}
+.nav-btn:hover { color: var(--es-text-primary); }
 
 .nav-btn.is-active {
   background: var(--es-interactive);
@@ -77,9 +75,7 @@
   color: var(--es-text-primary);
 }
 
-.sub-copy {
-  margin: 4px 0 0;
-}
+.sub-copy { margin: 4px 0 0; }
 
 .close-btn {
   border: 0;
@@ -90,15 +86,18 @@
   cursor: pointer;
 }
 
-.pref-row {
+.pref-row,
+.probe-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--es-divider);
   font-size: 12px;
 }
+
+.probe-row { padding: 6px 0; }
 
 .pref-label {
   font-size: 13px;
@@ -139,11 +138,14 @@
   gap: 2px;
 }
 
-.swatch-group {
+.swatch-group,
+.inline-ctrl {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+
+.inline-ctrl { gap: 10px; }
 
 .swatch-dot {
   width: 8px;
@@ -165,19 +167,21 @@
   padding: 8px 0;
 }
 
-.appearance-controls {
+.prev-cur { border-left: 2px solid var(--es-signal-cursor); padding-left: 6px; }
+.is-dim { opacity: 0.45; }
+.prev-fault { color: var(--es-signal-fault); }
+.prev-nom { color: var(--es-signal-nominal); }
+
+.appearance-controls,
+.probe-list-head,
+.settings-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.inline-ctrl {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
+.appearance-controls { flex-wrap: wrap; }
 
 .ctrl-select {
   height: 28px;
@@ -210,12 +214,6 @@
   color: var(--es-text-primary);
 }
 
-.probe-list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .probe-box {
   border: 1px solid var(--es-border);
   border-radius: var(--es-radius-md);
@@ -223,18 +221,7 @@
   padding: 8px 12px;
 }
 
-.probe-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--es-divider);
-}
-
-.empty-note {
-  margin: 4px 0;
-}
+.empty-note { margin: 4px 0; }
 
 .line-field {
   width: 160px;
@@ -250,17 +237,9 @@
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--es-divider);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
-.foot-left {
-  display: flex;
-  gap: 10px;
-}
-
+.foot-left,
 .foot-right {
   display: flex;
   gap: 8px;

@@ -4,6 +4,37 @@ import { SectionKickerComponent } from '../../shared/ui/section-kicker.component
 import { TonalButtonComponent } from '../../shared/ui/tonal-button.component';
 import { BUILTIN_SILICON_CATALOG, buildSocketFromCatalog } from './board-composer-catalog';
 
+function defaultsForArch(arch: ComposerCoreEntry['arch'], idx: number): Partial<ComposerCoreEntry> {
+  if (arch === 'Ethos-U55') {
+    return {
+      slotLabel: `NPU ${idx}`,
+      clockMhz: 500,
+      features: '256 MACs · 256 GOPS',
+      tcmKb: 0,
+      cacheLabel: '256 MACs · 256 GOPS',
+      bootMode: 'AXI Initiator',
+    };
+  }
+  if (arch === 'Cortex-M33') {
+    return {
+      slotLabel: `CORE ${idx}`,
+      clockMhz: 250,
+      features: 'FPU · DSP · TrustZone',
+      tcmKb: 128,
+      cacheLabel: '16K',
+      bootMode: idx === 0 ? 'Reset Primary' : 'Halted until IPC',
+    };
+  }
+  return {
+    slotLabel: `CORE ${idx}`,
+    clockMhz: 1000,
+    features: 'Helium MVE · TrustZone',
+    tcmKb: 256,
+    cacheLabel: '32K/32K',
+    bootMode: idx === 0 ? 'Reset Primary' : 'SMP Secondary',
+  };
+}
+
 @Component({
   selector: 'app-board-composer-cores-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,8 +73,8 @@ import { BUILTIN_SILICON_CATALOG, buildSocketFromCatalog } from './board-compose
           <app-section-kicker label="INTER-MCU INTERCONNECT" />
           <select class="box-input mono" data-testid="cores-interconnect-select" [value]="draft().interconnect" (change)="onInterconnectChange($event)">
             <option value="None">Standalone (No Inter-MCU Link)</option>
-            <option value="U1.SPI0 (Controller) <-> U2.SPI0 (Peripheral)">U1.SPI0 (Controller) <-> U2.SPI0 (Peripheral)</option>
-            <option value="U1.SCI2 (UART) <-> U2.SCI0">U1.SCI2 (UART) <-> U2.SCI0</option>
+            <option value="U1.SPI0 (Controller) <-> U2.SPI0 (Peripheral)">U1.SPI0 (Controller) &lt;-&gt; U2.SPI0 (Peripheral)</option>
+            <option value="U1.SCI2 (UART) <-> U2.SCI0">U1.SCI2 (UART) &lt;-&gt; U2.SCI0</option>
           </select>
         </label>
       </div>
@@ -70,14 +101,39 @@ import { BUILTIN_SILICON_CATALOG, buildSocketFromCatalog } from './board-compose
                 <input
                   type="number"
                   class="box-input mono"
-                  style="width: 86px"
+                  style="width: 78px"
                   aria-label="Core clock MHz"
                   [value]="core.clockMhz"
                   (input)="onCoreClockInput(idx, $event)"
                 />
-                <span class="es-meta">MHz · {{ core.features }}</span>
-                @if (core.tcmKb > 0) {
-                  <span class="chip-pill mono">TCM {{ core.tcmKb }} KB</span>
+                <span class="es-meta">MHz</span>
+                @if (core.arch !== 'Ethos-U55') {
+                  <select class="box-input mono" aria-label="TCM size" [value]="core.tcmKb" (change)="onCoreTcmChange(idx, $event)">
+                    <option [value]="256">TCM 256 KB</option>
+                    <option [value]="128">TCM 128 KB</option>
+                    <option [value]="64">TCM 64 KB</option>
+                    <option [value]="32">TCM 32 KB</option>
+                    <option [value]="0">TCM 0 KB</option>
+                  </select>
+                  <select class="box-input mono" aria-label="Cache configuration" [value]="core.cacheLabel" (change)="onCoreCacheChange(idx, $event)">
+                    <option value="32K/32K">Cache 32K/32K</option>
+                    <option value="16K">Cache 16K</option>
+                    <option value="None">Cache Off</option>
+                  </select>
+                  <select class="box-input" aria-label="Core boot mode" [value]="core.bootMode" (change)="onCoreBootChange(idx, $event)">
+                    <option value="Reset Primary">Boot Reset Primary</option>
+                    <option value="Halted until IPC">Boot Halted until IPC</option>
+                    <option value="SMP Secondary">Boot SMP Secondary</option>
+                  </select>
+                } @else {
+                  <select class="box-input mono" aria-label="NPU config" [value]="core.features" (change)="onCoreFeaturesChange(idx, $event)">
+                    <option value="256 MACs · 256 GOPS">Config 256 MACs · 256 GOPS</option>
+                    <option value="128 MACs · 128 GOPS">Config 128 MACs · 128 GOPS</option>
+                  </select>
+                  <select class="box-input" aria-label="NPU bus role" [value]="core.bootMode" (change)="onCoreBootChange(idx, $event)">
+                    <option value="AXI Initiator">Bus AXI Initiator</option>
+                    <option value="AXI Secondary">Bus AXI Secondary</option>
+                  </select>
                 }
               </div>
 
@@ -178,28 +234,39 @@ export class BoardComposerCoresModalComponent implements OnInit {
   protected onCoreArchChange(idx: number, event: Event): void {
     if (!(event.target instanceof HTMLSelectElement)) return;
     const arch = event.target.value as ComposerCoreEntry['arch'];
-    this.draft.update((d) => ({
-      ...d,
-      cores: d.cores.map((c, i) => (i === idx ? { ...c, arch } : c)),
-    }));
+    const defaults = defaultsForArch(arch, idx);
+    this.patchCore(idx, { arch, ...defaults });
   }
 
   protected onCoreClockInput(idx: number, event: Event): void {
     if (!(event.target instanceof HTMLInputElement)) return;
     const clockMhz = Math.max(10, Number.parseInt(event.target.value, 10) || 100);
-    this.draft.update((d) => ({
-      ...d,
-      cores: d.cores.map((c, i) => (i === idx ? { ...c, clockMhz } : c)),
-    }));
+    this.patchCore(idx, { clockMhz });
+  }
+
+  protected onCoreTcmChange(idx: number, event: Event): void {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    this.patchCore(idx, { tcmKb: Number.parseInt(event.target.value, 10) || 0 });
+  }
+
+  protected onCoreCacheChange(idx: number, event: Event): void {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    this.patchCore(idx, { cacheLabel: event.target.value });
+  }
+
+  protected onCoreBootChange(idx: number, event: Event): void {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    this.patchCore(idx, { bootMode: event.target.value });
+  }
+
+  protected onCoreFeaturesChange(idx: number, event: Event): void {
+    if (!(event.target instanceof HTMLSelectElement)) return;
+    this.patchCore(idx, { features: event.target.value });
   }
 
   protected onCoreToggle(idx: number, event: Event): void {
     if (!(event.target instanceof HTMLInputElement)) return;
-    const enabled = event.target.checked;
-    this.draft.update((d) => ({
-      ...d,
-      cores: d.cores.map((c, i) => (i === idx ? { ...c, enabled } : c)),
-    }));
+    this.patchCore(idx, { enabled: event.target.checked });
   }
 
   protected removeCore(idx: number): void {
@@ -219,5 +286,12 @@ export class BoardComposerCoresModalComponent implements OnInit {
     const cur = this.draft();
     const cat = BUILTIN_SILICON_CATALOG.find((s) => s.silicon === cur.silicon) ?? BUILTIN_SILICON_CATALOG[0]!;
     this.draft.set(buildSocketFromCatalog(cat, cur.designator, cur.role));
+  }
+
+  private patchCore(idx: number, patch: Partial<ComposerCoreEntry>): void {
+    this.draft.update((d) => ({
+      ...d,
+      cores: d.cores.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+    }));
   }
 }
