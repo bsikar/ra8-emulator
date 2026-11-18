@@ -16,6 +16,7 @@ pub const routes = .{
 
 pub fn list(context: *Context, _: struct {}) rpc.Outcome(wire.Text) {
     const registry = context.targets orelse return refuse(wire.Text, error.Unavailable);
+    registry.refresh();
     var out: std.Io.Writer = .fixed(context.scratch[0..@min(context.scratch.len, wire.max_json)]);
     out.writeByte('[') catch |err| return refuse(wire.Text, err);
     var first = true;
@@ -69,7 +70,7 @@ fn selection(args: anytype) model.Selection {
 fn refuse(comptime T: type, err: anyerror) rpc.Outcome(T) {
     const code = switch (err) {
         error.Unavailable => wire.codes.unavailable,
-        error.StaleSelection, error.Disconnected => wire.codes.stale,
+        error.StaleSelection, error.StaleLease, error.Disconnected => wire.codes.stale,
         error.AmbiguousIdentity => wire.codes.ambiguous,
         error.TargetBusy, error.AlreadyReserved => wire.codes.busy,
         error.NotReserved => wire.codes.ownership,

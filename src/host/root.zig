@@ -60,4 +60,22 @@ pub const camera = struct {
 
 pub const metrics = @import("metrics/metrics.zig");
 
+pub const target_lease = @import("target_lease.zig");
 pub const targets = @import("targets.zig");
+
+/// Authenticated probe-host framing and mutual HMAC-SHA256 handshake (RA8EMU-1287).
+pub const probe_host = struct {
+    pub const auth = @import("probe_host/auth.zig");
+    pub const wire = @import("probe_host/wire.zig");
+};
+
+/// Onboard SEGGER J-Link discovery and identity by USB serial (RA8EMU-1287).
+pub const jlink = struct {
+    pub const commander = @import("jlink/commander.zig");
+    pub const emu_list = @import("jlink/emu_list.zig");
+    pub const identity = @import("jlink/identity.zig");
+    pub const run = @import("jlink/run.zig");
+    pub const uart = @import("jlink/uart.zig");
+    pub const uart_linux = @import("jlink/uart/linux.zig");
+    pub const uart_windows = @import("jlink/uart/windows.zig");
+};
