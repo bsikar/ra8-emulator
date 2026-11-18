@@ -91,12 +91,19 @@ fn msr(cpu: *Cpu, instr: Instr) op.Error!void {
     const value = cpu.regs.get(@intCast(instr.hw1 & 0xF));
     const n = sysmOf(instr);
     if (!nsAlias(n)) {
-        const control_value = if (n == sysreg.sysm.control and !cpu.profile.v8_1m) value & ~pacbti_control else value;
-        return sysreg.write(&cpu.regs, n, maskOf(instr), control_value);
+        const masked = switch (n) {
+            sysreg.sysm.control => if (!cpu.profile.v8_1m) value & ~pacbti_control else value,
+            sysreg.sysm.basepri, sysreg.sysm.basepri_max => value & cpu.profile.prioMask(),
+            else => value,
+        };
+        return sysreg.write(&cpu.regs, n, maskOf(instr), masked);
     }
     if (sysreg.privileged(&cpu.regs)) {
-        const control_value = if (n == banked.sysm.control_ns and
-            !cpu.profile.v8_1m) value & ~pacbti_control else value;
-        _ = cpu.banked.writeNs(&cpu.regs, n, control_value);
+        const masked = switch (n) {
+            banked.sysm.control_ns => if (!cpu.profile.v8_1m) value & ~pacbti_control else value,
+            banked.sysm.basepri_ns => value & cpu.profile.prioMask(),
+            else => value,
+        };
+        _ = cpu.banked.writeNs(&cpu.regs, n, masked);
     }
 }

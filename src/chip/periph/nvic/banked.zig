@@ -9,19 +9,23 @@ const Candidate = @import("../candidate.zig").Candidate;
 const memmap = @import("../../core/memmap.zig");
 const systick_bank = @import("../../core/systick_bank.zig");
 
-/// The pends in both copies, Secure first.
+/// The pends in both copies, Secure first, assuming two SysTick timers.
 pub fn read(core: anytype) !systick_bank.Pends {
-    const secure: systick_bank.Words = .{
+    return readFor(core, 2);
+}
+
+/// The pends in both copies for a core implementing `systicks` timers (0..2).
+pub fn readFor(core: anytype, systicks: u2) !systick_bank.Pends {
+    var secure: systick_bank.Words = .{
         .icsr = try core.readWord(memmap.scb.icsr),
         .shpr3 = try core.readWord(memmap.scb.shpr3),
     };
+    if (systicks == 0) secure.icsr &= ~icsr_pendstset;
     const non_secure: systick_bank.Words = if (comptime reaches(@TypeOf(core))) .{
         .icsr = try core.readNonSecure(memmap.scb.icsr),
         .shpr3 = try core.readNonSecure(memmap.scb.shpr3),
     } else .{ .icsr = 0, .shpr3 = 0 };
-    // A core that reaches the Non-secure copy runs a Non-secure SysTick of
-    // its own (RA8EMU-154), so SysTick is offered from both copies.
-    return systick_bank.pends(secure, non_secure, true);
+    return systick_bank.pends(secure, non_secure, systicks >= 2);
 }
 
 /// Fold a Non-secure PENDSVCLR: it clears itself and PENDSVSET in that copy,
