@@ -23,7 +23,7 @@ test.describe('Per-Core Profiler (/profile) with Folded Stacks & Telemetry', () 
     }
   });
 
-  test('captures folded stacks and metrics on call_tree.elf, switches Flamegraph/Icicle, and audits Editorial Slate', async ({ page }) => {
+  test('captures folded stacks and metrics on call_tree.elf, exercises timeline/hotspots/export, and audits Editorial Slate', async ({ page }) => {
     server = await startServeFixture('tests/fixtures/profile/call_tree.elf', ['--profile-folded']);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/launch?ws=${encodeURIComponent(server.wsUrl)}`);
@@ -38,12 +38,40 @@ test.describe('Per-Core Profiler (/profile) with Folded Stacks & Telemetry', () 
     await expect(page).toHaveURL(/\/profile$/);
     await expect(page.locator('body')).toContainText('METRICS & STACKS');
     await expect(page.locator('body')).toContainText('Host Memory RSS', { timeout: 10_000 });
+    await expect(page.getByTestId('profile-cpu-sparkline')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('profile-rss-sparkline')).toBeVisible({ timeout: 10_000 });
 
     await page.getByTestId('profile-capture-all-btn').click();
+    await expect(page.getByTestId('profile-selected-frame')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('profile-hotspots-table')).toContainText('heavy', { timeout: 10_000 });
+
+    await page.getByTestId('sort-symbol').click();
     await page.getByTestId('profile-mode-icicle').click();
     await expect(page.getByTestId('profile-mode-icicle')).toHaveClass(/is-active/);
     await page.getByTestId('profile-mode-flame').click();
 
+    await page.getByTestId('timeline-zoom-in').click();
+    await page.getByTestId('timeline-mode-pan').click();
+    await page.getByTestId('timeline-mode-brush').click();
+    await page.getByTestId('timeline-reset-btn').click();
+
+    await page.getByTestId('profile-core-both').click();
+    await page.getByTestId('profile-core-cpu0').click();
+
+    await page.getByTestId('profile-symbol-filter').fill('heavy');
+    await expect(page.getByTestId('profile-hotspots-table')).toContainText('heavy');
+    await page.getByTestId('profile-symbol-filter').fill('');
+
     await auditBothViewports(page, 'profile-calltree');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByTestId('profile-export-folded-btn').click(),
+    ]);
+    expect(download.suggestedFilename()).toContain('.folded');
+
+    await page.getByTestId('hotspot-jump-heavy').click();
+    await expect(page).toHaveURL(/\/debug/);
+    await expect(page.locator('body')).toContainText('CORE REGISTERS');
   });
 });
