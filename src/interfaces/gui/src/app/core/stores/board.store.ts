@@ -19,6 +19,7 @@ import {
   serializeBoardProfile,
 } from 'ra8-rpc-client';
 import { formatHex32 } from '../../shared/utils/hex';
+import { get2dContext } from '../../shared/utils/hidpi-canvas';
 import { RpcConnectionStore } from '../rpc/rpc-connection.store';
 import type { StoredCustomBoardPreset } from './board-composer.types';
 import { loadSavedBoards, saveSavedBoards } from './board-storage';
@@ -80,6 +81,7 @@ export class BoardStore implements OnDestroy {
   }
 
   public attachCanvas(canvas: HTMLCanvasElement, defaultWidth = 800, defaultHeight = 480): void {
+    if (!get2dContext(canvas)) { this.renderer = null; return; }
     this.renderer = new FramebufferRenderer(canvas, { defaultWidth, defaultHeight });
   }
 
