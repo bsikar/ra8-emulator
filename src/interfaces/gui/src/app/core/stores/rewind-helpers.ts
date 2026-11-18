@@ -57,3 +57,23 @@ export function mapDiffRows(diff: DecodedDiff): DiffStateRow[] {
   }
   return rows;
 }
+
+const SINGLE_WORDS = new Set(['prev', 'next', 'start', 'end']);
+const TIME_RE = /^\d+(ns|us|ms|s)$/i;
+const POINT_TUPLE_RE = /^\d+:\d+:(cpu0|cpu1):\d+:(retired|irq)$/i;
+const SPACE_KW_RE = /^(frame|iter|bm)\s+\S+$/i;
+const DIR_KW_RE = /^(isr|rtos)\s+(prev|next)$/i;
+const MARKER_RE = /^marker\s+\S+\s+\d+$/i;
+
+/** Normalizes user seek input to match `src/session/history/seek_target.zig`. */
+export function normalizeSeekTarget(raw: string): string | null {
+  const clean = raw.trim().replace(/^@/, '');
+  if (!clean) return null;
+  if (SINGLE_WORDS.has(clean.toLowerCase())) return clean.toLowerCase();
+  if (TIME_RE.test(clean) || POINT_TUPLE_RE.test(clean)) return clean.toLowerCase();
+  if (SPACE_KW_RE.test(clean) || DIR_KW_RE.test(clean) || MARKER_RE.test(clean)) return clean;
+  const colonMatch = /^(frame|iter|bm):(\S+)$/i.exec(clean);
+  if (colonMatch?.[1] && colonMatch[2]) return `${colonMatch[1].toLowerCase()} ${colonMatch[2]}`;
+  if (/^\d+$/.test(clean)) return `iter ${clean}`;
+  return null;
+}
