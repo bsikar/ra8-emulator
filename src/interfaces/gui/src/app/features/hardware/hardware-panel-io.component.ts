@@ -17,12 +17,22 @@ import { BoardStore } from '../../core/stores/board.store';
 import { ExecutionStore } from '../../core/stores/execution.store';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { formatVirtualTime } from '../../shared/utils/hex';
-import { get2dContext, mapClientPointToPanel, observeHiDpiCanvas } from '../../shared/utils/hidpi-canvas';
+import { mapClientPointToPanel, observeHiDpiCanvas } from '../../shared/utils/hidpi-canvas';
 import {
-  type LcdRatePreset,
-  computeLcdSubscribeRateHz,
+  type CameraSourceKind,
+  type PanelCrosshair,
+  exportRgbaToPngDataUrl,
+  formatBoardMemorySummary,
+  formatRtcReport,
+  formatSiliconSummary,
+  paintHiDpiPanelCanvas,
+  resolveCameraSpec,
+} from './hardware-panel-helpers';
+import {
+  type AdaptiveLcdMode,
+  computeAdaptiveLcdPolicy,
   createLcdScrubberState,
-  pushDirtyRectFrame,
+  pushDirtyRectAdaptive,
 } from './lcd-scrubber-model';
 
 type TouchGestureMode = 'tap' | 'swipe' | 'long_press';
@@ -31,108 +41,29 @@ type TouchGestureMode = 'tap' | 'swipe' | 'long_press';
   selector: 'app-hardware-panel-io',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SectionKickerComponent],
-  template: `
-    <div class="panel-io">
-      <div class="sec-head">
-        <app-section-kicker label="DISPLAY PANEL & TOUCH" />
-        <span class="mono es-meta">{{ boardHeader() }}</span>
-      </div>
-
-      @if (hasPanel()) {
-        <div class="lcd-wrap">
-          <canvas
-            #lcdCanvas
-            class="lcd-canvas"
-            data-testid="hardware-lcd-canvas"
-            (pointerdown)="onCanvasPointerDown($event)"
-            (pointerup)="onCanvasPointerUp($event)"
-          ></canvas>
-        </div>
-
-        <div class="ctrl-row">
-          <button type="button" class="mini-btn" [class.is-active]="liveMode()" data-testid="hardware-live-btn" (click)="resumeLive()">
-            {{ liveMode() ? 'Live' : 'Resume Live' }}
-          </button>
-          <input
-            type="range"
-            class="scrubber"
-            data-testid="hardware-frame-scrubber"
-            [min]="0"
-            [max]="maxFrameIndex()"
-            [value]="effectiveFrameIndex()"
-            [disabled]="frames().length === 0"
-            (input)="onScrubInput($event)"
-            aria-label="LCD frame scrubber"
-          />
-          <span class="mono es-meta">{{ scrubberStatus() }}</span>
-          <select class="es-select mono" aria-label="LCD update rate" data-testid="hardware-lcd-rate" [value]="ratePreset()" (change)="onRateChange($event)">
-            <option value="unthrottled">Unthrottled (0)</option>
-            <option value="hz60">60 Hz</option>
-            <option value="hz15">15 Hz</option>
-          </select>
-          <select class="es-select" aria-label="Touch gesture mode" data-testid="hardware-touch-mode" [value]="touchMode()" (change)="onTouchModeChange($event)">
-            <option value="tap">Tap</option>
-            <option value="swipe">Swipe</option>
-            <option value="long_press">Long Press</option>
-          </select>
-        </div>
-      } @else {
-        <div class="headless-card">
-          <p class="es-meta note">Headless target profile — no display panel fitted on this board.</p>
-        </div>
-      }
-
-      <div class="io-grid">
-        <div class="io-card">
-          <app-section-kicker label="GPIO LEDS & SWITCHES" />
-          <div class="led-strip">
-            @for (on of ledPreview(); track $index) {
-              <span class="led-item mono">
-                <span class="led-dot" [class.is-on]="on"></span>
-                {{ ledName($index) }}
-              </span>
-            }
-          </div>
-          <div class="sw-row">
-            <button type="button" class="mini-btn mono" data-testid="hardware-sw-0" [disabled]="!rpc.isConnected() || rpc.observeOnly()" (click)="board.sendButton(0)">SW1</button>
-            <button type="button" class="mini-btn mono" data-testid="hardware-sw-1" [disabled]="!rpc.isConnected() || rpc.observeOnly()" (click)="board.sendButton(1)">SW2</button>
-            <span class="es-meta">Camera</span>
-            <select class="es-select mono" aria-label="Camera source" data-testid="hardware-camera-select" [value]="board.cameraSource()" (change)="onCameraChange($event)">
-              <option value="none">none</option>
-              <option value="gradient">gradient</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="io-card">
-          <div class="sec-head">
-            <app-section-kicker label="REAL-TIME CLOCK (RTC)" />
-            <button type="button" class="mini-btn" data-testid="hardware-rtc-refresh" [disabled]="!rpc.isConnected()" (click)="refreshRtc()">Read RTC</button>
-          </div>
-          <p class="mono rtc-val" data-testid="hardware-rtc-readout">{{ rtcText() }}</p>
-        </div>
-      </div>
-    </div>
-  `,
+  templateUrl: './hardware-panel-io.component.html',
   styles: [
     `
       :host { display: block; height: 100%; min-height: 0; min-width: 0; overflow: auto; }
-      .panel-io { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-      .sec-head, .ctrl-row, .sw-row, .led-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .sec-head { justify-content: space-between; }
-      .lcd-wrap { border: 1px solid var(--es-border); border-radius: var(--es-radius); background: var(--es-chrome); overflow: hidden; aspect-ratio: 16 / 10; }
+      .panel-io { display: flex; flex-direction: column; min-width: 0; background: var(--es-canvas); }
+      .sec { padding: 10px 12px; border-bottom: 1px solid var(--es-border); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+      .sec-head, .sub-head, .lcd-meta-row, .ctrl-row, .sw-row, .led-strip, .cam-row, .kv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .sec-head, .sub-head, .lcd-meta-row, .kv-row { justify-content: space-between; }
+      .kv-row { font-size: 12px; color: var(--es-text-secondary); }
+      .val-right { color: var(--es-text-primary); text-align: right; }
+      .lcd-wrap { border: 1px solid var(--es-border); border-radius: var(--es-radius-sm); background: var(--es-chrome); overflow: hidden; aspect-ratio: 16 / 10; }
       .lcd-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
-      .scrubber { flex: 1; min-width: 120px; accent-color: var(--es-signal-cursor); }
-      .headless-card, .io-card { padding: 10px 12px; background: var(--es-container); border: 1px solid var(--es-border); border-radius: var(--es-radius); display: flex; flex-direction: column; gap: 8px; }
-      .io-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-      .led-item { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--es-text-secondary); }
+      .scrubber { flex: 1; min-width: 100px; accent-color: var(--es-signal-cursor); }
+      .headless-box { padding: 10px 0; border-top: 1px solid var(--es-divider); }
+      .led-item, .toggle-lbl { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--es-text-secondary); }
       .led-dot { width: 6px; height: 6px; border-radius: var(--es-radius-full); border: 1px solid var(--es-border-strong); }
       .led-dot.is-on { background: var(--es-signal-nominal); border-color: var(--es-signal-nominal); }
       .mini-btn { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 8px; cursor: pointer; }
       .mini-btn.is-active { background: var(--es-interactive); border-color: var(--es-signal-cursor); color: var(--es-text-primary); }
       .mini-btn:disabled { opacity: 0.45; cursor: not-allowed; }
       .es-select { background: var(--es-chrome); color: var(--es-text-secondary); border: 1px solid var(--es-border); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 6px; }
-      .rtc-val, .note { margin: 0; font-size: 12px; color: var(--es-text-primary); }
+      .es-input { flex: 1; min-width: 100px; background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; padding: 3px 2px; }
+      .note { margin: 0; font-size: 12px; }
     `,
   ],
 })
@@ -146,11 +77,15 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
   private stopObserver: (() => void) | null = null;
   private dragStart: { x: number; y: number; tsMs: number } | null = null;
 
-  private readonly scrubState = signal(createLcdScrubberState(480, 272));
+  protected readonly scrubState = signal(createLcdScrubberState(480, 272));
   protected readonly liveMode = signal<boolean>(true);
   protected readonly selectedIndex = signal<number>(0);
-  protected readonly ratePreset = signal<LcdRatePreset>('unthrottled');
+  protected readonly adaptiveMode = signal<AdaptiveLcdMode>('rate_1x');
   protected readonly touchMode = signal<TouchGestureMode>('tap');
+  protected readonly crosshair = signal<PanelCrosshair | null>(null);
+  protected readonly cameraKind = signal<CameraSourceKind>('gradient');
+  protected readonly cameraArg = signal<string>('');
+  protected readonly allowWebcam = signal<boolean>(false);
   protected readonly rtcReport = signal<RtcReport | null>(null);
 
   protected readonly frames = computed(() => this.scrubState().frames);
@@ -164,53 +99,59 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
     const profile = this.board.boardProfile();
     return profile !== null && profile.panel !== null;
   });
+  protected readonly panelDimsLabel = computed(() => {
+    const { w, h } = this.resolvePanelDims();
+    return `${w}×${h} · RGB565`;
+  });
   protected readonly boardHeader = computed(() => {
-    const name = this.board.selectedPreset()?.partNumber || this.board.boardProfileName();
+    const name = this.board.selectedPreset()?.targetId.toUpperCase() || this.board.boardProfileName().toUpperCase();
     return this.board.lcdFrames() > 0 ? `${name} · ${this.board.lcdFps()} FPS` : name;
+  });
+  protected readonly crosshairLabel = computed(() => {
+    const pt = this.crosshair();
+    return pt ? `x: ${pt.x}  y: ${pt.y}` : 'x: —  y: —';
   });
   protected readonly ledPreview = computed(() => this.board.ledStates().slice(0, 6));
   protected readonly scrubberStatus = computed(() => {
     const list = this.frames();
-    if (list.length === 0) return '0 / 120 frames';
+    if (list.length === 0) return '0 / 120';
     const idx = this.effectiveFrameIndex();
     const frame = list[idx];
-    return frame ? `#${idx + 1}/${list.length} · ${formatVirtualTime(frame.virtualNs)}` : '0 / 120 frames';
+    return frame ? `#${idx + 1}/${list.length} · ${formatVirtualTime(frame.virtualNs)}` : '0 / 120';
   });
-  protected readonly rtcText = computed(() => {
-    const rtc = this.rtcReport();
-    if (!rtc) return 'Not sampled yet.';
-    const d = `${rtc.year.toString().padStart(4, '0')}-${String(rtc.month).padStart(2, '0')}-${String(rtc.day).padStart(2, '0')}`;
-    const t = `${String(rtc.hour).padStart(2, '0')}:${String(rtc.minute).padStart(2, '0')}:${String(rtc.second).padStart(2, '0')}`;
-    return `${d} ${t} (${rtc.running ? 'running' : 'stopped'}, ${rtc.valid ? 'valid' : 'unset'})`;
-  });
+  protected readonly rtcText = computed(() => formatRtcReport(this.rtcReport()));
+  protected readonly siliconSummary = computed(() => formatSiliconSummary(this.board.selectedPreset()));
+  protected readonly memorySummary = computed(() => formatBoardMemorySummary(this.board.boardProfile()));
 
   constructor() {
     this.subs.add(
       this.rpc.lcdDirty$.subscribe((rect) => {
-        this.scrubState.update((st) => pushDirtyRectFrame(st, rect, this.execution.virtualTimeNs()));
+        const policy = computeAdaptiveLcdPolicy(this.adaptiveMode());
+        this.scrubState.update((st) =>
+          pushDirtyRectAdaptive(st, rect, this.execution.virtualTimeNs(), policy, Date.now())
+        );
       })
     );
     effect(() => {
-      const idx = this.selectedIndex();
-      if (!this.liveMode()) this.paintScrubbedFrame(idx);
+      this.scrubState();
+      this.liveMode();
+      this.selectedIndex();
+      this.crosshair();
+      this.repaintCanvas();
     });
   }
 
   public ngAfterViewInit(): void {
     const canvas = this.lcdCanvas()?.nativeElement;
-    if (!canvas) return;
-    const parts = this.board.boardParts();
-    const w = parts && parts.panelWidth > 0 ? parts.panelWidth : 800;
-    const h = parts && parts.panelHeight > 0 ? parts.panelHeight : 480;
-    this.board.attachCanvas(canvas, w, h);
-    this.stopObserver = observeHiDpiCanvas(canvas, () => undefined);
+    if (canvas) {
+      this.stopObserver = observeHiDpiCanvas(canvas, () => this.repaintCanvas());
+    }
     if (this.rpc.isConnected()) void this.refreshRtc();
   }
 
   public ngOnDestroy(): void {
     this.stopObserver?.();
     this.stopObserver = null;
-    this.board.detachCanvas();
     this.subs.unsubscribe();
   }
 
@@ -226,19 +167,14 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
 
   protected resumeLive(): void {
     this.liveMode.set(true);
-    const canvas = this.lcdCanvas()?.nativeElement;
-    if (canvas) {
-      const parts = this.board.boardParts();
-      this.board.attachCanvas(canvas, parts?.panelWidth || 800, parts?.panelHeight || 480);
-    }
-    void this.applySubscribeRate(this.ratePreset());
+    void this.applySubscribeRate(this.adaptiveMode());
   }
 
   protected onRateChange(event: Event): void {
-    const val = (event.target as HTMLSelectElement).value;
-    if (val === 'unthrottled' || val === 'hz60' || val === 'hz15') {
-      this.ratePreset.set(val);
-      if (this.liveMode()) void this.applySubscribeRate(val);
+    const val = (event.target as HTMLSelectElement).value as AdaptiveLcdMode;
+    if (val === 'slow_0_1x' || val === 'rate_1x' || val === 'rate_100x' || val === 'rate_max') {
+      this.adaptiveMode.set(val);
+      void this.applySubscribeRate(val);
     }
   }
 
@@ -247,13 +183,54 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
     if (val === 'tap' || val === 'swipe' || val === 'long_press') this.touchMode.set(val);
   }
 
-  protected onCameraChange(event: Event): void {
-    void this.board.setCamera((event.target as HTMLSelectElement).value);
+  protected onCameraKindChange(event: Event): void {
+    const val = (event.target as HTMLSelectElement).value as CameraSourceKind;
+    this.cameraKind.set(val);
+  }
+
+  protected onCameraArgInput(event: Event): void {
+    this.cameraArg.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onWebcamConsentToggle(event: Event): void {
+    this.allowWebcam.set((event.target as HTMLInputElement).checked);
+  }
+
+  protected applyCamera(event: Event): void {
+    event.preventDefault();
+    const spec = resolveCameraSpec(this.cameraKind(), this.cameraArg());
+    void this.board.setCamera(spec, this.allowWebcam());
+  }
+
+  protected savePng(): void {
+    const frame = this.activeFrameRgba();
+    const url = exportRgbaToPngDataUrl(frame.rgba, frame.width, frame.height);
+    if (!url) {
+      this.rpc.pushToast('PNG export requires a browser canvas context', 'neutral');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'ra8-panel.png';
+    link.click();
+    this.rpc.pushToast('Saved panel frame PNG');
+  }
+
+  protected onCanvasPointerMove(event: PointerEvent): void {
+    const hit = this.mapPointer(event);
+    if (hit) this.crosshair.set(hit);
+  }
+
+  protected onCanvasPointerLeave(): void {
+    this.crosshair.set(null);
   }
 
   protected onCanvasPointerDown(event: PointerEvent): void {
     const hit = this.mapPointer(event);
-    if (hit) this.dragStart = { x: hit.x, y: hit.y, tsMs: Date.now() };
+    if (hit) {
+      this.crosshair.set(hit);
+      this.dragStart = { x: hit.x, y: hit.y, tsMs: Date.now() };
+    }
   }
 
   protected onCanvasPointerUp(event: PointerEvent): void {
@@ -282,33 +259,45 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private mapPointer(event: PointerEvent): { x: number; y: number } | null {
+  private resolvePanelDims(): { w: number; h: number } {
+    const parts = this.board.boardParts();
+    if (parts && parts.panelWidth > 0 && parts.panelHeight > 0) {
+      return { w: parts.panelWidth, h: parts.panelHeight };
+    }
+    const st = this.scrubState();
+    return { w: st.width, h: st.height };
+  }
+
+  private activeFrameRgba(): { rgba: Uint8ClampedArray; width: number; height: number } {
+    const st = this.scrubState();
+    if (!this.liveMode()) {
+      const snap = st.frames[this.effectiveFrameIndex()];
+      if (snap) return { rgba: snap.rgba, width: snap.width, height: snap.height };
+    }
+    return { rgba: st.backingRgba, width: st.width, height: st.height };
+  }
+
+  private repaintCanvas(): void {
+    const canvas = this.lcdCanvas()?.nativeElement;
+    if (!canvas) return;
+    const frame = this.activeFrameRgba();
+    paintHiDpiPanelCanvas(canvas, frame.rgba, frame.width, frame.height, this.crosshair());
+  }
+
+  private mapPointer(event: PointerEvent): PanelCrosshair | null {
     const canvas = this.lcdCanvas()?.nativeElement;
     if (!canvas) return null;
-    const parts = this.board.boardParts();
-    const w = parts && parts.panelWidth > 0 ? parts.panelWidth : 800;
-    const h = parts && parts.panelHeight > 0 ? parts.panelHeight : 480;
+    const { w, h } = this.resolvePanelDims();
     const hit = mapClientPointToPanel(event.clientX, event.clientY, canvas.getBoundingClientRect(), w, h, true);
     return hit.inside ? { x: hit.x, y: hit.y } : null;
   }
 
-  private paintScrubbedFrame(index: number): void {
-    const frame = this.frames()[index];
-    const canvas = this.lcdCanvas()?.nativeElement;
-    if (!frame || !canvas) return;
-    const ctx = get2dContext(canvas);
-    if (!ctx || typeof ImageData === 'undefined') return;
-    canvas.width = frame.width;
-    canvas.height = frame.height;
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(frame.rgba), frame.width, frame.height), 0, 0);
-  }
-
-  private async applySubscribeRate(preset: LcdRatePreset): Promise<void> {
+  private async applySubscribeRate(mode: AdaptiveLcdMode): Promise<void> {
     const client = this.rpc.activeClient;
-    const rate = computeLcdSubscribeRateHz(preset);
-    if (!client || rate === null) return;
+    if (!client) return;
+    const policy = computeAdaptiveLcdPolicy(mode);
     try {
-      await client.subscribe(Core.Cpu0, Topic.LcdDirty, rate);
+      await client.subscribe(Core.Cpu0, Topic.LcdDirty, policy.subscribeRateHz);
     } catch (err) {
       this.rpc.noteOptionalError(err);
     }

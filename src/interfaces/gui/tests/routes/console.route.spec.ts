@@ -6,16 +6,16 @@ import { ExecutionStore } from '../../src/app/core/stores/execution.store';
 import { ConsoleRouteComponent } from '../../src/app/routes/console.route';
 
 describe('ConsoleRouteComponent', () => {
-  it('preserves UART SERIAL STREAM contract and pauses on matching watch trigger', async () => {
+  it('preserves UART SERIAL STREAM contract, halts on Alert+Halt, and marks without halting on Marker', async () => {
     TestBed.configureTestingModule({});
     const rpc = TestBed.inject(RpcConnectionStore);
     const consoleStore = TestBed.inject(ConsoleStore);
     const execution = TestBed.inject(ExecutionStore);
 
     rpc.connectionState.set('connected');
-    let paused = false;
+    let pauseCount = 0;
     execution.pause = async () => {
-      paused = true;
+      pauseCount += 1;
     };
 
     const fixture = TestBed.createComponent(ConsoleRouteComponent);
@@ -23,7 +23,25 @@ describe('ConsoleRouteComponent', () => {
     const el: HTMLElement = fixture.nativeElement;
     expect(el.textContent).toContain('UART SERIAL STREAM');
 
+    (el.querySelector('[data-testid="console-trigger-action-marker"]') as HTMLButtonElement).click();
     const pat = el.querySelector('[data-testid="console-trigger-input"]') as HTMLInputElement;
+    pat.value = 'BOOT';
+    pat.dispatchEvent(new Event('input'));
+    pat.closest('form')!.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+
+    consoleStore.pushUartEvent({
+      core: Core.Cpu0,
+      channel: 0,
+      virtualNs: 50n,
+      bytes: new TextEncoder().encode('BOOT OK'),
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(pauseCount).toBe(0);
+    expect(el.textContent).toContain('Marker · 1');
+
+    (el.querySelector('[data-testid="console-trigger-action-halt"]') as HTMLButtonElement).click();
     pat.value = 'FAULT';
     pat.dispatchEvent(new Event('input'));
     pat.closest('form')!.dispatchEvent(new Event('submit'));
@@ -38,7 +56,7 @@ describe('ConsoleRouteComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(paused).toBe(true);
-    expect(el.textContent).toContain('Pause · 1');
+    expect(pauseCount).toBe(1);
+    expect(el.textContent).toContain('Alert + Halt · 1');
   });
 });

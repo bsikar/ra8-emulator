@@ -1,0 +1,102 @@
+<div class="panel-io">
+  <div class="sec">
+    <div class="sec-head">
+      <app-section-kicker label="INTERACTIVE PANEL" />
+      <span class="mono es-meta">{{ boardHeader() }}</span>
+    </div>
+
+    @if (hasPanel()) {
+      <div class="lcd-meta-row mono es-meta">
+        <span>{{ panelDimsLabel() }}</span>
+        <span data-testid="hardware-crosshair-readout">{{ crosshairLabel() }}</span>
+      </div>
+      <div class="lcd-wrap">
+        <canvas
+          #lcdCanvas
+          class="lcd-canvas"
+          data-testid="hardware-lcd-canvas"
+          (pointermove)="onCanvasPointerMove($event)"
+          (pointerleave)="onCanvasPointerLeave()"
+          (pointerdown)="onCanvasPointerDown($event)"
+          (pointerup)="onCanvasPointerUp($event)"
+        ></canvas>
+      </div>
+
+      <div class="ctrl-row">
+        <select class="es-select" aria-label="Touch gesture mode" data-testid="hardware-touch-mode" [value]="touchMode()" (change)="onTouchModeChange($event)">
+          <option value="tap">Tap</option>
+          <option value="swipe">Swipe</option>
+          <option value="long_press">Longpress</option>
+        </select>
+        <select class="es-select mono" aria-label="Adaptive LCD rate" data-testid="hardware-lcd-rate" [value]="adaptiveMode()" (change)="onRateChange($event)">
+          <option value="slow_0_1x">0.1x · Every Frame</option>
+          <option value="rate_1x">1x · 60 Hz</option>
+          <option value="rate_100x">100x · 15 Hz</option>
+          <option value="rate_max">Max · 5 Hz</option>
+        </select>
+        <button type="button" class="mini-btn" data-testid="hardware-save-png-btn" (click)="savePng()">Save PNG</button>
+      </div>
+
+      <div class="ctrl-row">
+        <button type="button" class="mini-btn" [class.is-active]="liveMode()" data-testid="hardware-live-btn" (click)="resumeLive()">
+          {{ liveMode() ? 'Live' : 'Resume Live' }}
+        </button>
+        <input
+          type="range"
+          class="scrubber"
+          data-testid="hardware-frame-scrubber"
+          [min]="0"
+          [max]="maxFrameIndex()"
+          [value]="effectiveFrameIndex()"
+          [disabled]="frames().length === 0"
+          (input)="onScrubInput($event)"
+          aria-label="LCD frame scrubber"
+        />
+        <span class="mono es-meta">{{ scrubberStatus() }}</span>
+      </div>
+      <div class="lcd-meta-row mono es-meta" data-testid="hardware-lcd-counters">
+        <span>Captured: {{ scrubState().capturedCount }}</span>
+        <span>Skipped: {{ scrubState().skippedCount }}</span>
+      </div>
+    } @else {
+      <div class="headless-box" data-testid="hardware-headless-card">
+        <p class="es-meta note">Headless target profile — no display panel fitted on this board.</p>
+      </div>
+    }
+  </div>
+
+  <div class="sec">
+    <app-section-kicker label="STIMULUS & FRONT PANEL I/O" />
+    <div class="sub-head"><span class="es-meta">OV5640 Camera (CEU)</span><span class="mono es-meta">{{ board.cameraSource() }}</span></div>
+    <form class="cam-row" (submit)="applyCamera($event)">
+      <select class="es-select mono" aria-label="Camera source kind" data-testid="hardware-camera-select" [value]="cameraKind()" (change)="onCameraKindChange($event)">
+        <option value="gradient">gradient</option>
+        <option value="image">image</option>
+        <option value="video">video</option>
+        <option value="pipe">pipe</option>
+        <option value="webcam">webcam</option>
+      </select>
+      <input type="text" class="es-input mono" data-testid="hardware-camera-path" [value]="cameraArg()" (input)="onCameraArgInput($event)" placeholder="Path, WxH, or device (optional)" />
+      <label class="toggle-lbl">
+        <input type="checkbox" data-testid="hardware-camera-webcam" [checked]="allowWebcam()" (change)="onWebcamConsentToggle($event)" />
+        <span>Webcam Consent</span>
+      </label>
+      <button type="submit" class="mini-btn" data-testid="hardware-camera-apply" [disabled]="!rpc.isConnected() || rpc.observeOnly()">Apply</button>
+    </form>
+
+    <div class="led-strip">
+      @for (on of ledPreview(); track $index) {
+        <span class="led-item mono"><span class="led-dot" [class.is-on]="on"></span>{{ ledName($index) }}</span>
+      }
+    </div>
+    <div class="sw-row">
+      <button type="button" class="mini-btn mono" data-testid="hardware-sw-0" [disabled]="!rpc.isConnected() || rpc.observeOnly()" (click)="board.sendButton(0)">Pulse SW1</button>
+      <button type="button" class="mini-btn mono" data-testid="hardware-sw-1" [disabled]="!rpc.isConnected() || rpc.observeOnly()" (click)="board.sendButton(1)">Pulse SW2</button>
+      <button type="button" class="mini-btn" data-testid="hardware-rtc-refresh" [disabled]="!rpc.isConnected()" (click)="refreshRtc()">Read RTC</button>
+    </div>
+
+    <div class="kv-row"><span>Silicon Target</span><span class="mono val-right">{{ siliconSummary() }}</span></div>
+    <div class="kv-row"><span>External Memory</span><span class="mono val-right">{{ memorySummary() }}</span></div>
+    <div class="kv-row"><span>RTC Oscillator</span><span class="mono val-right" data-testid="hardware-rtc-readout">{{ rtcText() }}</span></div>
+  </div>
+</div>
