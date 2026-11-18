@@ -24,7 +24,11 @@ pub const Stage = struct {
     }
 
     pub fn adopt(self: *Stage, gpa: std.mem.Allocator) !*Bind {
-        const bind = try Bind.adopt(gpa, &self.base, &self.session);
+        return self.adoptFor(gpa, "ra8p1");
+    }
+
+    pub fn adoptFor(self: *Stage, gpa: std.mem.Allocator, expected_part: []const u8) !*Bind {
+        const bind = try Bind.adoptFor(gpa, &self.base, &self.session, expected_part);
         self.transferred = true;
         return bind;
     }

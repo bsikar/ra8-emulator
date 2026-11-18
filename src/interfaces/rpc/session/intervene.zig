@@ -45,6 +45,14 @@ pub fn resetImage(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     return .{ .ok = .{ .accepted = 1 } };
 }
 
+/// Rewinds one recorded stop on `args.core` and emits the stop event.
+pub fn stepBack(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
+    if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
+    context.session.stepBack(core(args.core)) catch |err| return refuse(err);
+    context.pending = handlers.reported(context.session, args.core, .{ .stop = .stepped });
+    return .{ .ok = .{ .accepted = 1 } };
+}
+
 fn core(of: proto.Core) api.Core {
     return @fromBackingInt(@intCast(@backingInt(of)));
 }

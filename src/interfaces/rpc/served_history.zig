@@ -61,15 +61,7 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
         },
     };
     if (self.second) |cpu1| self.root.elf1 = .{ .identity = history_root.identity(cpu1.bytes), .bytes = cpu1.bytes };
-    if (self.history) |b| if (b.root) |existing| {
-        if (!std.mem.eql(u8, &existing.elf0.identity, &self.root.elf0.identity)) return error.ImageMismatch;
-        if ((existing.elf1 == null) != (self.root.elf1 == null)) return error.ImageMismatch;
-        if (existing.elf1) |image| if (!std.mem.eql(
-            u8,
-            &image.identity,
-            &self.root.elf1.?.identity,
-        )) return error.ImageMismatch;
-    };
+    if (self.history) |b| if (b.root) |existing| try checkExistingRoot(existing, &self.root);
     session.attachRoot(&self.root);
     session.attachImageIdentity(.cpu0, self.root.elf0.identity);
     if (self.root.elf1) |image| session.attachImageIdentity(.cpu1, image.identity);
@@ -79,7 +71,13 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
     try board_c6.attach(self.gpa, session, &self.owner.board().c6.wire.bridge);
     errdefer board_c6.release(&self.owner.board().c6.wire.bridge);
     self.owner.board().console_input.hook = .{ .context = session, .feedFn = routeConsoleStdin, .heldFn = hostHeld };
+    try attachRouter(self, allocator);
+    errdefer detachRamRouter(self, allocator);
+    try attachNav(self, allocator);
+}
 
+fn attachRouter(self: *served_setup.Served, allocator: std.mem.Allocator) !void {
+    const session = self.owner.session();
     if (self.history) |b| {
         session.attachForkRouter(&b.router);
         session.attachGraphSink(b.graph_sink);
@@ -87,31 +85,31 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
             b.root = self.root;
             try saveRoot(self.io, b.session.dir, allocator, &self.root);
         }
-    } else {
-        const graph = try allocator.create(session_branch.BranchGraph);
-        errdefer allocator.destroy(graph);
-        graph.* = try session_branch.BranchGraph.init(allocator);
-        errdefer graph.deinit();
-        const router = try allocator.create(session_fork.ForkRouter);
-        errdefer allocator.destroy(router);
-        router.* = session_fork.ForkRouter.init(allocator, graph);
-        self.ram_graph = graph;
-        self.ram_router = router;
-        session.attachForkRouter(router);
+        return;
     }
-    errdefer {
-        if (self.ram_router) |r| {
-            r.deinit();
-            allocator.destroy(r);
-            self.ram_router = null;
-        }
-        if (self.ram_graph) |g| {
-            g.deinit();
-            allocator.destroy(g);
-            self.ram_graph = null;
-        }
+    const graph = try allocator.create(session_branch.BranchGraph);
+    errdefer allocator.destroy(graph);
+    graph.* = try session_branch.BranchGraph.init(allocator);
+    errdefer graph.deinit();
+    const router = try allocator.create(session_fork.ForkRouter);
+    errdefer allocator.destroy(router);
+    router.* = session_fork.ForkRouter.init(allocator, graph);
+    self.ram_graph = graph;
+    self.ram_router = router;
+    session.attachForkRouter(router);
+}
+
+fn detachRamRouter(self: *served_setup.Served, allocator: std.mem.Allocator) void {
+    if (self.ram_router) |r| {
+        r.deinit();
+        allocator.destroy(r);
+        self.ram_router = null;
     }
-    try attachNav(self, allocator);
+    if (self.ram_graph) |g| {
+        g.deinit();
+        allocator.destroy(g);
+        self.ram_graph = null;
+    }
 }
 
 pub fn attachNav(self: *served_setup.Served, allocator: std.mem.Allocator) !void {
@@ -266,6 +264,15 @@ pub fn handleNewHistory(context: *anyopaque, core: session_api.Core, image_bytes
     _ = image_bytes;
     _ = core;
     if (self.history) |b| b.detached = true;
+}
+
+fn checkExistingRoot(existing: history_root.Root, current: *const history_root.Root) !void {
+    if (!std.mem.eql(u8, existing.part, current.part)) return error.WrongPart;
+    if (!std.mem.eql(u8, &existing.elf0.identity, &current.elf0.identity)) return error.ImageMismatch;
+    if ((existing.elf1 == null) != (current.elf1 == null)) return error.ImageMismatch;
+    if (existing.elf1) |image| {
+        if (!std.mem.eql(u8, &image.identity, &current.elf1.?.identity)) return error.ImageMismatch;
+    }
 }
 
 fn saveRoot(io: std.Io, dir: std.Io.Dir, allocator: std.mem.Allocator, r: *const history_root.Root) !void {
