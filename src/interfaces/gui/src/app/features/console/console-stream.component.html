@@ -1,0 +1,98 @@
+<div class="stream-pane">
+  <div class="stream-head">
+    <div class="head-left">
+      <app-section-kicker label="UART SERIAL STREAM" />
+      <div class="seg-group" role="tablist" aria-label="Stream source">
+        <button type="button" class="seg-tab" [class.is-active]="streamTab() === 'all'" data-testid="console-tab-all" (click)="streamTab.set('all')">All</button>
+        <button type="button" class="seg-tab" [class.is-active]="streamTab() === 'uart'" data-testid="console-tab-uart" (click)="streamTab.set('uart')">UART</button>
+        <button type="button" class="seg-tab" [class.is-active]="streamTab() === 'swo'" data-testid="console-tab-swo" (click)="streamTab.set('swo')">SWO</button>
+        <button type="button" class="seg-tab" [class.is-active]="streamTab() === 'rtt'" data-testid="console-tab-rtt" (click)="streamTab.set('rtt')">RTT</button>
+      </div>
+      <select class="es-select mono" aria-label="SCI channel" data-testid="console-channel-select" [value]="channelSelectValue()" (change)="onChannelSelect($event)">
+        <option value="all">All SCI</option>
+        @for (ch of availableChannels(); track ch) {
+          <option [value]="ch">CH{{ ch }}</option>
+        }
+      </select>
+    </div>
+
+    <div class="head-right">
+      <div class="search-wrap">
+        <input type="text" class="filter-input mono" data-testid="console-filter-input" [value]="searchQuery()" (input)="onSearchInput($event)" placeholder="Filter output or regex..." />
+        <button type="button" class="chip-btn mono" [class.is-active]="useRegex()" data-testid="console-regex-toggle" title="Toggle regex filter" (click)="useRegex.set(!useRegex())">.*</button>
+      </div>
+      <div class="seg-group">
+        <button type="button" class="seg-tab" [class.is-active]="displayMode() === 'ascii'" data-testid="console-mode-ascii" (click)="displayMode.set('ascii')">ASCII</button>
+        <button type="button" class="seg-tab" [class.is-active]="displayMode() === 'hex'" data-testid="console-mode-hex" (click)="displayMode.set('hex')">Hex</button>
+      </div>
+      <div class="seg-group">
+        <button type="button" class="seg-tab" [class.is-active]="timestampMode() === 'elapsed'" data-testid="console-ts-elapsed" (click)="timestampMode.set('elapsed')">Elapsed</button>
+        <button type="button" class="seg-tab" [class.is-active]="timestampMode() === 'virtual'" data-testid="console-ts-virtual" (click)="timestampMode.set('virtual')">Virtual ns</button>
+      </div>
+      <select class="es-select" aria-label="Filter stream direction" [value]="kindFilter()" (change)="onKindChange($event)">
+        <option value="all">RX + TX</option>
+        <option value="rx">RX only</option>
+        <option value="tx">TX only</option>
+      </select>
+      <button type="button" class="mini-btn" data-testid="console-copy-btn" [disabled]="filteredEntries().length === 0" (click)="copyLog()">Copy</button>
+      <button type="button" class="mini-btn" data-testid="console-export-btn" [disabled]="filteredEntries().length === 0" (click)="exportLog()">Save Log</button>
+      <button type="button" class="mini-btn" data-testid="console-clear-btn" [disabled]="consoleStore.entries().length === 0" (click)="consoleStore.clear()">Clear</button>
+    </div>
+  </div>
+
+  @if (regexError(); as errText) {
+    <div class="regex-err mono" data-testid="console-regex-error">Regex error: {{ errText }}</div>
+  }
+
+  <div class="viewport-wrap">
+    <div #streamViewport class="stream-viewport mono" data-testid="console-stream-viewport" (scroll)="onViewportScroll()">
+      @if (visibleRows().length > 0) {
+        @for (row of visibleRows(); track row.id) {
+          <div class="log-row" [class.is-tx]="row.isInput" [class.is-marked]="row.markKind !== null" [attr.data-testid]="'console-row-' + row.id">
+            <span class="ts es-meta">{{ row.timestamp }}</span>
+            <span class="tag es-meta">{{ row.streamTag }} {{ row.isInput ? 'TX' : 'RX' }}</span>
+            @if (row.markKind === 'alert_halt') {
+              <span class="mark-dot is-fault" aria-label="Alert trigger"></span>
+            } @else if (row.markKind === 'marker') {
+              <span class="mark-dot is-marker" aria-label="Marked row"></span>
+            }
+            <span class="payload">
+              @for (seg of row.segments; track $index) {
+                <span>{{ seg.text }}</span>
+                @if (seg.symbol) {
+                  <span class="sym-badge">[{{ seg.symbol }}]</span>
+                }
+              }
+            </span>
+          </div>
+        }
+      } @else {
+        <p class="es-meta empty-note">{{ emptyMessage() }}</p>
+      }
+    </div>
+
+    @if (autoScrollLocked()) {
+      <button type="button" class="autoscroll-pill" data-testid="console-autoscroll-pill" (click)="resumeAutoScroll()">Resume Tail ↓</button>
+    }
+  </div>
+
+  <form class="tx-bar" (submit)="onTxSubmit($event)">
+    @if (execution.cpu1Attached()) {
+      <select class="es-select mono" aria-label="Target core" [value]="consoleStore.activeCore()" (change)="onCoreChange($event)">
+        <option [value]="cpu0">CPU0</option>
+        <option [value]="cpu1">CPU1</option>
+      </select>
+    }
+    <select class="es-select mono" aria-label="Line ending" data-testid="console-line-ending" [value]="lineEnding()" (change)="onEndingChange($event)">
+      <option value="lf">LF</option>
+      <option value="crlf">CRLF</option>
+      <option value="none">Raw</option>
+    </select>
+    <label class="echo-label">
+      <input type="checkbox" data-testid="console-echo-toggle" [checked]="localEcho()" (change)="onEchoToggle($event)" />
+      <span>Echo</span>
+    </label>
+    <input type="text" class="tx-input mono" data-testid="console-tx-input" [value]="txDraft()" (input)="onTxInput($event)" placeholder="Send UART command or AT string..." />
+    <button type="submit" class="send-btn" data-testid="console-send-btn" [disabled]="!rpc.isConnected() || rpc.observeOnly()">Send</button>
+  </form>
+</div>
