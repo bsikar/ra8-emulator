@@ -191,6 +191,7 @@ pub const Host = struct {
 /// native local GUI link (slice 15) both use this order.
 pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
     try build.pump(context, server, tx);
+    try targets.pump(context, server, tx);
     try workspace_watch.pump(context, server, tx);
     try uart_feed.pump(context, server, tx);
     try lcd_feed.pump(context, server, tx);

@@ -2,14 +2,16 @@
 //! mode (`--listen tcp:HOST:PORT`), host-profile spawned pipe mode (`--stdio`),
 //! and OS/probe/transport matrix inspection (`--matrix`). Every frame after the
 //! `RA8PH2` handshake carries a directional HMAC-SHA256 and monotonic sequence
-//! number, operations stream progress chunks before the finite reply, and peer
-//! disconnect drops reservations immediately.
+//! number, flash/debug operations stream progress chunks before the finite
+//! reply, and peer disconnect drops reservations and staged images immediately.
 const builtin = @import("builtin");
 const std = @import("std");
 
 const host = @import("ra8_host");
 const listen = @import("serve/listen.zig");
 const loop = @import("serve/loop.zig");
+const probe_dispatch = @import("probe_dispatch.zig");
+const probe_stage = @import("probe_stage.zig");
 const target_bindings = @import("serve/targets.zig");
 
 const auth = host.probe_host.auth;
@@ -34,6 +36,7 @@ pub const Peer = struct {
     session: auth.Session = .{ .tx_key = @splat(0), .rx_key = @splat(0) },
     owner: u8 = 0,
     token: u64 = 0,
+    stage: probe_stage.Stage = .{},
 };
 
 const RawFlags = struct {
@@ -134,6 +137,7 @@ pub const State = struct {
 
     fn closeAll(self: *State) void {
         for (&self.peers) |*slot| if (slot.*) |*peer| {
+            peer.stage.drop();
             self.registry.release(&peer.owner);
             peer.stream.close(self.io);
             slot.* = null;
@@ -152,16 +156,13 @@ fn serveStdio(
     var tx: [4096]u8 = undefined;
     var writer = std.Io.File.stdout().writerStreaming(io, &tx);
     var peer: Peer = .{
-        .session = try auth.authenticateAgentFrom(
-            io,
-            .{ .pipe = .{ .file = stdin } },
-            &writer.interface,
-            host_id,
-            key,
-        ),
+        .session = try auth.authenticateAgentFrom(io, .{ .pipe = .{ .file = stdin } }, &writer.interface, host_id, key),
     };
     var state: State = .{ .io = io, .host_id = host_id, .registry = registry };
-    defer state.registry.release(&peer.owner);
+    defer {
+        peer.stage.drop();
+        state.registry.release(&peer.owner);
+    }
     while (true) {
         var scratch: [wire.max_line]u8 = undefined;
         const parsed = wire.receivePipe(
@@ -238,6 +239,7 @@ fn stepPeers(allocator: std.mem.Allocator, state: *State) void {
 
 fn dropPeer(state: *State, slot: *?Peer) void {
     if (slot.*) |*peer| {
+        peer.stage.drop();
         state.registry.release(&peer.owner);
         peer.stream.close(state.io);
         slot.* = null;
@@ -255,7 +257,7 @@ fn handleOne(allocator: std.mem.Allocator, state: *State, peer: *Peer) !void {
         peer.stream.socket.handle,
         &peer.session,
         &scratch,
-        5_000,
+        10_000,
     );
     defer parsed.deinit();
     try answerPeer(state, peer, parsed.value, &writer.interface);
@@ -263,11 +265,9 @@ fn handleOne(allocator: std.mem.Allocator, state: *State, peer: *Peer) !void {
 
 fn answerPeer(state: *State, peer: *Peer, req: wire.Request, writer: *std.Io.Writer) !void {
     if (req.op == .perform) {
-        try wire.send(writer, &peer.session, wire.Reply{
-            .ok = true,
-            .chunk = true,
-            .stream = @tagName(req.action),
-        });
+        try wire.send(writer, &peer.session, wire.Reply{ .ok = true, .chunk = true, .stream = @tagName(req.action) });
+    } else if (req.op == .flash_commit) {
+        try wire.send(writer, &peer.session, wire.Reply{ .ok = true, .chunk = true, .stream = "flash:program_verify" });
     }
     var out: [16384]u8 = undefined;
     var snaps: [32]wire.Snapshot = undefined;
@@ -285,87 +285,7 @@ pub fn dispatch(
     snaps: *[32]wire.Snapshot,
     out: []u8,
 ) !wire.Reply {
-    return switch (req.op) {
-        .list => .{ .ok = true, .targets = listTargets(state, snaps) },
-        .claim => claimTarget(state, peer, req),
-        .release => releaseTarget(state, peer, req),
-        .perform => performTarget(state, peer, req, out),
-    };
-}
-
-fn listTargets(state: *State, snaps: *[32]wire.Snapshot) []const wire.Snapshot {
-    state.registry.refresh();
-    var count: usize = 0;
-    for (state.registry.entries) |slot| if (slot) |entry| {
-        if (!std.mem.eql(u8, entry.target.host_id, state.host_id)) continue;
-        snaps[count] = snapshot(entry.target);
-        count += 1;
-    };
-    return snaps[0..count];
-}
-
-fn claimTarget(state: *State, peer: *Peer, req: wire.Request) !wire.Reply {
-    state.registry.refresh();
-    const sel = try selectionFor(state.registry, state.host_id, req.probe_id, req.board_id);
-    try state.registry.reserve(&peer.owner, sel);
-    state.next_token += 1;
-    peer.token = state.next_token;
-    return .{ .ok = true, .token = peer.token };
-}
-
-fn releaseTarget(state: *State, peer: *Peer, req: wire.Request) !wire.Reply {
-    if (req.token == 0 or peer.token != req.token) return error.StaleLease;
-    state.registry.release(&peer.owner);
-    peer.token = 0;
-    return .{ .ok = true };
-}
-
-fn performTarget(state: *State, peer: *Peer, req: wire.Request, out: []u8) !wire.Reply {
-    if (req.token == 0 or peer.token != req.token) return error.StaleLease;
-    const sel = try selectionFor(state.registry, state.host_id, req.probe_id, req.board_id);
-    const json = try state.registry.perform(&peer.owner, sel, req.action, out);
-    return .{ .ok = true, .json = json };
-}
-
-fn selectionFor(
-    registry: *model.Registry,
-    host_id: []const u8,
-    probe_id: []const u8,
-    board_id: []const u8,
-) !model.Selection {
-    for (registry.entries) |slot| if (slot) |entry| {
-        const t = entry.target;
-        if (!std.mem.eql(u8, t.host_id, host_id)) continue;
-        if (!std.mem.eql(u8, t.probe_id, probe_id) or !std.mem.eql(u8, t.board_id, board_id)) continue;
-        return .{
-            .host_id = t.host_id,
-            .probe_id = t.probe_id,
-            .board_id = t.board_id,
-            .generation = entry.generation,
-            .disambiguation = t.disambiguation,
-        };
-    };
-    return error.StaleSelection;
-}
-
-fn snapshot(t: model.Descriptor) wire.Snapshot {
-    return .{
-        .probe_id = t.probe_id,
-        .board_id = t.board_id,
-        .probe_serial = t.probe_serial,
-        .board_serial = t.board_serial,
-        .vendor = t.vendor,
-        .model = t.model,
-        .cores = t.cores,
-        .transport = t.transport,
-        .connected = t.connection != .disconnected,
-        .uart = t.uart,
-        .disambiguation = t.disambiguation,
-        .identity_verified = t.identity_verified,
-        .managed = t.managed,
-        .operations = t.operations,
-        .capabilities = t.capabilities,
-    };
+    return probe_dispatch.execute(state, peer, req, snaps, out);
 }
 
 fn catchStops() void {

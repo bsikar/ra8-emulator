@@ -1,7 +1,7 @@
 //! Onboard J-Link targets: presence and the probe CDC interface come from a
 //! USB scan keyed by the operator-pinned probe serial, ownership from a
 //! host-wide lease, and every operation names the probe by serial and checks
-//! the expected core.
+//! the expected core before executing or writing flash.
 const builtin = @import("builtin");
 const std = @import("std");
 
@@ -17,6 +17,16 @@ const target_lease = host.target_lease;
 pub const transport = "jlink-usb";
 pub const operations_debug: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset };
 pub const operations_uart: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset, .uart };
+pub const operations_flash_debug: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .flash, .reset };
+pub const operations_flash_uart: []const model.Action = &.{
+    .registers,
+    .halt,
+    .step,
+    .@"resume",
+    .flash,
+    .reset,
+    .uart,
+};
 
 pub const Probe = struct {
     io: std.Io,
@@ -25,13 +35,56 @@ pub const Probe = struct {
     device: []const u8,
     cpuid: u32,
     uart_wired: bool = true,
+    flash_enabled: bool = false,
+    flash_base: u32 = 0,
+    flash_size: u32 = 0,
     lease: ?target_lease.Lease = null,
     vcom: ?serial_port.Port = null,
     fence: target_lease.Fence = .{},
     uart: [2][64]u8 = undefined,
 
     pub fn provider(self: *Probe) model.Provider {
-        return .{ .context = self, .performFn = perform, .claimFn = claim, .releaseFn = release };
+        return .{
+            .context = self,
+            .performFn = perform,
+            .flashFn = flash,
+            .claimFn = claim,
+            .releaseFn = release,
+        };
+    }
+
+    fn flash(context: *anyopaque, elf: []const u8, out: []u8) ![]const u8 {
+        const self: *Probe = @ptrCast(@alignCast(context));
+        const lease = self.lease orelse return error.NotReserved;
+        try self.fence.admit(lease.token);
+        if (!self.flash_enabled) return error.Unsupported;
+        var text: [32768]u8 = undefined;
+        const outcome = try commander.flashAndVerify(
+            self.io,
+            self.tool,
+            self.serial,
+            self.device,
+            self.cpuid,
+            self.flash_base,
+            self.flash_size,
+            elf,
+            &text,
+        );
+        var digits: [20]u8 = undefined;
+        var cpuid_buf: [12]u8 = undefined;
+        const cpuid_hex = try std.fmt.bufPrint(&cpuid_buf, "0x{X:0>8}", .{outcome.identity.cpuid});
+        var writer: std.Io.Writer = .fixed(out);
+        try std.json.Stringify.value(.{
+            .flashed = true,
+            .verified = true,
+            .serial = emu_list.format(outcome.identity.serial, &digits),
+            .cpuid = cpuid_hex,
+            .sha256 = &outcome.sha256,
+            .segments = outcome.segments,
+            .bytes = outcome.bytes,
+            .lease = lease.token,
+        }, .{}, &writer);
+        return writer.buffered();
     }
 
     fn perform(context: *anyopaque, action: model.Action, out: []u8) ![]const u8 {
@@ -178,7 +231,31 @@ pub fn hostSupportsUart() bool {
     return builtin.os.tag == .windows or builtin.os.tag == .linux;
 }
 
+pub fn operationsFor(has_flash: bool, has_uart: bool) []const model.Action {
+    if (has_flash) return if (has_uart) operations_flash_uart else operations_flash_debug;
+    return if (has_uart) operations_uart else operations_debug;
+}
+
+const FlashSpec = struct { enabled: bool, base: u32, size: u32 };
+
+fn extractFlashSpec(fields: anytype) !FlashSpec {
+    const Fields = @TypeOf(fields);
+    const spec: FlashSpec = .{
+        .enabled = if (@hasField(Fields, "flash_enabled")) fields.flash_enabled else false,
+        .base = if (@hasField(Fields, "flash_base")) fields.flash_base else 0,
+        .size = if (@hasField(Fields, "flash_size")) fields.flash_size else 0,
+    };
+    if (spec.enabled) {
+        if (spec.size == 0) return error.InvalidEndpoint;
+        _ = std.math.add(u32, spec.base, spec.size) catch return error.InvalidEndpoint;
+    } else if (spec.base != 0 or spec.size != 0) {
+        return error.InvalidEndpoint;
+    }
+    return spec;
+}
+
 pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
+    const flash_spec = try extractFlashSpec(fields);
     if (!std.mem.eql(u8, target.transport, transport)) return error.InvalidEndpoint;
     if (fields.program.len == 0 or fields.scratch.len == 0 or fields.device.len == 0) return error.InvalidEndpoint;
     if (!std.fs.path.isAbsolute(fields.scratch)) return error.InvalidEndpoint;
@@ -190,5 +267,8 @@ pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
         .device = fields.device,
         .cpuid = std.fmt.parseInt(u32, hex, 16) catch return error.InvalidEndpoint,
         .uart_wired = fields.uart_wired and hostSupportsUart(),
+        .flash_enabled = flash_spec.enabled,
+        .flash_base = flash_spec.base,
+        .flash_size = flash_spec.size,
     };
 }

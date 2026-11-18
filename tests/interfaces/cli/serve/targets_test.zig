@@ -166,3 +166,31 @@ test "agent profile uniqueness scopes profile names by hosts_file" {
     try inventory.open(alloc, io, distinct_path, null);
     try std.testing.expectEqual(@as(usize, 2), inventory.agent_host_count);
 }
+
+test "jlink flash_enabled requires bounded flash window and non-jlink kinds reject flash fields" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const desc = testDescriptor("host-1", "fpb-ra8e1", "jlink-a", "001083322193");
+    const scratch_dir = if (builtin.os.tag == .windows) "C:\\tmp" else "/tmp";
+
+    try expectBindingError(&tmp, "rsp-flash.json", &.{.{
+        .kind = .rsp,
+        .host = "127.0.0.1",
+        .port = 2331,
+        .flash_enabled = true,
+        .flash_size = 4096,
+        .target = .{ .managed = false, .host_id = "h", .board_id = "b", .probe_id = "p", .transport = "rsp" },
+    }}, error.InvalidEndpoint);
+
+    try expectBindingError(&tmp, "jlink-zero-win.json", &.{.{
+        .kind = .jlink,
+        .program = "JLink",
+        .scratch = scratch_dir,
+        .device = "R7FA8E1AF",
+        .cpuid = "0x410FD232",
+        .flash_enabled = true,
+        .flash_base = 0x0200_0000,
+        .flash_size = 0,
+        .target = desc,
+    }}, error.InvalidEndpoint);
+}

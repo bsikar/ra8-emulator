@@ -569,14 +569,20 @@ Four binding kinds are supported:
 - `"kind":"rsp"` (`"transport":"rsp"`, `"host"`, `"port"`): operator-pinned RSP
   endpoint for registers, halt, step and resume; starts `configured`.
 - `"kind":"jlink"` (`"transport":"jlink-usb"`, `"program"`, `"scratch"`,
-  `"device"`, `"cpuid"`, optional `"uart_wired"` defaulting to `true`, and
+  `"device"`, `"cpuid"`, optional `"uart_wired"` defaulting to `true`, optional
+  `"flash_enabled"` with `"flash_base"` and `"flash_size"`, and
   `target.probe_serial`): physical USB J-Link discovery via `ShowEmuList USB`
   keyed strictly by probe serial, resolving the CDC `uart` port from the USB
   serial at scan time (Windows composite parent DevNode, Linux
   `/dev/serial/by-id`), acquiring an exclusive host-wide OS file lock
   (`<scratch>/jlink-<serial>.lease`) with a persisted monotonic fencing token
   across processes, and verifying both probe serial and `SCB.CPUID`
-  (`0xE000ED00`) before registers, halt, step, resume, reset or `uart`.
+  (`0xE000ED00`) before registers, halt, step, resume, `flash`, reset or `uart`.
+  When `"flash_enabled":true`, every loadable `PT_LOAD` segment of an admitted
+  32-bit little-endian Arm (`EM_ARM`) ELF must fit strictly within
+  `[flash_base, flash_base + flash_size)` (refusing wrong-part images and
+  option-setting flash regions before touching hardware), followed by J-Link
+  `loadfile` programming and per-segment byte-for-byte `verifybin` verification.
   Hotplug, unplug or UART renumbering advances `generation` and drops active
   leases. `uart` names the probe's own USB CDC interface only; it is not
   evidence that the board routes that port to the target MCU (for example,
@@ -619,25 +625,36 @@ to `native_local` (same host) or `native_agent` (cross-host, including Windows
 and macOS where `vhci_hcd` does not exist), while `bootloader_serial` targets
 without SWD are reported explicitly as unsupported.
 
-Configuration cannot enable build, flash or NPU execution. Separate capability
-booleans (`emulation`, `hardware_debug`, `uart`) and `operations` report what
-each provider implements.
+Target descriptors cannot self-assert build or NPU execution, and only operator
+`jlink` bindings (and `agent` bindings mirroring them) with explicit
+`flash_enabled`, `flash_base`, and `flash_size` advertise `capabilities.flash`.
+Separate capability booleans (`emulation`, `hardware_debug`, `flash`, `uart`)
+and `operations` report what each provider implements.
 
 Select with the complete identity and generation returned by list:
 
 ```sh
 ra8_emulator ctl --connect tcp:127.0.0.1:PORT targets use backend-a virtual-a emulator-a GENERATION - registers step
+ra8_emulator ctl --connect tcp:127.0.0.1:PORT targets flash win-bench jlink-ra8e1 fpb-ra8e1 GENERATION - --elf fw.elf --reset --uart
+ra8_emulator project flash /workspace project.json debug --connect tcp:127.0.0.1:PORT \
+  --target win-bench jlink-ra8e1 fpb-ra8e1 GENERATION - --zig /abs/path/to/zig --reset --uart
 ```
 
-`use` reserves exactly one target for that connection, runs its ordered
-operations, then releases it. Disconnect also releases it, including failed
-operations. RPC methods 0x190 through 0x193 expose list, reserve, release and
-perform for clients that keep a connection open. The capability bit is 21.
-Owners are server-side connection contexts, never client-supplied IDs.
-Reservations share the host registry. Embedders must serialize registry calls
-and hold descriptor/provider storage until removal. Provider errors fence the
-binding as disconnected and clear its reservation; stale generations and stale
-lease tokens both return `0x191`.
+`use` and `flash` reserve exactly one target for that connection, run its
+ordered operations, then release it; disconnect or failure also releases it.
+`project flash` verifies `project.target == BOARD_ID` before starting the build,
+prepares and validates `.ra8-builds/<id>/project.json`, streams the verified
+ELF to the selected target, verifies flash contents, optionally resets and
+captures bounded UART output, and releases ownership. RPC methods `0x190`
+through `0x197` expose `list`, `reserve`, `release`, `perform`, chunked
+`flash_begin`/`flash_chunk`/`flash_commit`, and server-local `flash_receipt`
+(which verifies an open project's receipt directly on the backend), streaming
+per-stage progress events on topic `0x183`. Artifact/profile rejections return
+`0x198` without disconnecting the probe, whereas hardware/link errors fence the
+binding as disconnected; stale generations and stale lease tokens return
+`0x191`. The capability bit is 21. Owners are server-side connection contexts,
+never client-supplied IDs. Reservations share the host registry. Embedders must
+serialize registry calls and hold descriptor/provider storage until removal.
 
 Two different mechanisms protect ownership:
 - Across processes on one host, a `jlink` binding takes an exclusive OS file

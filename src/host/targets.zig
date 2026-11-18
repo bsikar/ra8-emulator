@@ -41,6 +41,8 @@ pub const Selection = struct {
 pub const Provider = struct {
     context: *anyopaque,
     performFn: *const fn (*anyopaque, Action, []u8) anyerror![]const u8,
+    /// Programs and verifies an admitted firmware ELF on the reserved target.
+    flashFn: ?*const fn (*anyopaque, []const u8, []u8) anyerror![]const u8 = null,
     /// Takes ownership beyond this process (a host-wide lease) when a reservation starts.
     claimFn: ?*const fn (*anyopaque) anyerror!void = null,
     /// Gives that ownership back; called exactly once per successful claim.
@@ -162,6 +164,24 @@ pub const Registry = struct {
         };
     }
 
+    pub fn flash(self: *Registry, owner: *anyopaque, selection: Selection, elf: []const u8, out: []u8) ![]const u8 {
+        const entry = try self.find(selection);
+        if (entry.target.managed and (self.custodian == null or entry.custodian_token == 0)) {
+            return error.CustodianUnavailable;
+        }
+        if (entry.owner != owner) return error.NotReserved;
+        const has_flash_op = std.mem.indexOfScalar(Action, entry.target.operations, .flash) != null;
+        if (!entry.target.capabilities.flash or !has_flash_op) return error.Unsupported;
+        const flashFn = entry.provider.flashFn orelse return error.Unsupported;
+        return flashFn(entry.provider.context, elf, out) catch |err| {
+            if (!isInputRejection(err)) {
+                entry.target.connection = .disconnected;
+                self.drop(entry);
+            }
+            return err;
+        };
+    }
+
     fn acquire(self: *Registry, entry: *Entry) !void {
         var token: u64 = 0;
         if (entry.target.managed) {
@@ -219,6 +239,21 @@ fn matches(target: Descriptor, selection: Selection) bool {
     return std.mem.eql(u8, target.host_id, selection.host_id) and
         std.mem.eql(u8, target.probe_id, selection.probe_id) and
         std.mem.eql(u8, target.board_id, selection.board_id);
+}
+
+fn isInputRejection(err: anyerror) bool {
+    return switch (err) {
+        error.Unsupported,
+        error.NotElf,
+        error.InvalidElf,
+        error.UnsupportedElfTarget,
+        error.EmptyLoadImage,
+        error.TooManySegments,
+        error.InvalidFlashWindow,
+        error.AddressOutOfRange,
+        => true,
+        else => false,
+    };
 }
 
 fn checkSelection(entry: *const Entry, selection: Selection) !void {

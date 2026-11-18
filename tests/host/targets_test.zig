@@ -213,3 +213,51 @@ test "custodian hook gates managed targets and releases custodian lease when cla
     registry.release(&owner);
     try std.testing.expectEqual(@as(u64, 22), hooks.custodian_released);
 }
+
+const FlashMock = struct {
+    flashes: usize = 0,
+    mode: enum { ok, bad_elf, hw_fail } = .ok,
+    fn perform(_: *anyopaque, _: model.Action, _: []u8) ![]const u8 {
+        return "{\"ok\":true}";
+    }
+    fn flash(ctx: *anyopaque, elf: []const u8, out: []u8) ![]const u8 {
+        const self: *FlashMock = @ptrCast(@alignCast(ctx));
+        self.flashes += 1;
+        return switch (self.mode) {
+            .ok => std.fmt.bufPrint(out, "{{\"flashed\":true,\"bytes\":{d}}}", .{elf.len}),
+            .bad_elf => error.AddressOutOfRange,
+            .hw_fail => error.FlashFailed,
+        };
+    }
+};
+
+test "Registry.flash preserves reservation on artifact rejection and fences on hardware failure" {
+    var registry: model.Registry = .{};
+    var mock: FlashMock = .{ .mode = .bad_elf };
+    var owner: u8 = 0;
+    var target = descriptor("board-f", "probe-f");
+    target.operations = &.{ .registers, .flash, .reset };
+    target.capabilities = .{ .hardware_debug = true, .flash = true };
+    const gen = try registry.add(target, .{
+        .context = &mock,
+        .performFn = FlashMock.perform,
+        .flashFn = FlashMock.flash,
+    });
+    const sel = selection("board-f", "probe-f", gen);
+    try registry.reserve(&owner, sel);
+    var out: [128]u8 = undefined;
+
+    // Input rejection keeps target connected and reserved.
+    try std.testing.expectError(error.AddressOutOfRange, registry.flash(&owner, sel, "bad", &out));
+    try std.testing.expect(registry.entries[0].?.owner == @as(*anyopaque, &owner));
+
+    mock.mode = .ok;
+    const res = try registry.flash(&owner, sel, "elfbytes", &out);
+    try std.testing.expectEqualStrings("{\"flashed\":true,\"bytes\":8}", res);
+
+    // Hardware failure fences target disconnected and releases ownership.
+    mock.mode = .hw_fail;
+    try std.testing.expectError(error.FlashFailed, registry.flash(&owner, sel, "elfbytes", &out));
+    try std.testing.expect(registry.entries[0].?.owner == null);
+    try std.testing.expectEqual(.disconnected, registry.entries[0].?.target.connection);
+}

@@ -72,6 +72,7 @@ pub const probe_host = struct {
 /// Onboard SEGGER J-Link discovery, identity, and serial capture by USB serial (RA8EMU-1287/1288).
 pub const jlink = struct {
     pub const commander = @import("jlink/commander.zig");
+    pub const elf_image = @import("jlink/elf_image.zig");
     pub const emu_list = @import("jlink/emu_list.zig");
     pub const identity = @import("jlink/identity.zig");
     pub const run = @import("jlink/run.zig");

@@ -1,6 +1,7 @@
 //! Per-frame HMAC-SHA256 authenticated JSON messages (`SEQ MAC JSON\n`)
 //! exchanged over a `RA8PH2` probe-host session: inventory snapshots, claim
-//! tokens, streamed progress/UART chunks, and finite operation replies.
+//! tokens, chunked ELF staging for remote flashing, streamed progress/UART
+//! chunks, and finite operation replies.
 const std = @import("std");
 
 const auth = @import("auth.zig");
@@ -9,8 +10,10 @@ const targets = @import("../targets.zig");
 
 pub const max_line = 65536;
 pub const max_chunks = 64;
+pub const max_flash_elf: u32 = 4 * 1024 * 1024;
+pub const raw_chunk_bytes: usize = 16384;
 
-pub const Op = enum { list, claim, release, perform };
+pub const Op = enum { list, claim, release, perform, flash_begin, flash_chunk, flash_commit };
 
 pub const Request = struct {
     op: Op,
@@ -18,6 +21,10 @@ pub const Request = struct {
     board_id: []const u8 = "",
     token: u64 = 0,
     action: targets.Action = .registers,
+    total_len: u32 = 0,
+    offset: u32 = 0,
+    sha256: []const u8 = "",
+    hex: []const u8 = "",
 };
 
 pub const Snapshot = struct {
@@ -114,17 +121,37 @@ fn verifyAndParse(
     }) catch error.BadFrame;
 }
 
+const ErrorPair = struct { name: []const u8, err: anyerror };
+
+const mapped_errors = [_]ErrorPair{
+    .{ .name = "TargetBusy", .err = error.TargetBusy },
+    .{ .name = "StaleLease", .err = error.StaleLease },
+    .{ .name = "StaleSelection", .err = error.StaleLease },
+    .{ .name = "Disconnected", .err = error.Disconnected },
+    .{ .name = "AmbiguousIdentity", .err = error.AmbiguousIdentity },
+    .{ .name = "NotReserved", .err = error.NotReserved },
+    .{ .name = "Unsupported", .err = error.Unsupported },
+    .{ .name = "CustodianUnavailable", .err = error.CustodianUnavailable },
+    .{ .name = "WrongCore", .err = error.WrongCore },
+    .{ .name = "WrongProbe", .err = error.WrongProbe },
+    .{ .name = "Canceled", .err = error.Canceled },
+    .{ .name = "ProbeTimeout", .err = error.Timeout },
+    .{ .name = "Timeout", .err = error.Timeout },
+    .{ .name = "NotElf", .err = error.NotElf },
+    .{ .name = "InvalidElf", .err = error.InvalidElf },
+    .{ .name = "UnsupportedElfTarget", .err = error.UnsupportedElfTarget },
+    .{ .name = "EmptyLoadImage", .err = error.EmptyLoadImage },
+    .{ .name = "TooManySegments", .err = error.TooManySegments },
+    .{ .name = "InvalidFlashWindow", .err = error.InvalidFlashWindow },
+    .{ .name = "AddressOutOfRange", .err = error.AddressOutOfRange },
+    .{ .name = "BadChecksum", .err = error.BadChecksum },
+    .{ .name = "FlashFailed", .err = error.FlashFailed },
+    .{ .name = "VerifyFailed", .err = error.VerifyFailed },
+};
+
 pub fn mapError(name: []const u8) anyerror {
-    if (std.mem.eql(u8, name, "TargetBusy")) return error.TargetBusy;
-    if (std.mem.eql(u8, name, "StaleLease") or std.mem.eql(u8, name, "StaleSelection")) return error.StaleLease;
-    if (std.mem.eql(u8, name, "Disconnected")) return error.Disconnected;
-    if (std.mem.eql(u8, name, "AmbiguousIdentity")) return error.AmbiguousIdentity;
-    if (std.mem.eql(u8, name, "NotReserved")) return error.NotReserved;
-    if (std.mem.eql(u8, name, "Unsupported")) return error.Unsupported;
-    if (std.mem.eql(u8, name, "CustodianUnavailable")) return error.CustodianUnavailable;
-    if (std.mem.eql(u8, name, "WrongCore")) return error.WrongCore;
-    if (std.mem.eql(u8, name, "WrongProbe")) return error.WrongProbe;
-    if (std.mem.eql(u8, name, "Canceled")) return error.Canceled;
-    if (std.mem.eql(u8, name, "ProbeTimeout") or std.mem.eql(u8, name, "Timeout")) return error.Timeout;
+    for (mapped_errors) |item| {
+        if (std.mem.eql(u8, name, item.name)) return item.err;
+    }
     return error.ProbeHostFailed;
 }
