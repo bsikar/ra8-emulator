@@ -6,7 +6,7 @@ import { RpcConnectionStore } from '../../src/app/core/rpc/rpc-connection.store'
 import { RemoteHostsStore } from '../../src/app/core/stores/remote-hosts.store';
 import { ConnectRouteComponent } from '../../src/app/routes/connect.route';
 
-describe('ConnectRouteComponent (Screen 02)', () => {
+describe('ConnectRouteComponent', () => {
   beforeEach(() => {
     localStorage.clear();
   });

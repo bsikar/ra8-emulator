@@ -67,7 +67,7 @@ async function seedTestWorkspacesViaStorage(page: Page): Promise<void> {
   }, entries);
 }
 
-test.describe('Screen 01 Launch & Inline Command Mode', () => {
+test.describe('Launch Index & Inline Command Mode', () => {
   test('renders honest empty state on first boot at 1440x900 and 1280x720', async ({ page }) => {
     ensureScreenshotDir();
     for (const vp of [
@@ -79,9 +79,9 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
       await expect(page.getByTestId('launch-empty-state')).toBeVisible();
       await expect(page.getByTestId('launch-ws-input')).toBeVisible();
       await expect(page.getByText('RA8P1 Vision')).toHaveCount(0);
-      await auditEditorialSlateScreen(page, `screen01-empty-${vp.width}x${vp.height}`);
+      await auditEditorialSlateScreen(page, `launch-empty-${vp.width}x${vp.height}`);
       if (vp.width === 1440) {
-        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'screen01-empty.png') });
+        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'launch-empty.png') });
       }
     }
   });
@@ -99,9 +99,9 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
       await page.setViewportSize(vp);
       await expect(page.getByTestId('workspace-row-ws-ra8p1')).toBeVisible();
       await expect(page.getByTestId('workspace-row-ws-ra8e1')).toBeVisible();
-      await auditEditorialSlateScreen(page, `screen01-populated-${vp.width}x${vp.height}`);
+      await auditEditorialSlateScreen(page, `launch-populated-${vp.width}x${vp.height}`);
       if (vp.width === 1440) {
-        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'screen01-populated.png') });
+        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'launch-populated.png') });
       }
     }
 
@@ -118,18 +118,18 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
     await page.getByRole('menuitem', { name: 'Remove from Index' }).click();
     await expect(page.getByTestId('workspace-row-ws-ra8e1')).toBeHidden();
 
-    // Navigate to Screen 02 (/connect) via Connect Remote button and return via back arrow
+    // Navigate to /connect via Connect Remote button and return via back arrow
     await page.getByTestId('launch-action-connect').click();
     await expect(page).toHaveURL(/\/connect$/);
     await expect(page.getByTestId('connect-url-input')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen01-to-screen02');
+    await auditEditorialSlateScreen(page, 'launch-to-connect');
     await page.getByTestId('connect-back-btn').click();
     await expect(page).toHaveURL(/\/launch$/);
 
     // Open + New Workspace modal and create an entry
     await page.getByTestId('launch-action-new').click();
     await expect(page.getByTestId('new-workspace-dialog')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen01-new-workspace-dialog');
+    await auditEditorialSlateScreen(page, 'launch-new-workspace-dialog');
     await page.getByTestId('preset-fpb-ra4t1').click();
     await page.getByTestId('new-ws-create-btn').click();
     await expect(page.getByTestId('new-workspace-dialog')).toBeHidden();
@@ -156,9 +156,9 @@ test.describe('Screen 01 Launch & Inline Command Mode', () => {
       { width: 1280, height: 720 },
     ]) {
       await page.setViewportSize(vp);
-      await auditEditorialSlateScreen(page, `screen01-command-mode-${vp.width}x${vp.height}`);
+      await auditEditorialSlateScreen(page, `launch-command-mode-${vp.width}x${vp.height}`);
       if (vp.width === 1440) {
-        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'screen01-command-mode.png') });
+        await page.screenshot({ path: path.join(SCREENSHOT_DIR, 'launch-command-mode.png') });
       }
     }
 

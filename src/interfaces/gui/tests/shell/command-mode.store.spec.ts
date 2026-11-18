@@ -1,6 +1,6 @@
 import { CommandModeStore, formatShortcut, isEditableEventTarget } from '../../src/app/shell/command-mode.store';
 
-describe('CommandModeStore (RA8EMU-957 / RA8EMU-967)', () => {
+describe('CommandModeStore', () => {
   it('formats platform-aware shortcuts for macOS and non-macOS', () => {
     expect(formatShortcut({ mod: true, key: 'k' }, true)).toBe('Cmd+K');
     expect(formatShortcut({ mod: true, key: 'k' }, false)).toBe('Ctrl+K');

@@ -27,7 +27,7 @@ export function formatByteSize(bytes: number): string {
   return `${Math.round(bytes)} B`;
 }
 
-/** Convert a parsed USTAR/Gzip `BundlePreview` into Screen 03 inspection rows. */
+/** Convert a parsed USTAR/Gzip `BundlePreview` into bundle manifest inspection rows. */
 export function buildBundleSummaryRows(preview: BundlePreview, fileSizeBytes: number): BundleSummaryRow[] {
   const m = preview.manifest;
   const hasSnap = preview.entries.some((e) => e.path.endsWith('.ra8snap'));
