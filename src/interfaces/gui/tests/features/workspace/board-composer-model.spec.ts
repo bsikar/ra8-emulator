@@ -43,5 +43,25 @@ describe('board-composer-model & catalog', () => {
     const fromOfficial = createComposerDraft(OFFICIAL_BOARD_PRESETS[2]!);
     expect(fromOfficial.isExistingCustom).toBe(false);
     expect(fromOfficial.mcus[0]?.silicon).toBe('ra8e1');
+
+    fromOfficial.components = [
+      {
+        id: 'gpio-custom',
+        name: 'Custom LED1 + SW1',
+        category: 'GPIO',
+        isCustom: true,
+        mountSocket: 'U1',
+        endpointLabel: 'GPIO',
+        fitSpec: null,
+        interfaceKind: 'GPIO / Timer',
+        pins: [
+          { signal: 'LED1', pin: 'P401', electrical: 'Output' },
+          { signal: 'SW1', pin: 'P402', electrical: 'Input · Pull-up' },
+        ],
+      },
+    ];
+    const customGpio = compileDraftToBoardPreset(fromOfficial);
+    expect(customGpio.profile.leds[0]?.pin).toBe('P401');
+    expect(customGpio.profile.switches[0]?.pin).toBe('P402');
   });
 });

@@ -36,12 +36,13 @@ test.describe('Custom Board Composer, Settings Schemes, Splits & Fullscreen', ()
     await auditEditorialSlateScreen(page, 'board-composer-cores-1440x900');
     await page.getByTestId('cores-apply-btn').click();
 
-    // Add Preset MCU & Custom Silicon
+    // Add Preset MCU & Custom Silicon (with On-Chip Memory Map)
     await page.getByTestId('composer-open-preset-mcu').click();
     await expect(page.getByTestId('composer-preset-mcu-modal')).toBeVisible();
     await auditEditorialSlateScreen(page, 'board-composer-preset-mcu-1440x900');
     await page.getByTestId('switch-to-custom-silicon').click();
     await expect(page.getByTestId('composer-custom-silicon-modal')).toBeVisible();
+    await expect(page.getByTestId('custom-silicon-add-onchip-btn')).toBeVisible();
     await auditEditorialSlateScreen(page, 'board-composer-custom-silicon-1440x900');
     await page.getByTestId('custom-silicon-submit').click();
     await expect(page.getByTestId('composer-mcu-row-U2')).toBeVisible();
@@ -52,9 +53,10 @@ test.describe('Custom Board Composer, Settings Schemes, Splits & Fullscreen', ()
     await auditEditorialSlateScreen(page, 'board-composer-memory-1440x900');
     await page.getByTestId('memory-submit-btn').click();
 
-    // Component Catalog & Custom Component
+    // Component Catalog (Host Frame Source & Pin Mapping) & Custom Component
     await page.getByTestId('composer-open-add-component').click();
     await expect(page.getByTestId('composer-add-component-modal')).toBeVisible();
+    await expect(page.getByTestId('catalog-comp-frame-source')).toBeVisible();
     await auditEditorialSlateScreen(page, 'board-composer-add-comp-1440x900');
     await page.getByTestId('switch-to-custom-component').click();
     await expect(page.getByTestId('composer-custom-component-modal')).toBeVisible();

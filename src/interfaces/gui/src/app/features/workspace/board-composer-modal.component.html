@@ -29,26 +29,29 @@
       @case ('memory') {
         <app-board-composer-memory-modal
           [mcus]="draft().mcus"
+          [initialRegion]="editingMemoryRegion()"
           (cancelled)="subModal.set('none')"
-          (added)="addMemoryRegion($event)"
+          (added)="saveMemoryRegion($event)"
         />
       }
       @case ('catalog-component') {
         <app-board-composer-component-modals
           mode="catalog-component"
           [mcus]="draft().mcus"
+          [initialComponent]="editingComponent()"
           (cancelled)="subModal.set('none')"
           (switchMode)="switchComponentSubModal($event)"
-          (componentAdded)="addComponent($event)"
+          (componentAdded)="saveComponent($event)"
         />
       }
       @case ('custom-component') {
         <app-board-composer-component-modals
           mode="custom-component"
           [mcus]="draft().mcus"
+          [initialComponent]="editingComponent()"
           (cancelled)="subModal.set('none')"
           (switchMode)="switchComponentSubModal($event)"
-          (componentAdded)="addComponent($event)"
+          (componentAdded)="saveComponent($event)"
         />
       }
       @default {
@@ -120,7 +123,17 @@
                 <div class="item-row" [attr.data-testid]="'composer-mcu-row-' + mcu.designator">
                   <div class="row-inline">
                     <span class="row-title">{{ mcu.designator }} · {{ mcu.role }}</span>
-                    <span class="chip-pill mono">{{ mcu.silicon.toUpperCase() }}</span>
+                    <select
+                      class="box-input mono"
+                      style="height: 24px; padding: 0 6px"
+                      [attr.aria-label]="'Silicon preset for ' + mcu.designator"
+                      [value]="mcu.silicon"
+                      (change)="onMcuSiliconChange(idx, $event)"
+                    >
+                      @for (opt of siliconOptions; track opt.id) {
+                        <option [value]="opt.silicon">{{ opt.title }}</option>
+                      }
+                    </select>
                     <span class="es-meta mono">{{ mcuSummary(mcu) }}</span>
                   </div>
                   <div class="row-inline">
@@ -161,7 +174,7 @@
                 type="button"
                 class="es-ghost-link"
                 data-testid="composer-open-add-memory"
-                (click)="subModal.set('memory')"
+                (click)="openMemoryModal(null)"
               >
                 + Add Memory Region
               </button>
@@ -174,13 +187,20 @@
                     <span class="chip-pill">{{ reg.kind }}</span>
                     <span class="es-meta mono">SIZE {{ reg.sizeMib }} MiB · WIDTH {{ reg.widthModeLabel }} · CLOCK {{ reg.clockMhz }} MHz · LATENCY {{ reg.latencyCycles }} cyc · MOUNT {{ reg.mountSocket }}</span>
                   </div>
-                  @if (draft().memoryRegions.length > 2) {
-                    <button type="button" class="icon-btn" aria-label="Remove memory region" (click)="removeMemoryRegion(idx)">
+                  <div class="row-inline">
+                    <button type="button" class="icon-btn" aria-label="Edit memory region" (click)="openMemoryModal(idx)">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" fill="currentColor" />
                       </svg>
                     </button>
-                  }
+                    @if (draft().memoryRegions.length > 1) {
+                      <button type="button" class="icon-btn" aria-label="Remove memory region" (click)="removeMemoryRegion(idx)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                        </svg>
+                      </button>
+                    }
+                  </div>
                 </div>
               }
             </div>
@@ -194,7 +214,7 @@
                   type="button"
                   class="es-ghost-link"
                   data-testid="composer-open-add-component"
-                  (click)="subModal.set('catalog-component')"
+                  (click)="openComponentModal('catalog-component')"
                 >
                   + Add Component
                 </button>
@@ -202,7 +222,7 @@
                   type="button"
                   class="es-ghost-link"
                   data-testid="composer-open-custom-component"
-                  (click)="subModal.set('custom-component')"
+                  (click)="openComponentModal('custom-component')"
                 >
                   + Custom Component
                 </button>
@@ -223,16 +243,28 @@
                       <span class="chip-pill mono">{{ p.signal }}: {{ p.pin }}</span>
                     }
                   </div>
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    aria-label="Remove attached component"
-                    (click)="removeComponent(idx)"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
-                    </svg>
-                  </button>
+                  <div class="row-inline">
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      aria-label="Edit attached component"
+                      (click)="openComponentModal('custom-component', idx)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z" fill="currentColor" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      aria-label="Remove attached component"
+                      (click)="removeComponent(idx)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12ZM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4Z" fill="currentColor" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               } @empty {
                 <div class="item-row">

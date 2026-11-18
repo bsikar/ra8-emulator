@@ -26,6 +26,8 @@ describe('SettingsModalComponent', () => {
     (el.querySelector('[data-testid="settings-tab-appearance"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="settings-scheme-preview"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="settings-preview-reg"]')?.textContent).toContain('R3 = 0x00000000');
+    expect(el.querySelector('[data-testid="settings-preview-event"]')?.textContent).toContain('[fault]');
     (el.querySelector('[data-testid="scheme-option-nordic-frost"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     expect(document.documentElement.style.getPropertyValue('--es-tok-kw')).toBe('#88a4bf');

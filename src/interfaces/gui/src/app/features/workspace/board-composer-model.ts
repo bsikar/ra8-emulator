@@ -144,6 +144,37 @@ const DEFAULT_SWITCHES: readonly BoardSwitchSpec[] = [
   { pin: 'P009', port: 0, pinIndex: 9, label: 'SW1' },
 ];
 
+function parsePortPin(rawPin: string): { port: number; pinIndex: number } | null {
+  const m = /^P([0-9A-B])(\d{2})$/i.exec(rawPin.trim());
+  if (!m) return null;
+  const port = Number.parseInt(m[1]!, 16);
+  const pinIndex = Number.parseInt(m[2]!, 10);
+  if (!Number.isFinite(port) || !Number.isFinite(pinIndex)) return null;
+  return { port, pinIndex };
+}
+
+function resolveGpioPins(components: readonly ComposerComponentAttachment[]): {
+  leds: BoardLedSpec[];
+  switches: BoardSwitchSpec[];
+} {
+  const gpioComps = components.filter((c) => c.category === 'GPIO');
+  if (gpioComps.length === 0) return { leds: [], switches: [] };
+  const leds: BoardLedSpec[] = DEFAULT_LEDS.map((l) => ({ ...l }));
+  const switches: BoardSwitchSpec[] = DEFAULT_SWITCHES.map((s) => ({ ...s }));
+  for (const comp of gpioComps) {
+    for (const p of comp.pins) {
+      const parsed = parsePortPin(p.pin);
+      if (!parsed) continue;
+      if (/^LED1/i.test(p.signal) && leds[0]) {
+        leds[0] = { ...leds[0], pin: p.pin.toUpperCase(), ...parsed };
+      } else if (/^SW1/i.test(p.signal) && switches[0]) {
+        switches[0] = { ...switches[0], pin: p.pin.toUpperCase(), ...parsed };
+      }
+    }
+  }
+  return { leds, switches };
+}
+
 /** Compiles a `ComposerDraft` into a validated `StoredCustomBoardPreset` ready for `.board` export & storage. */
 export function compileDraftToBoardPreset(draft: ComposerDraft): StoredCustomBoardPreset {
   const primaryMcu = draft.mcus[0] ?? buildSocketFromCatalog(BUILTIN_SILICON_CATALOG[0]!, 'U1', 'Primary');
@@ -167,7 +198,7 @@ export function compileDraftToBoardPreset(draft: ComposerDraft): StoredCustomBoa
   const sdramWidth = sdramReg && [8, 16, 32].includes(sdramReg.widthBits) ? sdramReg.widthBits : 32;
 
   const hasDisplay = draft.components.some((c) => c.category === 'Displays' || c.name.toLowerCase().includes('lcd') || c.name.toLowerCase().includes('panel'));
-  const hasGpioUi = draft.components.some((c) => c.category === 'GPIO');
+  const { leds, switches } = resolveGpioPins(draft.components);
 
   const sensors: string[] = [];
   const companions: string[] = [];
@@ -200,8 +231,8 @@ export function compileDraftToBoardPreset(draft: ComposerDraft): StoredCustomBoa
       },
       windowCycles: 1_000_000,
     },
-    leds: hasGpioUi ? DEFAULT_LEDS.map((l) => ({ ...l })) : [],
-    switches: hasGpioUi ? DEFAULT_SWITCHES.map((s) => ({ ...s })) : [],
+    leds,
+    switches,
     panel: hasDisplay ? 'ek_ra8d2' : null,
     sensors,
     companions,

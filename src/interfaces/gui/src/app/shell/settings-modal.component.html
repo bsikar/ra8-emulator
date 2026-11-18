@@ -95,9 +95,19 @@
               <div class="es-code-line is-active">
                 <span class="es-bp-dot is-set"></span>
                 <span><span class="tok-fn">SCB_InvalidateDCache_by_Addr</span>(<span class="tok-id">scores_tcm</span>, <span class="tok-num">256U</span>);</span>
-                <span class="tok-cmt">/* PC 0x02004A1C */</span>
+                <span class="tok-cmt">&lt;- PC 0x02004A1C</span>
               </div>
-              <div class="es-code-line"><span><span class="tok-type">uint32_t</span> <span class="tok-id">r0_delta</span> = <span class="tok-num">0x22040000</span>; <span class="tok-cmt">// R3 = 0x00000000</span></span></div>
+              <div class="es-code-line preview-reg-line" data-testid="settings-preview-reg">
+                <span class="tok-cmt">REG Δ</span>
+                <span class="prev-cur">R0 = <span class="tok-num">0x22040000</span></span>
+                <span [class.is-dim]="prefsStore.prefs().dimZeroRegisters">R3 = 0x00000000</span>
+                <span>PC = <span class="tok-num">0x02004A1C</span></span>
+              </div>
+              <div class="es-code-line" data-testid="settings-preview-event">
+                <span class="tok-cmt">00:14.102</span>
+                <span class="prev-fault">[fault]</span>
+                <span>CMP0 tripped · <span class="prev-nom">foc_current_step()</span> at foc_loop.c:218</span>
+              </div>
             </div>
 
             <div class="appearance-controls">
