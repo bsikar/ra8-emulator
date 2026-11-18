@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { Core } from 'ra8-rpc-client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { appRoutes } from '../../src/app/app.routes';
 import { RpcConnectionStore } from '../../src/app/core/rpc/rpc-connection.store';
@@ -44,5 +45,15 @@ describe('DebugRouteComponent', () => {
     fixture.detectChanges();
     expect(prefs.prefs().workbenchLayout).toBe('split');
     expect(el.querySelector('[data-testid="debug-serial-tx-input"]')).toBeTruthy();
+
+    let steppedCore = Core.Cpu0;
+    execution.step = async (core = Core.Cpu0) => {
+      steppedCore = core;
+    };
+    rpc.setObserveOnly(false);
+    debug.activeCore.set(Core.Cpu1);
+    fixture.detectChanges();
+    (el.querySelector('[data-testid="debug-step-btn"]') as HTMLButtonElement).click();
+    expect(steppedCore).toBe(Core.Cpu1);
   });
 });

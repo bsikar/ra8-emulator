@@ -48,21 +48,21 @@ import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
           <app-tonal-button
             testId="debug-step-btn"
             [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
-            (pressed)="execution.step()"
+            (pressed)="execution.step(debug.activeCore())"
           >
             Step
           </app-tonal-button>
           <app-tonal-button
             testId="debug-step-over-btn"
             [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
-            (pressed)="execution.stepOver()"
+            (pressed)="execution.stepOver(debug.activeCore())"
           >
             Step Over
           </app-tonal-button>
           <app-tonal-button
             testId="debug-step-out-btn"
             [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
-            (pressed)="execution.stepOut()"
+            (pressed)="execution.stepOut(debug.activeCore())"
           >
             Step Out
           </app-tonal-button>

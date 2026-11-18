@@ -36,7 +36,7 @@ describe('DebugTargetsStackComponent', () => {
       count: 2,
       frames: [
         { pc: 0x0200_0100, interrupted: 0, offset: 0, line: 42, name: 'main', file: 'main.c' },
-        { pc: 0x0200_0200, interrupted: 0, offset: 4, line: 10, name: 'Reset_Handler', file: 'startup.c' },
+        { pc: 0x0200_0200, interrupted: 1, offset: 16, line: 10, name: 'Reset_Handler', file: 'startup.c' },
       ],
     });
     profile.cpu0Stack.set({
@@ -57,6 +57,7 @@ describe('DebugTargetsStackComponent', () => {
 
     const el: HTMLElement = fixture.nativeElement;
     expect(el.querySelector('[data-testid="debug-core-1"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="debug-callstack-exception"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="debug-stack-watermark"]')?.textContent).toContain('25%');
 
     (el.querySelector('[data-testid="debug-frame-1"]') as HTMLButtonElement).click();

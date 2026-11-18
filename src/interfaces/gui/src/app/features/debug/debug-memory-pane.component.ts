@@ -27,13 +27,14 @@ import { buildMemoryHexRows, parseRegisterOrMemoryValue } from './debug-view';
             placeholder="0x20000000"
           />
           <button type="submit" class="chip" data-testid="debug-mem-go-btn">Go</button>
-          <button type="button" class="chip" (click)="pageBy(-256)">-256B</button>
-          <button type="button" class="chip" (click)="pageBy(256)">+256B</button>
+          <button type="button" class="chip mono" (click)="pageBy(-256)">-256B</button>
+          <button type="button" class="chip mono" (click)="pageBy(256)">+256B</button>
           <button type="button" class="chip" (click)="watchCurrent()">+ Watch</button>
         </form>
       </div>
 
       @if (rows().length > 0) {
+        <div class="mem-meta es-meta mono">CPU{{ debug.activeCore() }} · {{ debug.memoryBytes().length }} B &#64; {{ hex(debug.memoryAddress()) }}</div>
         <div class="mem-grid mono" data-testid="debug-memory-grid">
           @for (row of rows(); track row.baseAddr) {
             <div class="mem-row">
@@ -49,6 +50,7 @@ import { buildMemoryHexRows, parseRegisterOrMemoryValue } from './debug-view';
                         maxlength="4"
                         [value]="pokeDraft()"
                         (input)="onPokeInput($event)"
+                        (keydown.escape)="pokeAddr.set(null)"
                         aria-label="Write memory byte hex"
                       />
                     </form>
@@ -83,6 +85,7 @@ import { buildMemoryHexRows, parseRegisterOrMemoryValue } from './debug-view';
       .chip { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 6px; cursor: pointer; }
       .chip:hover { background: var(--es-interactive); color: var(--es-text-primary); }
       .addr-input { width: 102px; background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; padding: 2px 4px; }
+      .mem-meta { font-size: 12px; }
       .mem-grid { display: flex; flex-direction: column; font-size: 12px; overflow: auto; }
       .mem-row { display: flex; align-items: center; gap: 10px; min-height: 22px; border-bottom: 1px solid var(--es-divider); white-space: nowrap; }
       .mem-addr { color: var(--es-text-muted); flex-shrink: 0; }
@@ -108,6 +111,10 @@ export class DebugMemoryPaneComponent {
   protected readonly rows = computed(() =>
     buildMemoryHexRows(this.debug.memoryAddress(), this.debug.memoryBytes(), this.debug.memoryPrevBytes())
   );
+
+  protected hex(val: number): string {
+    return formatHex32(val);
+  }
 
   protected onAddrInput(event: Event): void {
     this.addrDraft.set((event.target as HTMLInputElement).value);

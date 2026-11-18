@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { RpcConnectionStore } from '../../core/rpc/rpc-connection.store';
 import { DebugStore } from '../../core/stores/debug.store';
 import { HardwareHilStore } from '../../core/stores/hardware-hil.store';
@@ -33,7 +33,7 @@ import {
             data-testid="debug-tab-registers"
             (click)="activeTab.set('registers')"
           >
-            Registers (Δ {{ changedCount() }})
+            Registers (Δ <span class="mono">{{ changedCount() }}</span>)
           </button>
           <button
             type="button"
@@ -105,6 +105,7 @@ import {
                       data-testid="debug-reg-edit-input"
                       [value]="regDraft()"
                       (input)="onRegInput($event)"
+                      (keydown.escape)="editingReg.set(null)"
                       aria-label="Edit register hex value"
                     />
                   </form>
@@ -160,7 +161,7 @@ import {
       .seg-tab.is-active { color: var(--es-text-primary); border-bottom-color: var(--es-signal-cursor); }
       .grp-btn { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-muted); border-radius: var(--es-radius-sm); font-size: 12px; padding: 1px 8px; cursor: pointer; }
       .grp-btn.is-active { color: var(--es-text-primary); background: var(--es-interactive); border-color: var(--es-signal-cursor); }
-      .reg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(154px, 1fr)); gap: 0 10px; padding: 6px 12px; overflow: auto; }
+      .reg-grid { display: grid; grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: 0 10px; padding: 6px 12px; overflow: auto; }
       .reg-cell { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 24px; padding: 2px 6px; border-left: 2px solid transparent; border-bottom: 1px solid var(--es-divider); font-size: 12px; min-width: 0; }
       .reg-cell.is-changed { border-left-color: var(--es-signal-cursor); }
       .reg-cell.is-dimmed { opacity: 0.45; }
@@ -203,6 +204,16 @@ export class DebugInspectorPaneComponent {
     const blocks = this.hil.periphBlocks();
     return blocks.length > 0 ? blocks.slice(0, 8) : ['GLCDC', 'SCI8', 'RIIC0', 'GPT', 'ICU', 'IPC'];
   });
+
+  constructor() {
+    effect(() => {
+      const core = this.debug.activeCore();
+      const blk = this.hil.selectedPeriphBlock();
+      if (this.activeTab() === 'peripherals' && this.rpc.isConnected() && blk) {
+        void this.hil.selectPeriphBlock(blk, core);
+      }
+    });
+  }
 
   protected openMemoryTab(): void {
     this.activeTab.set('memory');

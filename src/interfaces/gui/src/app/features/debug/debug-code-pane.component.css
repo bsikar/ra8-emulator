@@ -39,6 +39,32 @@
   color: var(--es-text-primary);
 }
 
+.file-tab-strip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--es-chrome);
+  border-bottom: 1px solid var(--es-divider);
+  overflow-x: auto;
+}
+
+.file-tab {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--es-text-muted);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.file-tab.is-active {
+  color: var(--es-text-primary);
+  background: var(--es-canvas);
+  border-bottom-color: var(--es-signal-cursor);
+}
+
 .seg-tab {
   border: 0;
   border-bottom: 2px solid transparent;
@@ -127,18 +153,33 @@
   cursor: pointer;
 }
 
+.es-code-ln.is-wide {
+  min-width: 82px;
+  text-align: right;
+  display: inline-block;
+}
+
 .raw-bytes {
   color: var(--es-text-muted);
-  min-width: 66px;
+  min-width: 72px;
 }
 
 .sym-tag {
   color: var(--es-tok-fn);
 }
 
+.vim-mark {
+  color: var(--es-signal-cursor);
+  font-size: 12px;
+}
+
 .es-code-line.is-vim-cursor {
   outline: 1px solid var(--es-signal-cursor);
   outline-offset: -1px;
+}
+
+.es-code-line.is-search-hit {
+  background: rgba(184, 196, 217, 0.08);
 }
 
 .empty-note {
