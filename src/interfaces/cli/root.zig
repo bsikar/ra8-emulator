@@ -9,6 +9,7 @@ pub const cli = @import("cli.zig");
 pub const ctl = @import("ctl/ctl.zig");
 pub const eink_log = @import("eink_log.zig");
 pub const map_main = @import("map_main.zig");
+pub const probe_agent = @import("probe_agent.zig");
 pub const probe_ctl = @import("probe_ctl.zig");
 pub const project = @import("project/main.zig");
 pub const serve = @import("serve/serve.zig");

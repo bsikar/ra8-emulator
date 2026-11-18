@@ -558,19 +558,45 @@ operator-owned target bindings. FILE is a JSON array, for example:
 ```
 
 `ctl --connect tcp:127.0.0.1:PORT targets list` returns JSON descriptors,
-registration generations, connection state and reservation state. Host, probe
-and board IDs are explicit operator identities, never list positions or USB
-VID/PID pairs. `probe_serial` and `board_serial` are optional metadata.
-The operator supplies vendor, model and core topology; these are configured
-metadata, not automatic hardware identification. A physical binding uses
-`"kind":"rsp"`, `"host":"127.0.0.1"`, `"port":2331` beside `target`, and
-`"transport":"rsp"` inside it. It starts in `configured` connection state,
-not a claim that a board was detected. Configuration cannot enable build,
-flash, reset or NPU execution. Separate capability booleans and the
-`operations` array report what the provider implements. RSP reuses the
-existing probe control implementation for registers, halt, step and resume;
-step/resume report only that the command was sent, not execution completion.
-Emulator operations currently address CPU0 and support registers, halt and step.
+registration generations, connection state, dynamically resolved `uart` port
+and reservation state. Host, probe and board IDs are explicit operator
+identities, never list positions, COM port numbers or shared USB VID/PID pairs.
+Four binding kinds are supported:
+
+- `"kind":"emulator"` (`"transport":"in-process"`): in-process CPU0 registers,
+  halt and step.
+- `"kind":"rsp"` (`"transport":"rsp"`, `"host"`, `"port"`): operator-pinned RSP
+  endpoint for registers, halt, step and resume; starts `configured`.
+- `"kind":"jlink"` (`"transport":"jlink-usb"`, `"program"`, `"scratch"`,
+  `"device"`, `"cpuid"` and `target.probe_serial`): physical USB J-Link
+  discovery via `ShowEmuList USB` keyed strictly by probe serial, resolving the
+  CDC `uart` port from the USB serial at scan time (Windows composite parent
+  DevNode, Linux `/dev/serial/by-id`), acquiring an exclusive host-wide OS file
+  lock (`<scratch>/jlink-<serial>.lease`) with a persisted monotonic fencing
+  token across processes, and verifying both probe serial and `SCB.CPUID`
+  (`0xE000ED00`) before registers, halt, step, resume or reset. Hotplug,
+  unplug or UART renumbering advances `generation` and drops active leases.
+  `uart` names the probe's own USB CDC interface only. It is not evidence
+  that the board routes that port to the target MCU: some boards expose the
+  CDC interface with nothing wired behind it.
+  The CPUID check and the requested action run in two Commander sessions,
+  both selected by `-USB SERIAL`. The probe serial is checked again after the
+  action session, so a probe swapped between the two sessions would be
+  reported only after the action ran. J-Link's own `-USB` selection is what
+  keeps that window closed in practice.
+- `"kind":"agent"` (`"host"`, `"port"`, `"secret_file"`): link to
+  `ra8_emulator probe-agent --targets FILE --secret-file KEY --host-id ID
+  --listen tcp:HOST:PORT`, mirroring remote target presence, forwarding
+  claims/actions and calling `Registry.disconnect(host_id)` on agent loss.
+  Only the opening handshake is authenticated: both ends prove the shared
+  256-bit key and the exact `host_id` with HMAC-SHA256 over fresh nonces.
+  Later `list`, `claim`, `perform` and `release` frames are plain JSON with no
+  per-frame MAC and no encryption, so anyone who can inject into the TCP
+  stream after the handshake can issue operations. Run the agent link only
+  over loopback, an SSH tunnel or an otherwise trusted network segment.
+
+Configuration cannot enable build, flash or NPU execution. Separate capability
+booleans and `operations` report what each provider implements.
 
 Select with the complete identity and generation returned by list:
 
@@ -584,36 +610,36 @@ operations. RPC methods 0x190 through 0x193 expose list, reserve, release and
 perform for clients that keep a connection open. The capability bit is 21.
 Owners are server-side connection contexts, never client-supplied IDs.
 Reservations share the host registry. Embedders must serialize registry calls
-and hold descriptor/provider storage until removal. Registration generations
-change on host removal/re-registration; serve seeds them randomly on startup.
-Provider errors fence the binding as disconnected and clear its reservation.
-An authenticated probe-host adapter must call `Registry.disconnect(host_id)`
-on agent loss before accepting new operations. No remote registration RPC exists.
+and hold descriptor/provider storage until removal. Provider errors fence the
+binding as disconnected and clear its reservation; stale generations and stale
+lease tokens both return `0x191`.
+
+Two different mechanisms protect ownership:
+- Across processes on one host, a `jlink` binding takes an exclusive OS file
+  lock on `<scratch>/jlink-<serial>.lease`. The file also holds a persisted
+  counter that advances on every acquisition. The provider admits an
+  operation only with a token at least as new as the newest it has seen.
+- Over an agent link, `probe-agent` gives each peer connection a claim token
+  and refuses `perform` or `release` carrying any other token. A peer that
+  disconnects loses its reservation at once. The persisted J-Link lease
+  above is what fences the probe itself.
 
 If physical identity is unavailable, keep `identity_verified` false and set
-an operator-verified `disambiguation` binding. Clients must explicitly provide
-that exact binding instead of `-`. This is a manual mapping, not proof from
-RSP: generic RSP cannot verify probe/board serials or detect a physical swap
-behind a still-running GDB server. The endpoint must be exclusively pinned to
-the identified board by the operator. Do not reuse it after hotplug without
-removing/re-registering the binding. Duplicate board IDs, host/probe pairs
-and identical configured RSP endpoints are refused. DNS aliases and multiple
-backend processes are outside this in-process ownership boundary.
+an operator-verified `disambiguation` binding; clients must supply that exact
+string instead of `-`. This is a manual mapping, not proof from RSP: generic
+RSP cannot verify probe or board serials or detect a physical swap behind a
+still-running GDB server, so pin the endpoint to the identified board and do
+not reuse it after hotplug without re-registering. Duplicate board IDs,
+host/probe pairs, J-Link serials and conflicting RSP/agent endpoints are
+refused. DNS aliases of one endpoint are not detected as duplicates.
 
-`managed` is mandatory. Managed RA8CI targets can be listed but reservation
-and operations fail closed with custodian-unavailable. No direct fallback is
-provided. This does not qualify or replace RA8CI custodian enforcement.
-Use the existing trusted listener/SSH host boundary; inventory adds neither
-network authentication nor authority to access another host. Existing session
-and direct probe commands retain their existing contracts. Target bindings
-cannot be combined with artifact-session replacement.
-
-Remaining hardware acceptance requires authenticated probe-host discovery,
-serial-to-endpoint verification across actual same-model board hotplug,
-custodian-authorized fenced leases, cross-process ownership, and real
-multi-board operation evidence. Fixture/loopback tests establish only backend
-routing, stale-selection rejection and connection cleanup. No physical flash,
-reset, NPU execution or real multi-board qualification is claimed here.
+`managed` is mandatory. Without an attached `Registry.custodian`, managed RA8CI
+targets can be listed but reservation and operations fail closed with
+custodian-unavailable (`0x196`); live RA8CI bench custodian integration is
+tracked separately. `serve` and `ctl` targets add no network authentication
+or encryption of their own: use the existing trusted listener or SSH host
+boundary. Target bindings cannot be combined with artifact-session
+replacement.
 
 Managed Zig setup uses `ra8_emulator toolchain setup HOST TARGET --cache-root ABS --download`,
 or `--archive ABS --offline` for an offline kit. `toolchain doctor HOST TARGET --cache-root ABS --offline`

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 
+from agent import AgentProcess
 from probe import Probe
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "workspace_smoke"))
@@ -23,9 +24,10 @@ def call(emulator, port, words, trace):
 
 
 def exercise(emulator, fixture, output, trace, timeout):
-    providers = [Probe(name) for name in ("a", "b", "c")]
-    a, b, c = providers
+    providers = [Probe(name) for name in ("a", "b", "c", "d")]
+    a, b, c, d = providers
     server = None
+    agent_proc = None
     deadline = time.monotonic() + timeout
 
     def start(bindings, name):
@@ -73,11 +75,57 @@ def exercise(emulator, fixture, output, trace, timeout):
         assert code == 0
         lost = next(row for row in rows[0] if row["target"]["board_id"] == "board-b")
         assert lost["target"]["connection"] == "disconnected" and not lost["reserved"]
+        assert server.close()["exit_code"] == 0
+        server = None
+
+        secret = output / "agent.key"
+        wrong = output / "wrong.key"
+        secret.write_text("42" * 32 + "\n", encoding="utf8")
+        wrong.write_text("99" * 32 + "\n", encoding="utf8")
+        agent_targets = output / "agent-local.json"
+        local_binding = d.binding()
+        local_binding["target"]["host_id"] = "agent-host"
+        agent_targets.write_text(json.dumps([local_binding]), encoding="utf8")
+        agent_proc = AgentProcess(emulator, agent_targets, secret, "agent-host",
+                                  output / "agent-1.log", trace, deadline)
+        agent_port = agent_proc.port
+        bad_binding = dict(kind="agent", host="127.0.0.1", port=agent_port,
+                           secret_file=str(wrong.resolve()), target=dict(
+                               host_id="agent-host", probe_id="probe-d", board_id="board-d",
+                               transport="rsp", managed=False, disambiguation="binding-d"))
+        server = start([bad_binding], "agent-bad-secret")
+        code, rows = invoke(["list"])
+        assert code == 0 and rows[0] == [], "wrong probe-host secret must fail closed"
+        assert server.close()["exit_code"] == 0
+        server = None
+
+        good_binding = dict(bad_binding, secret_file=str(secret.resolve()))
+        server = start([good_binding], "agent-good")
+        code, rows = invoke(["list"])
+        assert code == 0 and len(rows[0]) == 1
+        gen_d = rows[0][0]["generation"]
+        code, rows = invoke(["use", "agent-host", "probe-d", "board-d", str(gen_d), "binding-d", "registers"])
+        assert code == 0 and rows[0]["registers_rsp"] == "01020304" and len(d.calls) == 1
+        agent_proc.close()
+        agent_proc = None
+        code, rows = invoke(["list"])
+        assert code == 0 and rows[0] == [], "agent disconnect removes host bindings"
+        agent_proc = AgentProcess(emulator, agent_targets, secret, "agent-host",
+                                  output / "agent-2.log", trace, deadline, port=agent_port)
+        code, rows = invoke(["use", "agent-host", "probe-d", "board-d", str(gen_d), "binding-d", "registers"])
+        assert code == 1 and rows[0]["code"] == 0x191, "reconnect invalidates old generation"
+        code, rows = invoke(["list"])
+        assert code == 0 and len(rows[0]) == 1 and rows[0][0]["generation"] != gen_d
+        gen_d2 = rows[0][0]["generation"]
+        code, rows = invoke(["use", "agent-host", "probe-d", "board-d", str(gen_d2), "binding-d", "registers"])
+        assert code == 0 and len(d.calls) == 2
         return dict(status="passed", provider_calls={p.name: len(p.calls) for p in providers},
-                    physical_hardware=False, custodian_integration=False)
+                    authenticated_probe_host=True, physical_hardware=False, custodian_integration=False)
     finally:
         if server is not None:
             assert server.close()["exit_code"] == 0
+        if agent_proc is not None:
+            agent_proc.close()
         for provider in providers:
             provider.close()
 
