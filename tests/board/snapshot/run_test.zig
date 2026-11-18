@@ -2,11 +2,14 @@
 //! fresh run saves the same bytes; another part's file is refused before
 //! anything changes, and a file without a core it is asked for is refused.
 const std = @import("std");
+
+const fixture = @import("../../chip/core/cpu/exception/ram.zig");
 const ra8 = @import("ra8");
 const store_board = @import("../../interfaces/cli/store_board.zig");
-const fixture = @import("../../chip/core/cpu/exception/ram.zig");
+
 const Board = ra8.board.board.Board;
 const Cpu = ra8.chip.core.cpu.cpu.Cpu;
+const machine_mod = ra8.chip.core.machine;
 const run = ra8.board.snapshot.run;
 
 const word_at: u32 = 0x2200_0040;
@@ -169,5 +172,76 @@ test "a whole file without a fabric section is refused for a memory-less load" {
     var whole = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer whole.deinit();
     try run.savePairAttached(&whole.writer, &.{&rig.store}, &.{&zero}, &rig.board, @splat(null));
-    try std.testing.expectError(error.Missing, run.prepareParts(whole.written(), &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{ .memory = false }));
+    try std.testing.expectError(
+        error.Missing,
+        run.prepareParts(whole.written(), &.{&rig.store}, &.{&zero}, &rig.board, @splat(null), .{ .memory = false }),
+    );
+}
+
+const sole_m33: machine_mod.Machine = .{
+    .name = "sole-m33",
+    .label = "SOLE-M33",
+    .cores = .{
+        .primary = machine_mod.core.cortexM33(.{
+            .security = false,
+            .fpu = .single,
+            .systicks = 1,
+        }),
+    },
+    .part = .ra8d2,
+};
+
+const sole_m85: machine_mod.Machine = .{
+    .name = "sole-m85",
+    .label = "SOLE-M85",
+    .cores = .{
+        .primary = machine_mod.core.cortexM85(.{
+            .security = true,
+            .fpu = .double,
+            .systicks = 2,
+        }),
+    },
+    .part = .ra8d2,
+};
+
+test "single-core run snapshots round-trip and refuse cross-machine loads before mutating state" {
+    var ram: fixture.Ram = .{};
+    var m33: Rig = undefined;
+    try m33.build();
+    defer m33.deinit();
+    m33.board.machine = &sole_m33;
+    try m33.store.write(.none, word_at, &.{0xAB});
+    var cpu_m33 = try fixture.boot(&ram);
+    cpu_m33.regs.low[4] = 0x55AA_1122;
+    var m33_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer m33_bytes.deinit();
+    try saved(&m33, &.{&cpu_m33}, &m33_bytes);
+
+    var m33_dest: Rig = undefined;
+    try m33_dest.build();
+    defer m33_dest.deinit();
+    m33_dest.board.machine = &sole_m33;
+    var dest_cpu = try fixture.boot(&ram);
+    try run.load(m33_bytes.written(), &m33_dest.store, &.{&dest_cpu}, &m33_dest.board);
+    try std.testing.expectEqual(@as(u8, 0xAB), m33_dest.store.span(word_at, 4).?[0]);
+    try std.testing.expectEqual(@as(u32, 0x55AA_1122), dest_cpu.regs.low[4]);
+
+    var d2: Rig = undefined;
+    try d2.build();
+    defer d2.deinit();
+    var d2_cpu = try fixture.boot(&ram);
+    d2_cpu.regs.low[4] = 0x9999_8888;
+    try std.testing.expectError(error.WrongPart, run.load(m33_bytes.written(), &d2.store, &.{&d2_cpu}, &d2.board));
+    try std.testing.expectEqual(@as(u8, 0), d2.store.span(word_at, 4).?[0]);
+    try std.testing.expectEqual(@as(u32, 0x9999_8888), d2_cpu.regs.low[4]);
+
+    var m85: Rig = undefined;
+    try m85.build();
+    defer m85.deinit();
+    m85.board.machine = &sole_m85;
+    var m85_cpu = try fixture.boot(&ram);
+    m85_cpu.regs.low[4] = 0x7777_6666;
+    try std.testing.expectError(error.WrongPart, run.load(m33_bytes.written(), &m85.store, &.{&m85_cpu}, &m85.board));
+    try std.testing.expectEqual(@as(u8, 0), m85.store.span(word_at, 4).?[0]);
+    try std.testing.expectEqual(@as(u32, 0x7777_6666), m85_cpu.regs.low[4]);
 }

@@ -47,8 +47,19 @@ const write_undo = @import("write_undo.zig");
 const zig_drive = @import("zig/drive.zig");
 const zig_session = @import("zig/session.zig");
 
-pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
+pub const Error = error{
+    CoreNotAttached,
+    NoLoader,
+    NoInput,
+    NoFaults,
+    NoPlugs,
+    NoTime,
+    TooManySubscribers,
+    NoHistory,
+    UnsupportedRegister,
+};
 pub const Machine = chip.core.machine.Machine;
+pub const CoreInfo = chip.core.machine.Core;
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("breaks/table.zig").Id;
@@ -220,44 +231,16 @@ pub const Session = struct {
     }
 
     /// Tap the center of the uniquely named widget at virtual time `at_ns`.
-    pub fn tapWidget(
-        self: *Session,
-        allocator: std.mem.Allocator,
-        core: Core,
-        at_ns: u64,
-        name: []const u8,
-    ) anyerror!void {
-        return session_input.tapWidget(self, allocator, core, at_ns, name);
-    }
+    pub const tapWidget = session_input.tapWidget;
 
     /// Tap one part (cell, row, pager control, point) of a named widget.
-    pub fn tapWidgetPart(
-        self: *Session,
-        allocator: std.mem.Allocator,
-        core: Core,
-        at_ns: u64,
-        name: []const u8,
-        part: TapPart,
-    ) anyerror!void {
-        return session_input.tapWidgetPart(self, allocator, core, at_ns, name, part);
-    }
+    pub const tapWidgetPart = session_input.tapWidgetPart;
 
     /// Queue a panel-pixel tap for virtual board time `at_ns`.
-    pub fn tap(self: *Session, core: Core, at_ns: u64, x: u16, y: u16) anyerror!void {
-        return session_input.tap(self, core, at_ns, x, y);
-    }
+    pub const tap = session_input.tap;
 
     /// Queue a swipe; intermediate reports use the input script's cadence.
-    pub fn swipe(
-        self: *Session,
-        core: Core,
-        at_ns: u64,
-        from: gt911.Contact,
-        to: gt911.Contact,
-        duration_ns: u64,
-    ) anyerror!void {
-        return session_input.swipe(self, core, at_ns, from, to, duration_ns);
-    }
+    pub const swipe = session_input.swipe;
 
     /// Queue repeated contact reports for a virtual-time long press.
     pub fn longpress(self: *Session, core: Core, at_ns: u64, point: gt911.Contact, duration_ns: u64) anyerror!void {
@@ -279,6 +262,7 @@ pub const Session = struct {
 
     pub const rewind = session_window.rewind;
     pub const stepBack = session_window.stepBack;
+    pub const reverseContinue = session_window.reverseContinue;
     pub const attachWindow = session_window.attachWindow;
     pub const attachWindowDriver = session_window.attachWindowDriver;
     pub const dropWindow = session_window.dropWindow;
@@ -300,6 +284,7 @@ pub const Session = struct {
     }
 
     pub fn register(self: *Session, core: Core, which: Register) anyerror!u32 {
+        try session_control.checkRegister(self, core, which);
         return (try self.view(core)).register(which);
     }
 

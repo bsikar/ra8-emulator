@@ -9,6 +9,7 @@ const std = @import("std");
 
 const attachments = @import("../board/attachments.zig");
 const backing = @import("ra8_board").external.backing;
+const board_snap = @import("ra8_board").snapshot.board;
 const boot = @import("ra8_chip").core.cpu.boot;
 const Clock = @import("../run/clock.zig").Clock;
 const Cpu = @import("ra8_chip").core.cpu.cpu.Cpu;
@@ -43,6 +44,7 @@ fn load(context: *anyopaque, core: *Cpu) anyerror!u32 {
     const allocator = std.heap.page_allocator;
     const bytes = try ops.reader.readAlloc(clock.io, clock.state.load.?, allocator, max_bytes);
     defer allocator.free(bytes);
+    try board_snap.machineOf(clock.board.desc(), bytes);
     var bases = .{ clock.timebase.*, clock.ns_timebase };
     try systick.load(.{ &bases[0], &bases[1] }, bytes);
     _ = try run_file.file.Reader.find(bytes, .stretch) orelse return error.Missing;

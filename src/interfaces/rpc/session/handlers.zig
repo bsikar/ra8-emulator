@@ -372,7 +372,7 @@ pub fn stopped(session: *api.Session, _: proto.Core, ended: api.Ended) proto.Sto
 }
 
 /// The wire form of how a run of `of` ended, at the PC it left.
-fn reported(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
+pub fn reported(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
     const pc = session.register(core(of), .pc) catch 0;
     return switch (ended) {
         .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },

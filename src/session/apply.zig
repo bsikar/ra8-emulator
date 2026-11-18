@@ -9,6 +9,7 @@
 const api = @import("api.zig");
 const elf = @import("ra8_board").image.elf;
 const fork_router_mod = @import("history/fork_router.zig");
+const session_control = @import("control.zig");
 const symbols = @import("symbols.zig");
 const widget_tree = @import("widget_tree.zig");
 const write_undo = @import("write_undo.zig");
@@ -21,6 +22,7 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
     switch (action) {
         .restore => |bytes| try write_undo.applyRestore(self, bytes),
         .register => |reg| {
+            try session_control.checkRegister(self, reg.core, reg.which);
             const prior = try write_undo.prepare(self);
             errdefer write_undo.finish(self, prior, false);
             try (try self.view(reg.core)).setRegister(reg.which, reg.value);
@@ -93,7 +95,7 @@ pub fn applyAction(self: *Session, action: Action) anyerror!void {
 pub fn preflight(self: *Session, action: Action) anyerror!void {
     switch (action) {
         .restore => |bytes| try write_undo.preflightRestore(self, bytes),
-        .register => |reg| _ = try (try self.view(reg.core)).register(reg.which),
+        .register => |reg| _ = try self.register(reg.core, reg.which),
         .memory => |mem| {
             const view = try self.view(mem.core);
             var probe: [64]u8 = undefined;

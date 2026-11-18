@@ -98,7 +98,7 @@ pub const Dispatch = struct {
             };
             return selected.answer(request, out);
         }
-        if (std.mem.startsWith(u8, request, xfer)) return features.read(request[xfer.len..], out);
+        if (std.mem.startsWith(u8, request, xfer)) return self.readFeatures(request[xfer.len..], out);
         if (std.mem.eql(u8, request, "qAttached")) return copy(out, "1");
         if (needsCore(request[0]) and self.view == null) return out[0..0];
         return switch (request[0]) {
@@ -114,6 +114,11 @@ pub const Dispatch = struct {
             'H' => copy(out, "OK"),
             else => out[0..0],
         };
+    }
+
+    fn readFeatures(self: Dispatch, args: []const u8, out: []u8) Error![]const u8 {
+        const info = if (self.session) |s| s.coreInfo(self.core) else null;
+        return features.readFor(info, args, out);
     }
 
     fn supportsReverse(self: Dispatch) bool {
