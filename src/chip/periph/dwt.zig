@@ -1,18 +1,7 @@
 //! The DWT comparators as firmware programs them: DWT_COMPn and
-//! DWT_FUNCTIONn, from 0xE000_1020 in steps of 16 bytes.
-//!
-//! This is the Armv8-M layout (DDI0553, DWT). A comparator holds an
-//! address; its FUNCTION register says what to compare it against (MATCH),
-//! what a match does (ACTION) and how many bytes the address covers
-//! (DATAVSIZE). Every match sets FUNCTION.MATCHED, which a read clears.
-//! A match whose ACTION is a debug event halts the core through the stop
-//! machine, the same way a debugger watch does.
-//!
-//! The comparators only match while DEMCR.TRCENA is set, which the debug
-//! core sees when the firmware stores DEMCR.
-//!
-//! DWT_CTRL and DWT_CYCCNT at the bottom of the block belong to
-//! src/chip/periph/clocks.zig and are not claimed here.
+//! DWT_FUNCTIONn, from 0xE000_1020 in steps of 16 bytes (DDI0553, DWT).
+//! Comparators only match while DEMCR.TRCENA is set; DWT_CTRL and DWT_CYCCNT
+//! belong to src/chip/periph/clocks.zig.
 //!
 //! FUNCTION.ID is read-only and says which MATCH kinds a comparator takes.
 //! DDI0553B.y D1.2.64 lists the legal encodings. Comparator 0 must take
@@ -31,13 +20,7 @@
 //! and stores both carry their value to the DWT.
 //!
 //! DWT_CTRL.NUMCOMP [31:28] says how many comparators the core has, and is
-//! read-only. The Cortex-M85 TRM (101924, DWT register summary) gives 8 in
-//! the full set and 4 in the reduced set; the Cortex-M33 TRM (100230) gives
-//! 4 and 2. Both cores are modelled with the full set and ITM trace, so
-//! DWT_CTRL resets to 0x8000_0000 on CPU0 and 0x4000_0000 on CPU1. The
-//! comparators past NUMCOMP read as zero and ignore writes.
-//!
-//! Not modelled yet: the Cycle Counter match itself.
+//! read-only. Comparators past NUMCOMP read as zero and ignore writes.
 const cpuid = @import("cpuid.zig");
 
 /// Which side of an access a comparator or a watch matches.
@@ -74,9 +57,19 @@ pub fn numcompOf(identity: u32) u4 {
     return if (cpuid.part(identity) == cpuid.partno.cortex_m33) 4 else limits.comparators;
 }
 
+/// DWT_CTRL at reset for an explicit comparator count.
+pub fn ctrlValue(numcomp: u4) u32 {
+    return @as(u32, numcomp) << ctrl_bits.numcomp_shift;
+}
+
+/// DWT_CTRL readback preserving read-only `numcomp` over `value`.
+pub fn ctrlWordFor(numcomp: u4, value: u32) u32 {
+    return (value & ~ctrl_bits.numcomp_mask) | ctrlValue(numcomp);
+}
+
 /// DWT_CTRL at reset for that core: NUMCOMP, with every other bit clear.
 pub fn ctrlReset(identity: u32) u32 {
-    return @as(u32, numcompOf(identity)) << ctrl_bits.numcomp_shift;
+    return ctrlValue(numcompOf(identity));
 }
 
 /// DWT_FUNCTION.MATCH values this model compares.
@@ -245,7 +238,8 @@ pub const Dwt = struct {
     pub fn accessAll(self: *Dwt, address: u32, width: u32, kind: ?Access, value: ?u32, into: []usize) usize {
         if (!self.trcena) return 0;
         var found: usize = 0;
-        for (0..self.numcomp) |index| {
+        const active: usize = @min(self.numcomp, @as(u4, limits.comparators));
+        for (0..active) |index| {
             const owner = self.reporter(index, address, width, kind, value) orelse continue;
             self.functions[owner] |= function_bits.matched;
             self.changed = true;

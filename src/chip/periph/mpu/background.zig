@@ -20,7 +20,7 @@ const mpu = @import("mpu.zig");
 
 pub const limits = struct {
     /// The most gaps a full table can leave.
-    pub const spans: usize = mpu.geometry.regions + 1;
+    pub const spans: usize = mpu.geometry.max_regions + 1;
     /// The highest address, and so the top of a gap that runs to the end.
     pub const top: u32 = 0xFFFF_FFFF;
 };
@@ -44,7 +44,7 @@ pub fn refuses(unit: *const mpu.Mpu, privileged: bool) bool {
 /// The spans no enabled region covers, lowest first, written into `out` and
 /// returned as the slice of it that was filled.
 pub fn gaps(unit: *const mpu.Mpu, out: *[limits.spans]Span) []Span {
-    var covered: [mpu.geometry.regions]Span = undefined;
+    var covered: [mpu.geometry.max_regions]Span = undefined;
     const taken = collect(unit, &covered);
     sortByBase(taken);
     var found: usize = 0;
@@ -68,9 +68,10 @@ pub fn gaps(unit: *const mpu.Mpu, out: *[limits.spans]Span) []Span {
 
 /// The span of every enabled region, in table order. An entry programmed with
 /// no bytes covers nothing and is left out.
-fn collect(unit: *const mpu.Mpu, out: *[mpu.geometry.regions]Span) []Span {
+fn collect(unit: *const mpu.Mpu, out: *[mpu.geometry.max_regions]Span) []Span {
     var count: usize = 0;
-    for (unit.table) |region| {
+    const active = @min(unit.region_count, @as(u8, mpu.geometry.max_regions));
+    for (unit.table[0..active]) |region| {
         if (region.bytes() == 0) continue;
         out[count] = .{ .base = region.base, .limit = region.limit };
         count += 1;

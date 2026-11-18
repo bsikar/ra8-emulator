@@ -33,6 +33,7 @@ pub fn secure(cpu: *const Cpu, number: u9) bool {
 }
 
 fn nonSecureIrq(cpu: *const Cpu, irq: u9) bool {
+    if (irq >= cpu.profile.irq_lines) return false;
     const word = cpu.bus.readWord(itns +% @as(u32, irq / 32) * 4) catch 0;
     return word >> @intCast(irq % 32) & 1 != 0;
 }

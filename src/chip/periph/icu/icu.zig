@@ -1,34 +1,15 @@
 //! The ICU event-link table: how a peripheral event becomes an NVIC line.
 //!
-//! On this part a peripheral does not own an interrupt line. It raises a
-//! numbered event, and the Interrupt Controller Unit decides which of its 96
-//! NVIC lines that event drives: IELSR[n].IELS holds the event number line n
-//! listens for, and firmware writes it there (`ra8_isr_register` /
-//! `ra8_icu_route`) before it enables the line. Until this file existed the
-//! Zig tree had no path from a block to an interrupt at all: src/chip/periph/sci/sci.zig
-//! landed with its transmit and receive interrupts deliberately left out,
-//! because there was nothing to raise them into, so an interrupt-driven
-//! `ra8_sci_write` printed nothing and waited forever on a flag its handler
-//! was supposed to set. Ported from the ICU half of board_periph.c on dev.
-//!
 //!   IELSR[0..95] (+0x6300, 32-bit each, one per NVIC line)
 //!     IELS[9:0]  the event this line listens for, 0 = unlinked
 //!     IR    [16] the latched interrupt status flag, WRITE ZERO to clear
 //!     DTCE  [24] DTC activation: the slot hands its event to the DTC
-//!
-//! An access carries a width, and IELSR is a word whose three fields sit in
-//! three different bytes of it: IELS at the bottom, IR in byte 2, DTCE in
-//! byte 3. A byte or halfword access is served through src/chip/periph/lanes.zig,
-//! the same rule the SCI, PORT and ELC blocks already apply.
-//!
-//! Only IELSR is registered on the bus. The rest of the ICU (IRQCR, the NMI
-//! block, the wake-up masks, SELSR) is nobody's yet, and the sparse register
-//! file answers a poll of an unmodelled register better than a block that
-//! flatly returns zero for it, so the block claims the table and no more.
+const irq_source = @import("../irq_source.zig");
 pub const irqcr = @import("irqcr.zig");
 const lanes = @import("../lanes.zig");
 const memmap = @import("../../core/memmap.zig");
 const periph = @import("../registry.zig");
+pub const source = @import("source.zig");
 
 /// Host-driven pin edges and the ISEL/IRQMD test they pass (RA8EMU-375).
 pub const pin_irq = @import("pin_irq.zig");
@@ -261,6 +242,16 @@ pub const Icu = struct {
             .readFn = pinsReadThunk,
             .writeFn = pinsWriteThunk,
         };
+    }
+
+    /// Vendor-neutral `IrqSource` view over CPU0's event-link table.
+    pub fn irqSource(self: *Icu) irq_source.IrqSource {
+        return source.forIssuer(self, .cpu0);
+    }
+
+    /// Vendor-neutral `IrqSource` view over the event-link table of `issuer`.
+    pub fn irqSourceFor(self: *Icu, issuer: periph.Issuer) irq_source.IrqSource {
+        return source.forIssuer(self, issuer);
     }
 };
 

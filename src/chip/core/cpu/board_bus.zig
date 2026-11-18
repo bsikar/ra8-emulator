@@ -1,37 +1,22 @@
-//! The Zig core's bus in a full run: the peripheral windows go to the
-//! board's peripheral bus, and everything else goes to the core's own
-//! store (src/chip/core/cpu/memory/guest/bus.zig).
-//!
-//! Both the Secure window and its Non-secure alias route to the one
-//! peripheral bus, which folds the alias itself. A peripheral access is one
-//! register access of 1, 2 or 4 bytes; any other width there is refused
-//! rather than split, since splitting would change what the peripheral sees.
-const bus = @import("bus.zig");
-const scs_files = @import("scs_files.zig");
-
-/// Public so a test can build the latch without a root export.
-const std = @import("std");
-
+//! The Zig core's bus in a full run: peripheral windows route to the board's
+//! peripheral bus and everything else routes to the core's store.
 const banked = @import("../banked.zig");
+const bus = @import("bus.zig");
 pub const fault_clear = @import("../../periph/fault/clear.zig");
-const fp_scb = @import("fpu/scb.zig");
-const fp_state = @import("fpu/state.zig");
+const fault_status = @import("../../periph/fault/status.zig");
 const GuestBus = @import("memory/guest/bus.zig").GuestBus;
 const memmap = @import("../memmap.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
-const mpu_ns = @import("../../periph/mpu/ns.zig");
-const registry = @import("../../periph/registry.zig");
-const sau = @import("../../periph/sau/sau.zig");
-
-/// Public so its tests reach it without a root export.
-const fault_status = @import("../../periph/fault/status.zig");
-pub const scs_route = @import("scs_route.zig");
-
-/// Public so its tests reach it without a root export.
-const itm_port = @import("../../periph/itm.zig");
 pub const mpu_check = @import("mpu_check.zig");
+const mpu_ns = @import("../../periph/mpu/ns.zig");
 pub const nvic_registers = @import("nvic_registers.zig");
-const systick_cut = @import("systick_cut.zig");
+const registry = @import("../../periph/registry.zig");
+const scs_files = @import("scs_files.zig");
+pub const scs_regs = @import("scs_regs.zig");
+pub const scs_route = @import("scs_route.zig");
+const std = @import("std");
+
+pub const Scs = scs_files.Scs;
 
 /// CFSR's banked bits, UFSR and MMFSR (src/chip/periph/scb/bank.zig).
 const cfsr_banked: u32 = 0xFFFF_00FF;
@@ -121,11 +106,7 @@ pub const BoardBus = struct {
 
     fn read(ctx: *anyopaque, given: u32, into: []u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (nvic_registers.covers(given)) {
-            if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
-            return nvic_registers.read(self.memory.view(), given, self.isSecure(), into);
-        }
-        if (scs_route.wired(self.security, given)) |halves| return self.readSplit(halves, given, into);
+        if (try self.readIntercepted(given, into)) return;
         const address = self.landing(given) orelse return @memset(into, 0);
         if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
         if (!self.periph.inWindow(address, into.len)) return self.readNonPeriph(address, into);
@@ -150,10 +131,32 @@ pub const BoardBus = struct {
         @memcpy(into, bytes[0..into.len]);
     }
 
+    fn readIntercepted(self: *BoardBus, given: u32, into: []u8) bus.Error!bool {
+        if (!self.scs.has_security and inNsAlias(given)) {
+            @memset(into, 0);
+            return true;
+        }
+        if (nvic_registers.covers(given)) {
+            try self.requireAllowed(given, .load);
+            try nvic_registers.readFor(self.memory.view(), given, self.isSecure(), self.scs.config.irq_lines, into);
+            return true;
+        }
+        if (scs_route.wiredWith(self.security, given, self.scs.systicks, self.scs.has_security)) |halves| {
+            try self.readSplit(halves, given, into);
+            return true;
+        }
+        try self.requireAllowed(given, .load);
+        if (try scs_regs.read(self.scs.policy(), self.memory.view(), given, self.isSecure(), into)) {
+            if (self.touched) |t| t.touch(given, false);
+            return true;
+        }
+        return false;
+    }
+
     /// Only a peripheral register repeats, and only when its block says so.
     fn repeat(ctx: *anyopaque, given: u32, len: usize, times: u64) bool {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (scs_route.wired(self.security, given) != null) return false;
+        if (scs_route.wiredWith(self.security, given, self.scs.systicks, self.scs.has_security) != null) return false;
         const address = self.landing(given) orelse return false;
         if (!self.periph.inWindow(address, len)) return false;
         if (self.check) |c| if (!c.allows(given, .load)) return false;
@@ -167,7 +170,7 @@ pub const BoardBus = struct {
     /// Only a peripheral register peeks, and only when its block keeps one.
     fn peekRegister(ctx: *anyopaque, given: u32, into: []u8) bool {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (scs_route.wired(self.security, given) != null) return false;
+        if (scs_route.wiredWith(self.security, given, self.scs.systicks, self.scs.has_security) != null) return false;
         const address = self.landing(given) orelse return false;
         if (!self.periph.inWindow(address, into.len)) return false;
         if (self.check) |c| if (!c.allows(given, .load)) return false;
@@ -193,12 +196,7 @@ pub const BoardBus = struct {
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
-        if (nvic_registers.covers(given)) {
-            if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
-            if (self.touched) |t| t.touch(given, true);
-            return nvic_registers.write(self.memory.view(), given, self.isSecure(), bytes);
-        }
-        if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
+        if (try self.writeIntercepted(given, bytes)) return;
         const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
         if (!self.periph.inWindow(address, bytes.len)) return self.writeNonPeriph(address, bytes);
@@ -223,13 +221,37 @@ pub const BoardBus = struct {
         if (self.touched) |t| t.touch(address, true);
     }
 
+    fn writeIntercepted(self: *BoardBus, given: u32, bytes: []const u8) bus.Error!bool {
+        if (!self.scs.has_security and inNsAlias(given)) return true;
+        if (nvic_registers.covers(given)) {
+            try self.requireAllowed(given, .store);
+            if (self.touched) |t| t.touch(given, true);
+            try nvic_registers.writeFor(self.memory.view(), given, self.isSecure(), self.scs.config.irq_lines, bytes);
+            return true;
+        }
+        if (scs_route.wiredWith(self.security, given, self.scs.systicks, self.scs.has_security)) |halves| {
+            try self.writeSplit(halves, given, bytes);
+            return true;
+        }
+        try self.requireAllowed(given, .store);
+        if (try scs_regs.write(self.scs.policy(), self.memory.view(), given, self.isSecure(), bytes)) {
+            if (self.touched) |t| t.touch(given, true);
+            return true;
+        }
+        return false;
+    }
+
+    fn requireAllowed(self: *const BoardBus, given: u32, kind: mpu.fault.Kind) bus.Error!void {
+        if (self.check) |c| if (!c.allows(given, kind)) return bus.Error.Unmapped;
+    }
+
     /// Where an access lands, or null for RES0: the SCS bank the core's
     /// state names, and once a Non-secure MPU is wired, that MPU's own copy
     /// for the Non-secure view of an MPU register (RA8EMU-447).
     fn landing(self: *const BoardBus, given: u32) ?u32 {
         const secure = if (self.security) |s| s.current == .secure else true;
         if (self.scs.regions_ns != null) if (mpu_ns.copyOf(given, secure)) |at| return at;
-        return switch (scs_route.land(self.security, given)) {
+        return switch (scs_route.landWith(self.security, given, self.scs.systicks, self.scs.has_security)) {
             .at => |at| at,
             .res0 => null,
         };
@@ -262,8 +284,9 @@ pub const BoardBus = struct {
         std.mem.writeInt(u32, &word, if (halves.clears) 0 else halves.read(shared, copy), .little);
         @memcpy(word[within..][0..bytes.len], bytes);
         const words = halves.write(shared, copy, std.mem.readInt(u32, &word, .little));
-        try scs_files.putWord(memory, halves.non_secure, words.non_secure);
-        std.mem.writeInt(u32, &word, words.shared, .little);
+        const pol = self.scs.policy();
+        try scs_files.putWord(memory, halves.non_secure, scs_regs.maskShprWord(pol, halves.shared, words.non_secure));
+        std.mem.writeInt(u32, &word, scs_regs.maskShprWord(pol, halves.shared, words.shared), .little);
         try self.scs.store(self.memory, halves.shared, &word);
     }
 
@@ -295,11 +318,11 @@ pub const BoardBus = struct {
     fn latch(ctx: *anyopaque, given: u32, bits: u32) bus.Error!void {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (self.touched) |t| t.touch(given, true);
-        if (scs_route.wired(self.security, given)) |halves| {
+        if (scs_route.wiredWith(self.security, given, self.scs.systicks, self.scs.has_security)) |halves| {
             try self.raise(halves.non_secure, bits & halves.mask);
             return self.raise(halves.shared, bits & ~halves.mask);
         }
-        const address = switch (scs_route.land(self.security, given)) {
+        const address = switch (scs_route.landWith(self.security, given, self.scs.systicks, self.scs.has_security)) {
             .at => |at| at,
             .res0 => return,
         };
@@ -313,61 +336,6 @@ pub const BoardBus = struct {
     }
 };
 
-/// The models inside a core that a plain store into its PPB RAM must reach,
-/// the store side of the models src/board/wiring.zig wires.
-/// Each is optional: a bus without one leaves that window as plain RAM.
-pub const Scs = struct {
-    /// SAU RBAR/RLAR bank through RNR.
-    partitions: ?*sau.Sau = null,
-    /// MPU pairs bank through RNR.
-    /// Enforcement is not armed from here.
-    regions: ?*mpu.Mpu = null,
-    /// The Non-secure MPU, programmed through its own copy at +0x20000
-    /// (src/chip/periph/mpu/ns.zig). Null keeps every MPU access on `regions`.
-    regions_ns: ?*mpu.Mpu = null,
-    /// CFSR, HFSR and SFSR are write-one-to-clear. The store is settled
-    /// as it lands, so no read in between sees the raw word.
-    clears: ?*fault_clear.Clears = null,
-    /// FPCCR, FPCAR and FPDSCR, read and written in the core's FP state.
-    fp: ?*fp_state.State = null,
-    /// The SysTick timers a store can arm, and the stretch cut it latches
-    /// (RA8EMU-464). Null leaves every SysTick store to RAM alone.
-    cut: ?*systick_cut.Cut = null,
-    /// The ITM a plain run keeps port 0's text in (RA8EMU-629). Null
-    /// leaves the ITM window as plain RAM.
-    itm: ?*itm_port.Itm = null,
-
-    /// A word read of FPCCR, FPCAR or FPDSCR answered from the FP state;
-    /// false leaves the read to RAM.
-    pub fn load(self: Scs, address: u32, into: []u8) bool {
-        const state = self.fp orelse return false;
-        if (into.len != fp_scb.width) return false;
-        const value = fp_scb.read(state, address) orelse return false;
-        std.mem.writeInt(u32, into[0..4], value, .little);
-        return true;
-    }
-
-    /// A store outside the peripheral windows: RAM, then whichever of the
-    /// core's own SCS models the address belongs to.
-    pub fn store(self: Scs, guest_memory: GuestBus, address: u32, bytes: []const u8) bus.Error!void {
-        var reach = guest_memory;
-        const memory = reach.view();
-        const owed = if (self.clears) |unit| (if (unit.slot(address) != null) unit else null) else null;
-        const standing = if (owed != null) try memory.readWord(address & ~@as(u32, 3)) else 0;
-        if (self.cut) |edge| try edge.see(memory, address, bytes);
-        try memory.write(address, bytes);
-        if (owed) |unit| {
-            var padded = @as([4]u8, @splat(0));
-            @memcpy(padded[0..@min(bytes.len, 4)], bytes[0..@min(bytes.len, 4)]);
-            unit.record(address, @intCast(bytes.len), std.mem.readInt(u32, &padded, .little), standing);
-            unit.apply(memory) catch return bus.Error.Unmapped;
-        }
-        if (self.partitions) |unit| try scs_files.bankPartition(memory, unit, address, bytes);
-        if (self.regions) |unit| try scs_files.bankRegion(memory, unit, address, bytes, 0);
-        if (self.regions_ns) |unit| if (mpu_ns.normalOf(address)) |normal| {
-            try scs_files.bankRegion(memory, unit, normal, bytes, mpu_ns.offset);
-        };
-        if (self.fp) |state| try scs_files.fileFp(memory, state, address, bytes);
-        if (self.itm) |port| try scs_files.fileItm(memory, port, address, bytes);
-    }
-};
+fn inNsAlias(address: u32) bool {
+    return address >= 0xE002_E000 and address <= 0xE002_EFFF;
+}

@@ -63,7 +63,8 @@ pub const Cut = struct {
             }
         }
         const ns_normal = if (self.requester) |state|
-            state.current == .non_secure and
+            self.clocks[1] != null and
+                state.current == .non_secure and
                 (address == memmap.syst.csr or
                     address == memmap.syst.rvr or
                     address == memmap.syst.cvr)
@@ -128,6 +129,7 @@ pub const Cut = struct {
 
 /// The register a store lands on, as the rule's normal-window offset.
 fn offsetOf(words: clocks.Words, address: u32) ?u32 {
+    if (!words.present) return null;
     if (address == words.csr) return memmap.syst.csr;
     if (address == words.rvr) return memmap.syst.rvr;
     if (address == words.cvr) return memmap.syst.cvr;

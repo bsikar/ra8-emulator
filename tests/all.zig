@@ -38,6 +38,7 @@ test {
     _ = @import("chip/core/cpu/mve/all_test.zig");
     _ = @import("chip/core/cpu/board_bus_test.zig");
     _ = @import("chip/core/cpu/nvic_registers_test.zig");
+    _ = @import("chip/core/cpu/scs_regs_test.zig");
     _ = @import("chip/core/cpu/boot_test.zig");
     _ = @import("chip/core/cpu/fp_corpus_test.zig");
     _ = @import("chip/core/cpu/fp_cmp_corpus_test.zig");
@@ -62,6 +63,7 @@ test {
     _ = @import("session/zig/boundary_test.zig");
     _ = @import("chip/core/cpu/exception/reset_scs_test.zig");
     _ = @import("chip/core/cpu/decode/decode_test.zig");
+    _ = @import("chip/core/cpu/decode/fpu_gate_test.zig");
     _ = @import("chip/core/cpu/decode/cache_test.zig");
     _ = @import("chip/core/cpu/text/all_test.zig");
     _ = @import("chip/core/cpu/instr_test.zig");
@@ -150,6 +152,7 @@ test {
     _ = @import("chip/core/part/map_test.zig");
     _ = @import("chip/core/part/clock_test.zig");
     _ = @import("chip/core/machine/core_test.zig");
+    _ = @import("chip/core/machine/scs_test.zig");
     _ = @import("chip/core/machine/topology_test.zig");
     _ = @import("chip/core/machine/catalog_test.zig");
     _ = @import("chip/core/machine/machine_test.zig");

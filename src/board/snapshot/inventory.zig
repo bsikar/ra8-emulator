@@ -124,6 +124,7 @@ pub const omitted = .{
     .{ .name = "input_landing", .reason = "Input landing observer wiring" },
     .{ .name = "panel_vsync", .reason = "Root configuration; the display's vsync section carries the clock state" },
     .{ .name = "machine", .reason = "Root machine topology; part section validates the fabric part" },
+    .{ .name = "irq_override", .reason = "Optional embedder external interrupt source wiring" },
 };
 pub fn complete(comptime Board: type) bool {
     return fields.complete(Board, saved, omitted);

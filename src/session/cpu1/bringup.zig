@@ -66,7 +66,10 @@ pub const Cpu1 = struct {
         if (opened.session().live.other != null) return error.SecondCoreAlreadyOpen;
         const desc = try opened.board().desc().cores.require(.cpu1);
         errdefer self.* = .{};
-        self.machine = .{ .dwt = .{ .numcomp = dwt.numcompOf(desc.cpuid) } };
+        self.machine = .{
+            .dwt = .{ .numcomp = desc.scs.effectiveDwt(desc.profile.v8_1m) },
+            .fpb = .{ .num_code = desc.scs.fpb_code },
+        };
         self.bytes = try allocator.dupe(u8, bytes);
         errdefer allocator.free(self.bytes);
         _ = try cpu1_image.openBytes(&self.pair, board_wiring.cpu1(opened.board()), self.bytes, opened.guest());

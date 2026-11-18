@@ -63,6 +63,10 @@ pub const Words = struct {
     rvr: u32 = memmap.syst.rvr,
     cvr: u32 = memmap.syst.cvr,
     icsr: u32 = memmap.scb.icsr,
+    present: bool = true,
+
+    /// An unimplemented SysTick instance (`systicks == 0` or absent NS bank).
+    pub const absent = Words{ .present = false };
 
     /// The Non-secure timer at the SCS alias, 0xE002_E010 (DDI0553 B6.2).
     /// Its pend word is left to the caller that wires it.
@@ -142,6 +146,7 @@ pub const Clocks = struct {
     /// The period is reload + 1 core cycles. A disabled counter or a zero
     /// reload never wraps and asks for nothing.
     pub fn period(self: *const Clocks, core: anytype) u32 {
+        if (!self.words.present) return 0;
         const csr = core.readWord(self.words.csr) catch return 0;
         if (csr & csr_enable == 0) return 0;
         const reload = (core.readWord(self.words.rvr) catch return 0) & counter_mask;
@@ -211,6 +216,7 @@ pub const Clocks = struct {
     /// a poll gets one chunk to observe each wrap, and a firmware that never
     /// polls does not accumulate a flag that was never true for a whole period.
     pub fn advanceSysTick(self: *Clocks, core: anytype, instructions: u32) !void {
+        if (!self.words.present) return;
         const csr = try core.readWord(self.words.csr);
         var next = csr & ~csr_countflag;
         defer_write: {

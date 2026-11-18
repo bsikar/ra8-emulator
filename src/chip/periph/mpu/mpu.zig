@@ -58,19 +58,30 @@ const memmap = @import("../../core/memmap.zig");
 /// The register block's fixed shape: how many data regions this core reports,
 /// and where DREGION sits in TYPE.
 pub const geometry = struct {
-    /// Data regions the modelled core implements. dev's emu_exc.h seeds
-    /// MPU_TYPE with 0x0000_0800 and calls it "8 data regions (matches the
-    /// M85 MPU)"; emu_mpu.c carries the same 8 as its table length.
+    /// Data regions the modelled core implements by default. dev's emu_exc.h
+    /// seeds MPU_TYPE with 0x0000_0800 ("8 data regions").
     pub const regions: u8 = 8;
+    /// Maximum configurable data regions supported by the table.
+    pub const max_regions: usize = 16;
     pub const dregion_shift: u5 = 8;
-    /// What a read of TYPE gives back. SEPARATE reads zero: the Armv8-M MPU
-    /// has one unified region set, not split instruction and data sets.
+    /// What a read of TYPE gives back for the default 8-region count.
     pub const type_value: u32 = @as(u32, regions) << dregion_shift;
 
-    /// The region a select value names, wrapped into the implemented set the
-    /// way a 3-bit RNR field does with 8 regions.
+    /// TYPE word for an arbitrary configured region count.
+    pub fn typeValueFor(count: u8) u32 {
+        return @as(u32, @min(count, @as(u8, max_regions))) << dregion_shift;
+    }
+
+    /// The region a select value names, wrapped into the default 8-region set.
     pub fn selects(rnr: u32) u8 {
-        return @intCast(rnr % regions);
+        return selectsIn(rnr, regions);
+    }
+
+    /// The region a select value names, wrapped into `count` regions.
+    pub fn selectsIn(rnr: u32, count: u8) u8 {
+        const active = @min(count, @as(u8, max_regions));
+        if (active == 0) return 0;
+        return @intCast(rnr % active);
     }
 };
 
@@ -171,7 +182,9 @@ pub const Region = struct {
 /// The MPU window: the hardwired count the firmware reads out of it, and the
 /// region table it programmes into it.
 pub const Mpu = struct {
-    table: [geometry.regions]Region = @splat(.{}),
+    table: [geometry.max_regions]Region = @splat(.{}),
+    /// Implemented region count advertised in MPU_TYPE.DREGION (0..max_regions).
+    region_count: u8 = geometry.regions,
     /// RNR as the firmware last left it.
     selected: u8 = 0,
     /// CTRL as the firmware last left it, so the report can say which of the
@@ -191,25 +204,35 @@ pub const Mpu = struct {
         return .{};
     }
 
+    pub fn setRegions(self: *Mpu, count: u8) void {
+        self.region_count = @min(count, @as(u8, geometry.max_regions));
+        self.selected = geometry.selectsIn(self.selected, self.region_count);
+        if (self.region_count == 0) self.ctrl = 0;
+    }
+
+    pub fn typeValue(self: *const Mpu) u32 {
+        return geometry.typeValueFor(self.region_count);
+    }
+
     /// Put the hardwired count in place, so the firmware's first read of TYPE
     /// is this core's region count rather than the zero the mapping starts at.
     pub fn prime(self: *Mpu, core: anytype) !void {
-        _ = self;
-        try core.writeWord(memmap.mpu.type_, geometry.type_value);
+        try core.writeWord(memmap.mpu.type_, self.typeValue());
     }
 
     /// Read the window: keep TYPE read-only, and see which way CTRL.ENABLE
     /// has moved. A word store to CTRL has already been taken in `observe`,
     /// so the edge it counts here is the one that never reached it: a narrow
-    /// store, which the window hook leaves to the RAM underneath. The region table is NOT read here: it is built from
-    /// the
-    /// stores themselves in `observe`, because the last store any
-    /// configuration leaves behind is a cleared RLAR for the unused tail and
-    /// a poll would only ever see that.
+    /// store, which the window hook leaves to the RAM underneath.
     pub fn poll(self: *Mpu, core: anytype) !void {
-        if (try core.readWord(memmap.mpu.type_) != geometry.type_value) {
+        const expected = self.typeValue();
+        if (try core.readWord(memmap.mpu.type_) != expected) {
             self.refused +%= 1;
-            try core.writeWord(memmap.mpu.type_, geometry.type_value);
+            try core.writeWord(memmap.mpu.type_, expected);
+        }
+        if (self.region_count == 0) {
+            self.ctrl = 0;
+            return;
         }
         const ctrl = try core.readWord(memmap.mpu.ctrl);
         const was_on = self.ctrl & field.ctrl_enable != 0;
@@ -241,7 +264,7 @@ pub const Mpu = struct {
 
     /// The region a pair at this offset from RNR programs.
     pub fn banks(self: *const Mpu, offset: u2) u8 {
-        return geometry.selects(@as(u32, self.selected) + offset);
+        return geometry.selectsIn(@as(u32, self.selected) + offset, self.region_count);
     }
 
     /// What a store into the window asks of the engine above this block.
@@ -257,20 +280,14 @@ pub const Mpu = struct {
     };
 
     /// File one store into the window under the region RNR names, and say
-    /// what else it asks for. CTRL is not folded in here: the enable and
-    /// disable edges are counted at the boundary poll, and this only cues
-    /// the engine to follow the bit the store carried.
+    /// what else it asks for.
     pub fn observe(self: *Mpu, address: u32, value: u32) Cue {
+        if (self.region_count == 0) return .none;
         if (address == memmap.mpu.rnr) {
-            self.selected = geometry.selects(value);
+            self.selected = geometry.selectsIn(value, self.region_count);
             return .rebank;
         }
         if (address == memmap.mpu.ctrl) {
-            // The store IS the new CTRL. Leaving the word for the next poll
-            // to pick out of the PPB left every live rule reading a stale
-            // one: enforcement asking whether the MPU is on, and the
-            // background asking about PRIVDEFENA, both run at access time,
-            // long before the next poll comes round.
             const was_on = self.ctrl & field.ctrl_enable != 0;
             const is_on = value & field.ctrl_enable != 0;
             if (is_on and !was_on) self.enables +%= 1;
@@ -293,12 +310,13 @@ pub const Mpu = struct {
     /// RNR, so a read after an RNR change gives back the region it selected
     /// rather than whatever the last store happened to leave in the word.
     pub fn pairFor(self: *const Mpu, offset: u2) [2]u32 {
+        if (self.region_count == 0) return .{ 0, 0 };
         const region = self.table[self.banks(offset)];
         return .{ region.rbar, region.rlar };
     }
 
     pub fn on(self: *const Mpu) bool {
-        return self.ctrl & field.ctrl_enable != 0;
+        return self.region_count > 0 and self.ctrl & field.ctrl_enable != 0;
     }
 
     pub fn privilegedDefault(self: *const Mpu) bool {
@@ -308,7 +326,7 @@ pub const Mpu = struct {
     /// How many regions the firmware left enabled.
     pub fn programmed(self: *const Mpu) u8 {
         var count: u8 = 0;
-        for (self.table) |region| {
+        for (self.table[0..@min(self.region_count, @as(u8, geometry.max_regions))]) |region| {
             if (region.enabled) count += 1;
         }
         return count;
@@ -317,7 +335,7 @@ pub const Mpu = struct {
     /// How many of those are read-only, the ones enforcement will care about.
     pub fn readOnly(self: *const Mpu) u8 {
         var count: u8 = 0;
-        for (self.table) |region| {
+        for (self.table[0..@min(self.region_count, @as(u8, geometry.max_regions))]) |region| {
             if (region.enabled and region.read_only) count += 1;
         }
         return count;
@@ -326,7 +344,7 @@ pub const Mpu = struct {
     /// The enabled region covering an address, highest-numbered first the way
     /// the architecture resolves an overlap, or null when none does.
     pub fn regionFor(self: *const Mpu, at: u32) ?Region {
-        var i: usize = self.table.len;
+        var i: usize = @min(self.region_count, @as(u8, geometry.max_regions));
         while (i > 0) {
             i -= 1;
             if (self.table[i].covers(at)) return self.table[i];

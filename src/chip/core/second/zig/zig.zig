@@ -31,6 +31,7 @@ const registry = @import("../../../periph/registry.zig");
 pub const run = @import("run.zig");
 const sau = @import("../../../periph/sau/sau.zig");
 const scb = @import("../../../periph/scb/scb.zig");
+const scs_mod = @import("../../machine/scs.zig");
 const Second = @import("../core.zig").Second;
 const second_core = @import("../core.zig");
 const Store = @import("../../cpu/memory/store.zig").Store;
@@ -46,6 +47,9 @@ pub const Units = struct {
     vector_base: u32,
     profile: profile.Profile = part.cpu1_profile,
     security: bool = true,
+    systicks: u2 = 2,
+    scs: scs_mod.ScsConfig = .{},
+    dwt_numcomp: ?u4 = null,
 
     pub fn of(second: *Second) Units {
         return .{
@@ -83,8 +87,18 @@ pub const SecondZig = struct {
                 .partitions = if (units.security) units.partitions else null,
                 .regions = units.regions,
                 .clears = units.clears,
+                .config = units.scs,
+                .systicks = units.systicks,
+                .has_security = units.security,
+                .dwt_numcomp = units.dwt_numcomp,
+                .fpb_wired = true,
             },
         };
+        self.pending = .{ .model = .{
+            .irq_lines = units.scs.irq_lines,
+            .prio_bits = units.scs.prio_bits,
+            .systicks = units.systicks,
+        } };
         self.quiet = .{ .inner = self.pending.source(), .memory = self.board.view() };
         self.cpu = .{
             .bus = self.quiet.bus(),
@@ -95,7 +109,7 @@ pub const SecondZig = struct {
         self.cpu.decoded = &self.decoded;
         self.board.security = if (units.security) &self.cpu.banked else null;
         // CPACR reaches CPU1's own FP state (RA8EMU-950).
-        self.board.scs.fp = &self.cpu.fp;
+        self.board.scs.attachFp(&self.cpu.fp, units.profile.fpu != .none or units.profile.mve);
         self.pending.banked = &self.cpu.banked;
         self.pending.clear_due = &self.quiet.clear_due;
         self.check = .{ .unit = units.regions };
@@ -189,6 +203,8 @@ pub fn bringUp(
         .guard = parts.guard,
         .identity = desc.cpuid,
         .security = desc.security,
+        .systicks = desc.systicks,
+        .scs = desc.scs,
         .control = parts.control,
         .clears = parts.clears,
     });
@@ -200,6 +216,9 @@ pub fn bringUp(
         .vector_base = seeded.vector_base,
         .profile = desc.profile,
         .security = desc.security,
+        .systicks = desc.systicks,
+        .scs = desc.scs,
+        .dwt_numcomp = desc.scs.effectiveDwt(desc.profile.v8_1m),
     };
     try core.openOn(memory, units, wiring.bus);
     return seeded;

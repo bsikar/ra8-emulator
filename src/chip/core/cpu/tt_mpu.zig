@@ -68,7 +68,7 @@ pub fn merge(security: u32, mpu_half: u32) u32 {
 
 /// The highest-numbered enabled region covering `at`, the one that decides.
 fn regionIndex(table: *const mpu.Mpu, at: u32) ?usize {
-    var i: usize = table.table.len;
+    var i: usize = @min(table.region_count, @as(u8, mpu.geometry.max_regions));
     while (i > 0) {
         i -= 1;
         if (table.table[i].covers(at)) return i;

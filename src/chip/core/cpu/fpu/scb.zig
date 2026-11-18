@@ -21,6 +21,10 @@ pub const width: usize = 4;
 /// The CPACR bits that exist: CP10 and CP11.
 pub const cpacr_mask: u32 = 0x00F0_0000;
 
+pub fn isFpAddress(at: u32) bool {
+    return at == address.cpacr or at == address.fpccr or at == address.fpcar or at == address.fpdscr;
+}
+
 /// The register at `at` as software reads it, or null when `at` is none
 /// of the three.
 pub fn read(state: *const State, at: u32) ?u32 {

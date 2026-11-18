@@ -221,6 +221,9 @@ pub fn handlerOf(cpu: *Cpu, number: Number) bus.Error!u32 {
 /// VTOR as the firmware set it, or the table the core reset from while
 /// nothing answers at VTOR or it still reads zero.
 pub fn vectorTable(cpu: *const Cpu) u32 {
+    if (cpu.profile.init_vtor != null) {
+        return cpu.bus.readWord(memmap.scb.vtor) catch cpu.vtor;
+    }
     const vtor = cpu.bus.readWord(memmap.scb.vtor) catch 0;
     return if (vtor != 0) vtor else cpu.vtor;
 }

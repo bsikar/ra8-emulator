@@ -7,6 +7,7 @@ const mpu = @import("../periph/mpu/mpu.zig");
 const mpu_guard = @import("mpu_guard.zig");
 const sau = @import("../periph/sau/sau.zig");
 const scb = @import("../periph/scb/scb.zig");
+const scs_mod = @import("machine/scs.zig");
 
 /// The state that lives inside one core rather than on the bus: its SAU,
 /// its MPU table and the guard that enforces that table. CPU0's are the
@@ -23,6 +24,10 @@ pub const CoreWindows = struct {
     identity: u32,
     /// Whether this core implements the Armv8-M Security Extension.
     security: bool = true,
+    /// Implemented SysTick timers (0..2).
+    systicks: u2 = 2,
+    /// Per-core System Control Space configuration.
+    scs: scs_mod.ScsConfig = .{},
     /// The AIRCR model this core's writes are judged by. CPU0's is the
     /// board's own; CPU1 brings its own, so a PRIGROUP one core programs is
     /// never the split the other reports.

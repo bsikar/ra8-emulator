@@ -10,7 +10,9 @@
 //! on. Keeping it here leaves board.zig as the list of what the board is.
 const cpuid = @import("ra8_chip").periph.cpuid;
 const dwt = @import("ra8_chip").periph.dwt;
+const fpb = @import("ra8_chip").periph.fpb;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const memmap = @import("ra8_chip").core.memmap;
 const mpu = @import("ra8_chip").periph.mpu;
 const sau = @import("ra8_chip").periph.sau;
 const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
@@ -194,6 +196,8 @@ pub fn cpu0Windows(self: *Board) CoreWindows {
         .guard = &self.guard,
         .identity = primary.cpuid,
         .security = primary.security,
+        .systicks = primary.systicks,
+        .scs = primary.scs,
         .control = &self.control,
         .clears = &self.clears,
     };
@@ -252,25 +256,26 @@ fn resetThunk(context: *anyopaque) void {
 /// The reset values a core's own PPB windows read as, written into
 /// `memory` (RA8EMU-550).
 pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
-    // CPUID read as zero on both cores, so neither said what it was.
+    windows.regions.setRegions(windows.scs.mpu_regions_s);
+    if (windows.regions_ns) |ns| ns.setRegions(if (windows.security) windows.scs.mpu_regions_ns else 0);
+    windows.partitions.setRegions(windows.scs.effectiveSau(windows.security));
     try cpuid.prime(memory, windows.identity);
-    // DWT_CTRL.NUMCOMP read as zero, so the core claimed no comparators.
-    try memory.writeWord(dwt.base, dwt.ctrlReset(windows.identity));
-    // AIRCR: the first read of it is 0 rather than the key status.
+    const numcomp = windows.scs.dwt_comparators orelse dwt.numcompOf(windows.identity);
+    try memory.writeWord(dwt.base, dwt.ctrlValue(numcomp));
+    try memory.writeWord(fpb.base, fpb.ctrlReset(windows.scs.fpb_code));
     try windows.control.prime(memory);
-    // CTR read as zero, so the firmware computed a four-byte line and
-    // walked every range eight times over.
     try self.caches.prime(memory);
-    // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
-    // configuration for want of capacity and main never got past it.
     try windows.regions.prime(memory);
+    if (windows.scs.init_vtor) |vtor| try memory.writeWord(memmap.scb.vtor, vtor);
+    if (windows.systicks >= 1 and windows.scs.syst_calib != 0) {
+        try memory.writeWord(memmap.syst.calib, windows.scs.syst_calib);
+    }
     if (windows.security) {
-        // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
-        try mpu.ns.prime(memory, mpu.geometry.type_value);
-        // SAU_TYPE read as zero, so the secure boot's capability check failed
-        // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
-        // error, parking the run in the Secure fallback main() forever.
+        try mpu.ns.prime(memory, mpu.geometry.typeValueFor(windows.scs.mpu_regions_ns));
         try windows.partitions.prime(memory);
+        if (windows.systicks >= 2 and windows.scs.syst_calib != 0) {
+            try memory.writeWord(memmap.syst.calib + 0x0002_0000, windows.scs.syst_calib);
+        }
     }
 }
 

@@ -21,7 +21,7 @@ pub fn poll(cpu: *Cpu) Error!bool {
     if (cpu.quiet) |q| if (q.hushed and (q.clear or q.holds(key(cpu)))) return false;
     const now = key(cpu);
     const external = if (cpu.source) |from| try from.winner(cpu.bus) else null;
-    const pending_fault = fault.pending(cpu.bus);
+    const pending_fault = fault.pendingFor(cpu.bus, cpu.profile.prioMask());
     if (external == null and pending_fault == null) return hush(cpu, now, true);
     const split = prigroup(cpu.bus);
     const fault_first = if (pending_fault) |pending|
@@ -135,7 +135,8 @@ pub fn chain(cpu: *Cpu, which: active.Entry, lr: u32) Error!void {
 /// SVC, at the priority SHPR2 gives it.
 pub fn supervisorCall(cpu: *Cpu, number: u9, return_address: u32) Error!void {
     const shpr2 = cpu.bus.readWord(memmap.scb.shpr2) catch 0;
-    try enter(cpu, .{ .number = number, .priority = @truncate(shpr2 >> 24) }, return_address);
+    const raw: u8 = @truncate(shpr2 >> 24);
+    try enter(cpu, .{ .number = number, .priority = raw & cpu.profile.prioMask() }, return_address);
 }
 
 /// After an exception return: the innermost handler is no longer active.

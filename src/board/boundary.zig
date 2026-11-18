@@ -118,10 +118,10 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
     try drain(self, core, self.dma.dueEvents());
     try drain(self, core, self.usb.dueEvents());
     try drain(self, core, self.links.takeEvents());
-    try self.events.repend(core);
-    if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
+    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
+    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
     // Drains after the reset request may have latched a line again.
-    if (self.reboot) |pending| if (pending.requested) self.events.clearLatches();
+    if (self.reboot) |pending| if (pending.requested) clearIrqLatches(self);
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 
@@ -131,6 +131,9 @@ fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.re
     self.trace.tick();
     notifyFrameTaps(self);
     try takeResetRequestsFrom(self, core, issuer);
+    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
+    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
+    if (self.reboot) |pending| if (pending.requested) clearIrqLatches(self);
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 
@@ -139,6 +142,22 @@ fn notifyFrameTaps(self: *Board) void {
         if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
     }
     self.frame_taps.afterBoundary(self.time.base.now());
+}
+
+/// Vendor-neutral external interrupt source for `issuer` on this board.
+pub fn irqSource(self: *Board, issuer: chip.periph.registry.Issuer) chip.periph.irq_source.IrqSource {
+    const slot: usize = if (issuer == .cpu1) 1 else 0;
+    return self.irq_override[slot] orelse self.events.irqSourceFor(issuer);
+}
+
+pub fn clearIrqLatches(self: *Board) void {
+    self.events.clearLatches();
+    if (self.irq_override[0]) |src| src.clearLatches();
+    if (self.irq_override[1]) |src| src.clearLatches();
+}
+
+fn cpu1IrqLines(self: *const Board) u16 {
+    return if (self.desc().core(.cpu1)) |c| c.scs.irq_lines else 0;
 }
 
 /// Host switch edges reach the event path only through a pin whose PFS ISEL
@@ -162,21 +181,26 @@ fn drain(self: *Board, core: Guest, events: anytype) !void {
 /// it. Then the transfer controller, before the core: a DTCE slot belongs to
 /// the DTC until its descriptor runs out.
 pub fn raise(self: *Board, core: Guest, event: u16) !void {
+    if (!self.desc().memory.attach_ra8_blocks or self.irq_override[0] != null) {
+        return irqSource(self, .cpu0).raise(&core, self.desc().primary().scs.irq_lines, event);
+    }
     _ = self.links.conduct(event);
     // INTSELR hands the event to CPU1's ICU. With no CPU1 attached it stays
     // CPU0's, which keeps a single-core run what it was.
     if (self.events.select.coreFor(event) == .cpu1) {
-        if (self.cpu1) |second| {
-            if (self.transfers1.activate(second.asInitiator(.dtc1), &self.events, event)) |moved| {
-                if (!moved.interrupt) return;
-            }
-            return self.events.raiseOn(.cpu1, second, event);
-        }
+        if (self.cpu1) |second| return raiseToSecond(self, second, event);
     }
     if (self.transfers.activate(core.asInitiator(.dtc0), &self.events, event)) |moved| {
         if (!moved.interrupt) return;
     }
-    try self.events.raise(core, event);
+    try irqSource(self, .cpu0).raise(&core, self.desc().primary().scs.irq_lines, event);
+}
+
+fn raiseToSecond(self: *Board, second: Guest, event: u16) !void {
+    if (self.transfers1.activate(second.asInitiator(.dtc1), &self.events, event)) |moved| {
+        if (!moved.interrupt) return;
+    }
+    try irqSource(self, .cpu1).raise(&second, cpu1IrqLines(self), event);
 }
 
 /// Whoever asked for a reset this boundary hands the request to the reset
@@ -224,7 +248,7 @@ pub fn resetFor(self: *Board, source: reset.Source) void {
 pub fn resetForFrom(self: *Board, source: reset.Source, issuer: chip.periph.registry.Issuer) void {
     if (self.event_sink) |sink| sink.resetFn(sink.context, issuer, source, self.time.base.now());
     self.causes.request(source);
-    self.events.clearLatches();
+    clearIrqLatches(self);
     self.second_core.reset();
     if (self.reboot) |pending| pending.requested = true;
 }

@@ -37,15 +37,25 @@ pub fn bitFor(line: u16) u32 {
     return @as(u32, 1) << @as(u5, @intCast(line % 32));
 }
 
-/// The state external interrupt `line` targets.
+/// The state external interrupt `line` targets on the default 96-line table.
 pub fn target(core: anytype, line: u16) !Target {
-    if (line >= nvic.irq_lines) return Error.NotAnIrq;
+    return targetWith(core, line, nvic.irq_lines);
+}
+
+/// The state external interrupt `line` targets on a core with `irq_lines` lines.
+pub fn targetWith(core: anytype, line: u16, irq_lines: u16) !Target {
+    if (line >= @min(irq_lines, nvic.max_irq_lines)) return Error.NotAnIrq;
     const word = try core.readWord(wordFor(line));
     return if (word & bitFor(line) != 0) .non_secure else .secure;
 }
 
 /// The state exception `number` targets, for an external interrupt.
 pub fn targetOf(core: anytype, number: u16) !Target {
+    return targetOfWith(core, number, nvic.irq_lines);
+}
+
+/// The state exception `number` targets on a core with `irq_lines` lines.
+pub fn targetOfWith(core: anytype, number: u16, irq_lines: u16) !Target {
     if (number < nvic.first_irq) return Error.NotAnIrq;
-    return target(core, number - nvic.first_irq);
+    return targetWith(core, number - nvic.first_irq, irq_lines);
 }

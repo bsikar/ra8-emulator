@@ -1,5 +1,6 @@
 //! The decoder: asks each group in src/chip/core/cpu/ops/table.zig in turn and
 //! returns the first one that recognises the encoding.
+pub const fpu_gate = @import("fpu_gate.zig");
 const Instr = @import("../instr.zig").Instr;
 const op = @import("../op.zig");
 const table = @import("../ops/table.zig");
@@ -27,6 +28,7 @@ pub fn decode(instr: Instr) ?Hit {
 pub fn decodeFor(core: profile.Profile, instr: Instr) ?Hit {
     for (table.groups) |group| {
         if (!core.has(group.needs)) continue;
+        if (!fpu_gate.allows(core, group.name, instr)) continue;
         if (group.decode(instr)) |exec| return .{
             .group = group.name,
             .exec = exec,

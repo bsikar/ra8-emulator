@@ -68,7 +68,7 @@ pub const Driver = struct {
     pub fn stored(self: *Driver, address: u32, value: u32, width: u8) void {
         if (inside(address, itm.base, itm.limits.span)) {
             _ = self.machine.itm.write(address - itm.base, value, width);
-        } else if (inside(address, fpb.base, fpb.limits.span)) {
+        } else if (inside(address, fpb.base, fpb.limits.max_span)) {
             if (self.machine.fpb.write(address - fpb.base, value)) self.unit_dirty = true;
         } else if (address == dwt.base + dwt.offsets.cyccnt and width == 4) {
             if (self.machine.dwt.cycleWritten(value)) |index| self.machine.onUnitMatch(index);

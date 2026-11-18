@@ -16,6 +16,7 @@ test "CPU foundation SCS reset clears last IRQ and priority words in both banks"
         ram.putWord(memmap.scb.shcsr + offset, 0xFFFF_FFFF);
         ram.putWord(memmap.scb.icsr + offset, 0xFFFF_FFFF);
     }
+    for (0..3) |i| ram.putWord(ra8.chip.periph.nvic.itns.base + @as(u32, @intCast(i * 4)), 0xFFFF_FFFF);
     try reset.clear(ram.view());
     for ([_]u32{ 0, 0x20000 }) |offset| {
         for (lines) |base| {
@@ -24,6 +25,10 @@ test "CPU foundation SCS reset clears last IRQ and priority words in both banks"
         for (0..24) |i| try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.nvic.ipr + offset + @as(u32, @intCast(i * 4))));
         try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.shcsr + offset));
         try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.icsr + offset));
+    }
+    for (0..3) |i| {
+        const addr = ra8.chip.periph.nvic.itns.base + @as(u32, @intCast(i * 4));
+        try std.testing.expectEqual(@as(u32, 0), ram.word(addr));
     }
 }
 

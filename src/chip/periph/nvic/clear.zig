@@ -5,6 +5,7 @@
 //! clear-register write is one job with one shape, nothing to do with
 //! picking or entering an exception.
 const memmap = @import("../../core/memmap.zig");
+const scs_mod = @import("../../core/machine/scs.zig");
 
 /// ICSR's four pend and unpend bits, handed in rather than imported, so this
 /// file does not have to import the module that imports it.
@@ -30,13 +31,30 @@ pub fn registers(core: anytype, irq_words: u16, bits: Bits) !void {
     try pends(core, bits);
 }
 
+pub fn registersFor(core: anytype, irq_lines: u16, bits: Bits) !void {
+    try linesFor(core, irq_lines);
+    try pends(core, bits);
+}
+
 /// ICER into ISER and ICPR into ISPR, word by word.
 pub fn lines(core: anytype, irq_words: u16) !void {
     var word: u16 = 0;
     while (word < irq_words) : (word += 1) {
         const offset = 4 * @as(u32, word);
-        try fold(core, memmap.nvic.icer + offset, memmap.nvic.iser + offset);
-        try fold(core, memmap.nvic.icpr + offset, memmap.nvic.ispr + offset);
+        try fold(core, memmap.nvic.icer + offset, memmap.nvic.iser + offset, 0xFFFF_FFFF);
+        try fold(core, memmap.nvic.icpr + offset, memmap.nvic.ispr + offset, 0xFFFF_FFFF);
+    }
+}
+
+/// ICER into ISER and ICPR into ISPR, masking unimplemented tail bits.
+pub fn linesFor(core: anytype, irq_lines: u16) !void {
+    const words = scs_mod.irqWordsOf(irq_lines);
+    var word: u16 = 0;
+    while (word < words) : (word += 1) {
+        const offset = 4 * @as(u32, word);
+        const mask = scs_mod.wordIrqMaskOf(irq_lines, word);
+        try fold(core, memmap.nvic.icer + offset, memmap.nvic.iser + offset, mask);
+        try fold(core, memmap.nvic.icpr + offset, memmap.nvic.ispr + offset, mask);
     }
 }
 
@@ -49,9 +67,10 @@ pub fn pends(core: anytype, bits: Bits) !void {
     if (next != icsr) try core.writeWord(memmap.scb.icsr, next);
 }
 
-fn fold(core: anytype, clear_register: u32, set_register: u32) !void {
+fn fold(core: anytype, clear_register: u32, set_register: u32, implemented: u32) !void {
     const clear = try core.readWord(clear_register);
-    if (clear == 0) return;
-    try core.writeWord(set_register, (try core.readWord(set_register)) & ~clear);
-    try core.writeWord(clear_register, 0);
+    const current = try core.readWord(set_register);
+    const masked = (current & ~clear) & implemented;
+    if (masked != current) try core.writeWord(set_register, masked);
+    if (clear != 0) try core.writeWord(clear_register, 0);
 }
