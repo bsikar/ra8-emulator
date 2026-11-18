@@ -1,0 +1,143 @@
+<div class="fg-pane">
+  <div class="fg-head">
+    <div class="grp">
+      <app-section-kicker label="CALL STACK FLAMEGRAPH" />
+      <span class="mono es-meta">{{ modeSummary() }}</span>
+      <div class="seg-group" role="group" aria-label="Flamegraph orientation">
+        <button
+          type="button"
+          class="seg-tab"
+          [class.is-active]="mode() === 'flame'"
+          data-testid="profile-mode-flame"
+          (click)="mode.set('flame')"
+        >Flamegraph</button>
+        <button
+          type="button"
+          class="seg-tab"
+          [class.is-active]="mode() === 'icicle'"
+          data-testid="profile-mode-icicle"
+          (click)="mode.set('icicle')"
+        >Icicle</button>
+      </div>
+    </div>
+    <div class="grp">
+      <input
+        type="search"
+        class="filter-input mono"
+        data-testid="profile-symbol-filter"
+        placeholder="Filter symbol..."
+        aria-label="Filter flamegraph symbol"
+        [value]="symbolFilter()"
+        (input)="onSymbolFilter($event)"
+      />
+      @if (zoomNodeId()) {
+        <button type="button" class="mini-btn" data-testid="profile-reset-zoom-btn" (click)="resetZoom()">Reset Zoom</button>
+      }
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="profile-capture-all-btn"
+        [disabled]="!rpc.isConnected()"
+        (click)="captureAll()"
+      >Capture All</button>
+    </div>
+  </div>
+
+  <div class="fg-body">
+    @if (profile.flamegraph().totalSamples > 0) {
+      @if (selectedFrame(); as sel) {
+        <div class="selected-bar mono" data-testid="profile-selected-frame">
+          <span class="es-meta">Selected Frame:</span>
+          <span class="sel-name">{{ sel.name }}</span>
+          <span class="es-meta">{{ selectedLocation() }}</span>
+          <span class="es-meta">Self: {{ selectedSelfPct() }}% ({{ sel.selfSamples }} samples)</span>
+          <span class="es-meta">Total: {{ sel.percentage }}% ({{ sel.samples }} samples)</span>
+        </div>
+      }
+
+      <div class="rows-box" data-testid="profile-flamegraph-rows">
+        @for (row of displayRows(); track $index) {
+          <div class="fg-row">
+            @for (node of row; track node.id) {
+              <button
+                type="button"
+                class="fg-bar mono"
+                [class.is-hotspot]="node.isHotspot"
+                [class.is-selected]="selectedNodeId() === node.id"
+                [class.is-dimmed]="isNodeDimmed(node)"
+                [style.left.%]="scaledLeft(node)"
+                [style.width.%]="scaledWidth(node)"
+                [title]="node.name + ' (' + node.samples + ' samples, ' + node.percentage + '%)'"
+                (click)="selectFrame(node)"
+              >
+                @if (scaledWidth(node) >= 3.5) {
+                  {{ node.name }} ({{ node.percentage }}%)
+                }
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="hotspots-box">
+        <div class="hotspots-head">
+          <app-section-kicker label="TOP SELF-CYCLE HOTSPOTS" />
+          <span class="mono es-meta">{{ sortedHotspots().length }} symbols</span>
+        </div>
+        <div class="table-wrap">
+          <table class="hs-table mono" data-testid="profile-hotspots-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="sort-btn" data-testid="sort-symbol" (click)="toggleSort('symbol')">
+                    FUNCTION SYMBOL {{ sortGlyph('symbol') }}
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-testid="sort-self" (click)="toggleSort('selfPct')">
+                    SELF % {{ sortGlyph('selfPct') }}
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-testid="sort-total" (click)="toggleSort('totalPct')">
+                    TOTAL % {{ sortGlyph('totalPct') }}
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-testid="sort-samples" (click)="toggleSort('samples')">
+                    SAMPLES {{ sortGlyph('samples') }}
+                  </button>
+                </th>
+                <th>SOURCE LOCATION</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (spot of sortedHotspots(); track spot.symbol) {
+                <tr class="hs-row" (click)="selectHotspotRow(spot.symbol)">
+                  <td class="sym-cell" [title]="spot.symbol">{{ spot.symbol }}</td>
+                  <td class="num-col">{{ spot.selfPct.toFixed(1) }}%</td>
+                  <td class="num-col es-meta">{{ spot.totalPct.toFixed(1) }}%</td>
+                  <td class="num-col es-meta">{{ spot.selfSamples }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="jump-link mono"
+                      [attr.data-testid]="'hotspot-jump-' + spot.symbol"
+                      (click)="jumpToDebug(spot, $event)"
+                    >
+                      {{ spot.sourceLocation }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    } @else {
+      <p class="es-meta note">
+        {{ rpc.isConnected() ? 'No folded stack samples yet (run with --profile-folded and Capture All).' : 'Connect a session to capture folded stacks.' }}
+      </p>
+    }
+  </div>
+</div>

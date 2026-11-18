@@ -1,0 +1,68 @@
+<div class="tl-pane">
+  <div class="tl-head">
+    <div class="grp">
+      <app-section-kicker label="CONTEXT-SWITCH TIMELINE" />
+      <span class="mono es-meta">window {{ windowWidthLabel() }} · span {{ totalSpanLabel() }}</span>
+      <span class="mono es-meta">CPU0 {{ windowUtil().cpu0ActivePct }}% active</span>
+      @if (execution.cpu1Attached()) {
+        <span class="mono es-meta">CPU1 {{ windowUtil().cpu1ActivePct }}% active</span>
+      }
+    </div>
+    <div class="grp">
+      <div class="mode-seg" role="group" aria-label="Timeline drag mode">
+        <button
+          type="button"
+          class="mini-btn"
+          [class.is-active]="dragMode() === 'brush'"
+          data-testid="timeline-mode-brush"
+          (click)="dragMode.set('brush')"
+        >Brush</button>
+        <button
+          type="button"
+          class="mini-btn"
+          [class.is-active]="dragMode() === 'pan'"
+          data-testid="timeline-mode-pan"
+          (click)="dragMode.set('pan')"
+        >Pan</button>
+      </div>
+      <button type="button" class="mini-btn" data-testid="timeline-zoom-in" (click)="zoom(0.5)">Zoom In</button>
+      <button type="button" class="mini-btn" data-testid="timeline-zoom-out" (click)="zoom(2)">Zoom Out</button>
+      <button type="button" class="mini-btn" data-testid="timeline-reset-btn" (click)="resetWindow()">Reset View</button>
+      <input type="text" class="ns-input mono" data-testid="profile-range-from" [value]="fromDraft()" (input)="onFromInput($event)" aria-label="Capture start ns" />
+      <span class="es-meta">to</span>
+      <input type="text" class="ns-input mono" data-testid="profile-range-to" [value]="toDraft()" (input)="onToInput($event)" aria-label="Capture end ns" />
+      <button type="button" class="mini-btn" data-testid="profile-capture-btn" (click)="captureRange()">Capture Range</button>
+    </div>
+  </div>
+
+  <div class="canvas-box">
+    <canvas
+      #tlCanvas
+      class="tl-canvas"
+      [class.is-pan]="dragMode() === 'pan'"
+      data-testid="profile-timeline-canvas"
+      (wheel)="onWheel($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerCancel()"
+      (pointerleave)="onPointerLeave()"
+    ></canvas>
+    @if (tooltip(); as tip) {
+      <div
+        class="tl-tooltip mono"
+        data-testid="timeline-tooltip"
+        [style.left.px]="tip.x"
+        [style.top.px]="tip.y"
+      >
+        <div>{{ tip.title }}</div>
+        <div class="es-meta">{{ tip.detail }}</div>
+      </div>
+    }
+  </div>
+
+  <div class="tl-foot mono es-meta">
+    <span>{{ hoverInfo() }}</span>
+    <span>{{ built().slices.length }} slices recorded</span>
+  </div>
+</div>
