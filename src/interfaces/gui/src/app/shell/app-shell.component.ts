@@ -19,6 +19,7 @@ import { SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import { BoardStore } from '../core/stores/board.store';
 import { DebugStore } from '../core/stores/debug.store';
 import { ExecutionStore } from '../core/stores/execution.store';
+import { PreferencesStore } from '../core/stores/preferences.store';
 import { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import { RewindStore } from '../core/stores/rewind.store';
 import { WorkspaceStore } from '../core/stores/workspace.store';
@@ -26,6 +27,7 @@ import { VimStore } from '../core/vim/vim.store';
 import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
 import { StatusDotComponent } from '../shared/ui/status-dot.component';
 import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
+import { toggleDocumentFullscreen } from '../shared/utils/fullscreen';
 import {
   type CommandAction,
   CommandModeStore,
@@ -37,6 +39,7 @@ import { ConnectionPopoverComponent } from './connection-popover.component';
 import { DropVeilComponent } from './drop-veil.component';
 import { ExtensionsSheetComponent } from './extensions-sheet.component';
 import { SearchEverywhereComponent } from './search-everywhere.component';
+import { SettingsModalComponent } from './settings-modal.component';
 import { registerShellExHandlers, registerShellSearchProviders } from './shell-ide-bridge';
 import { ToastRegionComponent } from './toast-region.component';
 
@@ -61,6 +64,7 @@ interface NavRouteItem {
     ConnectionPopoverComponent,
     SearchEverywhereComponent,
     ExtensionsSheetComponent,
+    SettingsModalComponent,
     DropVeilComponent,
     ToastRegionComponent,
     StatusDotComponent,
@@ -78,6 +82,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   protected readonly rewind = inject(RewindStore);
   protected readonly workspace = inject(WorkspaceStore);
   protected readonly remoteHosts = inject(RemoteHostsStore);
+  protected readonly prefs = inject(PreferencesStore);
   protected readonly cmdMode = inject(CommandModeStore);
   protected readonly searchEverywhere = inject(SearchEverywhereStore);
   protected readonly extStore = inject(ExtensionStore);
@@ -164,6 +169,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   protected onWindowKeyDown(event: KeyboardEvent): void {
+    if (event.ctrlKey && event.metaKey && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      void this.toggleFullScreen();
+      return;
+    }
     if (this.connectionPopoverOpen() && event.key === 'Escape') {
       event.preventDefault();
       this.connectionPopoverOpen.set(false);
@@ -260,6 +270,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
   }
 
+  protected async toggleFullScreen(): Promise<void> {
+    const res = await toggleDocumentFullscreen();
+    if (res.error) this.rpc.pushToast(`Full Screen: ${res.error}`, 'neutral');
+  }
+
   private syncCommands(extCmds: ReturnType<ExtensionStore['contributedCommands']>): void {
     const base: CommandAction[] = [
       { id: 'nav-launch', label: 'Go to Launch', category: 'navigation', menu: 'view', shortcut: { key: '1' }, run: () => this.router.navigateByUrl('/launch') },
@@ -272,12 +287,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { id: 'nav-rewind', label: 'Go to Rewind', category: 'navigation', menu: 'view', shortcut: { key: '4' }, run: () => this.router.navigateByUrl('/rewind') },
       { id: 'nav-profile', label: 'Go to Profile', category: 'navigation', menu: 'view', shortcut: { key: '5' }, run: () => this.router.navigateByUrl('/profile') },
       { id: 'nav-console', label: 'Go to Console', category: 'navigation', menu: 'terminal', shortcut: { key: '6' }, run: () => this.router.navigateByUrl('/console') },
+      { id: 'nav-fullscreen', label: 'Full Screen', category: 'navigation', menu: 'view', shortcut: { key: 'F11' }, run: () => this.toggleFullScreen() },
       { id: 'open-search', label: 'Search Everywhere', category: 'navigation', menu: 'view', run: () => this.searchEverywhere.openSearch() },
       { id: 'open-extensions', label: 'Extensions', category: 'extensions', menu: 'view', shortcut: { mod: true, shift: true, key: 'x' }, run: () => this.cmdMode.extensionsOpen.set(true) },
       { id: 'toggle-vim', label: 'Toggle Vim Keybindings', category: 'session', menu: 'edit', run: () => this.vim.toggleEnabled() },
       { id: 'exec-run', label: 'Continue / Pause', category: 'execution', menu: 'file', shortcut: { key: 'F5' }, isEnabled: (c) => c.connected, run: () => this.toggleRunPause() },
       { id: 'exec-over', label: 'Step Over', category: 'execution', menu: 'edit', shortcut: { key: 'F10' }, isEnabled: (c) => c.connected && !c.running, run: () => this.execution.stepOver() },
-      { id: 'exec-into', label: 'Step Into', category: 'execution', menu: 'edit', shortcut: { key: 'F11' }, isEnabled: (c) => c.connected && !c.running, run: () => this.execution.step() },
+      { id: 'exec-into', label: 'Step Into', category: 'execution', menu: 'edit', shortcut: { shift: true, key: 'F11' }, isEnabled: (c) => c.connected && !c.running, run: () => this.execution.step() },
       { id: 'open-settings', label: 'Session Settings', category: 'session', menu: 'file', shortcut: { mod: true, key: ',' }, run: () => this.cmdMode.settingsOpen.set(true) },
       { id: 'open-help', label: 'Keyboard & Transport Help', category: 'help', menu: 'help', run: () => this.cmdMode.helpOpen.set(true) },
       { id: 'disconnect', label: 'Disconnect Session', category: 'session', menu: 'file', isEnabled: (c) => c.connected, run: () => this.rpc.disconnect(true) },

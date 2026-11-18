@@ -1,0 +1,209 @@
+@if (mode() === 'catalog-component') {
+  <div
+    class="composer-card"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Add Component & Pin Mapping"
+    data-testid="composer-add-component-modal"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="composer-head">
+      <div>
+        <app-section-kicker label="COMPONENT CATALOG" />
+        <h2 class="composer-title">Add Component &amp; Pin Mapping</h2>
+      </div>
+      <button type="button" class="icon-btn" aria-label="Close component catalog" (click)="cancelled.emit()">x</button>
+    </div>
+
+    <div class="sec-head">
+      <input
+        type="text"
+        class="box-input"
+        style="flex: 1; min-width: 190px"
+        data-testid="component-catalog-search"
+        placeholder="Search built-in & custom components..."
+        [value]="query()"
+        (input)="onQueryInput($event)"
+      />
+      <div class="sec-actions">
+        @for (cat of catalogFilters; track cat) {
+          <button
+            type="button"
+            class="es-ghost-link"
+            [style.color]="filter() === cat ? 'var(--es-text-primary)' : null"
+            (click)="filter.set(cat)"
+          >
+            {{ cat }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="item-table">
+      @if (filter() !== 'Saved Custom') {
+        @for (item of filteredCatalog(); track item.id) {
+          <div
+            class="item-row is-selectable"
+            [class.is-active]="selectedCatalogId() === item.id"
+            [attr.data-testid]="'catalog-comp-' + item.id"
+            (click)="selectedCatalogId.set(item.id)"
+          >
+            <div>
+              <div class="row-title">{{ item.name }}</div>
+              <div class="es-subline">{{ item.summary }}</div>
+            </div>
+            <span class="es-meta">Built-in</span>
+          </div>
+        }
+      }
+      @for (custom of savedLibrary(); track custom.id) {
+        <div
+          class="item-row is-selectable"
+          [class.is-active]="selectedCatalogId() === custom.id"
+          (click)="selectedCatalogId.set(custom.id)"
+        >
+          <div>
+            <div class="row-title">{{ custom.name }}</div>
+            <div class="es-subline">{{ custom.interfaceKind }} · {{ custom.endpointLabel }}</div>
+          </div>
+          <span class="es-meta">Custom</span>
+        </div>
+      }
+    </div>
+
+    <div class="field-grid-2">
+      <label class="field-stack">
+        <app-section-kicker label="TARGET MCU &amp; ENDPOINT" />
+        <select class="box-input" data-testid="catalog-comp-mount" [value]="mountSocket()" (change)="onMountChange($event)">
+          @for (m of mcus(); track m.id) {
+            <option [value]="m.designator">{{ m.designator }} · {{ m.silicon.toUpperCase() }}</option>
+          }
+        </select>
+      </label>
+      <div class="field-stack">
+        <app-section-kicker label="PINOUT SUMMARY" />
+        <div class="chip-grid">
+          @for (pin of activePreviewPins(); track pin.signal) {
+            <span class="chip-pill mono">{{ pin.signal }} -> {{ pin.pin }}</span>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="composer-foot">
+      <button type="button" class="es-ghost-link" data-testid="switch-to-custom-component" (click)="switchMode.emit('custom-component')">
+        + Define Custom Component...
+      </button>
+      <div class="sec-actions">
+        <app-tonal-button variant="ghost" (pressed)="cancelled.emit()">Cancel</app-tonal-button>
+        <app-tonal-button testId="catalog-comp-submit" (pressed)="submitCatalogComponent()">Add Component</app-tonal-button>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div
+    class="composer-card"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Define Component & Pin Mapping"
+    data-testid="composer-custom-component-modal"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="composer-head">
+      <div>
+        <app-section-kicker label="CUSTOM COMPONENT" />
+        <h2 class="composer-title">Define Component &amp; Pin Mapping</h2>
+      </div>
+      <button type="button" class="icon-btn" aria-label="Close custom component" (click)="cancelled.emit()">x</button>
+    </div>
+
+    <div class="field-grid-2">
+      <label class="field-stack">
+        <app-section-kicker label="COMPONENT NAME" />
+        <input type="text" class="box-input" data-testid="custom-comp-name" [value]="customName()" (input)="onCustomName($event)" />
+      </label>
+      <label class="field-stack">
+        <app-section-kicker label="TARGET MCU" />
+        <select class="box-input" [value]="mountSocket()" (change)="onMountChange($event)">
+          @for (m of mcus(); track m.id) {
+            <option [value]="m.designator">{{ m.designator }} · {{ m.silicon.toUpperCase() }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="field-stack">
+      <app-section-kicker label="INTERFACE TYPE" />
+      <div class="seg-bar" role="radiogroup" aria-label="Component interface type">
+        @for (iface of interfaceTypes; track iface) {
+          <button
+            type="button"
+            role="radio"
+            class="seg-opt"
+            [class.is-active]="customIface() === iface"
+            [attr.aria-checked]="customIface() === iface"
+            (click)="selectInterface(iface)"
+          >
+            {{ iface }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="sec-block">
+      <div class="sec-head">
+        <app-section-kicker label="SIGNAL-TO-PIN MAPPING" />
+        <button type="button" class="es-ghost-link" data-testid="custom-comp-add-signal" (click)="addSignalRow()">+ Add Signal</button>
+      </div>
+      <div class="item-table">
+        @for (sig of customPins(); track $index; let idx = $index) {
+          <div class="item-row">
+            <div class="row-inline">
+              <input type="text" class="box-input mono" style="width: 120px" aria-label="Signal name" [value]="sig.signal" (input)="onSignalName(idx, $event)" />
+              <span class="es-meta">-></span>
+              <input type="text" class="box-input mono" style="width: 130px" aria-label="MCU pin" [value]="sig.pin" (input)="onSignalPin(idx, $event)" />
+              <span class="es-meta">{{ sig.electrical }}</span>
+            </div>
+            @if (customPins().length > 1) {
+              <button type="button" class="icon-btn" aria-label="Remove signal" (click)="removeSignalRow(idx)">x</button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="field-stack">
+      <app-section-kicker label="SIMULATION MODEL" />
+      <div class="seg-bar" role="radiogroup" aria-label="Simulation model">
+        @for (sm of simModels; track sm) {
+          <button
+            type="button"
+            role="radio"
+            class="seg-opt"
+            [class.is-active]="simModel() === sm"
+            [attr.aria-checked]="simModel() === sm"
+            (click)="simModel.set(sm)"
+          >
+            {{ sm }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <label class="field-stack">
+      <app-section-kicker label="MODEL SOURCE / BINDING" />
+      <input type="text" class="box-input mono" data-testid="custom-comp-source" [value]="modelSource()" (input)="onModelSource($event)" />
+    </label>
+
+    <div class="composer-foot">
+      <label class="row-inline">
+        <input type="checkbox" [checked]="saveReusable()" (change)="onSaveToggle($event)" />
+        <span class="es-meta">Save to reusable component library</span>
+      </label>
+      <div class="sec-actions">
+        <app-tonal-button variant="ghost" (pressed)="cancelled.emit()">Cancel</app-tonal-button>
+        <app-tonal-button testId="custom-comp-submit" (pressed)="submitCustomComponent()">Attach Component</app-tonal-button>
+      </div>
+    </div>
+  </div>
+}

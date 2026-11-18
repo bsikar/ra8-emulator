@@ -20,6 +20,7 @@ import {
 } from 'ra8-rpc-client';
 import { formatHex32 } from '../../shared/utils/hex';
 import { RpcConnectionStore } from '../rpc/rpc-connection.store';
+import type { StoredCustomBoardPreset } from './board-composer.types';
 import { loadSavedBoards, saveSavedBoards } from './board-storage';
 import { ExecutionStore } from './execution.store';
 
@@ -59,7 +60,7 @@ export class BoardStore implements OnDestroy {
   public readonly cpu0HasDwarf = signal<boolean>(false);
   public readonly cpu1HasDwarf = signal<boolean>(false);
   public readonly memoryMapText = signal<string>('');
-  public readonly savedBoards = signal<BoardPreset[]>(
+  public readonly savedBoards = signal<StoredCustomBoardPreset[]>(
     loadSavedBoards((err, ctx) => this.rpc.noteOptionalError(err, ctx))
   );
   public readonly boardPresets: readonly BoardPreset[] = OFFICIAL_BOARD_PRESETS;
@@ -140,6 +141,17 @@ export class BoardStore implements OnDestroy {
     });
     this.selectBoardPreset(copy.id);
     return copy;
+  }
+
+  public upsertCustomBoard(preset: StoredCustomBoardPreset): StoredCustomBoardPreset {
+    this.savedBoards.update((prev) => {
+      const idx = prev.findIndex((b) => b.id === preset.id);
+      const next = idx >= 0 ? prev.map((b, i) => (i === idx ? preset : b)) : [preset, ...prev];
+      saveSavedBoards(next, (msg) => this.rpc.errorMessage.set(msg));
+      return next;
+    });
+    this.selectBoardPreset(preset.id);
+    return preset;
   }
 
   public removeCustomBoard(id: string): void {

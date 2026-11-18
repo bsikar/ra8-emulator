@@ -32,10 +32,19 @@ describe('shared Editorial Slate UI primitives', () => {
 
     const paneFixture = TestBed.createComponent(SplitPaneComponent);
     paneFixture.componentRef.setInput('primarySize', '280px');
+    paneFixture.componentRef.setInput('persistKey', 'unit-test-split');
     paneFixture.autoDetectChanges(true);
     await paneFixture.whenStable();
     const grid = paneFixture.nativeElement.querySelector('.split-grid') as HTMLElement;
     expect(grid.style.gridTemplateColumns).toContain('280px');
+
+    const handle = paneFixture.nativeElement.querySelector('[data-testid="split-pane-handle"]') as HTMLElement;
+    expect(handle).toBeTruthy();
+    handle.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    await paneFixture.whenStable();
+    expect(localStorage.getItem('ra8.split.v1.unit-test-split')).toBe('38.00');
+    paneFixture.componentInstance.resetSize();
+    expect(localStorage.getItem('ra8.split.v1.unit-test-split')).toBeNull();
 
     const cmdFixture = TestBed.createComponent(CommandInputComponent);
     let submitted = '';
