@@ -1,91 +1,32 @@
 import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
-import { Direction, NavQueryKind } from 'ra8-rpc-client';
+import { CAP_ARTIFACTS, Direction, NavQueryKind, type NavQueryResult } from 'ra8-rpc-client';
 import { RpcConnectionStore } from '../../core/rpc/rpc-connection.store';
+import { DebugStore } from '../../core/stores/debug.store';
+import { ExecutionStore } from '../../core/stores/execution.store';
 import { RewindStore } from '../../core/stores/rewind.store';
 import { normalizeSeekTarget } from '../../core/stores/rewind-helpers';
-import { type RewindBookmark } from './rewind-model';
+import { formatHex32 } from '../../shared/utils/hex';
+import {
+  type RewindBookmark,
+  advanceRewind,
+  exportRewindBundle,
+  forkReasonLabel,
+  pauseRewind,
+  stepBackRewind,
+  stepForwardRewind,
+} from './rewind-model';
 
 @Component({
   selector: 'app-rewind-transport-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <div class="bar-wrap">
-      <div class="bar-row">
-        <div class="grp">
-          <button type="button" class="mini-btn" [disabled]="!canEdit()" (click)="rewind.play(dirBack, speedMilli())">◀ Reverse</button>
-          <button type="button" class="mini-btn" [disabled]="!canEdit()" (click)="rewind.play(dirFwd, speedMilli())">Forward ▶</button>
-          <select class="es-select mono" aria-label="Playback speed" [value]="speedPreset()" (change)="onSpeedChange($event)">
-            <option value="250">0.25x</option>
-            <option value="1000">1x</option>
-            <option value="4000">4x</option>
-          </select>
-          <button type="button" class="mini-btn" data-testid="rewind-seek-zero" [disabled]="!canEdit()" (click)="seekOrigin()">Seek 0</button>
-          <button type="button" class="mini-btn" data-testid="rewind-seek-prev" [disabled]="!canEdit()" (click)="rewind.seekPrev()">Step Back</button>
-        </div>
-
-        <form class="grp" (submit)="onSeekSubmit($event)">
-          <input type="text" class="es-input mono" data-testid="rewind-seek-input" [value]="seekDraft()" (input)="onSeekInput($event)" placeholder="0ns, prev, frame 5, isr prev" />
-          <button type="submit" class="mini-btn" data-testid="rewind-seek-btn" [disabled]="!canEdit()">Seek</button>
-        </form>
-
-        <div class="grp">
-          <button type="button" class="mini-btn mono" [disabled]="!canEdit()" (click)="rewind.seekTo('isr prev')">isr prev</button>
-          <button type="button" class="mini-btn mono" [disabled]="!canEdit()" (click)="rewind.seekTo('isr next')">isr next</button>
-          <button type="button" class="mini-btn mono" [disabled]="!canEdit()" (click)="rewind.seekTo('rtos prev')">rtos prev</button>
-        </div>
-      </div>
-
-      <div class="bar-row secondary">
-        <form class="grp" (submit)="onNavSubmit($event)">
-          <select class="es-select" aria-label="Navigation query kind" [value]="navKind()" (change)="onNavKindChange($event)">
-            <option value="frame">Frame</option>
-            <option value="iter">Iteration</option>
-            <option value="isr">ISR</option>
-            <option value="rtos">RTOS</option>
-            <option value="marker">Marker</option>
-          </select>
-          <input type="text" class="es-input short mono" [value]="navArg()" (input)="onNavArgInput($event)" placeholder="Index or name" />
-          <button type="submit" class="mini-btn" [disabled]="!rpc.isConnected()">Nav Query</button>
-        </form>
-
-        <form class="grp" (submit)="onMarkerSubmit($event)">
-          <input type="text" class="es-input short mono" data-testid="rewind-marker-name" [value]="markerName()" (input)="onMarkerNameInput($event)" placeholder="Marker name" />
-          <input type="text" class="es-input short mono" data-testid="rewind-marker-place" [value]="markerPlace()" (input)="onMarkerPlaceInput($event)" placeholder="0x02000008 or symbol" />
-          <button type="submit" class="mini-btn" data-testid="rewind-marker-btn" [disabled]="!canEdit()">Set Marker</button>
-        </form>
-      </div>
-
-      @if (rewind.pendingForkPrompt()) {
-        <div class="fork-banner" data-testid="rewind-fork-banner" role="alert">
-          <span class="fork-msg">Target stopped at historical state. Confirm counterfactual branch fork before continuing or poking state?</span>
-          <div class="grp">
-            <button type="button" class="mini-btn accent" data-testid="rewind-confirm-fork" (click)="rewind.confirmFork()">Confirm Fork</button>
-            <button type="button" class="mini-btn" data-testid="rewind-cancel-fork" (click)="rewind.cancelFork()">Cancel</button>
-          </div>
-        </div>
-      }
-    </div>
-  `,
-  styles: [
-    `
-      .bar-wrap { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--es-border); background: var(--es-chrome); }
-      .bar-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-      .bar-row.secondary { padding-top: 4px; border-top: 1px solid var(--es-divider); }
-      .grp { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-      .es-input { width: 176px; background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; padding: 2px 4px; }
-      .es-input.short { width: 122px; }
-      .es-select { background: var(--es-container); color: var(--es-text-secondary); border: 1px solid var(--es-border); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 6px; }
-      .mini-btn { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 8px; cursor: pointer; }
-      .mini-btn.accent { background: var(--es-interactive); border-color: var(--es-signal-cursor); color: var(--es-text-primary); }
-      .mini-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-      .fork-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 10px; background: var(--es-container); border: 1px solid var(--es-signal-cursor); border-radius: var(--es-radius); font-size: 12px; }
-      .fork-msg { color: var(--es-text-primary); }
-    `,
-  ],
+  templateUrl: './rewind-transport-bar.component.html',
+  styleUrl: './rewind-transport-bar.component.css',
 })
 export class RewindTransportBarComponent {
   protected readonly rpc = inject(RpcConnectionStore);
   protected readonly rewind = inject(RewindStore);
+  private readonly execution = inject(ExecutionStore);
+  private readonly debug = inject(DebugStore);
 
   public readonly bookmarkCreated = output<RewindBookmark>();
 
@@ -93,6 +34,7 @@ export class RewindTransportBarComponent {
   protected readonly dirFwd = Direction.Fwd;
   protected readonly speedPreset = signal<string>('1000');
   protected readonly seekDraft = signal<string>('');
+  protected readonly bookmarkBarOpen = signal<boolean>(false);
   protected readonly navKind = signal<'frame' | 'iter' | 'isr' | 'rtos' | 'marker'>('iter');
   protected readonly navArg = signal<string>('0');
   protected readonly markerName = signal<string>('');
@@ -100,6 +42,39 @@ export class RewindTransportBarComponent {
 
   protected canEdit(): boolean {
     return this.rpc.isConnected() && !this.rpc.observeOnly();
+  }
+
+  protected canExport(): boolean {
+    return this.rpc.isConnected() && this.rpc.hasCapability(CAP_ARTIFACTS);
+  }
+
+  protected toggleBookmarkBar(): void {
+    const next = !this.bookmarkBarOpen();
+    this.bookmarkBarOpen.set(next);
+    if (next && !this.markerPlace().trim()) {
+      const pc = this.debug.registers()['pc'];
+      if (pc !== undefined) this.markerPlace.set(formatHex32(pc));
+    }
+  }
+
+  protected onStepBack(): void {
+    void stepBackRewind(this.execution, this.rewind);
+  }
+
+  protected onPause(): void {
+    void pauseRewind(this.execution, this.rewind, this.rpc);
+  }
+
+  protected onStepForward(): void {
+    void stepForwardRewind(this.execution, this.rewind);
+  }
+
+  protected onAdvanceSlice(): void {
+    void advanceRewind(this.rpc, this.execution, this.rewind);
+  }
+
+  protected onExportBundle(): void {
+    void exportRewindBundle(this.rewind, this.rpc);
   }
 
   protected seekOrigin(): void {
@@ -155,6 +130,19 @@ export class RewindTransportBarComponent {
     });
   }
 
+  protected formatNavSummary(nav: NavQueryResult): string {
+    if (!nav.found) return `0 hits (${nav.count.toString()} total)`;
+    return `b${nav.branch}:r${nav.r.toString()} · ${nav.count.toString()} hits`;
+  }
+
+  protected forkPromptText(): string {
+    const st = this.rewind.forkStatus();
+    if (!st) {
+      return 'Target stopped at historical state. Confirm counterfactual branch fork before continuing or writing state?';
+    }
+    return `Historical position b${st.branch}:r${st.r.toString()} (${forkReasonLabel(st.reason)}). Confirm counterfactual fork?`;
+  }
+
   protected onMarkerNameInput(event: Event): void {
     this.markerName.set((event.target as HTMLInputElement).value);
   }
@@ -169,9 +157,20 @@ export class RewindTransportBarComponent {
     const place = this.markerPlace().trim();
     if (!name || !place) return;
     const res = await this.rewind.setMarker(name, place);
-    if (res?.found) {
-      this.bookmarkCreated.emit({ name, place, branch: res.branch, r: res.r, virtualNs: res.virtualNs });
+    if (!res) return;
+    if (res.found) {
+      this.bookmarkCreated.emit({
+        name,
+        place,
+        branch: res.branch,
+        r: res.r,
+        virtualNs: res.virtualNs,
+        count: res.count,
+      });
       this.markerName.set('');
+      this.rpc.pushToast(`Bookmark "${name}" set (${res.count.toString()} arrivals)`);
+    } else {
+      this.rpc.pushToast(`Marker "${name}" recorded 0 hits at ${place}`, 'neutral');
     }
   }
 }
