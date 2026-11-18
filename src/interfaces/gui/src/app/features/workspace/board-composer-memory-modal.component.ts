@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, input, output, signal } from '@angular/core';
 import type {
   ComposerBackingKind,
   ComposerMcuSocket,
@@ -22,6 +22,21 @@ const BACKING_KINDS: readonly ComposerBackingKind[] = [
   'Persistent Host File',
 ];
 
+function controllerNameForKind(kind: ComposerMemoryKind): string {
+  switch (kind) {
+    case 'SDRAM':
+      return 'SDRAM CS0';
+    case 'Quad-SPI NOR':
+      return 'QSPI0 CS0';
+    case 'HyperRAM':
+      return 'OSPI1 HyperBus';
+    case 'Custom MMIO':
+      return 'External Bus MMIO';
+    default:
+      return 'OSPI0 CS0';
+  }
+}
+
 @Component({
   selector: 'app-board-composer-memory-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,7 +54,7 @@ const BACKING_KINDS: readonly ComposerBackingKind[] = [
       <div class="composer-head">
         <div>
           <app-section-kicker label="EXTERNAL MEMORY &amp; BUS TIMING" />
-          <h2 class="composer-title">Add Memory Region</h2>
+          <h2 class="composer-title">{{ initialRegion() ? 'Edit Memory Region' : 'Add Memory Region' }}</h2>
         </div>
         <button type="button" class="icon-btn" aria-label="Close memory modal" (click)="cancelled.emit()">x</button>
       </div>
@@ -155,20 +170,33 @@ const BACKING_KINDS: readonly ComposerBackingKind[] = [
             </button>
           }
         </div>
+        @if (backing() !== 'Zero-Initialized') {
+          <input
+            type="text"
+            class="box-input mono"
+            data-testid="memory-backing-path"
+            [value]="backingPath()"
+            (input)="onBackingPathInput($event)"
+            placeholder="fixtures/flash_preload.bin"
+          />
+        }
       </div>
 
       <div class="composer-foot">
         <span></span>
         <div class="sec-actions">
           <app-tonal-button variant="ghost" (pressed)="cancelled.emit()">Cancel</app-tonal-button>
-          <app-tonal-button testId="memory-submit-btn" (pressed)="submit()">Add Memory Region</app-tonal-button>
+          <app-tonal-button testId="memory-submit-btn" (pressed)="submit()">
+            {{ initialRegion() ? 'Save Memory Region' : 'Add Memory Region' }}
+          </app-tonal-button>
         </div>
       </div>
     </div>
   `,
 })
-export class BoardComposerMemoryModalComponent {
+export class BoardComposerMemoryModalComponent implements OnInit {
   public readonly mcus = input<readonly ComposerMcuSocket[]>([]);
+  public readonly initialRegion = input<ComposerMemoryRegion | null>(null);
   public readonly cancelled = output<void>();
   public readonly added = output<ComposerMemoryRegion>();
 
@@ -184,9 +212,29 @@ export class BoardComposerMemoryModalComponent {
   protected readonly latencyCycles = signal<number>(8);
   protected readonly burst = signal<'single' | 'incrementing16'>('incrementing16');
   protected readonly backing = signal<ComposerBackingKind>('Zero-Initialized');
+  protected readonly backingPath = signal<string>('');
+
+  public ngOnInit(): void {
+    const initial = this.initialRegion();
+    if (!initial) {
+      const firstSocket = this.mcus()[0]?.designator;
+      if (firstSocket) this.mountSocket.set(firstSocket);
+      return;
+    }
+    this.kind.set(initial.kind);
+    this.mountSocket.set(initial.mountSocket);
+    this.baseHex.set(initial.baseHex);
+    this.sizeMib.set(initial.sizeMib);
+    this.widthBits.set(initial.widthBits);
+    this.xipLabel.set(initial.xipSecurityLabel);
+    this.clockMhz.set(initial.clockMhz);
+    this.latencyCycles.set(initial.latencyCycles);
+    this.burst.set(initial.burst);
+    this.backing.set(initial.backing);
+  }
 
   protected controllerForKind(): string {
-    return this.kind() === 'SDRAM' ? 'SDRAM CS0' : 'OSPI0 CS0';
+    return controllerNameForKind(this.kind());
   }
 
   protected selectKind(next: ComposerMemoryKind): void {
@@ -196,12 +244,12 @@ export class BoardComposerMemoryModalComponent {
       this.widthBits.set(32);
       this.clockMhz.set(133);
       this.latencyCycles.set(3);
-    } else {
-      this.baseHex.set(next === 'Custom MMIO' ? '0x60000000' : '0x80000000');
-      this.widthBits.set(next === 'Quad-SPI NOR' ? 4 : 8);
-      this.clockMhz.set(166);
-      this.latencyCycles.set(8);
+      return;
     }
+    this.baseHex.set(next === 'Custom MMIO' ? '0x60000000' : '0x80000000');
+    this.widthBits.set(next === 'Quad-SPI NOR' ? 4 : 8);
+    this.clockMhz.set(166);
+    this.latencyCycles.set(8);
   }
 
   protected onMountChange(e: Event): void {
@@ -230,11 +278,15 @@ export class BoardComposerMemoryModalComponent {
       this.burst.set(e.target.value === 'single' ? 'single' : 'incrementing16');
     }
   }
+  protected onBackingPathInput(e: Event): void {
+    if (e.target instanceof HTMLInputElement) this.backingPath.set(e.target.value);
+  }
 
   protected submit(): void {
     const w = this.widthBits();
+    const initial = this.initialRegion();
     this.added.emit({
-      id: `mem-${Date.now().toString(36)}`,
+      id: initial?.id ?? `mem-${Date.now().toString(36)}`,
       kind: this.kind(),
       mountSocket: this.mountSocket(),
       controllerLabel: this.controllerForKind(),

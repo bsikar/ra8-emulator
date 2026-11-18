@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
-import { type BoardPreset, serializeBoardProfile } from 'ra8-rpc-client';
+import { type BoardPreset, type BoardSiliconPart, serializeBoardProfile } from 'ra8-rpc-client';
 import type {
   ComposerComponentAttachment,
   ComposerMcuSocket,
@@ -8,6 +8,7 @@ import type {
 } from '../../core/stores/board-composer.types';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { TonalButtonComponent } from '../../shared/ui/tonal-button.component';
+import { BUILTIN_SILICON_CATALOG, buildSocketFromCatalog } from './board-composer-catalog';
 import {
   BoardComposerComponentModalsComponent,
   type ComponentSubModalKind,
@@ -54,9 +55,12 @@ export class BoardComposerModalComponent {
   public readonly saved = output<StoredCustomBoardPreset>();
   public readonly removed = output<string>();
 
+  protected readonly siliconOptions = BUILTIN_SILICON_CATALOG;
   protected readonly draft = signal<ComposerDraft>(createComposerDraft(null));
   protected readonly subModal = signal<ComposerSubModal>('none');
   protected readonly editingMcuIndex = signal<number>(0);
+  protected readonly editingMemoryIndex = signal<number | null>(null);
+  protected readonly editingComponentIndex = signal<number | null>(null);
   private wasOpen = false;
 
   constructor() {
@@ -67,6 +71,8 @@ export class BoardComposerModalComponent {
         this.draft.set(createComposerDraft(seed));
         this.subModal.set('none');
         this.editingMcuIndex.set(0);
+        this.editingMemoryIndex.set(null);
+        this.editingComponentIndex.set(null);
       }
       this.wasOpen = isOpen;
     });
@@ -79,6 +85,16 @@ export class BoardComposerModalComponent {
 
   protected editingSocket(): ComposerMcuSocket {
     return this.draft().mcus[this.editingMcuIndex()] ?? this.draft().mcus[0]!;
+  }
+
+  protected editingMemoryRegion(): ComposerMemoryRegion | null {
+    const idx = this.editingMemoryIndex();
+    return idx === null ? null : (this.draft().memoryRegions[idx] ?? null);
+  }
+
+  protected editingComponent(): ComposerComponentAttachment | null {
+    const idx = this.editingComponentIndex();
+    return idx === null ? null : (this.draft().components[idx] ?? null);
   }
 
   protected onBackdropClick(): void {
@@ -106,6 +122,19 @@ export class BoardComposerModalComponent {
       const profileFile = e.target.value;
       this.draft.update((d) => ({ ...d, profileFile }));
     }
+  }
+
+  protected onMcuSiliconChange(idx: number, e: Event): void {
+    if (!(e.target instanceof HTMLSelectElement)) return;
+    const silicon = e.target.value as BoardSiliconPart;
+    const cat = BUILTIN_SILICON_CATALOG.find((s) => s.silicon === silicon);
+    if (!cat) return;
+    this.draft.update((d) => ({
+      ...d,
+      mcus: d.mcus.map((m, i) =>
+        i === idx ? buildSocketFromCatalog(cat, m.designator, m.role, m.interconnect) : m
+      ),
+    }));
   }
 
   protected openCoresModal(idx: number): void {
@@ -136,20 +165,47 @@ export class BoardComposerModalComponent {
     this.draft.update((d) => ({ ...d, mcus: d.mcus.filter((_, i) => i !== idx) }));
   }
 
-  protected addMemoryRegion(region: ComposerMemoryRegion): void {
-    this.draft.update((d) => ({ ...d, memoryRegions: [...d.memoryRegions, region] }));
+  protected openMemoryModal(idx: number | null): void {
+    this.editingMemoryIndex.set(idx);
+    this.subModal.set('memory');
+  }
+
+  protected saveMemoryRegion(region: ComposerMemoryRegion): void {
+    const idx = this.editingMemoryIndex();
+    this.draft.update((d) => ({
+      ...d,
+      memoryRegions:
+        idx === null
+          ? [...d.memoryRegions, region]
+          : d.memoryRegions.map((r, i) => (i === idx ? region : r)),
+    }));
+    this.editingMemoryIndex.set(null);
     this.subModal.set('none');
   }
 
   protected removeMemoryRegion(idx: number): void {
+    if (this.draft().memoryRegions.length <= 1) return;
     this.draft.update((d) => ({
       ...d,
       memoryRegions: d.memoryRegions.filter((_, i) => i !== idx),
     }));
   }
 
-  protected addComponent(comp: ComposerComponentAttachment): void {
-    this.draft.update((d) => ({ ...d, components: [...d.components, comp] }));
+  protected openComponentModal(mode: ComponentSubModalKind, idx: number | null = null): void {
+    this.editingComponentIndex.set(idx);
+    this.subModal.set(mode);
+  }
+
+  protected saveComponent(comp: ComposerComponentAttachment): void {
+    const idx = this.editingComponentIndex();
+    this.draft.update((d) => ({
+      ...d,
+      components:
+        idx === null
+          ? [...d.components, comp]
+          : d.components.map((c, i) => (i === idx ? comp : c)),
+    }));
+    this.editingComponentIndex.set(null);
     this.subModal.set('none');
   }
 

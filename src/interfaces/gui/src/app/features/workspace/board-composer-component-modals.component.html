@@ -46,7 +46,7 @@
             class="item-row is-selectable"
             [class.is-active]="selectedCatalogId() === item.id"
             [attr.data-testid]="'catalog-comp-' + item.id"
-            (click)="selectedCatalogId.set(item.id)"
+            (click)="selectCatalogItem(item.id)"
           >
             <div>
               <div class="row-title">{{ item.name }}</div>
@@ -56,18 +56,20 @@
           </div>
         }
       }
-      @for (custom of savedLibrary(); track custom.id) {
-        <div
-          class="item-row is-selectable"
-          [class.is-active]="selectedCatalogId() === custom.id"
-          (click)="selectedCatalogId.set(custom.id)"
-        >
-          <div>
-            <div class="row-title">{{ custom.name }}</div>
-            <div class="es-subline">{{ custom.interfaceKind }} · {{ custom.endpointLabel }}</div>
+      @if (filter() === 'All' || filter() === 'Saved Custom') {
+        @for (custom of filteredSavedLibrary(); track custom.id) {
+          <div
+            class="item-row is-selectable"
+            [class.is-active]="selectedCatalogId() === custom.id"
+            (click)="selectCatalogItem(custom.id)"
+          >
+            <div>
+              <div class="row-title">{{ custom.name }}</div>
+              <div class="es-subline">{{ custom.interfaceKind }} · {{ custom.endpointLabel }}</div>
+            </div>
+            <span class="es-meta">Custom</span>
           </div>
-          <span class="es-meta">Custom</span>
-        </div>
+        }
       }
     </div>
 
@@ -80,13 +82,36 @@
           }
         </select>
       </label>
-      <div class="field-stack">
-        <app-section-kicker label="PINOUT SUMMARY" />
-        <div class="chip-grid">
-          @for (pin of activePreviewPins(); track pin.signal) {
-            <span class="chip-pill mono">{{ pin.signal }} -> {{ pin.pin }}</span>
-          }
-        </div>
+      <label class="field-stack">
+        <app-section-kicker label="HOST FRAME SOURCE" />
+        <select class="box-input" data-testid="catalog-comp-frame-source" [value]="hostFrameSource()" (change)="onFrameSourceChange($event)">
+          <option value="Synthetic Pattern / Video / Webcam">Synthetic Pattern / Video / Webcam</option>
+          <option value="Test Color Bars">Test Color Bars</option>
+          <option value="Video File / Pipe">Video File / Pipe</option>
+          <option value="Host Webcam (Consent)">Host Webcam (Consent)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="field-stack">
+      <app-section-kicker label="WIRING &amp; PIN MAPPING" />
+      <div class="chip-grid">
+        @for (pin of catalogPins(); track pin.signal; let idx = $index) {
+          <label class="chip-pill mono row-inline">
+            <span>{{ pin.signal }} -&gt;</span>
+            <select
+              class="box-input mono"
+              style="height: 22px; padding: 0 4px"
+              [attr.aria-label]="'Pin for ' + pin.signal"
+              [value]="pin.pin"
+              (change)="onCatalogPinChange(idx, $event)"
+            >
+              @for (opt of pinOptions(pin.pin); track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </label>
+        }
       </div>
     </div>
 
@@ -112,7 +137,7 @@
     <div class="composer-head">
       <div>
         <app-section-kicker label="CUSTOM COMPONENT" />
-        <h2 class="composer-title">Define Component &amp; Pin Mapping</h2>
+        <h2 class="composer-title">{{ initialComponent() ? 'Edit Component & Pin Mapping' : 'Define Component & Pin Mapping' }}</h2>
       </div>
       <button type="button" class="icon-btn" aria-label="Close custom component" (click)="cancelled.emit()">x</button>
     </div>
@@ -159,10 +184,14 @@
         @for (sig of customPins(); track $index; let idx = $index) {
           <div class="item-row">
             <div class="row-inline">
-              <input type="text" class="box-input mono" style="width: 120px" aria-label="Signal name" [value]="sig.signal" (input)="onSignalName(idx, $event)" />
-              <span class="es-meta">-></span>
-              <input type="text" class="box-input mono" style="width: 130px" aria-label="MCU pin" [value]="sig.pin" (input)="onSignalPin(idx, $event)" />
-              <span class="es-meta">{{ sig.electrical }}</span>
+              <input type="text" class="box-input mono" style="width: 108px" aria-label="Signal name" [value]="sig.signal" (input)="onSignalName(idx, $event)" />
+              <span class="es-meta">-&gt;</span>
+              <input type="text" class="box-input mono" style="width: 112px" aria-label="MCU pin" [value]="sig.pin" (input)="onSignalPin(idx, $event)" />
+              <select class="box-input" aria-label="Electrical mode" [value]="sig.electrical" (change)="onSignalElectrical(idx, $event)">
+                @for (modeOpt of electricalModes; track modeOpt) {
+                  <option [value]="modeOpt">{{ modeOpt }}</option>
+                }
+              </select>
             </div>
             @if (customPins().length > 1) {
               <button type="button" class="icon-btn" aria-label="Remove signal" (click)="removeSignalRow(idx)">x</button>
@@ -202,7 +231,9 @@
       </label>
       <div class="sec-actions">
         <app-tonal-button variant="ghost" (pressed)="cancelled.emit()">Cancel</app-tonal-button>
-        <app-tonal-button testId="custom-comp-submit" (pressed)="submitCustomComponent()">Attach Component</app-tonal-button>
+        <app-tonal-button testId="custom-comp-submit" (pressed)="submitCustomComponent()">
+          {{ initialComponent() ? 'Save Component' : 'Attach Component' }}
+        </app-tonal-button>
       </div>
     </div>
   </div>
