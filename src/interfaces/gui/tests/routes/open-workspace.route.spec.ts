@@ -25,7 +25,7 @@ function makeValidArmElf(totalSize = 256): Uint8Array {
   return bytes;
 }
 
-describe('OpenWorkspaceRouteComponent (Screen 05)', () => {
+describe('OpenWorkspaceRouteComponent', () => {
   beforeEach(() => {
     localStorage.clear();
   });

@@ -45,7 +45,7 @@ function onChipMemoryRows(preset: BoardPreset): BoardSpecRow[] {
   ];
 }
 
-/** Build full Screen 04a Board Specification rows from a `BoardPreset`. */
+/** Build full board specification rows from a `BoardPreset`. */
 export function buildBoardDetailsViewModel(preset: BoardPreset): BoardDetailsViewModel {
   const stem = `${preset.targetId.replace(/-/g, '_')}.board`;
   const kitSubtitle =

@@ -7,9 +7,9 @@ import { auditEditorialSlateScreen } from './helpers/editorial-slate-audit';
 import { startServeFixture, type ServedEmulatorHandle } from './helpers/serve-fixture';
 
 const ARTIFACT_DIR =
-  process.env['RA8_M2_SCREENSHOT_DIR'] || path.resolve(process.cwd(), 'test-results', 'screenshots');
+  process.env['RA8_SCREENSHOT_DIR'] || path.resolve(process.cwd(), 'test-results', 'screenshots');
 
-function saveM2Shot(page: import('@playwright/test').Page, name: string): Promise<Buffer> {
+function saveScreenshot(page: import('@playwright/test').Page, name: string): Promise<Buffer> {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
   return page.screenshot({ path: path.join(ARTIFACT_DIR, name) });
 }
@@ -63,7 +63,7 @@ function sendGdbStepOverTcp(port: number): Promise<string> {
   });
 }
 
-test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client Sync', () => {
+test.describe('Connect Remote (/connect), Saved Hosts, Observe Mode, & Multi-Client Sync', () => {
   let server: ServedEmulatorHandle | null = null;
   let tempHome: string | null = null;
 
@@ -84,10 +84,10 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
     await expect(page.getByTestId('connect-live-empty')).toBeVisible();
     await expect(page.getByTestId('connect-saved-empty')).toBeVisible();
     await expect(page.getByTestId('connect-footer-hint')).toContainText('--discover');
-    await auditEditorialSlateScreen(page, 'screen02-empty-1440');
+    await auditEditorialSlateScreen(page, 'connect-empty-1440');
 
     await page.setViewportSize({ width: 1280, height: 720 });
-    await auditEditorialSlateScreen(page, 'screen02-empty-1280');
+    await auditEditorialSlateScreen(page, 'connect-empty-1280');
   });
 
   test('auto-opens SSH Tunnel + Auth drawers, saves/pins/removes host profiles', async ({ page }) => {
@@ -105,8 +105,8 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
     await expect(page.getByTestId('connect-auth-drawer')).toBeVisible();
     await page.getByTestId('connect-auth-mode').selectOption('token');
     await page.getByTestId('connect-profile-name-input').fill('ci-runner-arm-02');
-    await auditEditorialSlateScreen(page, 'screen02-ssh-auth');
-    await saveM2Shot(page, 'm2_02_ssh_tunnel_auth.png');
+    await auditEditorialSlateScreen(page, 'connect-ssh-auth');
+    await saveScreenshot(page, 'connect-ssh-tunnel-auth.png');
 
     await page.getByTestId('connect-save-ssh-btn').click();
     await expect(page.getByTestId('connect-card')).toContainText('ci-runner-arm-02');
@@ -120,7 +120,7 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
   });
 
   test('probes live serve --discover, attaches in Observe mode, and auto-syncs external GDB step', async ({ page }) => {
-    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ra8-m2-e2e-'));
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ra8-connect-e2e-'));
     server = await startServeFixture(path.join('tests', 'fixtures', 'gpio', 'blink.elf'), ['--discover'], {
       HOME: tempHome,
       USERPROFILE: tempHome,
@@ -152,8 +152,8 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
     const liveRow = page.getByTestId('live-session-row-0');
     await expect(liveRow).toBeVisible({ timeout: 10_000 });
     await expect(liveRow).toContainText(/Loopback · \d+\.\d ms/);
-    await auditEditorialSlateScreen(page, 'screen02-populated-live');
-    await saveM2Shot(page, 'm2_01_connect_remote.png');
+    await auditEditorialSlateScreen(page, 'connect-populated-live');
+    await saveScreenshot(page, 'connect-remote-populated.png');
 
     // Attach via Observe button -> /debug in read-only mode
     await page.getByTestId('live-session-observe-0').click();
@@ -166,8 +166,8 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
     await expect(page.getByTestId('statusbar-observe-pill')).toHaveText('OBSERVE');
     await expect(page.getByTestId('debug-step-btn')).toBeDisabled();
     await expect(page.getByTestId('debug-run-btn')).toBeDisabled();
-    await auditEditorialSlateScreen(page, 'screen02-observe-debug');
-    await saveM2Shot(page, 'm2_03_observe_readonly.png');
+    await auditEditorialSlateScreen(page, 'connect-observe-debug');
+    await saveScreenshot(page, 'connect-observe-readonly.png');
 
     const initialPcText = await pcRow.innerText();
 
@@ -183,7 +183,7 @@ test.describe('Screen 02 (/connect), Saved Hosts, Observe Mode, & Multi-Client S
     await expect(page.getByTestId('popover-gdb-command')).toContainText(`:${gdbPort}`);
     await expect(page.getByTestId('popover-ctl-command')).toContainText('ra8_emulator ctl sessions');
     await expect(page.getByTestId('connection-popover')).toContainText('1 syncs');
-    await auditEditorialSlateScreen(page, 'screen02-gdb-popover');
-    await saveM2Shot(page, 'm2_04_gdb_multiclient_popover.png');
+    await auditEditorialSlateScreen(page, 'connect-gdb-popover');
+    await saveScreenshot(page, 'connect-gdb-multiclient-popover.png');
   });
 });

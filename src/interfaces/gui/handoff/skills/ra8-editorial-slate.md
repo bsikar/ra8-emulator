@@ -60,5 +60,6 @@ All chrome, dropdowns, call stacks, locals/registers, board views, forms, flameg
 - **Strict TypeScript:** `strict: true`, `noUncheckedIndexedAccess: true`, `noUnusedLocals: true`, `noUnusedParameters: true`, **0 `: any` / `as any` / `<any>`**.
 - **Honest Empty & Offline States:** 0 `catch {}` empty blocks (`tools/gate.mjs` forbids them), 0 `DEMO_*` placeholder rows or simulated telemetry in production components.
 - **No Inline Tests & No Host OS Imports:** Tests live strictly under `src/interfaces/gui/tests/` mirroring `src/interfaces/gui/src/`, plus `client/test/` and `e2e/`. Never use Node/OS APIs or `@cImport` inside `src/app/`.
+- **Zero Planning / Mockup Jargon in Code or Tests:** Never put milestone identifiers (`Milestone N`, `M0`–`M8`), mockup/screen codes (`Screen 01`–`12`, `04a`, `04b`–`04h`, `07`/`07b`), Stitch filenames (`stitch_*`), internal phase labels, or ticket IDs (`RA8EMU-*`) in source files, comments, UI labels, test descriptions, or spec filenames (`tools/gate.mjs` enforces this).
 - **Inclusive Vocabulary (`tools/terms.zig` & `tools/gate.mjs`):**
   Always use **`Controller`**, **`Peripheral`**, **`Bus Initiator`**, **`CS`** (chip select), **`COPI`**, and **`CIPO`** in every code, CSS, test, and markdown file. Both `npm run gate` and `zig build gate -j1` fail immediately on any legacy banned word (even inside comments or URLs).

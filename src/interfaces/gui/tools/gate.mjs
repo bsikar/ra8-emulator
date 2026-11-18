@@ -5,12 +5,25 @@ import ts from 'typescript';
 
 const MAX_FILE_LINES = 350;
 const MAX_FN_LINES = 80;
-const ROOTS = ['src', 'tests', 'e2e', 'client/src', 'tools'];
+const ROOTS = ['src', 'tests', 'e2e', 'client/src', 'client/test', 'tools'];
 const CODE_EXTS = new Set(['.ts', '.html', '.css', '.mjs', '.js']);
 const TS_JS_EXTS = new Set(['.ts', '.mjs', '.js']);
 const BANNED_ANYWHERE = ['mas' + 'ter', 'sla' + 've'];
 const BANNED_WORDS = ['MO' + 'SI', 'MI' + 'SO'];
 const LEGACY_NEON_HEXES = ['#0A' + '84FF', '#30' + 'D158', '#FF' + 'D60A', '#FF' + '453A', '#BF' + '5AF2'];
+const BAD_PATH_RX = /screen[-_]?\d|[-_](?:0[1-9]|1[0-2])(?:[-_.]|$)|\bm[0-8][-_]/i;
+const PLANNING_JARGON_RXS = [
+  /\bmilestones?\b/i,
+  /\[M[0-8]\]|\bM[0-8]\s*[:\u2013\u2014-]|\b(?:RA8_M[0-8]|saveM[0-8]Shot|ra8-m[0-8]-|m[0-8]_\d+)/,
+  /\bscreens?\s*0?\d+[a-h]?\b/i,
+  /\bscreen0?\d+[a-h]?\b/i,
+  /(?<![0-9a-fA-Fx_#-])(?:04[a-h]|07b)(?![0-9a-fA-F_])/,
+  /\b04b\s*[\u2013-]\s*04h\b|\b07\s*[/&]\s*07b\b/i,
+  /\bRA8EMU-\d+\b/i,
+  /\bstitch_\d+/i,
+  /\b(?:vim\s+)?layer[-\s]*[12]\b/i,
+  /\bphase\s*\d+\b/i,
+];
 const LEGACY_DECORATORS = new Set([
   'Input',
   'Output',
@@ -81,6 +94,22 @@ function checkTermsAndPalette(rel, lines, inSrc, failures) {
     if (inSrc) {
       for (const hex of lowerLegacyHexes) {
         if (lower.includes(hex)) failures.push(`${rel}:${i + 1}: forbidden legacy neon color ${hex.toUpperCase()}`);
+      }
+    }
+  }
+}
+
+function checkPlanningJargon(rel, lines, failures) {
+  if (rel === 'tools/gate.mjs') return;
+  if (BAD_PATH_RX.test(rel)) {
+    failures.push(`${rel}:1: filename contains screen/milestone code`);
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    for (const rx of PLANNING_JARGON_RXS) {
+      if (rx.test(line)) {
+        failures.push(`${rel}:${i + 1}: forbidden planning/mockup jargon matching ${rx}`);
+        break;
       }
     }
   }
@@ -180,6 +209,7 @@ function runGate() {
       failures.push(`${rel}: test files forbidden under src/ (move to tests/ or e2e/)`);
     }
     checkTermsAndPalette(rel, lines, rel.startsWith('src/'), failures);
+    checkPlanningJargon(rel, lines, failures);
     if (rel.endsWith('.html')) checkTemplateDirectives(rel, text, 1, failures);
     if (TS_JS_EXTS.has(path.extname(rel))) checkTypeScriptAst(rel, text, inTests || !inSrc, failures);
   }

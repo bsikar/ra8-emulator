@@ -80,7 +80,7 @@ function registerBranchAndNavTests(suite) {
     assert.equal(nq.count, 4n);
     assert.equal(nq.virtualNs, 1_500_000n);
 
-    assert.equal(encodeMarkerSetArgs("m1", "0x02000100").length, 8 + 2 + 10);
+    assert.equal(encodeMarkerSetArgs("loop_start", "0x02000100").length, 8 + 10 + 10);
     assert.equal(encodeDiffArgs("1:100", "1:200").length, 8 + 5 + 5);
 
     const fsBuf = new Uint8Array(40);

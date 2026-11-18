@@ -8,13 +8,14 @@
 
 You are the autonomous lead Angular 19 / TypeScript engineer finishing the **Editorial Slate Progressive Web App (`src/interfaces/gui/`)** and its bundled **`ra8-rpc-client` SDK (`src/interfaces/gui/client/`)** on branch **`bsikar/RA8EMU-1242-gui`** in repository **`ra8-emulator`**.
 
-**Milestones `M0`, `M1`, `M2`, and `M3` are already implemented, tested, committed, and pushed (`ec560b104`).** Your mission is to execute **Milestones `M4`, `M5`, `M6`, `M7`, and `M8` sequentially**.
+**Milestones `M0`–`M4` (`0c04398d4` + code-hygiene enforcement) are already implemented, tested, committed, and pushed.** Your mission is to execute **Milestones `M5`, `M6`, `M7`, and `M8` sequentially**.
 
 ### Hard Operational Boundaries
 1. **No External Access Assumed:** Do **NOT** try to connect to YouTrack, Stitch, or any remote SSH machines. All YouTrack ticket requirements, design specs, Stitch reference screenshots, and skills live locally inside **`src/interfaces/gui/handoff/`** and **`src/interfaces/gui/DESIGN.md`**.
-2. **Workspace Ownership Boundary (`AGENTS.md`):** Keep all edits inside **`src/interfaces/gui/`** (the Angular PWA, `client/` SDK, mirrored Vitest `tests/`, Playwright `e2e/`, and `tools/`). Do **NOT** edit Zig files under `src/chip/`, `src/board/`, `src/session/`, `src/interfaces/rpc/`, etc., unless strictly required by a blocking backend bug (and if so, pass full Zig tests too). Notice `HANDOFF_PROMPT.md` and `handoff/` are temporary reference files — do **NOT** delete them during M4–M8; the maintainer will clean them out after reviewing M4–M8.
-3. **Commit & Push After EVERY Milestone:** Execute one milestone at a time (`M4`, then `M5`, then `M6`, then `M7`, then `M8`). Do **NOT** batch multiple milestones into one commit. After finishing a milestone and passing 100% of its gates (client SDK + static gate + strict TypeScript + `ng build` + Vitest + Playwright live-daemon E2E + Zig `fmt`/`gate`), **immediately `git commit` and fast-forward `git push origin bsikar/RA8EMU-1242-gui:bsikar/RA8EMU-1242-gui`** before starting the next milestone.
+2. **Workspace Ownership Boundary (`AGENTS.md`):** Keep all edits inside **`src/interfaces/gui/`** (the Angular PWA, `client/` SDK, mirrored Vitest `tests/`, Playwright `e2e/`, and `tools/`). Do **NOT** edit Zig files under `src/chip/`, `src/board/`, `src/session/`, `src/interfaces/rpc/`, etc., unless strictly required by a blocking backend bug (and if so, pass full Zig tests too). Notice `HANDOFF_PROMPT.md` and `handoff/` are temporary reference files — do **NOT** delete them during M5–M8; the maintainer will clean them out after reviewing M5–M8.
+3. **Commit & Push After EVERY Milestone:** Execute one milestone at a time (`M5`, then `M6`, then `M7`, then `M8`). Do **NOT** batch multiple milestones into one commit. After finishing a milestone and passing 100% of its gates (client SDK + static gate + strict TypeScript + `ng build` + Vitest + Playwright live-daemon E2E + Zig `fmt`/`gate`), **immediately `git commit` and fast-forward `git push origin bsikar/RA8EMU-1242-gui:bsikar/RA8EMU-1242-gui`** before starting the next milestone.
 4. **Zero Slop / Honest Software:** Zero `DEMO_*` fake data arrays, zero empty `catch {}` blocks, zero `: any` / `as any` / `<any>`, zero `@Input()`/`@Output()`/`*ngIf`/`*ngFor`, zero Light mode or neon accents, zero banned terminology (`tools/terms.zig` scans all source AND `.md` files).
+5. **Zero Milestone / Screen-Code Identifiers in Source & Tests (`tools/gate.mjs` Enforced):** Never include milestone tags (`Milestone N`, `M0`–`M8`), Stitch/screen/modal codes (`Screen 01`–`12`, `04a`–`04h`, `07`/`07b`, `stitch_*`), internal phase/layer labels (`Layer 1`/`2`, `Phase N`), or ticket IDs (`RA8EMU-*`) anywhere in `src/`, `client/`, `tests/`, `e2e/`, or `tools/` (filenames, comments, strings, or test names). Use clean product/domain identifiers (`e2e/workbench-debug.spec.ts`, `e2e/console-hardware.spec.ts`, etc.).
 
 ---
 
@@ -30,10 +31,11 @@ Read these files first inside the repo:
 
 ---
 
-## Current Baseline Inventory (`ec560b104` on `bsikar/RA8EMU-1242-gui`)
+## Current Baseline Inventory (`0c04398d4` + Hygiene Enforcement on `bsikar/RA8EMU-1242-gui`)
 
-### What Already Exists & Passes (`191` GUI source/test files clean)
-- **`ra8-rpc-client` (`src/interfaces/gui/client/`)**: Complete binary WebSocket client covering session opcodes `0x0100..0x013F` and backend opcodes `0x0140..0x0193`, including chunked CRC32 ELF upload (`> 64 KiB`), 45-byte `DiffReply` decoder, 43-byte `NavQueryResult` (`setMarker`), `.board` parser/serializer + 4 Renesas board presets (`ek_ra8d2`, `ek_ra8p1`, `fpb_ra8e1`, `fpb_ra4t1`), ARM ELF32 header/DWARF/symbol inspector, and USTAR/gzip `.tar` validator with `ArtifactsAbort` (`0x0185`) spool release (`27/27` tests passing in `client/test/`).
+### What Already Exists & Passes (`275+` GUI files clean)
+- **`ra8-rpc-client` (`src/interfaces/gui/client/`)**: Complete binary WebSocket client covering session opcodes `0x0100..0x013F` and backend opcodes `0x0140..0x0193`, including chunked CRC32 ELF upload (`> 64 KiB`), 45-byte `DiffReply` decoder, 43-byte `NavQueryResult` (`setMarker`), `.board` parser/serializer + 4 Renesas board presets (`ek_ra8d2`, `ek_ra8p1`, `fpb_ra8e1`, `fpb_ra4t1`), ARM ELF32 header/DWARF/symbol inspector, and USTAR/gzip `.tar` validator with `ArtifactsAbort` (`0x0185`) spool release (`client/test/`).
+- **Custom Board Composer, Settings Schemes, SplitPane & HiDPI (`M4`, `0c04398d4`)**: `features/workspace/board-composer-*`, multi-section `SettingsModalComponent` with code-buffer color schemes + probe rescan, proportional persisted `SplitPaneComponent`, `shared/utils/hidpi-canvas.ts`, and `View > Full Screen`.
 - **Signal Stores (`src/interfaces/gui/src/app/core/`)**:
   - `rpc/rpc-connection.store.ts` (WebSocket attach, `observeOnly`, `capabilitiesSummary`, toast/error reporting)
   - `stores/execution.store.ts` (`run`, `pause`, `step`, `stepOver`, `stepOut`, `reset`, `advanceAsync`, `Topic.Session` external GDB/`ctl` auto-sync)
@@ -69,56 +71,49 @@ Existing Playwright E2E tests (`e2e/`) assert these exact elements and test IDs:
 
 ---
 
-## Sequential Execution Plan (`M4` -> `M5` -> `M6` -> `M7` -> `M8`)
+## Sequential Execution Plan (`M5` -> `M6` -> `M7` -> `M8`)
 
-### Milestone 4 — Custom Board Composer (`04b`–`04h`), Settings & Color Schemes (`07`, `07b`), Responsive Splits, HiDPI & Fullscreen
-- **Spec:** `handoff/specs/milestones_m4_to_m8_youtrack.md#milestone-4`
-- **Stitch References:** `stitch_04b`..`stitch_04h`, `stitch_07`, `stitch_07b`
-- **Deliverables:**
-  1. Custom Board Composer (`04b`) + sub-modals (`04c`–`04h`) under `src/app/features/workspace/` (keep each component/helper `<= 350` lines), wired to `+ New Board` / row Edit on Screen 04 & 04a and persisted via `board-storage.ts`.
-  2. Multi-section Settings modal (`07` + `07b`) preserving `role="dialog" aria-label="Session settings"`, `settings-vim-toggle`, and `settings-open-extensions`, adding syntax/signal color scheme switcher (code-buffer `--es-tok-*` only + chrome stays midnight-slate!), font size, dim zero registers, USB Serial + VID:PID probe policy, and `CAP_TARGETS` probe rescan.
-  3. Draggable proportional `SplitPaneComponent` (`localStorage` persisted), `shared/utils/hidpi-canvas.ts` (`devicePixelRatio` + inverse touch coordinate mapping), and `View > Full Screen` (`F11` / `Ctrl+Cmd+F`).
-  4. Mirrored Vitest unit tests under `tests/` + `e2e/composer-settings-04-07.spec.ts`.
-- **Commit Subject:** `RA8EMU-1336: implement Custom Board Composer, Settings schemes, HiDPI splits, and Fullscreen` -> **run full gates & push**.
+### Milestone 4 — Completed (`0c04398d4`)
+- Custom Board Composer (`features/workspace/`), multi-section Settings modal (`PreferencesStore`, color schemes, probe rescan), proportional persisted `SplitPaneComponent`, `shared/utils/hidpi-canvas.ts`, and `View > Full Screen` (`e2e/board-composer-settings.spec.ts`).
 
-### Milestone 5 — Screen 08 Workbench Debug (`stitch_08_workbench_debug.png`)
+### Milestone 5 — Workbench Debug (`stitch_08_workbench_debug.png`)
 - **Spec:** `handoff/specs/milestones_m4_to_m8_youtrack.md#milestone-5`
 - **Stitch Reference:** `stitch_08_workbench_debug.png`
 - **Deliverables:**
   1. Spatial Mode 2 hairline-split `/debug` workbench: `TARGETS & THREADS` + `CALL STACK` (`0x011D` Stack MSP/PSP bars + click frame -> `getLocalsAt` `0x012A`) + `BREAKPOINTS (+)` (`pending` deferred breakpoints, `R/W/RW` watchpoints).
-  2. Code Buffer (`Source | Disasm | Mixed | Decomp`) reading source via `0x0142` (`CAP_WORKSPACE`), syntax tokens strictly inside `.es-code-buffer`, active PC line `#181C24` + `2px #B8C4D9` bar + `#D9776C` gutter dot, `Follow PC`, hex/symbol jump + `+ Break`, `Split CPU0 | CPU1`, `Skip BKPT` (`0x0137`), and Layer-2 Vim navigation (`j/k/gg/G///n/N/Ctrl+u/d/m/'`).
+  2. Code Buffer (`Source | Disasm | Mixed | Decomp`) reading source via `0x0142` (`CAP_WORKSPACE`), syntax tokens strictly inside `.es-code-buffer`, active PC line `#181C24` + `2px #B8C4D9` bar + `#D9776C` gutter dot, `Follow PC`, hex/symbol jump + `+ Break`, `Split CPU0 | CPU1`, `Skip BKPT` (`0x0137`), and Vim buffer navigation (`j/k/gg/G///n/N/Ctrl+u/d/m/'`).
   3. `LOCALS & WATCH` (writable DWARF local/watch inline editing via `0x013D` `SetVar` + immediate re-read, read-only badge on optimized variables, `Undo Write` `0x013E`) + `Registers (Δ) | Memory | Peripherals` (`GPR·MVE·Sys` delta ticks & inline edit `0x0106`, 256B paged Hex+ASCII `Memory` bound to `debug.activeCore()` with `MRAM/SRAM/SP/PC` jumps & inline poke `0x0108`).
   4. Switchable `Board PREVIEW` + `SERIAL` right pane (`Board | Debugger | Side-by-Side Split` persisted).
-  5. Mirrored Vitest specs + `e2e/debug-screen-08.spec.ts` (live `blink.elf` + DWARF `uart_irq_echo.elf`).
-- **Commit Subject:** `RA8EMU-1337: implement Screen 08 Workbench Debug, Locals editing, Memory hex, and Vim Layer 2` -> **run full gates & push**.
+  5. Mirrored Vitest specs + `e2e/workbench-debug.spec.ts` (live `blink.elf` + DWARF `uart_irq_echo.elf`).
+- **Commit Subject:** `RA8EMU-1337: implement Workbench Debug, DWARF locals editing, memory hex, and Vim code navigation` -> **run full gates & push**.
 
-### Milestone 6 — Screens 09 (Device Monitor) & 10 (Board, LCD Scrubber & HIL)
+### Milestone 6 — Device Monitor (`/console`) & Board, LCD Scrubber & HIL (`/hardware`)
 - **Spec:** `handoff/specs/milestones_m4_to_m8_youtrack.md#milestone-6`
 - **Stitch References:** `stitch_09_workbench_monitor.png`, `stitch_10_workbench_hardware.png`
 - **Deliverables:**
-  1. Screen 09 (`/console`): `All | UART | SWO | RTT` + SCI `CH0..CH9` picker, `ASCII | Hex`, `Elapsed | Virtual ns`, `>= 2,000`-line scrollback with wheel-up autoscroll lock (never in `ngAfterViewChecked`!), `Copy`, `Save Log`, `Clear`, interactive TX bar (`ConsoleInput` `0x011A`), `ELF SYMBOL DECODER`, `WATCH TRIGGERS`, `Reset Image` (`0x013F`).
-  2. Screen 10 (`/hardware`): HiDPI aspect-locked `FramebufferRenderer` `<canvas>` (`Tap | Swipe | Longpress` with `atNs = execution.virtualTimeNs()`, crosshair, `Save PNG`), Frame History Scrubber + adaptive `0x010D` `subscribe` throttling (`1x`, `100x`, `max`, `0.1x` every-frame capture, skipped frame counter), clean headless state, `OV5640 Camera`, LEDs, Switches, `RTC`, `HIL COMPONENTS` (`plug`/`unplug` + `MODEL@ENDPOINT=RULE` Fault Injector `setFault`/`clearFault`), live hardware events, and `MMIO PERIPHERALS` (`getPeriph` JSON + 64B `readMemory` fallback).
-  3. Mirrored Vitest specs (including scrubber ring & rate throttling) + `e2e/monitor-hardware-09-10.spec.ts`.
-- **Commit Subject:** `RA8EMU-1338: implement Screen 09 Console Monitor and Screen 10 Hardware, LCD Scrubber & HIL` -> **run full gates & push**.
+  1. Console (`/console`): `All | UART | SWO | RTT` + SCI `CH0..CH9` picker, `ASCII | Hex`, `Elapsed | Virtual ns`, `>= 2,000`-line scrollback with wheel-up autoscroll lock (never in `ngAfterViewChecked`!), `Copy`, `Save Log`, `Clear`, interactive TX bar (`ConsoleInput` `0x011A`), `ELF SYMBOL DECODER`, `WATCH TRIGGERS`, `Reset Image` (`0x013F`).
+  2. Hardware (`/hardware`): HiDPI aspect-locked `FramebufferRenderer` `<canvas>` (`Tap | Swipe | Longpress` with `atNs = execution.virtualTimeNs()`, crosshair, `Save PNG`), Frame History Scrubber + adaptive `0x010D` `subscribe` throttling (`1x`, `100x`, `max`, `0.1x` every-frame capture, skipped frame counter), clean headless state, `OV5640 Camera`, LEDs, Switches, `RTC`, `HIL COMPONENTS` (`plug`/`unplug` + `MODEL@ENDPOINT=RULE` Fault Injector `setFault`/`clearFault`), live hardware events, and `MMIO PERIPHERALS` (`getPeriph` JSON + 64B `readMemory` fallback).
+  3. Mirrored Vitest specs (including scrubber ring & rate throttling) + `e2e/console-hardware.spec.ts`.
+- **Commit Subject:** `RA8EMU-1338: implement Console Monitor and Hardware Inspector, LCD scrubber, and HIL faults` -> **run full gates & push**.
 
-### Milestone 7 — Screen 11 Deterministic Time-Travel Rewind (`stitch_11_workbench_rewind.png`)
+### Milestone 7 — Deterministic Time-Travel Rewind (`stitch_11_workbench_rewind.png`)
 - **Spec:** `handoff/specs/milestones_m4_to_m8_youtrack.md#milestone-7` and `handoff/specs/rewind_architecture_spec.md`
 - **Stitch Reference:** `stitch_11_workbench_rewind.png`
 - **Deliverables:**
-  1. Screen 11 (`/rewind`): Transport & seek strip (`stepBack` `0x012D`, `play` `0x0138`, valid `seekTarget` `0x012C`, `Prev/Next ISR & RTOS` `0x0139`, `+ Bookmark` `0x013A`, pending fork confirmation `0x0133`).
+  1. Rewind (`/rewind`): Transport & seek strip (`stepBack` `0x012D`, `play` `0x0138`, valid `seekTarget` `0x012C`, `Prev/Next ISR & RTOS` `0x0139`, `+ Bookmark` `0x013A`, pending fork confirmation `0x0133`).
   2. Rooted single-parent CoW `BRANCH TREE` (`switchBranch` `0x0131`, `Prune` `0x0132`), `frameStatus` (`0x013B`), Snapshot/Restore controls (`0x0118`/`0x0119`), Interactive Center-Spine (`±Y`) + `Waterfall` (`+Y`) SVG/Canvas timeline (`shared/utils/rewind-layout.ts`), and 3-column `STATE DIFF` (`diff.regs`, `diff.pages`, `diff.periphs` with `Swap A↔B` & category filters).
-  3. Mirrored Vitest specs + live `--history` E2E `e2e/rewind-screen-11.spec.ts` (`RA8EMU-1201`).
-- **Commit Subject:** `RA8EMU-1339: implement Screen 11 Rewind Branch DAG, Seek Nav, and 3-column State Diff` -> **run full gates & push**.
+  3. Mirrored Vitest specs + live `--history` E2E `e2e/rewind-history.spec.ts` (`RA8EMU-1201`).
+- **Commit Subject:** `RA8EMU-1339: implement Rewind branch DAG, seek navigation, and state diff` -> **run full gates & push**.
 
-### Milestone 8 — Screen 12 Execution Profiler, Flamegraph, Stack Watermarks & Soak Benchmark
+### Milestone 8 — Execution Profiler, Flamegraph, Stack Watermarks & Soak Benchmark
 - **Spec:** `handoff/specs/milestones_m4_to_m8_youtrack.md#milestone-8`
 - **Stitch Reference:** `stitch_12_workbench_profile.png`
 - **Deliverables:**
-  1. Screen 12 (`/profile`): Pure TypeScript bounded ring-buffer `TimelineModel` (`features/profile/timeline-model.ts`) with mirrored Vitest unit tests (nested ISRs, idle gaps, utilization %, cursor zoom, clamped pan, brushed `[A, B]`, hit-testing) rendered on a HiDPI Editorial Slate `<canvas>`.
+  1. Profiler (`/profile`): Pure TypeScript bounded ring-buffer `TimelineModel` (`features/profile/timeline-model.ts`) with mirrored Vitest unit tests (nested ISRs, idle gaps, utilization %, cursor zoom, clamped pan, brushed `[A, B]`, hit-testing) rendered on a HiDPI Editorial Slate `<canvas>`.
   2. `CALL STACK FLAMEGRAPH` (`Flamegraph | Icicle`, zoom, search) + `TOP SELF-CYCLE HOTSPOTS` table (`Export .folded` `0x0121`) + right sidebar (`STACK WATERMARKS` `0x011D` with `Near PSPLIM` warning, `GUEST COMPUTE & MEMORY` `0x012E`, `HOST RUNTIME METRICS` with `< 0.35x` pacing & `cpuPinned` alerts + optional monochrome sparklines).
-  3. Coalesced streaming verification (`RA8EMU-1235` frontend scope), automated benchmark/soak script `src/interfaces/gui/tools/bench-soak.mjs` (`RA8EMU-228` / `RA8EMU-1199` recipe), and `e2e/profile-screen-12.spec.ts` against `ra8_emulator serve --profile-folded`.
+  3. Coalesced streaming verification (`RA8EMU-1235` frontend scope), automated benchmark/soak script `src/interfaces/gui/tools/bench-soak.mjs` (`RA8EMU-228` / `RA8EMU-1199` recipe), and `e2e/profiler-timeline.spec.ts` against `ra8_emulator serve --profile-folded`.
   4. Final cross-app audit across all 10 routes (`npm run gate`, `tsc --noEmit`, `ng build`, `test:unit`, `playwright test`, `zig fmt --check`, `zig build gate -j1`).
-- **Commit Subject:** `RA8EMU-1340: implement Screen 12 Profiler Timeline, Flamegraph, Watermarks & Soak Benchmark` -> **run full gates & push**.
+- **Commit Subject:** `RA8EMU-1340: implement Profiler context-switch timeline, flamegraph, stack watermarks, and soak benchmark` -> **run full gates & push**.
 
 ---
 

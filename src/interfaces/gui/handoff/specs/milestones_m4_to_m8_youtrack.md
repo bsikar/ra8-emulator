@@ -39,7 +39,7 @@ This document contains every requirement from the private YouTrack sprint (`PWA 
    - Upgrade `SplitPaneComponent` to use proportional percentage/flex-basis or CSS Grid `fr` bounds with draggable resize handle + `localStorage` persistence key (optional `@Input`/`input<string>('persistKey')`), enforcing `min-width`/`min-height` so panes never collapse cleanly down to `1280x720`.
    - Create `shared/utils/hidpi-canvas.ts`: `ResizeObserver` + `window.devicePixelRatio` helper keeping `<canvas>` backing buffers crisp across 1x/Retina displays and computing exact aspect-locked inverse coordinates for touch events (`0x011F`).
    - Add `View > Full Screen` action (`nav-fullscreen` / `F11` / `Ctrl+Cmd+F`) wired to `document.documentElement.requestFullscreen()` / `document.exitFullscreen()`.
-4. **Tests & Commit Target:** `npm run gate`, `tsc --noEmit`, `ng build` (0 warnings), `npm run test:unit`, new `e2e/composer-settings-04-07.spec.ts` (`1440x900` + `1280x720` `auditEditorialSlateScreen` + custom board round-trip + scheme CSS var update + fullscreen/split check), `zig build gate -j1`. Commit & push `bsikar/RA8EMU-1242-gui`.
+4. **Tests & Commit Target:** `npm run gate`, `tsc --noEmit`, `ng build` (0 warnings), `npm run test:unit`, new `e2e/board-composer-settings.spec.ts` (`1440x900` + `1280x720` `auditEditorialSlateScreen` + custom board round-trip + scheme CSS var update + fullscreen/split check), `zig build gate -j1`. Commit & push `bsikar/RA8EMU-1242-gui`.
 
 ---
 
@@ -75,7 +75,7 @@ This document contains every requirement from the private YouTrack sprint (`PWA 
      - `BOARD PREVIEW`: Live HiDPI `FramebufferRenderer` LCD `<canvas>`, `cameraSource` picker (`0x011B`), LED1–N indicators (`decodeLedEvent`), `SW1`/`SW2` buttons (`sendButton` with current `virtualTimeNs()`), clean headless state if the active `.board` profile has `panel === null`.
      - `SERIAL · SCI8 UART`: Compact live UART tail + quick TX command input + `Open Console ↗` link to `/console`.
    - **Typography Check (`RA8EMU-1169`):** Verify `.mono` (`tabular-nums`) applies to EVERY hex/code/address/value element across Debug panes.
-2. **Tests & Commit Target:** Full gates + `e2e/debug-screen-08.spec.ts` (live `blink.elf` + DWARF ELF `tests/fixtures/uart/uart_irq_echo.elf`: registers, step, disassembly toggle, breakpoint add/remove, memory jump/poke, register edit + readback, Vim `j`/`k`/`gg` navigation, `auditEditorialSlateScreen` at `1440x900` & `1280x720`). Commit & push `bsikar/RA8EMU-1242-gui`.
+2. **Tests & Commit Target:** Full gates + `e2e/workbench-debug.spec.ts` (live `blink.elf` + DWARF ELF `tests/fixtures/uart/uart_irq_echo.elf`: registers, step, disassembly toggle, breakpoint add/remove, memory jump/poke, register edit + readback, Vim `j`/`k`/`gg` navigation, `auditEditorialSlateScreen` at `1440x900` & `1280x720`). Commit & push `bsikar/RA8EMU-1242-gui`.
 
 ---
 
@@ -109,7 +109,7 @@ This document contains every requirement from the private YouTrack sprint (`PWA 
      - Filter input (`Filter peripheral or 0x40...`), quick block chips (`NPU`, `GLCDC`, `CEU`, `RIIC0`, `SCI8`, `IPC`, `SCB`, `SAU`, ...), CPU0/CPU1 core selector, collapsible register & bitfield inspector (`getPeriph(core, block, true)` `0x0123`, falling back cleanly to 64B `readMemory` dump when no descriptor exists).
 3. **Layout Switcher & LCD Rate Benchmark Tests (`RA8EMU-958`, `RA8EMU-826`):**
    - Persist `Board | Debugger | Side-by-Side Split` mode cleanly across `/debug` and `/hardware` via `localStorage`.
-   - Write automated benchmark/scrubber unit + E2E tests (`e2e/monitor-hardware-09-10.spec.ts` + Vitest scrubber/throttle tests verifying `1x`, `100x`, `max`, `0.1x` subscription rate adaptation and frame scrubber playback).
+   - Write automated benchmark/scrubber unit + E2E tests (`e2e/console-hardware.spec.ts` + Vitest scrubber/throttle tests verifying `1x`, `100x`, `max`, `0.1x` subscription rate adaptation and frame scrubber playback).
 4. **Tests & Commit Target:** All gates clean, commit & push `bsikar/RA8EMU-1242-gui`.
 
 ---
@@ -141,7 +141,7 @@ This document contains every requirement from the private YouTrack sprint (`PWA 
      - `CPU REGISTERS`: `before -> after` for changed registers in `activeDiff().regs`.
      - `DIRTY COW RAM PAGES`: page address + diff byte count in `activeDiff().pages`.
      - `PERIPHERAL MMIO`: block/register transitions in `activeDiff().periphs`.
-5. **Live `--history` Playwright E2E (`e2e/rewind-screen-11.spec.ts`, `RA8EMU-1201`):**
+5. **Live `--history` Playwright E2E (`e2e/rewind-history.spec.ts`, `RA8EMU-1201`):**
    - Start `startServeFixture` with `--history <tempHistoryDir> --artifacts-root <tempArtifactsDir>` (check `ra8_emulator serve --help`: `--history DIR --checkpoint-every 4`!).
    - Advance execution, inspect `/rewind`, set a bookmark (`setMarker`), step back (`stepBack`), trigger seek (`seek`), compare `diff` between two positions, verify snapshot/restore (`0x0118` / `0x0119`), run `auditEditorialSlateScreen` at `1440x900` & `1280x720`.
 6. **Tests & Commit Target:** All gates clean, commit & push `bsikar/RA8EMU-1242-gui`.
@@ -176,5 +176,5 @@ This document contains every requirement from the private YouTrack sprint (`PWA 
    - `HOST RUNTIME METRICS`: Pacing (`pacingRatio` with `< 0.35x` bottleneck warning & `cpuPinned` indicator if reported), `Host CPU %`, `Host RSS MB`, plus optional subtle monochrome SVG hairline sparkline over `hostCpuHistory()` / `hostRssHistory()`.
 5. **Throughput Coalescing & Sustained Benchmark Script (`RA8EMU-1235` Frontend, `RA8EMU-228` / `RA8EMU-1199` Recipe):**
    - Audit `ExecutionStore` + `DebugStore` + `ProfileStore`: confirm active runs use streaming `run` (`0x0101`) / `advanceAsync` (`0x012B`) + rate-capped `subscribe` and inspect registers/stack/locals ONLY on halt (`stop`) or explicit throttle (never tight polling loops).
-   - Add automated sustained-load benchmark script `src/interfaces/gui/tools/bench-soak.mjs` (plus unit tests / docs) that starts `ra8_emulator serve` with `--profile-folded`, connects a headless Chromium/RPC client for timed runs, logs virtual-time throughput, `MetricsReport` RSS/CPU, JS heap stability, and frame timing p50/p99 without failing offline CI (`e2e/profile-screen-12.spec.ts` runs short `--profile-folded` E2E verification + `auditEditorialSlateScreen` at `1440x900` & `1280x720`).
+   - Add automated sustained-load benchmark script `src/interfaces/gui/tools/bench-soak.mjs` (plus unit tests / docs) that starts `ra8_emulator serve` with `--profile-folded`, connects a headless Chromium/RPC client for timed runs, logs virtual-time throughput, `MetricsReport` RSS/CPU, JS heap stability, and frame timing p50/p99 without failing offline CI (`e2e/profiler-timeline.spec.ts` runs short `--profile-folded` E2E verification + `auditEditorialSlateScreen` at `1440x900` & `1280x720`).
 6. **Final Epic Audit & Commit Target:** Confirm every route (`/launch`, `/open`, `/import`, `/workspace/new`, `/connect`, `/debug`, `/hardware`, `/rewind`, `/profile`, `/console`), all unit tests, all Playwright E2E tests, `npm run gate`, `tsc --noEmit`, `ng build`, `zig fmt --check`, and `zig build gate -j1` pass 100%, then commit & push `bsikar/RA8EMU-1242-gui`.
