@@ -2,12 +2,16 @@
 const std = @import("std");
 
 const agent = @import("agent.zig");
+const agent_link = @import("agent_link.zig");
 const api = @import("ra8_session").api;
-const auth = @import("ra8_host").probe_host.auth;
 const Context = @import("ra8_rpc").session.server.Context;
+const host = @import("ra8_host");
 const jlink = @import("jlink.zig");
-const model = @import("ra8_host").targets;
 const probe = @import("../probe_ctl.zig");
+
+const auth = host.probe_host.auth;
+const model = host.targets;
+const profiles = host.profiles;
 
 pub const Binding = struct {
     target: model.Descriptor,
@@ -15,10 +19,15 @@ pub const Binding = struct {
     host: []const u8 = "",
     port: u16 = 0,
     secret_file: []const u8 = "",
+    profile: []const u8 = "",
+    hosts_file: []const u8 = "",
+    remote_targets: []const u8 = "",
+    remote_secret_file: []const u8 = "",
     program: []const u8 = "",
     scratch: []const u8 = "",
     device: []const u8 = "",
     cpuid: []const u8 = "",
+    uart_wired: bool = true,
 };
 pub const Provider = struct {
     binding: Binding,
@@ -68,6 +77,9 @@ pub const Inventory = struct {
     agent_host_count: usize = 0,
     agent_targets: [32]agent.Target = undefined,
     agent_target_count: usize = 0,
+    hosts_texts: [16][]const u8 = undefined,
+    hosts_text_count: usize = 0,
+    allocator: ?std.mem.Allocator = null,
     parsed: ?std.json.Parsed([]Binding) = null,
 
     pub fn open(
@@ -77,6 +89,7 @@ pub const Inventory = struct {
         path: []const u8,
         session: ?*api.Session,
     ) !void {
+        self.allocator = allocator;
         const bytes = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(65536));
         defer allocator.free(bytes);
         self.parsed = try std.json.parseFromSlice([]Binding, allocator, bytes, .{ .allocate = .alloc_always });
@@ -91,7 +104,7 @@ pub const Inventory = struct {
             const descriptor = try describe(binding);
             switch (binding.kind) {
                 .jlink => try self.addProbe(io, descriptor, binding),
-                .agent => try self.addAgent(io, bindings[0..i], descriptor, binding),
+                .agent => try self.addAgent(allocator, io, bindings[0..i], descriptor, binding),
                 .emulator => {
                     if (session == null) return error.InvalidEndpoint;
                     if (emulator) return error.DuplicateEmulator;
@@ -139,6 +152,7 @@ pub const Inventory = struct {
 
     fn addAgent(
         self: *Inventory,
+        allocator: std.mem.Allocator,
         io: std.Io,
         previous: []const Binding,
         descriptor: model.Descriptor,
@@ -150,31 +164,57 @@ pub const Inventory = struct {
                 (std.mem.eql(u8, other.descriptor.host_id, descriptor.host_id) and
                     std.mem.eql(u8, other.descriptor.probe_id, descriptor.probe_id))) return error.DuplicateIdentity;
         }
-        const peer = try self.ensureAgentHost(io, descriptor.host_id, binding);
+        const peer = try self.ensureAgentHost(allocator, io, descriptor.host_id, binding);
         self.agent_targets[self.agent_target_count] = .{ .descriptor = descriptor, .peer = peer };
         self.agent_target_count += 1;
     }
 
-    fn ensureAgentHost(self: *Inventory, io: std.Io, host_id: []const u8, binding: Binding) !*agent.Host {
+    fn ensureAgentHost(
+        self: *Inventory,
+        allocator: std.mem.Allocator,
+        io: std.Io,
+        host_id: []const u8,
+        binding: Binding,
+    ) !*agent.Host {
         for (self.agent_hosts[0..self.agent_host_count]) |*existing| {
             if (!std.mem.eql(u8, existing.host_id, host_id)) continue;
-            if (!std.mem.eql(u8, existing.address, binding.host) or existing.port != binding.port or
-                !std.mem.eql(u8, existing.secret_file, binding.secret_file)) return error.InvalidEndpoint;
+            if (!sameAgentBinding(existing.*, binding)) return error.InvalidEndpoint;
             return existing;
         }
         if (self.agent_host_count == self.agent_hosts.len) return error.InventoryFull;
         const key = try auth.readKey(io, binding.secret_file);
+        const spec = try self.resolveAgentSpec(allocator, io, binding);
         self.agent_hosts[self.agent_host_count] = .{
             .io = io,
             .host_id = host_id,
-            .address = binding.host,
-            .port = binding.port,
+            .spec = spec,
             .secret_file = binding.secret_file,
             .key = key,
         };
         const slot = &self.agent_hosts[self.agent_host_count];
         self.agent_host_count += 1;
         return slot;
+    }
+
+    fn resolveAgentSpec(self: *Inventory, allocator: std.mem.Allocator, io: std.Io, binding: Binding) !agent_link.Spec {
+        if (binding.profile.len == 0) {
+            return .{ .tcp = .{ .address = binding.host, .port = binding.port } };
+        }
+        const text = try std.Io.Dir.cwd().readFileAlloc(io, binding.hosts_file, allocator, .limited(65536));
+        errdefer allocator.free(text);
+        const prof = try profiles.find(text, binding.profile);
+        self.hosts_texts[self.hosts_text_count] = text;
+        self.hosts_text_count += 1;
+        return .{ .profile = .{
+            .name = binding.profile,
+            .hosts_file = binding.hosts_file,
+            .profile = prof,
+            .remote_targets = binding.remote_targets,
+            .remote_secret_file = if (binding.remote_secret_file.len != 0)
+                binding.remote_secret_file
+            else
+                binding.secret_file,
+        } };
     }
 
     pub fn bind(
@@ -196,6 +236,11 @@ pub const Inventory = struct {
         for (self.agent_hosts[0..self.agent_host_count]) |*peer| {
             peer.close();
         }
+        if (self.allocator) |alloc| {
+            for (self.hosts_texts[0..self.hosts_text_count]) |text| {
+                alloc.free(text);
+            }
+        }
         if (self.parsed) |parsed| parsed.deinit();
         self.parsed = null;
         self.registry.entries = @splat(null);
@@ -203,22 +248,47 @@ pub const Inventory = struct {
         self.probe_count = 0;
         self.agent_host_count = 0;
         self.agent_target_count = 0;
+        self.hosts_text_count = 0;
     }
 };
 
+fn sameAgentBinding(existing: agent.Host, binding: Binding) bool {
+    if (!std.mem.eql(u8, existing.secret_file, binding.secret_file)) return false;
+    return switch (existing.spec) {
+        .tcp => |t| binding.profile.len == 0 and t.port == binding.port and std.mem.eql(u8, t.address, binding.host),
+        .profile => |p| sameProfileSpec(p, binding),
+    };
+}
+
+fn sameProfileSpec(spec: anytype, binding: Binding) bool {
+    const remote_secret = if (binding.remote_secret_file.len != 0) binding.remote_secret_file else binding.secret_file;
+    return std.mem.eql(u8, spec.name, binding.profile) and
+        std.mem.eql(u8, spec.hosts_file, binding.hosts_file) and
+        std.mem.eql(u8, spec.remote_targets, binding.remote_targets) and
+        std.mem.eql(u8, spec.remote_secret_file, remote_secret);
+}
+
 fn uniqueEndpoint(previous: []const Binding, binding: Binding) !void {
     for (previous) |other| {
-        if ((other.kind != .rsp and other.kind != .agent) or other.port != binding.port) continue;
-        if (!std.mem.eql(u8, other.host, binding.host)) continue;
-        if (binding.kind == .agent and other.kind == .agent and
-            std.mem.eql(u8, other.target.host_id, binding.target.host_id)) continue;
-        return error.DuplicateEndpoint;
+        if (endpointConflicts(other, binding)) return error.DuplicateEndpoint;
     }
+}
+
+fn endpointConflicts(other: Binding, binding: Binding) bool {
+    if (binding.profile.len != 0 or other.profile.len != 0) {
+        return binding.profile.len != 0 and
+            std.mem.eql(u8, other.profile, binding.profile) and
+            std.mem.eql(u8, other.hosts_file, binding.hosts_file) and
+            !std.mem.eql(u8, other.target.host_id, binding.target.host_id);
+    }
+    if ((other.kind != .rsp and other.kind != .agent) or other.port == 0 or other.port != binding.port) return false;
+    if (!std.mem.eql(u8, other.host, binding.host)) return false;
+    return !(binding.kind == .agent and other.kind == .agent and
+        std.mem.eql(u8, other.target.host_id, binding.target.host_id));
 }
 
 fn describe(binding: Binding) !model.Descriptor {
     var descriptor = binding.target;
-    // Capability claims come from this adapter, never configuration data.
     descriptor.capabilities = .{};
     descriptor.connection = .configured;
     descriptor.uart = "";
@@ -238,18 +308,31 @@ fn describe(binding: Binding) !model.Descriptor {
         .jlink => {
             descriptor.identity_verified = false;
             descriptor.disambiguation = "";
-            descriptor.operations = jlink.operations;
+            const has_uart = binding.uart_wired and jlink.hostSupportsUart();
+            descriptor.operations = if (has_uart) jlink.operations_uart else jlink.operations_debug;
             descriptor.capabilities.hardware_debug = true;
+            descriptor.capabilities.uart = has_uart;
         },
         .agent => {
-            if (binding.port == 0 or binding.host.len == 0 or binding.secret_file.len == 0) {
-                return error.InvalidEndpoint;
-            }
-            if (!std.fs.path.isAbsolute(binding.secret_file)) return error.InvalidEndpoint;
+            try validateAgentBinding(binding);
             descriptor.identity_verified = false;
             descriptor.connection = .disconnected;
             descriptor.operations = &.{};
         },
     }
     return descriptor;
+}
+
+fn validateAgentBinding(binding: Binding) !void {
+    if (binding.secret_file.len == 0 or !std.fs.path.isAbsolute(binding.secret_file)) return error.InvalidEndpoint;
+    if (binding.profile.len != 0) {
+        if (binding.host.len != 0 or binding.port != 0) return error.InvalidEndpoint;
+        if (binding.hosts_file.len == 0 or !std.fs.path.isAbsolute(binding.hosts_file)) return error.InvalidEndpoint;
+        if (binding.remote_targets.len == 0) return error.InvalidEndpoint;
+        return;
+    }
+    if (binding.hosts_file.len != 0 or binding.remote_targets.len != 0 or binding.remote_secret_file.len != 0) {
+        return error.InvalidEndpoint;
+    }
+    if (binding.port == 0 or binding.host.len == 0) return error.InvalidEndpoint;
 }

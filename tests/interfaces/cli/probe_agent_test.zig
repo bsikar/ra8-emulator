@@ -11,15 +11,38 @@ fn noop(_: *anyopaque, _: model.Action, _: []u8) ![]const u8 {
     return "{\"ok\":true}";
 }
 
-test "probe-agent CLI rejects unix sockets missing flags and competing or stale claims" {
-    const ok = try probe_agent.parse(&.{
+test "probe-agent CLI supports matrix stdio and tcp modes and rejects invalid flag combinations" {
+    const mat = try probe_agent.parse(&.{ "emu", "probe-agent", "--matrix" });
+    try std.testing.expect(mat == .matrix);
+
+    const tcp_mode = try probe_agent.parse(&.{
         "emu",           "probe-agent",
         "--targets",     "t.json",
         "--secret-file", "s.key",
         "--host-id",     "bench-a",
         "--listen",      "tcp:127.0.0.1:0",
     });
-    try std.testing.expectEqualStrings("bench-a", ok.host_id);
+    try std.testing.expectEqualStrings("bench-a", tcp_mode.serve.host_id);
+    try std.testing.expect(tcp_mode.serve.where == .tcp);
+
+    const stdio_mode = try probe_agent.parse(&.{
+        "emu",           "probe-agent",
+        "--targets",     "t.json",
+        "--secret-file", "s.key",
+        "--host-id",     "bench-stdio",
+        "--stdio",
+    });
+    try std.testing.expectEqualStrings("bench-stdio", stdio_mode.serve.host_id);
+    try std.testing.expect(stdio_mode.serve.where == .stdio);
+
+    try std.testing.expectError(error.BadArguments, probe_agent.parse(&.{
+        "emu",             "probe-agent",
+        "--targets",       "t.json",
+        "--secret-file",   "s.key",
+        "--host-id",       "bench-a",
+        "--stdio",         "--listen",
+        "tcp:127.0.0.1:0",
+    }));
     try std.testing.expectError(error.BadArguments, probe_agent.parse(&.{
         "emu",           "probe-agent",
         "--targets",     "t.json",
@@ -27,7 +50,9 @@ test "probe-agent CLI rejects unix sockets missing flags and competing or stale 
         "--host-id",     "bench-a",
         "--listen",      "unix:/tmp/a.sock",
     }));
+}
 
+test "probe-agent dispatch enforces competing reservations and stale lease tokens" {
     var registry: model.Registry = .{};
     var dummy: u8 = 0;
     _ = try registry.add(.{

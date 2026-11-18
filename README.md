@@ -568,35 +568,59 @@ Four binding kinds are supported:
 - `"kind":"rsp"` (`"transport":"rsp"`, `"host"`, `"port"`): operator-pinned RSP
   endpoint for registers, halt, step and resume; starts `configured`.
 - `"kind":"jlink"` (`"transport":"jlink-usb"`, `"program"`, `"scratch"`,
-  `"device"`, `"cpuid"` and `target.probe_serial`): physical USB J-Link
-  discovery via `ShowEmuList USB` keyed strictly by probe serial, resolving the
-  CDC `uart` port from the USB serial at scan time (Windows composite parent
-  DevNode, Linux `/dev/serial/by-id`), acquiring an exclusive host-wide OS file
-  lock (`<scratch>/jlink-<serial>.lease`) with a persisted monotonic fencing
-  token across processes, and verifying both probe serial and `SCB.CPUID`
-  (`0xE000ED00`) before registers, halt, step, resume or reset. Hotplug,
-  unplug or UART renumbering advances `generation` and drops active leases.
-  `uart` names the probe's own USB CDC interface only. It is not evidence
-  that the board routes that port to the target MCU: some boards expose the
-  CDC interface with nothing wired behind it.
-  The CPUID check and the requested action run in two Commander sessions,
-  both selected by `-USB SERIAL`. The probe serial is checked again after the
-  action session, so a probe swapped between the two sessions would be
-  reported only after the action ran. J-Link's own `-USB` selection is what
-  keeps that window closed in practice.
-- `"kind":"agent"` (`"host"`, `"port"`, `"secret_file"`): link to
-  `ra8_emulator probe-agent --targets FILE --secret-file KEY --host-id ID
-  --listen tcp:HOST:PORT`, mirroring remote target presence, forwarding
-  claims/actions and calling `Registry.disconnect(host_id)` on agent loss.
-  Only the opening handshake is authenticated: both ends prove the shared
-  256-bit key and the exact `host_id` with HMAC-SHA256 over fresh nonces.
-  Later `list`, `claim`, `perform` and `release` frames are plain JSON with no
-  per-frame MAC and no encryption, so anyone who can inject into the TCP
-  stream after the handshake can issue operations. Run the agent link only
-  over loopback, an SSH tunnel or an otherwise trusted network segment.
+  `"device"`, `"cpuid"`, optional `"uart_wired"` defaulting to `true`, and
+  `target.probe_serial`): physical USB J-Link discovery via `ShowEmuList USB`
+  keyed strictly by probe serial, resolving the CDC `uart` port from the USB
+  serial at scan time (Windows composite parent DevNode, Linux
+  `/dev/serial/by-id`), acquiring an exclusive host-wide OS file lock
+  (`<scratch>/jlink-<serial>.lease`) with a persisted monotonic fencing token
+  across processes, and verifying both probe serial and `SCB.CPUID`
+  (`0xE000ED00`) before registers, halt, step, resume, reset or `uart`.
+  Hotplug, unplug or UART renumbering advances `generation` and drops active
+  leases. `uart` names the probe's own USB CDC interface only; it is not
+  evidence that the board routes that port to the target MCU (for example,
+  `FPB-RA4T1` exposes OB CDC with VCOM unrouted on the PCB, so set
+  `"uart_wired":false` to withhold `capabilities.uart` and refuse `uart` with
+  `0x195`). When `uart_wired` is true on Linux or Windows, `reset` pre-opens
+  the serial-resolved CDC port at 115200 8N1 so boot output from reset release
+  is buffered for a subsequent bounded `uart` read, while unconditionally
+  refusing host console ports (`COM1`, `COM3`, `COM9`). The CPUID check and
+  the requested action run in two Commander sessions, both selected by
+  `-USB SERIAL`. The probe serial is checked again after the action session,
+  so a probe swapped between the two sessions would be reported only after the
+  action ran. J-Link's own `-USB` selection is what keeps that window closed
+  in practice.
+- `"kind":"agent"`: authenticated link (`RA8PH2`) to `ra8_emulator probe-agent`,
+  mirroring remote target presence, streaming bounded progress frames
+  (`chunk:true`), forwarding claims/actions and calling
+  `Registry.disconnect(host_id)` on agent loss. Two carriers are supported:
+  - TCP (`"host"`, `"port"`, `"secret_file"`): connects to
+    `probe-agent --targets FILE --secret-file KEY --host-id ID --listen tcp:HOST:PORT`
+    over loopback or an `ssh -R` reverse tunnel (for a laptop-attached probe
+    reaching a remote build/session server).
+  - Host profile (`"profile"`, `"hosts_file"`, `"remote_targets"`,
+    `"secret_file"`, optional `"remote_secret_file"`): spawns
+    `probe-agent --targets ... --secret-file ... --host-id ID --stdio` over a
+    named `ra8_host.profiles` `local` or `ssh` entry.
+  Both ends prove the shared 256-bit key and exact `host_id` with HMAC-SHA256
+  over fresh nonces (`RA8PH2`), derive directional session keys (`c2a` /
+  `a2c`), and sign every subsequent request, streamed chunk and reply as
+  `SEQ MAC_HEX64 JSON` with a strictly monotonic sequence counter to reject
+  injection, tampering and replay. Frames are authenticated cleartext JSON, not
+  encrypted; use loopback or SSH when payload confidentiality is required.
+
+`ra8_emulator probe-agent --matrix` prints the machine-readable OS, probe,
+placement and transport support matrix (`ra8_host.probe_host.matrix`). It keeps
+`ra8_usbip` (emulated USB device export from the simulator) distinct from
+physical probe attachment: physical `usbip_vhci` applies only when both probe
+host and server run Linux with `vhci_hcd` available, automatically falling back
+to `native_local` (same host) or `native_agent` (cross-host, including Windows
+and macOS where `vhci_hcd` does not exist), while `bootloader_serial` targets
+without SWD are reported explicitly as unsupported.
 
 Configuration cannot enable build, flash or NPU execution. Separate capability
-booleans and `operations` report what each provider implements.
+booleans (`emulation`, `hardware_debug`, `uart`) and `operations` report what
+each provider implements.
 
 Select with the complete identity and generation returned by list:
 

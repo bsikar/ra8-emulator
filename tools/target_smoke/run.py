@@ -45,6 +45,17 @@ def exercise(emulator, fixture, output, trace, timeout):
                        str(generation), disambiguation, "registers"])
 
     try:
+        matrix_run = subprocess.run([str(emulator), "probe-agent", "--matrix"],
+                                    capture_output=True, text=True, timeout=15)
+        assert matrix_run.returncode == 0
+        matrix = json.loads(matrix_run.stdout)
+        assert matrix["emulated_usbip_distinct"] is True
+        entries = matrix["entries"]
+        assert any(e["probe_os"] == "windows" and e["fallback_used"] and e["chosen"] == "native_agent"
+                   for e in entries)
+        assert any(e["probe"] == "bootloader_serial" and not e["supported"] for e in entries)
+        trace(dict(type="matrix", count=len(entries)))
+
         bindings = [a.binding(), b.binding(), c.binding(managed=True)]
         server = start(bindings, "initial")
         code, rows = invoke(["list"])
@@ -119,8 +130,28 @@ def exercise(emulator, fixture, output, trace, timeout):
         gen_d2 = rows[0][0]["generation"]
         code, rows = invoke(["use", "agent-host", "probe-d", "board-d", str(gen_d2), "binding-d", "registers"])
         assert code == 0 and len(d.calls) == 2
+        assert server.close()["exit_code"] == 0
+        server = None
+        agent_proc.close()
+        agent_proc = None
+
+        hosts_file = output / "hosts"
+        hosts_file.write_text("local stdio-agent\n", encoding="utf8")
+        stdio_binding = dict(kind="agent", profile="stdio-agent",
+                             hosts_file=str(hosts_file.resolve()),
+                             remote_targets=str(agent_targets.resolve()),
+                             secret_file=str(secret.resolve()),
+                             target=dict(host_id="agent-host", probe_id="probe-d", board_id="board-d",
+                                         transport="rsp", managed=False, disambiguation="binding-d"))
+        server = start([stdio_binding], "agent-stdio")
+        code, rows = invoke(["list"])
+        assert code == 0 and len(rows[0]) == 1
+        gen_d3 = rows[0][0]["generation"]
+        code, rows = invoke(["use", "agent-host", "probe-d", "board-d", str(gen_d3), "binding-d", "registers"])
+        assert code == 0 and rows[0]["registers_rsp"] == "01020304" and len(d.calls) == 3
         return dict(status="passed", provider_calls={p.name: len(p.calls) for p in providers},
-                    authenticated_probe_host=True, physical_hardware=False, custodian_integration=False)
+                    authenticated_probe_host=True, stdio_profile_agent=True,
+                    physical_hardware=False, custodian_integration=False)
     finally:
         if server is not None:
             assert server.close()["exit_code"] == 0

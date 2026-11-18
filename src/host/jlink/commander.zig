@@ -14,6 +14,7 @@ pub const Tool = struct {
     /// Existing directory for the per-call command files.
     scratch: []const u8,
     timeout_ms: u32 = 15_000,
+    cancel: ?*const std.atomic.Value(bool) = null,
 };
 
 pub const Outcome = struct {
@@ -57,7 +58,7 @@ pub fn operate(
         .step => "h\ns\nregs\nexit\n",
         .@"resume" => "g\nexit\n",
         .reset => "r\ng\nexit\n",
-        .flash => return error.Unsupported,
+        .flash, .uart => return error.Unsupported,
     };
     const found = try identify(io, tool, serial, device, text);
     try identity.check(found, serial, cpuid);
@@ -115,7 +116,7 @@ fn script(
     const tail = head.len + extra.len;
     argv[tail] = "-CommandFile";
     argv[tail + 1] = path;
-    const outcome = run_tool.run(io, argv[0 .. tail + 2], text, tool.timeout_ms);
+    const outcome = run_tool.runWithCancel(io, argv[0 .. tail + 2], text, tool.timeout_ms, tool.cancel);
     dir.deleteFile(io, name) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,

@@ -63,18 +63,22 @@ pub const metrics = @import("metrics/metrics.zig");
 pub const target_lease = @import("target_lease.zig");
 pub const targets = @import("targets.zig");
 
-/// Authenticated probe-host framing and mutual HMAC-SHA256 handshake (RA8EMU-1287).
+/// Probe-host framing, OS/probe transport matrix, and `RA8PH2` per-frame HMAC (RA8EMU-1288).
 pub const probe_host = struct {
     pub const auth = @import("probe_host/auth.zig");
+    pub const matrix = @import("probe_host/matrix.zig");
     pub const wire = @import("probe_host/wire.zig");
 };
 
-/// Onboard SEGGER J-Link discovery and identity by USB serial (RA8EMU-1287).
+/// Onboard SEGGER J-Link discovery, identity, and serial capture by USB serial (RA8EMU-1287/1288).
 pub const jlink = struct {
     pub const commander = @import("jlink/commander.zig");
     pub const emu_list = @import("jlink/emu_list.zig");
     pub const identity = @import("jlink/identity.zig");
     pub const run = @import("jlink/run.zig");
+    pub const serial = @import("jlink/serial.zig");
+    pub const serial_linux = @import("jlink/serial/linux.zig");
+    pub const serial_windows = @import("jlink/serial/windows.zig");
     pub const uart = @import("jlink/uart.zig");
     pub const uart_linux = @import("jlink/uart/linux.zig");
     pub const uart_windows = @import("jlink/uart/windows.zig");

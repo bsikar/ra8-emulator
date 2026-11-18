@@ -34,25 +34,40 @@ fn serveSession(
     var tx: [2048]u8 = undefined;
     var reader = stream.reader(io, &rx);
     var writer = stream.writer(io, &tx);
-    try auth.authenticateAgent(io, &reader.interface, &writer.interface, host_id, key);
-    var peer: probe_agent.Peer = .{ .stream = stream };
+    var peer: probe_agent.Peer = .{
+        .stream = stream,
+        .session = try auth.authenticateAgent(io, &reader.interface, &writer.interface, host_id, key),
+    };
     defer state.registry.release(&peer.owner);
     var count: usize = 0;
     while (count < max_requests) : (count += 1) {
         var scratch: [wire.max_line]u8 = undefined;
-        const parsed = wire.receive(wire.Request, std.heap.page_allocator, &reader.interface, &scratch) catch return;
+        const parsed = wire.receive(
+            wire.Request,
+            std.heap.page_allocator,
+            &reader.interface,
+            &peer.session,
+            &scratch,
+        ) catch return;
         defer parsed.deinit();
+        if (parsed.value.op == .perform) {
+            try wire.send(&writer.interface, &peer.session, wire.Reply{
+                .ok = true,
+                .chunk = true,
+                .stream = @tagName(parsed.value.action),
+            });
+        }
         var out: [4096]u8 = undefined;
         var snaps: [32]wire.Snapshot = undefined;
         const reply = probe_agent.dispatch(state, &peer, parsed.value, &snaps, &out) catch |err| wire.Reply{
             .ok = false,
             .err = @errorName(err),
         };
-        try wire.send(&writer.interface, reply);
+        try wire.send(&writer.interface, &peer.session, reply);
     }
 }
 
-test "authenticated probe-host adapter syncs claims operates and disconnects on agent loss" {
+test "authenticated probe-host adapter syncs claims streams chunks and disconnects on agent loss" {
     const io = std.testing.io;
     const key: auth.Key = @splat(0x42);
     var remote_reg: model.Registry = .{};
@@ -79,8 +94,7 @@ test "authenticated probe-host adapter syncs claims operates and disconnects on 
     var hosts = [1]agent.Host{.{
         .io = io,
         .host_id = "agent-host",
-        .address = "127.0.0.1",
-        .port = port,
+        .spec = .{ .tcp = .{ .address = "127.0.0.1", .port = port } },
         .secret_file = "/secret",
         .key = key,
     }};
@@ -111,6 +125,7 @@ test "authenticated probe-host adapter syncs claims operates and disconnects on 
         .client => |r| r,
     });
     try std.testing.expectEqual(@as(usize, 1), log.calls);
+    try std.testing.expectEqual(@as(usize, 1), hosts[0].chunks_seen);
 }
 
 fn clientFlow(hosts: *[1]agent.Host, targets: *[1]agent.Target, registry: *model.Registry) anyerror!void {
