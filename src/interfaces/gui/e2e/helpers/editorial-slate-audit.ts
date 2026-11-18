@@ -103,9 +103,26 @@ async function collectTextBoxes(page: Page): Promise<TextBox[]> {
         if (activeDialog || !parent.closest('[role="dialog"]')) {
           const range = document.createRange();
           range.selectNodeContents(current);
-          const rect = range.getBoundingClientRect();
-          if (rect.width > 1 && rect.height > 1) {
-            out.push({ text: (current.textContent ?? '').trim().slice(0, 40), tag: parent.tagName.toLowerCase(), x: rect.left, y: rect.top, right: rect.right, bottom: rect.bottom });
+          const raw = range.getBoundingClientRect();
+          let left = raw.left;
+          let top = raw.top;
+          let right = raw.right;
+          let bottom = raw.bottom;
+          for (let anc: HTMLElement | null = parent; anc && anc !== document.body; anc = anc.parentElement) {
+            const st = getComputedStyle(anc);
+            if (st.overflowX === 'hidden' || st.overflowX === 'auto' || st.overflowX === 'scroll' || st.overflowX === 'clip') {
+              const b = anc.getBoundingClientRect();
+              left = Math.max(left, b.left);
+              right = Math.min(right, b.right);
+            }
+            if (st.overflowY === 'hidden' || st.overflowY === 'auto' || st.overflowY === 'scroll' || st.overflowY === 'clip') {
+              const b = anc.getBoundingClientRect();
+              top = Math.max(top, b.top);
+              bottom = Math.min(bottom, b.bottom);
+            }
+          }
+          if (right - left > 1 && bottom - top > 1) {
+            out.push({ text: (current.textContent ?? '').trim().slice(0, 40), tag: parent.tagName.toLowerCase(), x: left, y: top, right, bottom });
           }
         }
       }

@@ -42,6 +42,8 @@ export class DebugStore {
   public readonly canUndoWrite = signal<boolean>(false);
   public readonly memoryAddress = signal<number>(0x2000_0000);
   public readonly memoryBytes = signal<Uint8Array>(new Uint8Array(0));
+  public readonly memoryPrevBytes = signal<Uint8Array>(new Uint8Array(0));
+  public readonly watchExpressions = signal<string[]>([]);
 
   public readonly cpu0Breakpoints = this.points.cpu0Breakpoints;
   public readonly cpu1Breakpoints = this.points.cpu1Breakpoints;
@@ -77,6 +79,17 @@ export class DebugStore {
       this.execution.cpu1Attached() ? this.refreshDisassembly(Core.Cpu1) : Promise.resolve([]),
       this.refreshBacktrace(),
       this.refreshSourceAndLocals(0),
+      this.readMemoryPage(this.memoryAddress(), 256, this.activeCore(), true),
+    ]);
+  }
+
+  public async selectCore(core: Core): Promise<void> {
+    this.activeCore.set(core);
+    this.selectedFrameIndex.set(0);
+    if (!this.rpc.isConnected()) return;
+    await Promise.all([
+      this.refreshSourceAndLocals(0),
+      this.readMemoryPage(this.memoryAddress(), 256, core, true),
     ]);
   }
 
@@ -181,16 +194,24 @@ export class DebugStore {
     });
   }
 
-  public async readMemoryPage(address = this.memoryAddress(), length = 128, core: Core = this.activeCore()): Promise<Uint8Array | null> {
+  public async readMemoryPage(
+    address = this.memoryAddress(),
+    length = 256,
+    core: Core = this.activeCore(),
+    silent = false
+  ): Promise<Uint8Array | null> {
     const client = this.rpc.activeClient;
-    if (!client) return null;
+    if (!client || typeof client.readMemory !== 'function') return null;
+    const nextAddr = address >>> 0;
     try {
-      const bytes = await client.readMemory(core, address >>> 0, length);
-      this.memoryAddress.set(address >>> 0);
+      const bytes = await client.readMemory(core, nextAddr, length);
+      this.memoryPrevBytes.set(nextAddr === this.memoryAddress() ? this.memoryBytes() : new Uint8Array(0));
+      this.memoryAddress.set(nextAddr);
       this.memoryBytes.set(bytes);
       return bytes;
     } catch (err) {
-      this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
+      if (silent) this.rpc.noteOptionalError(err);
+      else this.rpc.errorMessage.set(err instanceof Error ? err.message : String(err));
       return null;
     }
   }
@@ -202,9 +223,19 @@ export class DebugStore {
     }
     return this.runRpc('Memory write failed', false, async (client) => {
       const ok = await client.writeMemory(core, address >>> 0, bytes);
-      if (ok) await this.readMemoryPage(this.memoryAddress(), Math.max(128, this.memoryBytes().length), core);
+      if (ok) await this.readMemoryPage(this.memoryAddress(), Math.max(256, this.memoryBytes().length), core);
       return ok;
     });
+  }
+
+  public addWatchExpression(expr: string): void {
+    const clean = expr.trim();
+    if (!clean) return;
+    this.watchExpressions.update((arr) => (arr.includes(clean) ? arr : [...arr, clean]));
+  }
+
+  public removeWatchExpression(expr: string): void {
+    this.watchExpressions.update((arr) => arr.filter((item) => item !== expr));
   }
 
   public toggleBreakpoint(address: number, core: Core = this.activeCore(), label?: string): Promise<boolean> {

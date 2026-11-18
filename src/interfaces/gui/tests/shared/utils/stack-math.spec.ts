@@ -1,5 +1,10 @@
 import { Core, type StackReport } from 'ra8-rpc-client';
-import { computeStackMetrics, formatStackSummary, NEVER_LOW_SP } from '../../../src/app/shared/utils/stack-math';
+import {
+  computePspWatermark,
+  computeStackMetrics,
+  formatStackSummary,
+  NEVER_LOW_SP,
+} from '../../../src/app/shared/utils/stack-math';
 
 function makeReport(overrides: Partial<StackReport> = {}): StackReport {
   return {
@@ -56,5 +61,21 @@ describe('stack-math', () => {
     const metrics = computeStackMetrics(makeReport({ hasStack: false, base: 0, size: 0 }));
     expect(metrics.hasReservation).toBe(false);
     expect(formatStackSummary(null)).toBe('No stack reservation');
+  });
+
+  it('computes PSP watermark headroom and overflow against PSPLIM', () => {
+    const untouched = computePspWatermark(makeReport({ psp: 0, lowPsp: NEVER_LOW_SP }), 0x2201_9000);
+    expect(untouched.touched).toBe(false);
+    expect(untouched.nearLimit).toBe(false);
+
+    const near = computePspWatermark(makeReport({ psp: 0x2201_9400, lowPsp: 0x2201_9180 }), 0x2201_9000);
+    expect(near.touched).toBe(true);
+    expect(near.headroomBytes).toBe(0x180);
+    expect(near.nearLimit).toBe(true);
+
+    const over = computePspWatermark(makeReport({ psp: 0x2201_9100, lowPsp: 0x2201_8fc0 }), 0x2201_9000);
+    expect(over.overflowBytes).toBe(0x40);
+    expect(over.nearLimit).toBe(true);
+    expect(over.summary).toContain('OVERFLOW');
   });
 });

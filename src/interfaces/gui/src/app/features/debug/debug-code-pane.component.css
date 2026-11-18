@@ -1,0 +1,147 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.code-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--es-border);
+  background: var(--es-chrome);
+  flex-wrap: wrap;
+}
+
+.head-left,
+.head-actions,
+.mode-tabs,
+.jump-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-title {
+  font-size: 12px;
+  color: var(--es-text-primary);
+}
+
+.seg-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--es-text-muted);
+  font-size: 12px;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+
+.seg-tab.is-active {
+  color: var(--es-text-primary);
+  border-bottom-color: var(--es-signal-cursor);
+}
+
+.mini-btn {
+  border: 1px solid var(--es-border);
+  background: transparent;
+  color: var(--es-text-secondary);
+  border-radius: var(--es-radius-sm);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.mini-btn.is-active {
+  background: var(--es-interactive);
+  border-color: var(--es-signal-cursor);
+  color: var(--es-text-primary);
+}
+
+.jump-input {
+  width: 148px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--es-border);
+  color: var(--es-text-primary);
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.vim-strip {
+  display: flex;
+  gap: 14px;
+  padding: 3px 12px;
+  border-bottom: 1px solid var(--es-divider);
+  background: var(--es-container);
+  color: var(--es-text-muted);
+  font-size: 12px;
+}
+
+.viewport-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  outline: none;
+}
+
+.code-col {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.split-right {
+  border-left: 1px solid var(--es-border);
+}
+
+.split-core-hdr {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--es-divider);
+  color: var(--es-text-muted);
+  font-size: 12px;
+}
+
+.gutter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.raw-bytes {
+  color: var(--es-text-muted);
+  min-width: 66px;
+}
+
+.sym-tag {
+  color: var(--es-tok-fn);
+}
+
+.es-code-line.is-vim-cursor {
+  outline: 1px solid var(--es-signal-cursor);
+  outline-offset: -1px;
+}
+
+.empty-note {
+  margin: 0;
+  padding: 14px 12px;
+}
