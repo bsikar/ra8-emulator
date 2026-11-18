@@ -1,7 +1,7 @@
 //! Authenticated probe-host adapter (`RA8PH2` per-frame HMAC-SHA256): connects
 //! over TCP or a `ra8_host.profiles` (`local` / `ssh`) `probe-agent --stdio`
-//! session, mirrors remote target presence into `Registry`, consumes bounded
-//! streamed progress/UART chunks, and calls `Registry.disconnect(host_id)`
+//! session, mirrors remote target presence into `Registry`, streams chunked
+//! ELF images and progress/UART frames, and calls `Registry.disconnect(host_id)`
 //! whenever the agent link fails or disconnects.
 const std = @import("std");
 
@@ -9,6 +9,7 @@ const agent_link = @import("agent_link.zig");
 const host = @import("ra8_host");
 
 const auth = host.probe_host.auth;
+const elf_image = host.jlink.elf_image;
 const model = host.targets;
 const wire = host.probe_host.wire;
 
@@ -49,7 +50,7 @@ pub const Host = struct {
         try self.link.send(self.io, req);
         var chunks: usize = 0;
         while (true) {
-            const parsed = try self.link.receive(allocator, self.io, scratch, 25_000);
+            const parsed = try self.link.receive(allocator, self.io, scratch, 60_000);
             if (!parsed.value.chunk) {
                 self.chunks_seen += chunks;
                 return parsed;
@@ -69,7 +70,13 @@ pub const Target = struct {
     ops: [7]model.Action = undefined,
 
     pub fn provider(self: *Target) model.Provider {
-        return .{ .context = self, .performFn = perform, .claimFn = claim, .releaseFn = release };
+        return .{
+            .context = self,
+            .performFn = perform,
+            .flashFn = flash,
+            .claimFn = claim,
+            .releaseFn = release,
+        };
     }
 
     fn claim(context: *anyopaque) !void {
@@ -101,6 +108,58 @@ pub const Target = struct {
         parsed.deinit();
     }
 
+    fn flash(context: *anyopaque, elf: []const u8, out: []u8) ![]const u8 {
+        const self: *Target = @ptrCast(@alignCast(context));
+        if (self.token == 0) return error.NotReserved;
+        if (elf.len == 0 or elf.len > wire.max_flash_elf) return error.InvalidElf;
+        const sha = elf_image.sha256Hex(elf);
+        try self.stageRemoteElf(elf, &sha);
+        var scratch: [wire.max_line]u8 = undefined;
+        const commit = try self.peer.request(std.heap.page_allocator, .{
+            .op = .flash_commit,
+            .probe_id = self.descriptor.probe_id,
+            .board_id = self.descriptor.board_id,
+            .token = self.token,
+        }, &scratch);
+        defer commit.deinit();
+        if (!commit.value.ok) return wire.mapError(commit.value.err);
+        if (commit.value.json.len > out.len) return error.TooLarge;
+        @memcpy(out[0..commit.value.json.len], commit.value.json);
+        return out[0..commit.value.json.len];
+    }
+
+    fn stageRemoteElf(self: *Target, elf: []const u8, sha: *const [64]u8) !void {
+        var scratch: [wire.max_line]u8 = undefined;
+        const begin = try self.peer.request(std.heap.page_allocator, .{
+            .op = .flash_begin,
+            .probe_id = self.descriptor.probe_id,
+            .board_id = self.descriptor.board_id,
+            .token = self.token,
+            .total_len = @intCast(elf.len),
+            .sha256 = sha,
+        }, &scratch);
+        defer begin.deinit();
+        if (!begin.value.ok) return wire.mapError(begin.value.err);
+
+        var offset: usize = 0;
+        var hex_buf: [wire.raw_chunk_bytes * 2]u8 = undefined;
+        while (offset < elf.len) {
+            const take = @min(wire.raw_chunk_bytes, elf.len - offset);
+            encodeHex(elf[offset..][0..take], hex_buf[0 .. take * 2]);
+            const ack = try self.peer.request(std.heap.page_allocator, .{
+                .op = .flash_chunk,
+                .probe_id = self.descriptor.probe_id,
+                .board_id = self.descriptor.board_id,
+                .token = self.token,
+                .offset = @intCast(offset),
+                .hex = hex_buf[0 .. take * 2],
+            }, &scratch);
+            defer ack.deinit();
+            if (!ack.value.ok) return wire.mapError(ack.value.err);
+            offset += take;
+        }
+    }
+
     fn perform(context: *anyopaque, action: model.Action, out: []u8) ![]const u8 {
         const self: *Target = @ptrCast(@alignCast(context));
         if (self.token == 0) return error.NotReserved;
@@ -126,6 +185,14 @@ pub const Target = struct {
         return self.uart[side][0..port.len];
     }
 };
+
+fn encodeHex(src: []const u8, dst: []u8) void {
+    const digits = "0123456789abcdef";
+    for (src, 0..) |byte, i| {
+        dst[i * 2] = digits[byte >> 4];
+        dst[i * 2 + 1] = digits[byte & 0x0f];
+    }
+}
 
 pub fn scanHosts(hosts: []Host, targets: []Target, registry: *model.Registry) void {
     for (hosts) |*peer| {

@@ -28,6 +28,9 @@ pub const Binding = struct {
     device: []const u8 = "",
     cpuid: []const u8 = "",
     uart_wired: bool = true,
+    flash_enabled: bool = false,
+    flash_base: u32 = 0,
+    flash_size: u32 = 0,
 };
 pub const Provider = struct {
     binding: Binding,
@@ -292,6 +295,9 @@ fn describe(binding: Binding) !model.Descriptor {
     descriptor.capabilities = .{};
     descriptor.connection = .configured;
     descriptor.uart = "";
+    if (binding.kind != .jlink and (binding.flash_enabled or binding.flash_base != 0 or binding.flash_size != 0)) {
+        return error.InvalidEndpoint;
+    }
     switch (binding.kind) {
         .rsp => {
             if (binding.port == 0 or binding.host.len == 0) return error.InvalidEndpoint;
@@ -309,8 +315,9 @@ fn describe(binding: Binding) !model.Descriptor {
             descriptor.identity_verified = false;
             descriptor.disambiguation = "";
             const has_uart = binding.uart_wired and jlink.hostSupportsUart();
-            descriptor.operations = if (has_uart) jlink.operations_uart else jlink.operations_debug;
+            descriptor.operations = jlink.operationsFor(binding.flash_enabled, has_uart);
             descriptor.capabilities.hardware_debug = true;
+            descriptor.capabilities.flash = binding.flash_enabled;
             descriptor.capabilities.uart = has_uart;
         },
         .agent => {

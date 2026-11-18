@@ -17,6 +17,7 @@ const session_rtc = @import("ra8_session").rtc;
 const session_symbols = @import("ra8_session").symbols;
 const source_spec = @import("ra8_host").camera.source_spec;
 const stop_machine = @import("ra8_session").stop_machine;
+const target_progress = @import("../target_progress.zig");
 const transport_mod = @import("ra8_session").transport;
 const workspace_watch = @import("../workspace_watch.zig");
 
@@ -115,8 +116,8 @@ pub const Context = struct {
     session_feed: ?usize = null,
     /// The event-stream queue read for the trace topic (RA8EMU-832).
     trace_feed: ?usize = null,
-    /// The in-flight chunked load (RA8EMU-1174).
-    chunks: load_chunks.Assembler = .{},
+    chunks: load_chunks.Assembler = .{}, // in-flight chunked load (RA8EMU-1174)
+    target_flash: target_progress.State = .{}, // hardware flash chunks + stage ring (RA8EMU-1252)
     /// Owns captured panel frames; null, or no display, refuses lcd_dirty.
     gpa: ?std.mem.Allocator = null,
     /// The run file's snapshot and restore, when the server has one.

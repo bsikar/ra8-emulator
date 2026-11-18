@@ -42,6 +42,7 @@ pub const served_setup = @import("served_setup.zig");
 pub const session = @import("session/session.zig");
 pub const socket_transport = @import("socket_transport.zig");
 pub const stdio_transport = @import("stdio_transport.zig");
+pub const target_progress = @import("target_progress.zig");
 pub const targets = @import("targets.zig");
 pub const targets_wire = @import("targets_wire.zig");
 pub const workspace = @import("workspace.zig");
