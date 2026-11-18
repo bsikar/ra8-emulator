@@ -1,0 +1,130 @@
+<aside class="branch-side">
+  <section class="sec">
+    <div class="sec-head">
+      <app-section-kicker label="EXECUTION BRANCHES" />
+      <div class="head-right">
+        <span class="es-meta mono" data-testid="rewind-branch-count">{{ rewind.branches().length }} ACTIVE</span>
+        <button
+          type="button"
+          class="mini-btn"
+          data-testid="rewind-refresh-btn"
+          [disabled]="!rpc.isConnected()"
+          (click)="rewind.refreshBranches()"
+        >
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    @if (!rewind.historySupported()) {
+      <p class="es-meta note">
+        {{ rpc.isConnected() ? 'Start emulator with --history to record deterministic checkpoints.' : 'Connect a session to inspect execution history.' }}
+      </p>
+    } @else if (rewind.branches().length > 0) {
+      @for (b of rewind.branches(); track b.id) {
+        <div class="branch-card" [class.is-live]="b.isLive">
+          <div class="card-top">
+            <span class="mono branch-id">#{{ b.id }} · {{ reasonLabel(b.reason) }}</span>
+            <div class="badge-row">
+              @if (b.isPinned) {
+                <span class="badge mono">Pinned</span>
+              }
+              @if (b.isKept && !b.isLive) {
+                <span class="badge mono">Kept</span>
+              }
+              <span class="badge mono" [class.live]="b.isLive">{{ b.isLive ? 'LIVE' : 'END r' + b.recordedEndR.toString() }}</span>
+            </div>
+          </div>
+          <div class="es-meta mono">
+            @if (b.id !== b.parent) {
+              <span>from #{{ b.parent }} &#64; r{{ b.forkR }} · </span>
+            }
+            <span>r{{ b.forkR }}..r{{ b.recordedEndR }}</span>
+            @if (b.childCount > 0) {
+              <span> · {{ b.childCount }} child</span>
+            }
+          </div>
+          <div class="card-actions">
+            <button
+              type="button"
+              class="mini-btn"
+              [attr.data-testid]="'rewind-switch-' + b.id"
+              [disabled]="b.isLive || rpc.observeOnly()"
+              (click)="rewind.switchBranch(b.id)"
+            >
+              Switch
+            </button>
+            <button
+              type="button"
+              class="mini-btn"
+              [attr.data-testid]="'rewind-delete-' + b.id"
+              [disabled]="b.id === 0 || b.isLive || rpc.observeOnly()"
+              (click)="rewind.deleteBranch(b.id, true)"
+            >
+              Prune
+            </button>
+          </div>
+        </div>
+      }
+    }
+  </section>
+
+  <section class="sec">
+    <div class="sec-head">
+      <app-section-kicker label="SCRUB CACHE & STORAGE" />
+      <span class="es-meta mono" data-testid="rewind-active-cursor">{{ activeBranchLabel() }}</span>
+    </div>
+    @if (rewind.frameStatus(); as fs) {
+      <div class="cache-grid mono" data-testid="rewind-frame-status">
+        <span>Frames</span>
+        <span class="val">{{ fs.frames.toString() }} hot · {{ fs.decodedSegments.toString() }} dec</span>
+        <span>RAM Cache</span>
+        <span class="val">{{ formatBytes(fs.ramBytes) }}</span>
+        <span>Disk Store</span>
+        <span class="val">{{ formatBytes(fs.diskBytes) }}</span>
+        <span>Queue</span>
+        <span class="val">{{ formatBytes(fs.queueBytes) }}</span>
+      </div>
+    } @else {
+      <p class="es-meta note">Frame cache telemetry idle until history checkpoints are active.</p>
+    }
+  </section>
+
+  <section class="sec">
+    <app-section-kicker label="BOOKMARKS" />
+    @if (bookmarks().length > 0) {
+      @for (bm of bookmarks(); track bm.name) {
+        <button
+          type="button"
+          class="bm-row mono"
+          [attr.data-testid]="'rewind-bm-' + bm.name"
+          (click)="rewind.seekTo('bm ' + bm.name)"
+        >
+          <span class="bm-name">{{ bm.name }}</span>
+          <span class="es-meta">b{{ bm.branch }}:r{{ bm.r.toString() }} · {{ bm.place }}</span>
+        </button>
+      }
+    } @else {
+      <p class="es-meta note">Use + Bookmark above to arm a seekable marker.</p>
+    }
+  </section>
+
+  <section class="sec">
+    <app-section-kicker label="SNAPSHOTS & RESTORE" />
+    <div class="snap-form">
+      <input
+        type="text"
+        class="es-input mono"
+        data-testid="rewind-snapshot-name"
+        aria-label="Snapshot filename"
+        [value]="snapName()"
+        (input)="onSnapInput($event)"
+        placeholder="checkpoint.ra8snap"
+      />
+      <div class="card-actions">
+        <button type="button" class="mini-btn" data-testid="rewind-snapshot-save" [disabled]="!canEdit()" (click)="saveSnap()">Save</button>
+        <button type="button" class="mini-btn" data-testid="rewind-snapshot-restore" [disabled]="!canEdit()" (click)="restoreSnap()">Restore</button>
+      </div>
+    </div>
+  </section>
+</aside>

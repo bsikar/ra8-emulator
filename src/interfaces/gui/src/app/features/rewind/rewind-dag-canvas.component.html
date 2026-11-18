@@ -1,0 +1,83 @@
+<div class="dag-pane">
+  <div class="dag-head">
+    <div class="head-left">
+      <app-section-kicker label="BRANCH DAG" />
+      <span class="es-meta">◆ Checkpoint · Shift+Click sets B</span>
+    </div>
+
+    <div class="mode-grp">
+      <button
+        type="button"
+        class="mini-btn"
+        [class.is-active]="clickAction() === 'seek'"
+        data-testid="rewind-click-seek"
+        (click)="clickAction.set('seek')"
+      >
+        Click: Seek
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        [class.is-active]="clickAction() === 'pinA'"
+        data-testid="rewind-click-pin-a"
+        (click)="clickAction.set('pinA')"
+      >
+        Pin A
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        [class.is-active]="clickAction() === 'pinB'"
+        data-testid="rewind-click-pin-b"
+        (click)="clickAction.set('pinB')"
+      >
+        Pin B
+      </button>
+      <span class="sep" aria-hidden="true"></span>
+      <button
+        type="button"
+        class="mini-btn"
+        [class.is-active]="layoutMode() === 'spine'"
+        data-testid="rewind-layout-spine"
+        (click)="setLayoutMode('spine')"
+      >
+        Spine: Center ±Y
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        [class.is-active]="layoutMode() === 'waterfall'"
+        data-testid="rewind-layout-waterfall"
+        (click)="setLayoutMode('waterfall')"
+      >
+        Waterfall
+      </button>
+    </div>
+  </div>
+
+  <div class="canvas-box">
+    <canvas #dagCanvas class="dag-canvas" data-testid="rewind-dag-canvas" (click)="onCanvasClick($event)"></canvas>
+  </div>
+
+  <div class="node-strip">
+    @for (node of dagLayout().nodes; track node.id + ':' + $index) {
+      <button
+        type="button"
+        class="node-chip mono"
+        [class.is-cursor]="node.isCursor"
+        [class.is-pin]="isPinNode(node.id)"
+        [attr.data-testid]="'rewind-node-' + $index"
+        (click)="onNodeChipClick($event, node.branch, node.round, node.id)"
+      >
+        {{ formatNodeChip(node) }}
+      </button>
+    }
+  </div>
+
+  <div class="dag-foot mono" data-testid="rewind-dag-summary">
+    <span>Span A→B: {{ summary().roundSpan }}</span>
+    <span>·</span>
+    <span>{{ summary().totalChanges }} changes ({{ summary().regCount }} regs, {{ summary().pageCount }} pages, {{ summary().periphCount }} MMIO)</span>
+    <span class="foot-right">Branch #{{ summary().liveBranchId }} · {{ summary().liveRound }} · {{ summary().hotFrames }} hot frames</span>
+  </div>
+</div>

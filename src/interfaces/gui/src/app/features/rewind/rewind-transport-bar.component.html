@@ -1,0 +1,199 @@
+<div class="bar-wrap">
+  <div class="bar-row">
+    <div class="grp">
+      <button
+        type="button"
+        class="mini-btn mono"
+        data-testid="rewind-step-back-btn"
+        title="Step Back (Reverse Continue)"
+        [disabled]="!canEdit()"
+        (click)="onStepBack()"
+      >
+        « Step Back
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-seek-prev"
+        title="Previous Checkpoint Frame"
+        [disabled]="!canEdit()"
+        (click)="rewind.seekPrev()"
+      >
+        ‹ Frame
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-play-back-btn"
+        title="Play Reverse"
+        [disabled]="!canEdit()"
+        (click)="rewind.play(dirBack, speedMilli())"
+      >
+        ◀ Rev
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-pause-btn"
+        title="Pause Execution"
+        [disabled]="!canEdit()"
+        (click)="onPause()"
+      >
+        ‖ Pause
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-step-fwd-btn"
+        title="Step Forward"
+        [disabled]="!canEdit()"
+        (click)="onStepForward()"
+      >
+        Step ›
+      </button>
+      <button
+        type="button"
+        class="mini-btn mono"
+        data-testid="rewind-advance-btn"
+        title="Advance Virtual Time (+8ms)"
+        [disabled]="!canEdit()"
+        (click)="onAdvanceSlice()"
+      >
+        +8ms
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-play-fwd-btn"
+        title="Play Forward"
+        [disabled]="!canEdit()"
+        (click)="rewind.play(dirFwd, speedMilli())"
+      >
+        Fwd ▶
+      </button>
+      <select class="es-select mono" aria-label="Playback speed" [value]="speedPreset()" (change)="onSpeedChange($event)">
+        <option value="250">0.25x</option>
+        <option value="1000">1x</option>
+        <option value="4000">4x</option>
+      </select>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-seek-zero"
+        title="Seek to Origin Round"
+        [disabled]="!canEdit()"
+        (click)="seekOrigin()"
+      >
+        Origin
+      </button>
+    </div>
+
+    <div class="grp">
+      <button type="button" class="mini-btn" data-testid="rewind-isr-prev-btn" [disabled]="!canEdit()" (click)="rewind.seekTo('isr prev')">Prev ISR</button>
+      <button type="button" class="mini-btn" data-testid="rewind-isr-next-btn" [disabled]="!canEdit()" (click)="rewind.seekTo('isr next')">Next ISR</button>
+      <button type="button" class="mini-btn" data-testid="rewind-rtos-prev-btn" [disabled]="!canEdit()" (click)="rewind.seekTo('rtos prev')">Prev RTOS</button>
+      <button type="button" class="mini-btn" data-testid="rewind-rtos-next-btn" [disabled]="!canEdit()" (click)="rewind.seekTo('rtos next')">Next RTOS</button>
+    </div>
+
+    <form class="grp" (submit)="onSeekSubmit($event)">
+      <input
+        type="text"
+        class="es-input mono"
+        data-testid="rewind-seek-input"
+        aria-label="Seek target"
+        [value]="seekDraft()"
+        (input)="onSeekInput($event)"
+        placeholder="frame 1, iter 4, bm..."
+      />
+      <button type="submit" class="mini-btn accent" data-testid="rewind-seek-btn" [disabled]="!canEdit()">Seek</button>
+    </form>
+
+    <div class="grp">
+      <button
+        type="button"
+        class="mini-btn"
+        [class.accent]="bookmarkBarOpen()"
+        data-testid="rewind-bookmark-toggle"
+        (click)="toggleBookmarkBar()"
+      >
+        + Bookmark
+      </button>
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-export-tar-btn"
+        [disabled]="!canExport()"
+        (click)="onExportBundle()"
+      >
+        Export Session (.tar)
+      </button>
+    </div>
+  </div>
+
+  @if (bookmarkBarOpen()) {
+    <div class="bar-row secondary" data-testid="rewind-bookmark-drawer">
+      <form class="grp" (submit)="onMarkerSubmit($event)">
+        <span class="es-kicker">BOOKMARK MARKER</span>
+        <input
+          type="text"
+          class="es-input short mono"
+          data-testid="rewind-marker-name"
+          aria-label="Bookmark name"
+          [value]="markerName()"
+          (input)="onMarkerNameInput($event)"
+          placeholder="Marker name"
+        />
+        <input
+          type="text"
+          class="es-input short mono"
+          data-testid="rewind-marker-place"
+          aria-label="Bookmark address or symbol"
+          [value]="markerPlace()"
+          (input)="onMarkerPlaceInput($event)"
+          placeholder="Address or symbol"
+        />
+        <button type="submit" class="mini-btn accent" data-testid="rewind-marker-btn" [disabled]="!canEdit()">Set Marker</button>
+      </form>
+
+      <form class="grp" (submit)="onNavSubmit($event)">
+        <span class="es-kicker">NAV QUERY</span>
+        <select class="es-select" aria-label="Navigation query kind" [value]="navKind()" (change)="onNavKindChange($event)">
+          <option value="frame">Frame</option>
+          <option value="iter">Iteration</option>
+          <option value="isr">ISR</option>
+          <option value="rtos">RTOS</option>
+          <option value="marker">Marker</option>
+        </select>
+        <input
+          type="text"
+          class="es-input short mono"
+          data-testid="rewind-nav-arg"
+          aria-label="Navigation query index or name"
+          [value]="navArg()"
+          (input)="onNavArgInput($event)"
+          placeholder="Index or name"
+        />
+        <button type="submit" class="mini-btn" data-testid="rewind-nav-btn" [disabled]="!rpc.isConnected()">Query</button>
+        @if (rewind.lastNavResult(); as nav) {
+          <span class="es-meta mono" data-testid="rewind-nav-readout">{{ formatNavSummary(nav) }}</span>
+        }
+      </form>
+    </div>
+  }
+
+  @if (rpc.isConnected() && !rewind.historySupported()) {
+    <div class="notice-banner" data-testid="rewind-no-history-banner" role="status">
+      <span class="notice-msg">History recording is disabled on this session. Start the emulator with <code class="mono">--history DIR</code> to enable deterministic rewind, branches, and state diff.</span>
+    </div>
+  }
+
+  @if (rewind.pendingForkPrompt()) {
+    <div class="fork-banner" data-testid="rewind-fork-banner" role="alert">
+      <span class="fork-msg">{{ forkPromptText() }}</span>
+      <div class="grp">
+        <button type="button" class="mini-btn accent" data-testid="rewind-confirm-fork" (click)="rewind.confirmFork()">Confirm Fork</button>
+        <button type="button" class="mini-btn" data-testid="rewind-cancel-fork" (click)="rewind.cancelFork()">Cancel</button>
+      </div>
+    </div>
+  }
+</div>
