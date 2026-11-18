@@ -16,6 +16,7 @@ const served_media = @import("served_media.zig");
 
 const std = @import("std");
 
+const catalog = @import("ra8_chip").core.machine.catalog;
 const history = @import("ra8_host").history;
 const history_segments = @import("history_segments.zig");
 const object_read = @import("object_read.zig");
@@ -103,6 +104,8 @@ pub const Options = struct {
     prepare: ?Prepare = null,
     /// The RAM the replay machine may use; null sizes it from the host.
     ram_budget: u64 = 256 * 1024 * 1024,
+    /// Explicit machine description; null uses `catalog.ra8p1`.
+    machine: ?*const session_lib.api.Machine = null,
 };
 
 /// A checkpoint count no run reaches: the replay machine takes none of its own.
@@ -140,13 +143,15 @@ pub fn run(
         keep,
     )) orelse return Error.NoRoot;
     const root = try history_root.decode(root_bytes);
-    try validity.check(root);
+    const chosen = options.machine orelse &catalog.ra8p1;
+    try validity.checkFor(root, chosen.name);
+    if (root.elf1 != null and !chosen.hasSecond()) return Error.UnsupportedRootPart;
     const log = try history_segments.readAll(keep, store);
     const found = try seek_facts.gather(allocator, log);
     defer allocator.free(found.checkpoints);
     const line = try rootLine(keep, found.checkpoints);
     if (line.len == 0) return Error.NoRootCheckpoints;
-    try checkLine(allocator, io, store, root, line);
+    try checkLine(allocator, io, store, root, chosen, line);
     const media = if (root.media) |id| try served_media.read(keep, store, id) else null;
     const rebuilt = try std.Io.Dir.cwd().readFileAlloc(io, rebuilt_path, keep, .limited(history_root.max_elf));
 
@@ -158,7 +163,7 @@ pub fn run(
         root.board_profile,
         .{ .ram_budget = options.ram_budget, .checkpoint_every = never, .elf_bytes = rebuilt },
         if (root.elf1) |image| .{ .bytes = image.bytes } else null,
-        .{ .media = media },
+        .{ .media = media, .machine = options.machine },
     );
     defer served.deinit();
     if (options.prepare) |hook| try hook.prepareFn(hook.context, &served, log);
@@ -220,6 +225,7 @@ fn checkLine(
     io: std.Io,
     store: history.storage.Store,
     root: history_root.Root,
+    machine: *const session_lib.api.Machine,
     line: []const seek_engine.Checkpoint,
 ) !void {
     // The existing snapshot owner validates every section and attachment.
@@ -228,7 +234,7 @@ fn checkLine(
     var validator = try session_lib.harness.open(
         gpa,
         io,
-        .{ .elf_path = "", .elf_bytes = root.elf0.bytes, .board_profile = root.board_profile },
+        .{ .elf_path = "", .elf_bytes = root.elf0.bytes, .board_profile = root.board_profile, .machine = machine },
     );
     defer validator.deinit();
     var second: session_lib.cpu1.bringup.Cpu1 = .{};

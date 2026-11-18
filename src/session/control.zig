@@ -8,6 +8,18 @@ const api = @import("api.zig");
 const itm = @import("ra8_chip").periph.itm;
 const stop_machine = @import("stop_machine.zig");
 
+pub fn checkRegister(session: *const api.Session, core: api.Core, which: api.Register) api.Error!void {
+    const info = session.coreInfo(core) orelse return api.Error.CoreNotAttached;
+    if (which == .vpr and !info.mve) return api.Error.UnsupportedRegister;
+    if (isFpRegister(which) and !info.hasFpu()) return api.Error.UnsupportedRegister;
+}
+
+fn isFpRegister(which: api.Register) bool {
+    if (which == .fpscr) return true;
+    const tag = @backingInt(which);
+    return tag >= @backingInt(api.Register.s0) and tag <= @backingInt(api.Register.s31);
+}
+
 pub fn rewind(session: *api.Session, core: api.Core, back: u32) anyerror!void {
     if (session.persistent_recorder) |rec| try rec.force();
     try session.select(core);
@@ -17,7 +29,22 @@ pub fn rewind(session: *api.Session, core: api.Core, back: u32) anyerror!void {
 }
 
 pub fn stepBack(session: *api.Session, core: api.Core) anyerror!void {
-    return rewind(session, core, 1);
+    const h = session.history orelse return api.Error.NoHistory;
+    return rewind(session, core, h.cursor + 1);
+}
+
+pub fn reverseContinue(session: *api.Session, core: api.Core) anyerror!void {
+    const h = session.history orelse return api.Error.NoHistory;
+    if (h.len() == 0) return api.History.Error.NotRecorded;
+    const machine = try session.machine(core);
+    var at = h.cursor + 1;
+    while (at < h.len()) : (at += 1) {
+        const frame_info = try h.frame(at);
+        if (frame_info.tag == 1 or machine.breaks.hit(frame_info.pc) != null) break;
+    }
+    if (at >= h.len()) at = h.len() - 1;
+    if (at <= h.cursor) return api.History.Error.NotRecorded;
+    return rewind(session, core, at);
 }
 
 pub fn interrupt(session: *api.Session, core: api.Core) anyerror!stop_machine.Stop {

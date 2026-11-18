@@ -32,6 +32,8 @@ pub const History = struct {
     /// Index of the oldest live frame; the newest is one behind head + count.
     head: usize = 0,
     count: u32 = 0,
+    /// Stops behind the newest frame that the last `restore` landed on.
+    cursor: u32 = 0,
     /// The persistent recorder (slice 16), when the session streams its
     /// history into an application-owned store beside this ring.
     recorder: ?*recorder_mod.Recorder = null,
@@ -123,6 +125,7 @@ pub const History = struct {
                 .{ .bytes = bytes, .pc = pc, .tag = tag, .at_ns = at_ns };
             self.head = (self.head + 1) % self.capacity;
         }
+        self.cursor = 0;
     }
 
     /// Puts the run back to a state the persisted history kept: the save
@@ -130,12 +133,14 @@ pub const History = struct {
     /// twice-replay comparison restores from these and re-runs forward.
     pub fn restoreBytes(self: *History, bytes: []const u8) anyerror!void {
         try self.files.readFrom(bytes);
+        self.cursor = 0;
     }
 
     /// Puts the run back `back` stops behind the newest; back 0 is the
     /// newest frame itself. A slot the ring has not reached refuses.
     pub fn restore(self: *History, back: u32) anyerror!void {
         try self.files.readFrom((try self.frame(back)).bytes);
+        self.cursor = back;
     }
 
     /// The frame `back` stops behind the newest, for callers showing the

@@ -4,6 +4,7 @@ const std = @import("std");
 const inspection = @import("inspection.zig");
 const p = @import("protocol.zig");
 const Points = @import("points.zig").Points;
+const reverse = @import("reverse.zig");
 const session = @import("ra8_session");
 
 pub const Target = inspection.Target;
@@ -23,6 +24,7 @@ pub const Adapter = struct {
     closed: bool = false,
     inspect: inspection.Inspection = .{},
     points: Points = .{},
+    stopped_after: ?reverse.Stop = null,
     /// Pending wire operation, not a copy of the stop machine's mode or target.
     pending: ?struct { core: session.api.Core, first: ?session.api.Run } = null,
 
@@ -69,6 +71,10 @@ pub const Adapter = struct {
             ) else try self.start(self.target.?.session.currentCore(), .cont);
         }
         if (equal(command, "pause")) try self.stopped(out, self.target.?.session.currentCore(), "pause");
+        if (self.stopped_after) |stop| {
+            self.stopped_after = null;
+            try self.stopped(out, stop.core, stop.reason);
+        }
         if (equal(command, "disconnect")) try self.event(out, "terminated", @as(struct {}, .{}));
     }
 
@@ -76,12 +82,7 @@ pub const Adapter = struct {
         if (equal(command, "initialize")) return self.initialize(args, out);
         if (!self.initialized or self.closed) return error.InvalidState;
         if (equal(command, "launch") or equal(command, "attach")) return self.connect(args, equal(command, "launch"));
-        if (equal(command, "disconnect")) {
-            if (self.target) |t| _ = try t.session.interrupt(t.session.currentCore());
-            self.pending = null;
-            self.closed = true;
-            return;
-        }
+        if (equal(command, "disconnect")) return self.disconnect();
         if (!self.connected) return error.NotAttached;
         const target = self.target.?;
         if (equal(command, "pause")) {
@@ -91,22 +92,23 @@ pub const Adapter = struct {
             return;
         }
         if (self.pending != null) return error.notStopped;
-        if (equal(command, "configurationDone")) {
-            if (self.configured) return error.InvalidState;
-            self.configured = true;
-            return;
-        }
+        if (equal(command, "configurationDone")) return self.configure();
+        if (try self.queryOrBreak(target, command, args, out)) return;
+        return self.execute(target, command, args, out);
+    }
+
+    fn queryOrBreak(self: *Adapter, target: Target, command: []const u8, args: p.Value, out: *std.Io.Writer) !bool {
         if (equal(command, "setExceptionBreakpoints")) {
             if ((try p.list(p.get(args, "filters"))).len != 0) return error.UnsupportedExceptionFilter;
-            return out.writeAll("{\"breakpoints\":[]}");
+            try out.writeAll("{\"breakpoints\":[]}");
+            return true;
         }
         if (equal(command, "threads")) {
-            try out.writeAll("{\"threads\":[{\"id\":1,\"name\":\"CPU0\"}");
-            if (target.session.hasCore(.cpu1)) try out.writeAll(",{\"id\":2,\"name\":\"CPU1\"}");
-            return out.writeAll("]}");
+            try writeThreads(target, out);
+            return true;
         }
         if (equal(command, "setBreakpoints") or equal(command, "setInstructionBreakpoints")) {
-            return self.points.replaceMapped(
+            try self.points.replaceMapped(
                 self.allocator,
                 target.session,
                 target.images[@backingInt(target.session.currentCore())],
@@ -116,10 +118,39 @@ pub const Adapter = struct {
                 self.inspect.lines_start_at_one,
                 target.sources,
             );
+            return true;
         }
-        if (equal(command, "stackTrace")) return self.inspect.stackTrace(target, args, out);
-        if (equal(command, "scopes")) return self.inspect.scopes(target, args, out);
-        if (equal(command, "variables")) return self.inspect.variables(target, args, out);
+        if (equal(command, "stackTrace")) {
+            try self.inspect.stackTrace(target, args, out);
+            return true;
+        }
+        if (equal(command, "scopes")) {
+            try self.inspect.scopes(target, args, out);
+            return true;
+        }
+        if (equal(command, "variables")) {
+            try self.inspect.variables(target, args, out);
+            return true;
+        }
+        return false;
+    }
+
+    fn disconnect(self: *Adapter) !void {
+        if (self.target) |t| _ = try t.session.interrupt(t.session.currentCore());
+        self.pending = null;
+        self.closed = true;
+    }
+
+    fn configure(self: *Adapter) !void {
+        if (self.configured) return error.InvalidState;
+        self.configured = true;
+    }
+
+    fn execute(self: *Adapter, target: Target, command: []const u8, args: p.Value, out: *std.Io.Writer) !void {
+        if (reverse.handles(command)) {
+            self.stopped_after = try reverse.run(target, &self.inspect, &self.points, self.configured, command, args);
+            return;
+        }
         const run: session.api.Run = if (equal(command, "continue"))
             .cont
         else if (equal(command, "stepIn"))
@@ -147,15 +178,29 @@ pub const Adapter = struct {
         if (format != .null and !equal(try p.text(format), "path")) return error.UnsupportedPathFormat;
         self.inspect.lines_start_at_one = try boolean(args, "linesStartAt1", true);
         self.inspect.columns_start_at_one = try boolean(args, "columnsStartAt1", true);
-        try p.quote(
-            out,
-            .{
-                .supportsConfigurationDoneRequest = true,
-                .supportsInstructionBreakpoints = true,
-                .supportsSteppingGranularity = true,
-                .exceptionBreakpointFilters = @as([]const struct {}, &.{}),
-            },
-        );
+        if (reverse.supported(self.target)) {
+            try p.quote(
+                out,
+                .{
+                    .supportsConfigurationDoneRequest = true,
+                    .supportsInstructionBreakpoints = true,
+                    .supportsSteppingGranularity = true,
+                    .supportsStepBack = true,
+                    .supportsRestartRequest = true,
+                    .exceptionBreakpointFilters = @as([]const struct {}, &.{}),
+                },
+            );
+        } else {
+            try p.quote(
+                out,
+                .{
+                    .supportsConfigurationDoneRequest = true,
+                    .supportsInstructionBreakpoints = true,
+                    .supportsSteppingGranularity = true,
+                    .exceptionBreakpointFilters = @as([]const struct {}, &.{}),
+                },
+            );
+        }
         self.initialized = true;
     }
 
@@ -229,6 +274,23 @@ pub const Adapter = struct {
         try p.event(self.allocator, out, try self.nextSeq(), name, body);
     }
 };
+
+fn writeThreads(target: Target, out: *std.Io.Writer) !void {
+    try out.writeAll("{\"threads\":[{\"id\":1,\"name\":");
+    if (!target.session.machine_desc.hasSecond()) {
+        const info = target.session.coreInfo(.cpu0) orelse return error.UnknownThread;
+        var buf: [64]u8 = undefined;
+        const name = try std.fmt.bufPrint(&buf, "CPU0 ({s})", .{info.name});
+        try p.quote(out, name);
+        return out.writeAll("}]}");
+    }
+    try p.quote(out, "CPU0");
+    if (target.session.hasCore(.cpu1)) {
+        try out.writeAll("},{\"id\":2,\"name\":\"CPU1\"}]}");
+        return;
+    }
+    return out.writeAll("}]}");
+}
 
 fn equal(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);

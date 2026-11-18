@@ -34,7 +34,7 @@ pub const Inspection = struct {
             2 => .cpu1,
             else => return error.UnknownThread,
         };
-        if (!target.session.hasCore(core)) return error.UnknownThread;
+        if (target.session.coreInfo(core) == null) return error.UnknownThread;
         return core;
     }
 
@@ -200,7 +200,7 @@ pub const Inspection = struct {
     fn decode(self: *Inspection, target: Target, id: u32) !Frame {
         if (id / 64 != self.epoch) return error.InvalidReference;
         const core: session.api.Core = if (id % 64 >= 32) .cpu1 else .cpu0;
-        if (!target.session.hasCore(core)) return error.UnknownThread;
+        if (target.session.coreInfo(core) == null) return error.UnknownThread;
         // Validate by walking again, so fabricated frame ids cannot expose data.
         const view = try target.session.view(core);
         const image = target.images[@backingInt(core)];

@@ -4,3 +4,4 @@ pub const framing = @import("framing.zig");
 pub const inspection = @import("inspection.zig");
 pub const points = @import("points.zig");
 pub const protocol = @import("protocol.zig");
+pub const reverse = @import("reverse.zig");

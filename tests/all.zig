@@ -127,6 +127,7 @@ test {
     _ = @import("interfaces/dap/adapter_test.zig");
     _ = @import("interfaces/dap/inspection_test.zig");
     _ = @import("interfaces/dap/points_test.zig");
+    _ = @import("interfaces/dap/reverse_test.zig");
     _ = @import("session/run_slice_test.zig");
     _ = @import("board/image/elf_test.zig");
     _ = @import("chip/core/idle_test.zig");

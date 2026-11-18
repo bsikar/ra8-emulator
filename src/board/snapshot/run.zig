@@ -95,7 +95,7 @@ pub fn saveCores(writer: anytype, cores: []const *const Cpu, identity: Identity)
 }
 
 pub fn check(bytes: []const u8, board: anytype) !void {
-    try board_snap.partOf(board.part, bytes);
+    try board_snap.machineOf(board_snap.boardDesc(board), bytes);
     _ = try file.Reader.find(bytes, .memory) orelse return Error.Missing;
 }
 
@@ -178,7 +178,7 @@ fn prepareMode(
     parts: Parts,
 ) !Prepared(@TypeOf(board.*)) {
     if (stores.len == 0 or stores.len > 2 or cores.len == 0 or cores.len > 2) return Error.BadValue;
-    if (parts.memory) try check(bytes, board) else try board_snap.partOf(board.part, bytes);
+    if (parts.memory) try check(bytes, board) else try board_snap.machineOf(board_snap.boardDesc(board), bytes);
     try checkImage(bytes, identity);
     var memories: [2]?memory.Prepared = @splat(null);
     errdefer for (&memories) |*held| if (held.*) |*one| one.deinit();

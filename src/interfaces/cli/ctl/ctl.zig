@@ -2,6 +2,7 @@
 
 pub const args = @import("args.zig");
 pub const branch = @import("branch.zig");
+pub const cores = @import("cores.zig");
 pub const diff = @import("diff.zig");
 pub const disasm = @import("disasm.zig");
 pub const discovery = @import("discovery.zig");

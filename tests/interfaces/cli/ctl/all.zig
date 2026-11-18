@@ -4,4 +4,5 @@ test {
     _ = @import("write_test.zig");
     _ = @import("diff_test.zig");
     _ = @import("set_var_test.zig");
+    _ = @import("cores_test.zig");
 }

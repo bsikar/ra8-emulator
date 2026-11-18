@@ -66,4 +66,5 @@ pub const Method = enum(u16) {
     reset_image = 0x013F,
     disassemble = 0x01A0,
     list_cores = 0x01A1,
+    step_back = 0x01A2,
 };

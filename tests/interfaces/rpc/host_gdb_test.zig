@@ -1,10 +1,16 @@
 const std = @import("std");
+
+const builtin = @import("builtin");
 const ra8 = @import("ra8");
-const ready = ra8.host.sock.ready;
-const listener_mod = ra8.rpc.host_listener;
-const served_setup = ra8.rpc.served_setup;
 const slow_peer = @import("slow_peer.zig");
+
+const elf = ra8.board.image.elf;
 const io = std.testing.io;
+const listener_mod = ra8.rpc.host_listener;
+const machine_mod = ra8.chip.core.machine;
+const memmap = ra8.chip.core.memmap;
+const ready = ra8.host.sock.ready;
+const served_setup = ra8.rpc.served_setup;
 
 fn homePath(gpa: std.mem.Allocator) ![]u8 {
     const parent = if (@import("builtin").os.tag == .windows)
@@ -142,4 +148,167 @@ test "host GDB sends port 0's console text as O packets ahead of the stop reply"
     const stop = try packet(host, client, &buffer);
     try std.testing.expect(stop.len > 1 and (stop[1] == 'T' or stop[1] == 'S'));
     try std.testing.expectEqual(@as(usize, 0), itmp.output().len);
+}
+
+const sole_m33: machine_mod.Machine = .{
+    .name = "sole-m33",
+    .label = "SOLE-M33",
+    .cores = .{
+        .primary = machine_mod.core.cortexM33(.{
+            .security = false,
+            .fpu = .single,
+            .systicks = 1,
+        }),
+    },
+    .part = .ra8d2,
+};
+
+fn soleM33Elf() [0x2000]u8 {
+    const page: usize = 0x1000;
+    const reset_at: u32 = memmap.mram_base + 0x40;
+    var file: [0x2000]u8 align(@alignOf(elf.Header)) = @splat(0);
+    const head: *elf.Header = @ptrCast(@alignCast(&file[0]));
+    head.* = .{
+        .magic = .{ 0x7f, 'E', 'L', 'F' },
+        .class = 1,
+        .data = 1,
+        .version = 1,
+        .osabi = 0,
+        .abiversion = 0,
+        .pad = @splat(0),
+        .e_type = 2,
+        .e_machine = elf.em_arm,
+        .e_version = 1,
+        .e_entry = reset_at | 1,
+        .e_phoff = @sizeOf(elf.Header),
+        .e_shoff = 0,
+        .e_flags = 0,
+        .e_ehsize = @sizeOf(elf.Header),
+        .e_phentsize = @sizeOf(elf.ProgramHeader),
+        .e_phnum = 1,
+        .e_shentsize = 0,
+        .e_shnum = 0,
+        .e_shstrndx = 0,
+    };
+    const ph: *elf.ProgramHeader = @ptrCast(@alignCast(&file[@sizeOf(elf.Header)]));
+    ph.* = .{
+        .p_type = elf.pt_load,
+        .p_offset = page,
+        .p_vaddr = memmap.mram_base,
+        .p_paddr = memmap.mram_base,
+        .p_filesz = 0x100,
+        .p_memsz = 0x100,
+        .p_flags = 5,
+        .p_align = 4,
+    };
+    std.mem.writeInt(u32, file[page..][0..4], memmap.sram_base + 0x800, .little);
+    std.mem.writeInt(u32, file[page + 4 ..][0..4], reset_at | 1, .little);
+    const code = [_]u16{ 0x2001, 0x3002, 0x3003, 0xE7FE };
+    for (code, 0..) |hw, i| {
+        std.mem.writeInt(u16, file[page + 0x40 + i * 2 ..][0..2], hw, .little);
+    }
+    return file;
+}
+
+fn findGdbBinary(gpa: std.mem.Allocator) !?[]u8 {
+    if (builtin.os.tag == .windows) {
+        const win_arm =
+            "C:\\Program Files (x86)\\Arm GNU Toolchain arm-none-eabi\\14.2 rel1\\bin\\arm-none-eabi-gdb.exe";
+        if (std.Io.Dir.accessAbsolute(io, win_arm, .{})) |_| return try gpa.dupe(u8, win_arm) else |_| {}
+    }
+    for ([_][]const u8{ "arm-none-eabi-gdb", "gdb-multiarch" }) |name| {
+        var child = std.process.spawn(io, .{
+            .argv = &.{ name, "--version" },
+            .stdin = .ignore,
+            .stdout = .ignore,
+            .stderr = .ignore,
+        }) catch continue;
+        if ((child.wait(io) catch continue).success()) return try gpa.dupe(u8, name);
+    }
+    return null;
+}
+
+test "real GDB client attaches to sole-M33, reads armv8-m.main, sees one thread, steps and breaks" {
+    const gpa = std.testing.allocator;
+    const gdb_bin = (try findGdbBinary(gpa)) orelse return error.SkipZigTest;
+    defer gpa.free(gdb_bin);
+
+    const home = try homePath(gpa);
+    defer gpa.free(home);
+    defer std.Io.Dir.cwd().deleteTree(io, home) catch {};
+    try std.Io.Dir.cwd().createDirPath(io, home);
+
+    const bytes = soleM33Elf();
+    var h = try ra8.session.harness.open(gpa, io, .{
+        .elf_bytes = &bytes,
+        .machine = &sole_m33,
+        .history_frames = 8,
+    });
+    defer h.deinit();
+
+    const listen_addr: std.Io.net.IpAddress = .{ .ip4 = .loopback(0) };
+    var server = try listen_addr.listen(io, .{ .reuse_address = true });
+    defer server.deinit(io);
+    const port = server.socket.address.getPort();
+
+    const log_raw = try std.fs.path.join(gpa, &.{ home, "gdb.log" });
+    defer gpa.free(log_raw);
+    const log_fwd = try gpa.dupe(u8, log_raw);
+    defer gpa.free(log_fwd);
+    std.mem.replaceScalar(u8, log_fwd, '\\', '/');
+    const script_path = try std.fs.path.join(gpa, &.{ home, "commands.gdb" });
+    defer gpa.free(script_path);
+    const script = try std.fmt.allocPrint(
+        gpa,
+        "set pagination off\nset confirm off\nset logging file {s}\n" ++
+            "set logging overwrite on\nset logging enabled on\n" ++
+            "target remote 127.0.0.1:{d}\nshow architecture\ninfo threads\n" ++
+            "stepi\nbreak *0x02000046\ncontinue\ninfo registers r0 pc\n" ++
+            "set logging enabled off\ndetach\nquit\n",
+        .{ log_fwd, port },
+    );
+    defer gpa.free(script);
+    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = script_path, .data = script });
+
+    var child = try std.process.spawn(io, .{
+        .argv = &.{ gdb_bin, "--nx", "--quiet", "--batch", "-x", script_path },
+        .stdin = .ignore,
+        .stdout = .ignore,
+        .stderr = .ignore,
+    });
+    errdefer child.kill(io);
+    try serveOneGdb(&server, &h);
+    try std.testing.expect((try child.wait(io)).success());
+
+    const logged = try std.Io.Dir.cwd().readFileAlloc(io, log_raw, gpa, .unlimited);
+    defer gpa.free(logged);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "armv8-m.main") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "armv8.1-m.main") == null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "CPU0 (Cortex-M33, armv8-m.main)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "Thread 2") == null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "0x6") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "0x2000046") != null);
+}
+
+fn serveOneGdb(server: *std.Io.net.Server, h: *ra8.session.harness.Harness) !void {
+    const rsp_dispatch = ra8.gdb.rsp.dispatch;
+    const rsp_poll = ra8.gdb.rsp.poll;
+    var wall_clock = ra8.session.run.pacer.HostClock.init(io);
+    const stream = try server.accept(io);
+    defer stream.close(io);
+    var socket: rsp_poll.Socket = .{ .handle = stream.socket.handle, .io = io };
+    try h.session().setRunBudget(.cpu0, rsp_poll.chunk);
+    var target: rsp_dispatch.zig_run.Target = .{
+        .session = h.session(),
+        .poll = socket.poll(),
+        .transport = h.transport(),
+        .wall = wall_clock.wall(),
+    };
+    const stub: rsp_dispatch.Dispatch = .{ .zig = &target };
+    var in: [rsp_dispatch.server.limits.chunk]u8 = undefined;
+    var out: [rsp_dispatch.server.limits.framed]u8 = undefined;
+    var reader = stream.reader(io, &in);
+    var writer = stream.writer(io, &out);
+    const end = try rsp_dispatch.server.serve(stub, &reader.interface, &writer.interface);
+    try std.testing.expectEqual(rsp_dispatch.server.End.detached, end);
 }

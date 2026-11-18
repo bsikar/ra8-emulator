@@ -19,6 +19,8 @@ pub const Command = union(enum) {
     play: ctl_nav.PlayCmd,
     rc,
     step,
+    step_back,
+    cores,
     pause,
     regs: []const proto.Register,
     mem: struct { address: u32, length: u32 },

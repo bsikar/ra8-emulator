@@ -72,8 +72,11 @@ pub const Service = struct {
             value.board_profile
         else
             self.options.profile;
+        const active_desc = self.active.owner.board().desc();
         const candidate = try importer.open(self.gpa, self.io, &reader.interface, .{
             .history_root = self.spool.base.path,
+            .expected_board = active_desc.name,
+            .machine = active_desc,
             .elf0 = first.bytes,
             .elf1 = if (second) |value| value.bytes else null,
             .board_profile = profile,

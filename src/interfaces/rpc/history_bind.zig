@@ -1,11 +1,5 @@
-//! The application-side bridge from a host history session to the
-//! harness's open options (RA8EMU-1196): the log storage and the object
-//! space the persistent recorder writes through. The session library
-//! defines the callback shapes and never opens a host file; the
-//! applications own the history root and bridge it here, next to the
-//! served sessions that use it. The bind holds the session's lease for
-//! the run and deletes the ephemeral session on close, so no history
-//! byte lands before the lifecycle is wired.
+//! Application-side bridge from a host history session to harness open options
+//! (RA8EMU-1196): log storage, object space, lease ownership, and cleanup.
 const history_references = @import("history_references.zig");
 const history_startup = @import("history_startup.zig");
 const history_validity = @import("history_validity.zig");
@@ -71,19 +65,14 @@ pub const Bind = struct {
     /// Set when this bind took over a session an earlier run recorded.
     reopened: bool = false,
 
-    /// Open a history root at `path`, made and marked when it is new,
-    /// and make the run's session in it with the lease held.
+    /// Open or reopen a leased history session at `path`.
     pub const Options = struct {
-        /// An explicit session share cap in bytes, instead of the volume's
-        /// computed share. The volume's free floor and the relief stay.
         cap: ?u64 = null,
         kept: bool = false,
-        /// Take over this kept session instead of making a new one: its
-        /// log, objects and caches are served again, and recording
-        /// continues past the line's recorded end.
         reopen: ?history.name.Id = null,
         board_profile: ?[]const u8 = null,
         images: ?*served_initial.Images = null,
+        expected_part: []const u8 = "ra8p1",
     };
 
     pub fn open(allocator: std.mem.Allocator, io: std.Io, path: []const u8, opts: Options) !*Bind {
@@ -111,13 +100,22 @@ pub const Bind = struct {
 
     /// Borrow a validated import's lease until success, then take ownership without an unlock gap.
     pub fn adopt(allocator: std.mem.Allocator, base: *history.base.Base, incoming: *history.session.Session) !*Bind {
+        return adoptFor(allocator, base, incoming, "ra8p1");
+    }
+
+    pub fn adoptFor(
+        allocator: std.mem.Allocator,
+        base: *history.base.Base,
+        incoming: *history.session.Session,
+        expected_part: []const u8,
+    ) !*Bind {
         const bind = try allocate(allocator);
         errdefer allocator.destroy(bind);
         errdefer bind.pending.deinit();
         bind.base = base.*;
         bind.session = incoming.*;
         bind.session.base = &bind.base;
-        try initialize(bind, allocator, base.io, .{ .reopen = incoming.id });
+        try initialize(bind, allocator, base.io, .{ .reopen = incoming.id, .expected_part = expected_part });
         return bind;
     }
 
@@ -264,7 +262,7 @@ pub const Bind = struct {
         if (self.root_bytes) |bytes| self.root = history_root.decode(bytes) catch null;
         if (opts.reopen == null) return;
         const root = self.root orelse return error.NoRoot;
-        try history_validity.check(root);
+        try history_validity.checkFor(root, opts.expected_part);
         if (opts.board_profile) |profile| {
             if (!std.mem.eql(u8, profile, root.board_profile)) return error.BoardProfileMismatch;
         }

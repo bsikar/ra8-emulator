@@ -2,10 +2,13 @@
 //! attached one matches byte for byte, and a file from another part, or one
 //! without a part section, is refused before anything changes.
 const std = @import("std");
+
 const ra8 = @import("ra8");
 const store_board = @import("../../interfaces/cli/store_board.zig");
+
 const Board = ra8.board.board.Board;
 const file = ra8.snapshot.file;
+const machine_mod = ra8.chip.core.machine;
 const section = ra8.board.snapshot.board;
 
 /// A store and the board attached to it, built in place so the board's
@@ -81,4 +84,84 @@ test "a file without a part section is refused" {
     try rig.build();
     defer rig.deinit();
     try std.testing.expectError(error.Missing, section.load(&rig.board, bytes.written()));
+}
+
+const sole_m33: machine_mod.Machine = .{
+    .name = "sole-m33",
+    .label = "SOLE-M33",
+    .cores = .{
+        .primary = machine_mod.core.cortexM33(.{
+            .security = false,
+            .fpu = .single,
+            .systicks = 1,
+        }),
+    },
+    .part = .ra8d2,
+};
+
+const sole_m85: machine_mod.Machine = .{
+    .name = "sole-m85",
+    .label = "SOLE-M85",
+    .cores = .{
+        .primary = machine_mod.core.cortexM85(.{
+            .security = true,
+            .fpu = .double,
+            .systicks = 2,
+        }),
+    },
+    .part = .ra8d2,
+};
+
+test "shipped D2 and P1 keep 1-byte part tags while non-catalog machines encode machine name" {
+    var d2: Rig = undefined;
+    try d2.build();
+    defer d2.deinit();
+    var d2_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer d2_bytes.deinit();
+    try saved(&d2.board, &d2_bytes);
+    const d2_part = (try file.Reader.find(d2_bytes.written(), .part)).?;
+    try std.testing.expectEqualSlices(u8, &.{0}, d2_part.payload);
+
+    d2.board.part = .ra8p1;
+    var p1_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer p1_bytes.deinit();
+    try saved(&d2.board, &p1_bytes);
+    const p1_part = (try file.Reader.find(p1_bytes.written(), .part)).?;
+    try std.testing.expectEqualSlices(u8, &.{1}, p1_part.payload);
+
+    var m33: Rig = undefined;
+    try m33.build();
+    defer m33.deinit();
+    m33.board.machine = &sole_m33;
+    m33.board.c6.reply = .{0x77};
+    var m33_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer m33_bytes.deinit();
+    try saved(&m33.board, &m33_bytes);
+    const m33_part = (try file.Reader.find(m33_bytes.written(), .part)).?;
+    try std.testing.expectEqualSlices(u8, &([_]u8{section.named_part_tag} ++ "sole-m33".*), m33_part.payload);
+
+    var m33_fresh: Rig = undefined;
+    try m33_fresh.build();
+    defer m33_fresh.deinit();
+    m33_fresh.board.machine = &sole_m33;
+    try section.load(&m33_fresh.board, m33_bytes.written());
+    try std.testing.expectEqual(@as(u8, 0x77), m33_fresh.board.c6.reply[0]);
+
+    // Cross-target refusal in every direction before mutating board state.
+    d2.board.part = .ra8d2;
+    d2.board.c6.reply = .{0x11};
+    try std.testing.expectError(error.WrongPart, section.load(&d2.board, m33_bytes.written()));
+    try std.testing.expectEqual(@as(u8, 0x11), d2.board.c6.reply[0]);
+
+    m33_fresh.board.c6.reply = .{0x22};
+    try std.testing.expectError(error.WrongPart, section.load(&m33_fresh.board, d2_bytes.written()));
+    try std.testing.expectEqual(@as(u8, 0x22), m33_fresh.board.c6.reply[0]);
+
+    var m85: Rig = undefined;
+    try m85.build();
+    defer m85.deinit();
+    m85.board.machine = &sole_m85;
+    m85.board.c6.reply = .{0x33};
+    try std.testing.expectError(error.WrongPart, section.load(&m85.board, m33_bytes.written()));
+    try std.testing.expectEqual(@as(u8, 0x33), m85.board.c6.reply[0]);
 }

@@ -35,13 +35,25 @@ pub const Error = error{
 /// and empty model/config. It cannot prove the run this build would replay.
 /// Codec compatibility remains unchanged; comparison fails closed here.
 pub fn check(r: root.Root) !void {
+    return checkFor(r, "ra8p1");
+}
+
+pub fn checkFor(r: root.Root, expected_part: []const u8) !void {
+    try checkIdentity(r, expected_part);
+    try checkConfig(r);
+}
+
+fn checkIdentity(r: root.Root, expected_part: []const u8) !void {
     try root.check(&r);
     if (std.mem.allEqual(u8, &r.emulator_commit, 0) or
         std.mem.allEqual(u8, &commit, 0)) return Error.UnknownBuildIdentity;
     if (!std.mem.eql(u8, &r.emulator_commit, &commit)) return Error.BuildMismatch;
     if (!std.mem.eql(u8, r.model_version, model)) return Error.ModelMismatch;
     if (r.snapshot_version != snapshot_version) return Error.SnapshotVersionMismatch;
-    if (!std.mem.eql(u8, r.part, "ra8p1")) return Error.UnsupportedRootPart;
+    if (r.part.len == 0 or !std.mem.eql(u8, r.part, expected_part)) return Error.UnsupportedRootPart;
+}
+
+fn checkConfig(r: root.Root) !void {
     if (r.board_profile.len == 0) return Error.MissingRootProfile;
     _ = try board.profile.parse(r.board_profile);
     if (r.memory_config.len != 0) return Error.UnsupportedRootMemory;
