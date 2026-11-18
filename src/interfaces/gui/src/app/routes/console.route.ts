@@ -1,72 +1,79 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal, untracked } from '@angular/core';
 import { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import { ConsoleStore } from '../core/stores/console.store';
-import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
-import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
+import { ExecutionStore } from '../core/stores/execution.store';
+import { type WatchTriggerRule, evaluateWatchTriggers } from '../features/console/console-model';
+import { ConsoleSidebarComponent } from '../features/console/console-sidebar.component';
+import { ConsoleStreamComponent } from '../features/console/console-stream.component';
+import { SplitPaneComponent } from '../shared/ui/split-pane.component';
 
 @Component({
   selector: 'app-console-route',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SectionKickerComponent, TonalButtonComponent],
+  imports: [SplitPaneComponent, ConsoleStreamComponent, ConsoleSidebarComponent],
   template: `
-    <div class="console-pane">
-      <div class="console-head">
-        <app-section-kicker label="UART SERIAL STREAM" />
-        <app-tonal-button [disabled]="consoleStore.entries().length === 0" (pressed)="consoleStore.clear()">
-          Clear
-        </app-tonal-button>
-      </div>
-      @if (consoleStore.filteredEntries().length > 0) {
-        <div class="console-log mono">
-          @for (entry of consoleStore.filteredEntries(); track entry.id) {
-            <div class="log-row">
-              <span class="es-meta">[CH{{ entry.channel }}]</span>
-              <span>{{ entry.text }}</span>
-            </div>
-          }
-        </div>
-      } @else {
-        <p class="es-meta empty-note">
-          {{ rpc.isConnected() ? 'No UART bytes received yet.' : 'Connect a session to stream UART output.' }}
-        </p>
-      }
+    <div class="console-shell">
+      <app-split-pane primarySize="72%" persistKey="console-split" [minPrimaryPx]="420" [minSecondaryPx]="240">
+        <app-console-stream pane-primary [symbolDecoderEnabled]="symbolDecoderEnabled()" />
+        <app-console-sidebar
+          pane-secondary
+          [symbolDecoderEnabled]="symbolDecoderEnabled()"
+          [watchRules]="watchRules()"
+          (symbolDecoderChanged)="symbolDecoderEnabled.set($event)"
+          (addRule)="onAddRule($event)"
+          (removeRule)="onRemoveRule($event)"
+        />
+      </app-split-pane>
     </div>
   `,
   styles: [
     `
-      .console-pane {
-        padding: 12px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        height: 100%;
-      }
-      .console-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--es-divider);
-      }
-      .console-log {
-        flex: 1;
-        min-height: 0;
-        overflow: auto;
-        font-size: 12px;
-      }
-      .log-row {
-        display: flex;
-        gap: 8px;
-        padding: 2px 0;
-        white-space: pre-wrap;
-      }
-      .empty-note {
-        margin: 0;
-      }
+      :host { display: block; height: 100%; min-height: 0; min-width: 0; }
+      .console-shell { height: 100%; min-height: 0; min-width: 0; background: var(--es-canvas); }
     `,
   ],
 })
 export class ConsoleRouteComponent {
-  protected readonly rpc = inject(RpcConnectionStore);
-  protected readonly consoleStore = inject(ConsoleStore);
+  private readonly rpc = inject(RpcConnectionStore);
+  private readonly consoleStore = inject(ConsoleStore);
+  private readonly execution = inject(ExecutionStore);
+
+  protected readonly symbolDecoderEnabled = signal<boolean>(true);
+  protected readonly watchRules = signal<WatchTriggerRule[]>([]);
+  private nextRuleId = 1;
+  private lastEvaluatedId = 0;
+
+  constructor() {
+    effect(() => {
+      const entries = this.consoleStore.entries();
+      const latest = entries[entries.length - 1];
+      if (!latest || latest.id <= this.lastEvaluatedId) return;
+      const fresh = entries.filter((e) => e.id > this.lastEvaluatedId && !e.isInput);
+      this.lastEvaluatedId = latest.id;
+      if (fresh.length === 0) return;
+
+      const currentRules = untracked(() => this.watchRules());
+      if (currentRules.length === 0) return;
+      let nextRules = currentRules;
+      let pauseNeeded = false;
+      for (const entry of fresh) {
+        const res = evaluateWatchTriggers(entry.text, nextRules);
+        nextRules = res.updated;
+        if (res.shouldPause) pauseNeeded = true;
+      }
+      this.watchRules.set(nextRules);
+      if (pauseNeeded && this.rpc.isConnected() && !this.rpc.observeOnly()) {
+        void this.execution.pause();
+      }
+    });
+  }
+
+  protected onAddRule(evt: { pattern: string; pauseOnMatch: boolean }): void {
+    const id = `r${this.nextRuleId++}`;
+    this.watchRules.update((list) => [...list, { id, pattern: evt.pattern, pauseOnMatch: evt.pauseOnMatch, hits: 0 }]);
+  }
+
+  protected onRemoveRule(id: string): void {
+    this.watchRules.update((list) => list.filter((item) => item.id !== id));
+  }
 }
