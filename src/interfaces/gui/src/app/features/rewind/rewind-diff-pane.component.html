@@ -1,0 +1,164 @@
+<div class="diff-pane">
+  <div class="diff-head">
+    <div class="grp">
+      <app-section-kicker label="STATE DIFF" />
+      @if (rewind.activeDiff(); as d) {
+        <span class="es-meta mono" data-testid="rewind-diff-span">
+          {{ formatSide(d.a) }} → {{ formatSide(d.b) }}
+        </span>
+      }
+    </div>
+
+    <form class="grp" (submit)="onCompareSubmit($event)">
+      <input
+        type="text"
+        class="es-input mono"
+        data-testid="rewind-diff-a"
+        aria-label="Diff Point A"
+        [value]="pointADraft()"
+        (input)="onPointAInput($event)"
+        placeholder="Point A (0)"
+      />
+      <button
+        type="button"
+        class="mini-btn"
+        data-testid="rewind-diff-swap-btn"
+        title="Swap Point A and Point B"
+        (click)="onSwapPoints()"
+      >
+        Swap A↔B
+      </button>
+      <input
+        type="text"
+        class="es-input mono"
+        data-testid="rewind-diff-b"
+        aria-label="Diff Point B"
+        [value]="pointBDraft()"
+        (input)="onPointBInput($event)"
+        placeholder="Point B (latest)"
+      />
+      <button type="submit" class="mini-btn accent" data-testid="rewind-diff-btn" [disabled]="!rpc.isConnected()">Compare</button>
+    </form>
+
+    <div class="tabs" role="tablist" aria-label="State diff category filters">
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        [class.is-active]="activeTab() === 'all'"
+        [attr.aria-selected]="activeTab() === 'all'"
+        data-testid="rewind-diff-tab-all"
+        (click)="activeTab.set('all')"
+      >
+        All Changes ({{ totalCount() }})
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        [class.is-active]="activeTab() === 'regs'"
+        [attr.aria-selected]="activeTab() === 'regs'"
+        data-testid="rewind-diff-tab-regs"
+        (click)="activeTab.set('regs')"
+      >
+        CPU Registers ({{ regs().length }})
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        [class.is-active]="activeTab() === 'pages'"
+        [attr.aria-selected]="activeTab() === 'pages'"
+        data-testid="rewind-diff-tab-pages"
+        (click)="activeTab.set('pages')"
+      >
+        Dirty CoW Pages ({{ pages().length }})
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="tab-btn"
+        [class.is-active]="activeTab() === 'periphs'"
+        [attr.aria-selected]="activeTab() === 'periphs'"
+        data-testid="rewind-diff-tab-periphs"
+        (click)="activeTab.set('periphs')"
+      >
+        Peripheral MMIO ({{ periphs().length }})
+      </button>
+    </div>
+  </div>
+
+  @if (!rewind.activeDiff()) {
+    <p class="es-meta empty-note">
+      {{ rpc.isConnected() ? 'Select Point A and Point B above and click Compare to inspect state differences.' : 'Connect a session to compare checkpoints.' }}
+    </p>
+  } @else {
+    <div class="diff-cols" [class.single-col]="activeTab() !== 'all'">
+      @if (activeTab() === 'all' || activeTab() === 'regs') {
+        <section class="diff-col" data-testid="rewind-diff-col-regs">
+          <div class="col-head">
+            <span class="es-kicker">CPU REGISTERS</span>
+            <span class="es-meta mono">Δ {{ regs().length }} REGS</span>
+          </div>
+          <div class="col-body">
+            @if (regs().length > 0) {
+              @for (reg of regs(); track reg.core + ':' + reg.name) {
+                <div class="diff-row reg-row mono" [attr.data-testid]="'rewind-diff-row-' + $index">
+                  <span class="cell-name">CPU{{ reg.core }} · {{ reg.name.toUpperCase() }}</span>
+                  <span class="cell-before es-meta">{{ hex32(reg.valA) }}</span>
+                  <span class="cell-arrow es-meta">→</span>
+                  <span class="cell-after">{{ hex32(reg.valB) }}</span>
+                </div>
+              }
+            } @else {
+              <p class="es-meta col-empty">No register changes.</p>
+            }
+          </div>
+        </section>
+      }
+
+      @if (activeTab() === 'all' || activeTab() === 'pages') {
+        <section class="diff-col" data-testid="rewind-diff-col-pages">
+          <div class="col-head">
+            <span class="es-kicker">DIRTY COW RAM PAGES</span>
+            <span class="es-meta mono">{{ pages().length }} PAGES</span>
+          </div>
+          <div class="col-body">
+            @if (pages().length > 0) {
+              @for (page of pages(); track page.space + ':' + page.pageIndex) {
+                <div class="diff-row page-row mono" [attr.data-testid]="'rewind-diff-page-' + $index">
+                  <span class="cell-name">{{ pageHash(page) }}</span>
+                  <span class="cell-after es-meta">sp{{ page.space }} · {{ pageStatus(page) }}</span>
+                </div>
+              }
+            } @else {
+              <p class="es-meta col-empty">No dirty CoW RAM pages.</p>
+            }
+          </div>
+        </section>
+      }
+
+      @if (activeTab() === 'all' || activeTab() === 'periphs') {
+        <section class="diff-col" data-testid="rewind-diff-col-periphs">
+          <div class="col-head">
+            <span class="es-kicker">PERIPHERAL MMIO</span>
+            <span class="es-meta mono">Δ {{ periphs().length }} REGS</span>
+          </div>
+          <div class="col-body">
+            @if (periphs().length > 0) {
+              @for (periph of periphs(); track periph.unit + ':' + periph.offset) {
+                <div class="diff-row periph-row mono" [attr.data-testid]="'rewind-diff-periph-' + $index">
+                  <span class="cell-name">{{ periph.unit }}+{{ hexOffset(periph.offset) }}</span>
+                  <span class="cell-before es-meta">{{ hex32(periph.oldVal) }} → {{ hex32(periph.newVal) }}</span>
+                  <span class="cell-after es-meta">m {{ hexMask(periph.changedBytes) }}</span>
+                </div>
+              }
+            } @else {
+              <p class="es-meta col-empty">No peripheral MMIO changes.</p>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  }
+</div>

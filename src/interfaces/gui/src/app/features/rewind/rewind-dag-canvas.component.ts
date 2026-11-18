@@ -15,63 +15,34 @@ import {
 import { RewindStore } from '../../core/stores/rewind.store';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { get2dContext, observeHiDpiCanvas, resolveDevicePixelRatio } from '../../shared/utils/hidpi-canvas';
-import { type RewindLayoutMode } from '../../shared/utils/rewind-layout';
+import { type RewindLayoutMode, type RewindLayoutNode } from '../../shared/utils/rewind-layout';
+import { resolveDagPins } from './rewind-dag-render';
 import {
   type RewindBookmark,
   buildDagLayoutFromBranches,
+  computeDiffSummary,
   drawRewindDag,
   hitTestRewindNode,
 } from './rewind-model';
+
+const LAYOUT_MODE_KEY = 'ra8.rewindLayout.v1';
+
+function loadSavedLayoutMode(): RewindLayoutMode {
+  if (typeof localStorage === 'undefined') return 'spine';
+  try {
+    return localStorage.getItem(LAYOUT_MODE_KEY) === 'waterfall' ? 'waterfall' : 'spine';
+  } catch (err) {
+    void err;
+    return 'spine';
+  }
+}
 
 @Component({
   selector: 'app-rewind-dag-canvas',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SectionKickerComponent],
-  template: `
-    <div class="dag-pane">
-      <div class="dag-head">
-        <div class="head-left">
-          <app-section-kicker label="BRANCH DAG" />
-          <span class="es-meta">Click node to seek · Shift+Click to diff</span>
-        </div>
-        <div class="mode-grp">
-          <button type="button" class="mini-btn" [class.is-active]="layoutMode() === 'spine'" data-testid="rewind-layout-spine" (click)="layoutMode.set('spine')">Spine: Center ±Y</button>
-          <button type="button" class="mini-btn" [class.is-active]="layoutMode() === 'waterfall'" data-testid="rewind-layout-waterfall" (click)="layoutMode.set('waterfall')">Waterfall</button>
-        </div>
-      </div>
-
-      <div class="canvas-box">
-        <canvas #dagCanvas class="dag-canvas" data-testid="rewind-dag-canvas" (click)="onCanvasClick($event)"></canvas>
-      </div>
-
-      <div class="node-strip">
-        @for (node of dagLayout().nodes; track node.id + ':' + $index) {
-          <button
-            type="button"
-            class="node-chip mono"
-            [class.is-cursor]="node.isCursor"
-            [attr.data-testid]="'rewind-node-' + $index"
-            (click)="onNodeChipClick($event, node.branch, node.round, node.id)"
-          >
-            {{ node.label }}
-          </button>
-        }
-      </div>
-    </div>
-  `,
-  styles: [
-    `
-      :host { display: block; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
-      .dag-pane { display: flex; flex-direction: column; height: 100%; min-width: 0; background: var(--es-canvas); }
-      .dag-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-bottom: 1px solid var(--es-border); background: var(--es-chrome); flex-wrap: wrap; }
-      .head-left, .mode-grp, .node-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .canvas-box { flex: 1; min-height: 120px; position: relative; overflow: hidden; }
-      .dag-canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
-      .node-strip { padding: 6px 12px; border-top: 1px solid var(--es-divider); background: var(--es-chrome); }
-      .mini-btn, .node-chip { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 8px; cursor: pointer; }
-      .mini-btn.is-active, .node-chip.is-cursor { background: var(--es-interactive); border-color: var(--es-signal-cursor); color: var(--es-text-primary); }
-    `,
-  ],
+  templateUrl: './rewind-dag-canvas.component.html',
+  styleUrl: './rewind-dag-canvas.component.css',
 })
 export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
   protected readonly rewind = inject(RewindStore);
@@ -83,9 +54,19 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
 
   private readonly dagCanvas = viewChild<ElementRef<HTMLCanvasElement>>('dagCanvas');
   private stopObserver: (() => void) | null = null;
-  protected readonly layoutMode = signal<RewindLayoutMode>('spine');
+  protected readonly layoutMode = signal<RewindLayoutMode>(loadSavedLayoutMode());
+  protected readonly clickAction = signal<'seek' | 'pinA' | 'pinB'>('seek');
+
   protected readonly dagLayout = computed(() =>
     buildDagLayoutFromBranches(this.rewind.branches(), this.bookmarks(), this.layoutMode())
+  );
+
+  protected readonly resolvedPins = computed(() =>
+    resolveDagPins(this.dagLayout(), this.pointASelected(), this.pointBSelected())
+  );
+
+  protected readonly summary = computed(() =>
+    computeDiffSummary(this.rewind.activeDiff(), this.rewind.branches(), this.rewind.frameStatus())
   );
 
   constructor() {
@@ -93,7 +74,8 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
       const layout = this.dagLayout();
       const ptA = this.pointASelected();
       const ptB = this.pointBSelected();
-      this.redraw(layout, ptA, ptB);
+      const bms = this.bookmarks();
+      this.redraw(layout, ptA, ptB, bms);
     });
   }
 
@@ -101,7 +83,7 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
     const canvas = this.dagCanvas()?.nativeElement;
     if (!canvas) return;
     this.stopObserver = observeHiDpiCanvas(canvas, () =>
-      this.redraw(this.dagLayout(), this.pointASelected(), this.pointBSelected())
+      this.redraw(this.dagLayout(), this.pointASelected(), this.pointBSelected(), this.bookmarks())
     );
   }
 
@@ -110,11 +92,42 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
     this.stopObserver = null;
   }
 
+  protected setLayoutMode(mode: RewindLayoutMode): void {
+    this.layoutMode.set(mode);
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(LAYOUT_MODE_KEY, mode);
+      } catch (err) {
+        void err;
+      }
+    }
+  }
+
+  protected isPinNode(nodeId: string): boolean {
+    const pins = this.resolvedPins();
+    return pins.pointANode?.id === nodeId || pins.pointBNode?.id === nodeId;
+  }
+
+  protected formatNodeChip(node: RewindLayoutNode): string {
+    const pins = this.resolvedPins();
+    const tags: string[] = [];
+    if (pins.pointANode?.id === node.id) tags.push('A');
+    if (pins.pointBNode?.id === node.id) tags.push('B');
+    const prefix = tags.length > 0 ? `[${tags.join('/')}] ` : '◆ ';
+    return `${prefix}${node.label}`;
+  }
+
   protected onCanvasClick(event: MouseEvent): void {
     const canvas = this.dagCanvas()?.nativeElement;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const hit = hitTestRewindNode(this.dagLayout(), event.clientX - rect.left, event.clientY - rect.top);
+    const hit = hitTestRewindNode(
+      this.dagLayout(),
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+      rect.width,
+      rect.height
+    );
     if (!hit) return;
     this.handleNodeSelect(event.shiftKey, hit.branch, hit.round, hit.id);
   }
@@ -124,14 +137,24 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
   }
 
   private handleNodeSelect(shiftKey: boolean, branch: number, round: number, nodeId: string): void {
-    if (shiftKey) {
+    const mode = this.clickAction();
+    if (shiftKey || mode === 'pinB') {
       this.diffPairRequested.emit({ pointA: this.pointASelected(), pointB: nodeId });
-    } else {
-      void this.rewind.seekPoint(branch, round);
+      return;
     }
+    if (mode === 'pinA') {
+      this.diffPairRequested.emit({ pointA: nodeId, pointB: this.pointBSelected() });
+      return;
+    }
+    void this.rewind.seekPoint(branch, round);
   }
 
-  private redraw(layout = this.dagLayout(), ptA = this.pointASelected(), ptB = this.pointBSelected()): void {
+  private redraw(
+    layout = this.dagLayout(),
+    ptA = this.pointASelected(),
+    ptB = this.pointBSelected(),
+    bms = this.bookmarks()
+  ): void {
     const canvas = this.dagCanvas()?.nativeElement;
     if (!canvas) return;
     const ctx = get2dContext(canvas);
@@ -139,6 +162,6 @@ export class RewindDagCanvasComponent implements AfterViewInit, OnDestroy {
     const dpr = resolveDevicePixelRatio();
     const cssW = Math.max(1, canvas.clientWidth || Math.round(canvas.width / dpr));
     const cssH = Math.max(1, canvas.clientHeight || Math.round(canvas.height / dpr));
-    drawRewindDag(ctx, layout, cssW, cssH, dpr, ptA, ptB);
+    drawRewindDag(ctx, layout, cssW, cssH, dpr, ptA, ptB, bms);
   }
 }

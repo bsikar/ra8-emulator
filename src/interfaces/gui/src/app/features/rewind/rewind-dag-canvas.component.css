@@ -1,0 +1,102 @@
+:host {
+  display: block;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dag-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--es-canvas);
+}
+
+.dag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--es-border);
+  background: var(--es-chrome);
+  flex-wrap: wrap;
+}
+
+.head-left,
+.mode-grp,
+.node-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sep {
+  width: 1px;
+  height: 16px;
+  background: var(--es-border);
+  margin: 0 2px;
+}
+
+.canvas-box {
+  flex: 1;
+  min-height: 120px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dag-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+}
+
+.node-strip {
+  padding: 6px 12px;
+  border-top: 1px solid var(--es-divider);
+  background: var(--es-chrome);
+}
+
+.dag-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 5px 12px;
+  border-top: 1px solid var(--es-border);
+  background: var(--es-container);
+  font-size: 12px;
+  color: var(--es-text-muted);
+}
+
+.foot-right {
+  margin-left: auto;
+  color: var(--es-text-secondary);
+}
+
+.mini-btn,
+.node-chip {
+  border: 1px solid var(--es-border);
+  background: transparent;
+  color: var(--es-text-secondary);
+  border-radius: var(--es-radius-sm);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.mini-btn.is-active,
+.node-chip.is-cursor {
+  background: var(--es-interactive);
+  border-color: var(--es-signal-cursor);
+  color: var(--es-text-primary);
+}
+
+.node-chip.is-pin {
+  border-color: var(--es-text-primary);
+  color: var(--es-text-primary);
+}

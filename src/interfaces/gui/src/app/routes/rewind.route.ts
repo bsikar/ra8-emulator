@@ -77,6 +77,8 @@ export class RewindRouteComponent {
   protected onDiffPairRequested(evt: { pointA: string; pointB: string }): void {
     this.pointA.set(evt.pointA);
     this.pointB.set(evt.pointB);
-    void this.rewind.compareDiff(evt.pointA, evt.pointB);
+    if (this.rpc.isConnected()) {
+      void this.rewind.compareDiff(evt.pointA, evt.pointB);
+    }
   }
 }
