@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "prebench:soak": "npm --prefix client run build",
+    "bench:soak": "node tools/bench-soak.mjs",
     "gate": "node tools/gate.mjs"
   },
   "private": true,
