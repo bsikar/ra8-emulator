@@ -60,7 +60,7 @@ test "six independent dual-core machines record, invalidate and undo without cro
         cpu1[i] = try Store.init(&cpu0[i]);
         recs[i] = trail_mod.Recording.init(std.testing.allocator, .{ &slots[i][0], &slots[i][1] }, &cpu0[i]);
         recs[i].arm();
-        caches[i].clear();
+        caches[i].init();
         caches[i].mark(memmap.sram_base + 0x80, memmap.sram_base + 0x90);
         try cpu0[i].fanMut().attach(&caches[i]);
     }

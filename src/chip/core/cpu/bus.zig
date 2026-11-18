@@ -18,56 +18,53 @@ const Peer = @import("exclusive_peer.zig").Peer;
 /// SecurityViolation: a Non-secure access the data gate refused (RA8EMU-274).
 pub const Error = error{ Unmapped, SecurityViolation };
 
-/// Fixed host-backed ranges. Separate fields avoid a per-access region loop;
-/// peripheral addresses and cross-range accesses continue through the vtable.
+/// Fixed host-backed flash and SRAM ranges derived from the machine's
+/// `MemoryMap` (RA8EMU-319, RA8EMU-1343).
 pub const DirectMemory = struct {
     touched: ?*touched_api.Tracker = null,
     flash: ?[]u8 = null,
+    flash_base: u32 = memmap.mram_base,
+    flash_size: u32 = memmap.mram_end - memmap.mram_base,
+    ns_flash_base: ?u32 = memmap.ns_mram_base,
+    flash_writable: bool = true,
     sram: ?[]u8 = null,
+    sram_base: u32 = memmap.sram_base,
+    sram_size: u32 = memmap.sram_end - memmap.sram_base,
+    ns_sram_base: ?u32 = memmap.ns_sram_base,
+    sram_writable: bool = true,
     enabled: bool = false,
     /// The MPU check's armed flag. While it is set every access goes through
     /// the vtable, so the board bus can ask the MPU (RA8EMU-710).
     checking: ?*const bool = null,
-    /// The trail hook the core's fast writes feed (H2); null records
-    /// nothing (RA8EMU-D1).
+    /// The trail hook the core's fast writes feed (H2); null records nothing.
     observer: ?*const observer.Observer = null,
     /// The initiator the core's own stores carry into the trail.
     initiator: Initiator = .none,
     /// The machine's block fanout, which a fast write invalidates.
     lines: ?*const code_lines.Fanout = null,
 
-    /// Where an access lands: the canonical region base (the Non-secure
-    /// aliases fold onto their Secure region), the offset inside it and the
-    /// host bytes (RA8EMU-D1).
-    const Located = struct { base: u32, offset: usize, data: []u8 };
+    const Located = struct { base: u32, offset: usize, data: []u8, writable: bool };
 
     inline fn locate(self: *const DirectMemory, address: u32, len: usize) ?Located {
         if (self.checking) |armed| if (armed.*) return null;
-        if (address >= memmap.mram_base and address < memmap.mram_end) {
-            const offset = address - memmap.mram_base;
-            if (len > memmap.mram_end - memmap.mram_base - offset) return null;
-            const bytes = self.flash orelse return null;
-            return .{ .base = memmap.mram_base, .offset = offset, .data = bytes[offset..][0..len] };
-        }
-        if (address >= memmap.ns_mram_base and address < memmap.ns_mram_end) {
-            const offset = address - memmap.ns_mram_base;
-            if (len > memmap.ns_mram_end - memmap.ns_mram_base - offset) return null;
-            const bytes = self.flash orelse return null;
-            return .{ .base = memmap.mram_base, .offset = offset, .data = bytes[offset..][0..len] };
-        }
-        if (address >= memmap.sram_base and address < memmap.sram_end) {
-            const offset = address - memmap.sram_base;
-            if (len > memmap.sram_end - memmap.sram_base - offset) return null;
-            const bytes = self.sram orelse return null;
-            return .{ .base = memmap.sram_base, .offset = offset, .data = bytes[offset..][0..len] };
-        }
-        if (address >= memmap.ns_sram_base and address < memmap.ns_sram_end) {
-            const offset = address - memmap.ns_sram_base;
-            if (len > memmap.ns_sram_end - memmap.ns_sram_base - offset) return null;
-            const bytes = self.sram orelse return null;
-            return .{ .base = memmap.sram_base, .offset = offset, .data = bytes[offset..][0..len] };
-        }
-        return null;
+        if (locatePair(
+            self.flash,
+            self.flash_base,
+            self.flash_size,
+            self.ns_flash_base,
+            self.flash_writable,
+            address,
+            len,
+        )) |hit| return hit;
+        return locatePair(
+            self.sram,
+            self.sram_base,
+            self.sram_size,
+            self.ns_sram_base,
+            self.sram_writable,
+            address,
+            len,
+        );
     }
 
     inline fn span(self: *const DirectMemory, address: u32, len: usize) ?[]u8 {
@@ -81,11 +78,11 @@ pub const DirectMemory = struct {
         return true;
     }
 
-    /// A fast-path write (H2): the pre-image leaves through the trail
-    /// observer before the bytes move, then the block fanout hears the
-    /// range (RA8EMU-D1).
+    /// A fast-path write (H2); a read-only region falls back to the vtable so
+    /// the refused store raises its BusFault with BFAR.
     inline fn write(self: *const DirectMemory, address: u32, bytes: []const u8) bool {
         const hit = self.locate(address, bytes.len) orelse return false;
+        if (!hit.writable) return false;
         if (self.touched) |tracker| tracker.note(hit.base, hit.offset, bytes.len);
         if (self.observer) |o| o.bytes(
             .{
@@ -100,28 +97,47 @@ pub const DirectMemory = struct {
         if (self.lines) |fan| fan.notify(address, bytes.len);
         return true;
     }
+
+    inline fn locatePair(
+        backing: ?[]u8,
+        base: u32,
+        size: u32,
+        alias_base: ?u32,
+        writable: bool,
+        address: u32,
+        len: usize,
+    ) ?Located {
+        const bytes = backing orelse return null;
+        if (inSpan(base, size, address, len)) |offset| {
+            if (offset <= bytes.len and len <= bytes.len - offset) {
+                return .{ .base = base, .offset = offset, .data = bytes[offset..][0..len], .writable = writable };
+            }
+        }
+        const view = alias_base orelse return null;
+        if (inSpan(view, size, address, len)) |offset| {
+            if (offset <= bytes.len and len <= bytes.len - offset) {
+                return .{ .base = base, .offset = offset, .data = bytes[offset..][0..len], .writable = writable };
+            }
+        }
+        return null;
+    }
+
+    inline fn inSpan(base: u32, size: u32, address: u32, len: usize) ?usize {
+        if (address < base) return null;
+        if (@as(u64, address) + len > @as(u64, base) + size) return null;
+        return address - base;
+    }
 };
 
 pub const Bus = struct {
     ctx: *anyopaque,
     vtable: *const VTable,
     direct: ?*const DirectMemory = null,
-    /// Attribution on data accesses; null checks nothing (RA8EMU-274).
     gate: ?*Gate = null,
-    /// Where the last access the bus behind refused went, for the BusFault's
-    /// BFAR; null records nothing (RA8EMU-641).
     miss: ?*u32 = null,
-    /// Counts the BusFaults those refusals raised, for the run report.
     tally: ?*bus_fault.Tally = null,
-    /// The other core's exclusive monitor, cleared by a store into the word
-    /// it tagged; null on a single-core run (RA8EMU-134).
     peer: ?Peer = null,
-    /// The machine's block fanout, where a run's block cache joins; null on
-    /// a bus with no store behind it (RA8EMU-D1).
     lines: ?*code_lines.Fanout = null,
-
-    /// Absolute NVIC state for the exception model, not firmware commands.
-    /// Wrappers retain this capability; flat test RAM needs no separate view.
     register_state: ?RegisterState = null,
 
     pub const RegisterState = struct { ctx: *anyopaque, vtable: *const VTable };
@@ -134,22 +150,23 @@ pub const Bus = struct {
     pub const VTable = struct {
         read: *const fn (ctx: *anyopaque, address: u32, into: []u8) Error!void,
         write: *const fn (ctx: *anyopaque, address: u32, bytes: []const u8) Error!void,
-        /// Sets bits in a status word without a store; null reads and
-        /// writes the word back instead.
         latch: ?*const fn (ctx: *anyopaque, address: u32, bits: u32) Error!void = null,
-        /// Counts `times` more reads at `address` that would each answer as
-        /// the last did and change nothing but a counter; false, having done
-        /// nothing, when such a read is not repeatable. Times 0 only asks
-        /// (RA8EMU-595). Null repeats nothing.
         repeat: ?*const fn (ctx: *anyopaque, address: u32, len: usize, times: u64) bool = null,
-        /// Fills `into` from a peripheral register with none of a read's
-        /// side effects; false when nothing can (RA8EMU-948). Null peeks
-        /// nothing.
         peek: ?*const fn (ctx: *anyopaque, address: u32, into: []u8) bool = null,
+        allowsExec: ?*const fn (ctx: *anyopaque, address: u32, len: usize) bool = null,
+        touchesPeriph: ?*const fn (ctx: *anyopaque, address: u32, len: usize) ?bool = null,
     };
 
-    /// A debugger's look at one register: true with `into` filled, or false
-    /// having changed nothing, when the bus behind keeps no peek there.
+    pub fn allowsExec(self: Bus, address: u32, len: usize) bool {
+        const check = self.vtable.allowsExec orelse return true;
+        return check(self.ctx, address, len);
+    }
+
+    pub fn touchesPeriph(self: Bus, address: u32, len: usize) ?bool {
+        const check = self.vtable.touchesPeriph orelse return null;
+        return check(self.ctx, address, len);
+    }
+
     pub fn peek(self: Bus, address: u32, into: []u8) bool {
         if (self.gate) |gate| if (gate.refuses(address, into.len)) return false;
         const look = self.vtable.peek orelse return false;
@@ -181,15 +198,11 @@ pub const Bus = struct {
         return self.vtable.write(self.ctx, address, bytes) catch |err| self.missed(err, address);
     }
 
-    /// Record `address` as the refused one, then hand `err` back.
     fn missed(self: Bus, err: Error, address: u32) Error {
         if (self.miss) |at| at.* = address;
         return err;
     }
 
-    /// Set `bits` in a status word the way the core raises a fault. This is
-    /// not a store: a bus with a write-one-to-clear model behind it must not
-    /// take the core's own latch for an acknowledge (RA8EMU-394).
     pub fn latch(self: Bus, address: u32, bits: u32) Error!void {
         if (self.vtable.latch) |set| return set(self.ctx, address, bits);
         var bytes: [4]u8 = undefined;
@@ -201,6 +214,11 @@ pub const Bus = struct {
         var bytes: [2]u8 = undefined;
         try self.read(address, &bytes);
         return std.mem.readInt(u16, &bytes, .little);
+    }
+
+    pub fn fetchHalf(self: Bus, address: u32) Error!u16 {
+        if (!self.allowsExec(address, 2)) return Error.Unmapped;
+        return self.readHalf(address);
     }
 
     pub fn readWord(self: Bus, address: u32) Error!u32 {

@@ -9,7 +9,6 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const memmap = @import("ra8_chip").core.memmap;
 const store_mod = @import("ra8_chip").core.cpu.memory.store;
 const trail_mod = @import("trail.zig");
 
@@ -67,7 +66,8 @@ pub const ShadowOracle = struct {
 
     /// Tracks all mapped RAM regions from a Store.
     pub fn trackStore(self: *ShadowOracle, store: *const store_mod.Store) !void {
-        for (memmap.ram, 0..) |entry, index| {
+        const count = @min(store.map_desc.regions.len, store.pages.len);
+        for (store.map_desc.regions[0..count], 0..) |entry, index| {
             if (store.pages[index]) |slice| {
                 if (store.owned[index]) {
                     try self.trackRegion(entry.base, slice);

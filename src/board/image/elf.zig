@@ -6,7 +6,7 @@
 const std = @import("std");
 
 const loaded_image = @import("ra8_chip").core.loaded_image;
-const memmap = @import("ra8_chip").core.memmap;
+const machine_memory = @import("ra8_chip").core.machine.memory;
 
 pub const Error = error{
     NotElf32,
@@ -107,13 +107,17 @@ pub const Image = struct {
     /// vectors. Linkers commonly keep this read-only table in a separate
     /// segment from the executable code it points to.
     pub fn vectorBase(self: Image) ?u32 {
+        return self.vectorBaseFor(&machine_memory.ra8);
+    }
+
+    pub fn vectorBaseFor(self: Image, map: *const machine_memory.MemoryMap) ?u32 {
         var index: u16 = 0;
         while (index < self.segmentCount()) : (index += 1) {
             const segment = self.loadSegment(index) orelse continue;
             if (segment.bytes.len < 8 or segment.memsz < 8) continue;
             const stack_pointer = std.mem.readInt(u32, segment.bytes[0..4], .little);
             const reset_vector = std.mem.readInt(u32, segment.bytes[4..8], .little);
-            if (!validStackPointer(stack_pointer)) continue;
+            if (!map.validStack(stack_pointer)) continue;
             if (!self.executableAddress(reset_vector)) continue;
             return segment.vaddr;
         }
@@ -134,14 +138,3 @@ pub const Image = struct {
         return false;
     }
 };
-
-fn validStackPointer(stack_pointer: u32) bool {
-    if (stack_pointer & 7 != 0) return false;
-    for (memmap.ram) |region| {
-        // A stack never lives in instruction TCM or the PPB.
-        if (region.base == memmap.itcm_base or region.base == memmap.ppb_base) continue;
-        if (!region.perms.write) continue;
-        if (stack_pointer > region.base and @as(u64, stack_pointer) <= region.end()) return true;
-    }
-    return false;
-}

@@ -63,6 +63,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
 }
 
 pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
+    if (!self.desc().memory.attach_ra8_blocks) return tickBare(self, core, instructions, issuer);
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
@@ -89,10 +90,7 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
             frame.notify(now);
         }
     }
-    if (self.frame_tap) |tap| {
-        if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
-    }
-    self.frame_taps.afterBoundary(self.time.base.now());
+    notifyFrameTaps(self);
     core_clock.retune(self);
     try takeResetRequestsFrom(self, core, issuer);
     for (self.serial.channels) |channel| {
@@ -125,6 +123,22 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
     // Drains after the reset request may have latched a line again.
     if (self.reboot) |pending| if (pending.requested) self.events.clearLatches();
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
+}
+
+fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
+    if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
+    self.time.base.advance(instructions);
+    self.trace.tick();
+    notifyFrameTaps(self);
+    try takeResetRequestsFrom(self, core, issuer);
+    if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
+}
+
+fn notifyFrameTaps(self: *Board) void {
+    if (self.frame_tap) |tap| {
+        if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
+    }
+    self.frame_taps.afterBoundary(self.time.base.now());
 }
 
 /// Host switch edges reach the event path only through a pin whose PFS ISEL

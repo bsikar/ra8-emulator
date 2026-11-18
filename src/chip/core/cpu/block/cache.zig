@@ -33,6 +33,12 @@ pub const BlockCache = struct {
 
     /// Set up in place: the cache is too large to build on the stack.
     pub fn init(self: *BlockCache) void {
+        self.lines.layout = code_lines.ra8_layout;
+        self.clear();
+    }
+
+    /// Drop formed blocks and line marks while keeping the attached layout.
+    pub fn clear(self: *BlockCache) void {
         for (&self.blocks) |*one| {
             one.start = 0;
             one.len = 0;
@@ -61,7 +67,7 @@ pub const BlockCache = struct {
             self.reused += 1;
         } else {
             found.* = block.Block.form(from, &self.decoded, core, address);
-            found.tracked = code_lines.covers(found.start, found.end());
+            found.tracked = self.lines.layout.covers(found.start, found.end());
             self.lines.mark(found.start, found.end());
             self.formed += 1;
         }
@@ -94,8 +100,8 @@ pub const BlockCache = struct {
         self.lines.dirty = false;
         for (&self.blocks) |*one| {
             if (one.len == 0) continue;
-            const first = code_lines.line(one.start) orelse continue;
-            const last = code_lines.line(one.end() -% 1) orelse first;
+            const first = self.lines.layout.line(one.start) orelse continue;
+            const last = self.lines.layout.line(one.end() -% 1) orelse first;
             if (last < low or first > high) continue;
             one.len = 0;
             self.dropped += 1;

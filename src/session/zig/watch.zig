@@ -69,7 +69,14 @@ pub const Recorder = struct {
         self.inner = if (self.next) |w| w.busFn(w.context, under) else under;
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat },
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .latch = latch,
+                .repeat = repeat,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
+            },
             .lines = self.inner.lines,
             .register_state = self.inner.register_state,
         };
@@ -154,6 +161,16 @@ fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
 fn repeat(ctx: *anyopaque, address: u32, len: usize, times: u64) bool {
     const self: *Recorder = @ptrCast(@alignCast(ctx));
     return self.inner.repeat(address, len, times);
+}
+
+fn allowsExec(ctx: *anyopaque, address: u32, len: usize) bool {
+    const self: *Recorder = @ptrCast(@alignCast(ctx));
+    return self.inner.allowsExec(address, len);
+}
+
+fn touchesPeriph(ctx: *anyopaque, address: u32, len: usize) ?bool {
+    const self: *Recorder = @ptrCast(@alignCast(ctx));
+    return self.inner.touchesPeriph(address, len);
 }
 
 fn width(len: usize) u8 {

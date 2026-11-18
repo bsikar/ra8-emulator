@@ -124,7 +124,7 @@ fn apply(cpu: *Cpu, cursor: *fields.Cursor) Error!void {
 /// Drop execution accelerators only after the restored state commits.
 pub fn afterRestore(cpu: *Cpu) void {
     cpu.metrics_epoch +%= 1;
-    if (cpu.blocks) |cache| cache.init();
+    if (cpu.blocks) |cache| cache.clear();
     if (cpu.decoded) |cache| cache.* = .{};
     cpu.trip = .{};
     if (cpu.quiet) |quiet| quiet.stirAll();
