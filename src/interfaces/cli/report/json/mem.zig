@@ -19,7 +19,7 @@ pub fn section(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !void {
     try caches(j, &board.caches);
     try sram(j, board);
     try transfers(j, &board.dma);
-    try dtc1(j, &board.transfers1);
+    if (board.desc().hasSecond()) try dtc1(j, &board.transfers1);
     try worklist(j, board);
     try externalRegions(j, board, memory, elapsed);
     try j.close('}');
@@ -165,7 +165,9 @@ fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !voi
             external.Initiator.ceu,
             external.Initiator.eth,
         }) |one| {
-            try j.field(@tagName(one), counters.stall_cycles_by_initiator[one.timedIndex().?]);
+            if (one != .dtc1 or board.desc().hasSecond()) {
+                try j.field(@tagName(one), counters.stall_cycles_by_initiator[one.timedIndex().?]);
+            }
         }
         try j.close('}');
         try j.close('}');

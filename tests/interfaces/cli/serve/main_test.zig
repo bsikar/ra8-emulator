@@ -33,3 +33,25 @@ test "artifact serving requires one explicit nonempty spool root" {
     const duplicate = &.{ "ra8", "serve", "--artifacts-root", "one", "--artifacts-root", "two", "--stdio", "fw.elf" };
     try std.testing.expect(cli.parse(duplicate) == null);
 }
+
+test "serve takes a machine from the catalog and refuses --cpu1 on a single-core one" {
+    const machine_mod = @import("ra8").chip.core.machine;
+    const single: machine_mod.Machine = .{
+        .name = "single-m33",
+        .label = "SINGLE-M33",
+        .cores = .{ .primary = machine_mod.core.cortexM33(.{ .security = false, .fpu = .single, .systicks = 1 }) },
+        .part = .ra8d2,
+    };
+    const list = [_]*const machine_mod.Machine{ &machine_mod.catalog.ra8d2, &single };
+    const picked = cli.parseWithCatalog(&.{ "ra8", "serve", "--part", "single-m33", "--stdio", "fw.elf" }, &list).?;
+    try std.testing.expectEqual(&single, picked.machine.?);
+    const absent = &.{ "ra8", "serve", "--part", "single-m33", "--cpu1", "c.elf", "--stdio", "fw.elf" };
+    try std.testing.expect(cli.parseWithCatalog(absent, &list) == null);
+    const dual_line = &.{ "ra8", "serve", "--device", "ra8d2", "--cpu1", "c.elf", "--stdio", "fw.elf" };
+    const dual = cli.parseWithCatalog(dual_line, &list).?;
+    try std.testing.expectEqualStrings("c.elf", dual.cpu1.?);
+    const shipped_only = &.{ "ra8", "serve", "--part", "ra8p1", "--stdio", "fw.elf" };
+    try std.testing.expect(cli.parseWithCatalog(shipped_only, &list) == null);
+    const shipped = cli.parse(&.{ "ra8", "serve", "--part", "ra8p1", "--stdio", "fw.elf" }).?;
+    try std.testing.expectEqual(&machine_mod.catalog.ra8p1, shipped.machine.?);
+}

@@ -322,6 +322,7 @@ test {
     _ = @import("session/run/clock_test.zig");
     _ = @import("interfaces/cli/report/undefined_test.zig");
     _ = @import("interfaces/cli/cli_test.zig");
+    _ = @import("interfaces/cli/machine_args_test.zig");
     _ = @import("interfaces/cli/count_pc_test.zig");
     _ = @import("interfaces/cli/camera_source_test.zig");
     _ = @import("interfaces/cli/usb_disk_option_test.zig");

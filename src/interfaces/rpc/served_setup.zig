@@ -160,7 +160,7 @@ pub const Served = struct {
             }
         };
         const profile = if (bind) |b| if (b.reopened) b.root.?.board_profile else board_profile else board_profile;
-        var owner = try served_owner.open(allocator, io, elf_path, &initial, profile, bind, ram, history_opts);
+        var owner = try served_owner.open(allocator, io, elf_path, &initial, profile, startup, bind, ram, history_opts);
         errdefer owner.deinit();
         _ = owner.watchModules();
         try self.initContext(allocator, io, owner, bind, ram);

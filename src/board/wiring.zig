@@ -124,7 +124,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.flash.block());
     try self.bus.add(self.cipher.block());
     try self.options.attach(&self.bus, memory);
-    try self.bus.add(self.second_core.block());
+    if (self.desc().hasSecond()) try self.bus.add(self.second_core.block());
     try self.bus.add(self.memory_rates.block());
     try self.memory_ecc.attach(&self.bus);
     try self.sdram.attach(&self.bus);
@@ -137,7 +137,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.can.block(0));
     try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
-    if (self.part.hasNpu()) {
+    if (self.desc().hasNpu()) {
         self.npu.memory = memory.asInitiator(.ethos_u55);
         try self.bus.add(self.npu.block());
     }
@@ -164,8 +164,10 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
 /// DTC0 and DTC1 share one window, served by whichever core is on the bus;
 /// DTC1 starts on the DTCE bits of CPU1's ICU table.
 fn attachTransfers(self: *Board) !void {
-    self.transfers1.table = .cpu1;
-    self.transfers.twin = &self.transfers1;
+    if (self.desc().hasSecond()) {
+        self.transfers1.table = .cpu1;
+        self.transfers.twin = &self.transfers1;
+    }
     self.transfers.issuer = &self.bus.issuer;
     try self.bus.add(self.transfers.block());
     self.transfer_attribution = dtc.attribution.Unit.init(&self.protection);
@@ -175,12 +177,14 @@ fn attachTransfers(self: *Board) !void {
 /// CPU0's windows: the board's own SAU, MPU tables, guard, AIRCR and
 /// fault clears. A `--cpu zig` run primes them into its own store.
 pub fn cpu0Windows(self: *Board) CoreWindows {
+    const primary = self.desc().primary();
     return .{
         .partitions = &self.partitions,
         .regions = &self.regions,
-        .regions_ns = &self.regions_ns,
+        .regions_ns = if (primary.security) &self.regions_ns else null,
         .guard = &self.guard,
-        .identity = cpuid.cpu0,
+        .identity = primary.cpuid,
+        .security = primary.security,
         .control = &self.control,
         .clears = &self.clears,
     };
@@ -199,6 +203,7 @@ pub fn cpu1(self: *Board) second_wiring.Wiring {
         .reboot = &self.reboot,
         .release = &self.second_core,
         .cpu1 = &self.cpu1,
+        .core = self.desc().core(.cpu1),
         .context = self,
         .primeFn = primeThunk,
         .resetFn = resetThunk,
@@ -250,12 +255,14 @@ pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     // MPU_TYPE read as zero, so ra8_mpu_configure rejected every
     // configuration for want of capacity and main never got past it.
     try windows.regions.prime(memory);
-    // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
-    try mpu.ns.prime(memory, mpu.geometry.type_value);
-    // SAU_TYPE read as zero, so the secure boot's capability check failed
-    // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
-    // error, parking the run in the Secure fallback main() forever.
-    try windows.partitions.prime(memory);
+    if (windows.security) {
+        // The Non-secure view of MPU_TYPE is its own banked word (RA8EMU-446).
+        try mpu.ns.prime(memory, mpu.geometry.type_value);
+        // SAU_TYPE read as zero, so the secure boot's capability check failed
+        // and ra8_tz_secure_boot_sau_init programmed nothing and returned an
+        // error, parking the run in the Secure fallback main() forever.
+        try windows.partitions.prime(memory);
+    }
 }
 
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
@@ -296,7 +303,7 @@ fn attachProtected(self: *Board) !void {
     for (self.sram_attribution.blocks()) |window| {
         try self.bus.add(window);
     }
-    self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.part == .ra8p1);
+    self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
     for (self.memory_monitors.blocks()) |window| {
         try self.bus.add(window);
     }

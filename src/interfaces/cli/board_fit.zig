@@ -41,7 +41,9 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
         std.debug.print("--camera-source requires Session history; raw Board keeps no camera history\n", .{});
         return error.CameraRequiresSession;
     }
-    board.part = options.part;
+    const chosen = options.resolvedMachine();
+    board.machine = chosen;
+    board.part = chosen.part;
     board.memory_monitors = .{ .cms = options.cms, .sfs = options.sfs };
     board.wire.click = options.click;
     // A run's RTC counts virtual time (RA8EMU-185): with idle fast-forward a

@@ -13,6 +13,7 @@ pub const idle = @import("core/idle.zig");
 pub const loaded_image = @import("core/loaded_image.zig");
 pub const lob = @import("core/lob.zig");
 pub const long_shift = @import("core/long_shift.zig");
+pub const machine = @import("core/machine/machine.zig");
 pub const memmap = @import("core/memmap.zig");
 pub const module_place = @import("core/module_place.zig");
 pub const mpu_guard = @import("core/mpu_guard.zig");

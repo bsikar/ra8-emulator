@@ -21,6 +21,8 @@ pub const CoreWindows = struct {
     /// The CPUID word this core answers with: a Cortex-M85 on CPU0, a
     /// Cortex-M33 on CPU1.
     identity: u32,
+    /// Whether this core implements the Armv8-M Security Extension.
+    security: bool = true,
     /// The AIRCR model this core's writes are judged by. CPU0's is the
     /// board's own; CPU1 brings its own, so a PRIGROUP one core programs is
     /// never the split the other reports.

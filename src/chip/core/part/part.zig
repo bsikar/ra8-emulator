@@ -10,31 +10,21 @@
 const std = @import("std");
 
 pub const clock = @import("clock.zig");
+pub const cores = @import("cores.zig");
 pub const map = @import("map.zig");
-const profile = @import("../cpu/profile.zig");
 
 /// SysTick timers on CPU0, the Cortex-M85 both parts carry: two, one Secure
-/// and one Non-secure. Arm's Cortex-M85 Devices Generic User Guide (101928,
-/// issue 0101), "System timer, SysTick": "There are two 24-bit system
-/// timers, a Non-secure SysTick timer and a Secure SysTick timer." The RA8P1
-/// (R01DS0439EJ0130) and RA8D2 (R01DS0493EJ0130) datasheets, Rev.1.30 p2,
-/// say the same: "Embeds two Systick timers: Secure and Non-secure
-/// instance". With two, SHPR3.PRI_15 and SHCSR.SYSTICKACT are banked
-/// (src/chip/periph/scb/bank.zig).
-pub const cpu0_systicks: u2 = 2;
+/// and one Non-secure (cores.zig cites them).
+pub const cpu0_systicks: u2 = cores.cpu0.systicks;
 
-/// SysTick timers on CPU1, the Cortex-M33: also two. A Cortex-M33 has two
-/// only with the Security Extension (Arm 100235, issue 0100), and both
-/// datasheets above list it for CPU1, Rev.1.30 p2: "Armv8-M Security
-/// Extension" and "Embeds two Systick timers: Secure instance (SysTick_S)
-/// and Non-secure instance (SysTick_NS)".
-pub const cpu1_systicks: u2 = 2;
+/// SysTick timers on CPU1, the Cortex-M33: also two (cores.zig).
+pub const cpu1_systicks: u2 = cores.cpu1.systicks;
 
 /// The instruction set each CPU decodes on the Zig core (RA8EMU-233): CPU0
 /// is the Cortex-M85 (Armv8.1-M, MVE, LOB), CPU1 the Cortex-M33 (Armv8.0-M
 /// Mainline, DSP, FPv5-SP), on both parts.
-pub const cpu0_profile = profile.Profile.m85;
-pub const cpu1_profile = profile.Profile.m33;
+pub const cpu0_profile = cores.cpu0.profile;
+pub const cpu1_profile = cores.cpu1.profile;
 
 pub const Part = enum {
     ra8d2,

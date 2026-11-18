@@ -7,17 +7,37 @@
 //! one every corpus expectation was recorded against.
 const std = @import("std");
 
+const machine_mod = @import("ra8_chip").core.machine;
 const part = @import("ra8_chip").core.part;
 const Writer = @import("../report.zig").Writer;
 
 const kib: u32 = 1024;
 
-/// The part line, written into `buf`.
+/// The part line for `which`, written into `buf`.
 pub fn line(buf: []u8, which: part.Part) ![]const u8 {
-    const geometry = part.map.of(which);
+    return lineMachine(buf, machine_mod.catalog.ofPart(which));
+}
+
+/// The machine geometry line for `which`, written into `buf`. A single-core
+/// machine omits CPU1's TCM and cache.
+pub fn lineMachine(buf: []u8, which: *const machine_mod.Machine) ![]const u8 {
+    const geometry = part.map.of(which.part);
+    if (!which.hasSecond()) {
+        return std.fmt.bufPrint(buf, "PART: {s} MRAM {d} KB @0x{X:0>8}, SRAM {d} KB @0x{X:0>8}, CPU0 TCM {d} KB + " ++
+            "cache {d} KB ({s})\n", .{
+            which.label,
+            geometry.mram_bytes / kib,
+            geometry.mram_base,
+            geometry.sram_bytes / kib,
+            geometry.sram_base,
+            geometry.cpu0TcmBytes() / kib,
+            2 * geometry.cpu0_cache_bank_bytes / kib,
+            geometry.source,
+        });
+    }
     return std.fmt.bufPrint(buf, "PART: {s} MRAM {d} KB @0x{X:0>8}, SRAM {d} KB @0x{X:0>8}, CPU0 TCM {d} KB + " ++
         "cache {d} KB, CPU1 TCM {d} KB + cache {d} KB ({s})\n", .{
-        which.label(),
+        which.label,
         geometry.mram_bytes / kib,
         geometry.mram_base,
         geometry.sram_bytes / kib,
@@ -35,9 +55,19 @@ pub fn shown(which: part.Part) bool {
     return which != .ra8d2;
 }
 
+/// Whether a run on `which` prints the machine line at all.
+pub fn shownMachine(which: *const machine_mod.Machine) bool {
+    return !std.mem.eql(u8, which.name, "ra8d2");
+}
+
 /// Print the part line for `which`, when it is not the default part.
 pub fn print(out: Writer, which: part.Part) !void {
-    if (!shown(which)) return;
+    return printMachine(out, machine_mod.catalog.ofPart(which));
+}
+
+/// Print the machine line for `which`, when it is not the default machine.
+pub fn printMachine(out: Writer, which: *const machine_mod.Machine) !void {
+    if (!shownMachine(which)) return;
     var buf: [256]u8 = undefined;
-    try out.writeAll(try line(&buf, which));
+    try out.writeAll(try lineMachine(&buf, which));
 }
