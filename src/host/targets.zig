@@ -2,13 +2,14 @@
 //! The host serializes calls and retains descriptor/provider storage until removal.
 const std = @import("std");
 
-pub const Action = enum(u8) { registers, halt, step, @"resume", flash, reset };
+pub const Action = enum(u8) { registers, halt, step, @"resume", flash, reset, uart };
 pub const Capabilities = struct {
     build: bool = false,
     flash: bool = false,
     hardware_debug: bool = false,
     emulation: bool = false,
     npu: bool = false,
+    uart: bool = false,
 };
 pub const Descriptor = struct {
     host_id: []const u8,
@@ -148,6 +149,7 @@ pub const Registry = struct {
         const supported = switch (action) {
             .flash => caps.flash,
             .reset => caps.hardware_debug or caps.flash,
+            .uart => caps.uart,
             else => caps.hardware_debug or caps.emulation,
         };
         if (!supported) return error.Unsupported;
@@ -194,6 +196,7 @@ pub const Registry = struct {
 
 fn validate(target: Descriptor) !void {
     if (target.operations.len > @typeInfo(Action).@"enum".field_names.len) return error.InvalidCapabilities;
+    if (hasDuplicateAction(target.operations)) return error.InvalidCapabilities;
     inline for (.{ "host_id", "probe_id", "board_id", "transport" }) |field| {
         const value = @field(target, field);
         if (value.len == 0 or value.len > 128) return error.InvalidIdentity;
@@ -203,6 +206,13 @@ fn validate(target: Descriptor) !void {
     inline for (.{ "probe_serial", "board_serial", "vendor", "model", "cores", "disambiguation", "uart" }) |field| {
         if (@field(target, field).len > 128) return error.InvalidIdentity;
     }
+}
+
+fn hasDuplicateAction(actions: []const Action) bool {
+    for (actions, 0..) |item, index| {
+        if (std.mem.indexOfScalar(Action, actions[0..index], item) != null) return true;
+    }
+    return false;
 }
 
 fn matches(target: Descriptor, selection: Selection) bool {
