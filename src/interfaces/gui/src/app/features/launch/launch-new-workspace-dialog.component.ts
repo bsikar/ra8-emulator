@@ -5,7 +5,9 @@ import { RemoteHostsStore } from '../../core/stores/remote-hosts.store';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { TonalButtonComponent } from '../../shared/ui/tonal-button.component';
 import { pickBrowserFile } from '../../shared/utils/file-picker';
+import type { StoredCustomBoardPreset } from '../../core/stores/board-composer.types';
 import { formatByteSize } from '../bundles/bundle-summary';
+import { BoardComposerModalComponent } from '../workspace/board-composer-modal.component';
 import { BoardDetailsModalComponent } from '../workspace/board-details-modal.component';
 import { formatPresetArchSummary } from './launch-commands';
 
@@ -29,7 +31,12 @@ const SOURCES: readonly ProjectSourceKind[] = ['Source Project', 'Prebuilt .elf'
 @Component({
   selector: 'app-launch-new-workspace-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SectionKickerComponent, TonalButtonComponent, BoardDetailsModalComponent],
+  imports: [
+    SectionKickerComponent,
+    TonalButtonComponent,
+    BoardDetailsModalComponent,
+    BoardComposerModalComponent,
+  ],
   templateUrl: './launch-new-workspace-dialog.component.html',
   styleUrl: './launch-new-workspace-dialog.component.css',
 })
@@ -56,6 +63,8 @@ export class LaunchNewWorkspaceDialogComponent {
   protected readonly pickedElf = signal<{ name: string; bytes: Uint8Array; entryHex: string } | null>(null);
   protected readonly elfError = signal<string | null>(null);
   protected readonly inspectedBoard = signal<BoardPreset | null>(null);
+  protected readonly composerOpen = signal<boolean>(false);
+  protected readonly composerSeed = signal<BoardPreset | null>(null);
   private userEditedName = false;
 
   protected readonly allBoards = computed<BoardPreset[]>(() => [
@@ -133,6 +142,34 @@ export class LaunchNewWorkspaceDialogComponent {
     const copy = this.boardStore.duplicateBoardPreset(preset);
     this.selectedPresetId.set(copy.id);
     this.inspectedBoard.set(null);
+  }
+
+  protected openNewBoardComposer(): void {
+    this.inspectedBoard.set(null);
+    this.composerSeed.set(null);
+    this.composerOpen.set(true);
+  }
+
+  protected openEditBoardComposer(preset: BoardPreset): void {
+    this.inspectedBoard.set(null);
+    this.composerSeed.set(preset);
+    this.composerOpen.set(true);
+  }
+
+  protected onComposerSaved(saved: StoredCustomBoardPreset): void {
+    const stored = this.boardStore.upsertCustomBoard(saved);
+    this.selectedPresetId.set(stored.id);
+    if (!this.userEditedName) {
+      this.name.set(`${stored.name} Session`);
+      this.path.set(`~/work/${stored.targetId}`);
+    }
+    this.composerOpen.set(false);
+  }
+
+  protected onComposerRemoved(id: string): void {
+    this.boardStore.removeCustomBoard(id);
+    this.selectedPresetId.set(OFFICIAL_BOARD_PRESETS[0]!.id);
+    this.composerOpen.set(false);
   }
 
   protected async importBoardFile(): Promise<void> {

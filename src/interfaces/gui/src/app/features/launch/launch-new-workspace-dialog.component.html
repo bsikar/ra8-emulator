@@ -3,8 +3,8 @@
     <div
       [class.sheet-card]="!standalone()"
       [class.standalone-card]="standalone()"
-      [attr.role]="standalone() ? null : 'dialog'"
-      [attr.aria-modal]="standalone() ? null : 'true'"
+      [attr.role]="standalone() || inspectedBoard() || composerOpen() ? null : 'dialog'"
+      [attr.aria-modal]="standalone() || inspectedBoard() || composerOpen() ? null : 'true'"
       aria-label="New Workspace"
       data-testid="new-workspace-dialog"
       (click)="$event.stopPropagation()"
@@ -27,6 +27,14 @@
               [value]="boardQuery()"
               (input)="onSearchInput($event)"
             />
+            <button
+              type="button"
+              class="es-ghost-link"
+              data-testid="new-ws-create-board-btn"
+              (click)="openNewBoardComposer()"
+            >
+              + New Board
+            </button>
             <button
               type="button"
               class="es-ghost-link"
@@ -64,6 +72,14 @@
                   (click)="inspectedBoard.set(preset)"
                 >
                   Details
+                </button>
+                <button
+                  type="button"
+                  class="mini-btn"
+                  [attr.data-testid]="'board-edit-btn-' + preset.targetId"
+                  (click)="openEditBoardComposer(preset)"
+                >
+                  Edit
                 </button>
                 <button
                   type="button"
@@ -217,5 +233,14 @@
     [preset]="inspectedBoard()"
     (closed)="inspectedBoard.set(null)"
     (duplicate)="duplicateBoard($event)"
+    (edit)="openEditBoardComposer($event)"
+  />
+
+  <app-board-composer-modal
+    [open]="composerOpen()"
+    [seedPreset]="composerSeed()"
+    (closed)="composerOpen.set(false)"
+    (saved)="onComposerSaved($event)"
+    (removed)="onComposerRemoved($event)"
   />
 }

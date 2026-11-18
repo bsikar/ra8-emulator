@@ -4,8 +4,8 @@
   color: var(--es-tok-id);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  line-height: 1.375rem;
+  font-size: var(--es-code-font-size, 12px);
+  line-height: 1.4rem;
 }
 
 .es-code-buffer .es-code-line {

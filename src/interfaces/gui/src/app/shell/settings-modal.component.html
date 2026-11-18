@@ -1,0 +1,244 @@
+@if (open()) {
+  <div class="settings-backdrop" (click)="closed.emit()">
+    <div
+      class="settings-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Session settings"
+      data-testid="settings-modal"
+      (click)="$event.stopPropagation()"
+    >
+      <aside class="settings-nav" aria-label="Preference categories">
+        <app-section-kicker label="PREFERENCES" />
+        @for (sec of navSections; track sec.id) {
+          <button
+            type="button"
+            class="nav-btn"
+            [class.is-active]="activeTab() === sec.id"
+            [attr.data-testid]="'settings-tab-' + sec.id"
+            (click)="activeTab.set(sec.id)"
+          >
+            {{ sec.label }}
+          </button>
+        }
+      </aside>
+
+      <section class="settings-body">
+        @switch (activeTab()) {
+          @case ('general') {
+            <div class="pane-head">
+              <div>
+                <app-section-kicker label="SESSION &amp; WORKBENCH DEFAULTS" />
+                <h2 class="pane-title">General &amp; Defaults</h2>
+              </div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Active RPC Endpoint</div><div class="es-meta">Live binary WebSocket daemon attachment</div></div>
+              <span class="mono">{{ rpc.serverUrl() }}</span>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Negotiated Capabilities</div><div class="es-meta">Advertised in RPC Hello bitmask</div></div>
+              <span class="mono">{{ rpc.capabilitiesSummary() }}</span>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Vim Modal Keybindings</div><div class="es-meta">Normal motions (j/k/gg/G/marks) and :ex bar</div></div>
+              <app-tonal-button testId="settings-vim-toggle" [active]="vim.enabled()" (pressed)="vim.toggleEnabled()">
+                {{ vim.enabled() ? 'Enabled' : 'Disabled' }}
+              </app-tonal-button>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Sandboxed Extensions ({{ extStore.extensions().length }})</div><div class="es-meta">Isolated Web Worker plugins and contributed commands</div></div>
+              <app-tonal-button variant="ghost" testId="settings-open-extensions" (pressed)="openExtensions.emit()">Manage Extensions</app-tonal-button>
+            </div>
+          }
+
+          @case ('appearance') {
+            <div class="pane-head">
+              <div>
+                <app-section-kicker label="APPEARANCE &amp; WORKBENCH PALETTE" />
+                <h2 class="pane-title">Syntax &amp; Semantic Signal Schemes</h2>
+                <p class="es-meta sub-copy">Window chrome stays monochromatic Editorial Slate; schemes tune code syntax, register deltas, and hardware state signals.</p>
+              </div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+
+            <app-section-kicker label="SELECT SCHEME PRESET" />
+            <div class="scheme-list">
+              @for (scheme of prefsStore.schemes; track scheme.id) {
+                <button
+                  type="button"
+                  class="scheme-row"
+                  [class.is-active]="prefsStore.prefs().colorScheme === scheme.id"
+                  [attr.data-testid]="'scheme-option-' + scheme.id"
+                  (click)="selectScheme(scheme.id)"
+                >
+                  <div class="scheme-meta">
+                    <span class="pref-label">{{ scheme.name }}</span>
+                    <span class="es-meta">{{ scheme.subtitle }}</span>
+                  </div>
+                  <div class="swatch-group" aria-hidden="true">
+                    @for (hex of scheme.swatches; track hex) {
+                      <span class="swatch-dot" [style.background]="hex"></span>
+                    }
+                    @if (scheme.isDefault) {
+                      <span class="default-tag">Default</span>
+                    }
+                  </div>
+                </button>
+              }
+            </div>
+
+            <app-section-kicker label="LIVE WORKBENCH PREVIEW" />
+            <div class="preview-box es-code-buffer" data-testid="settings-scheme-preview">
+              <div class="es-code-line"><span><span class="tok-kw">if</span> (<span class="tok-fn">ethosu_invoke_v3</span>(&amp;<span class="tok-id">ethosu0</span>, <span class="tok-id">cms_buf</span>, <span class="tok-num">576U</span>) &lt; <span class="tok-num">0</span>)</span></div>
+              <div class="es-code-line is-active">
+                <span class="es-bp-dot is-set"></span>
+                <span><span class="tok-fn">SCB_InvalidateDCache_by_Addr</span>(<span class="tok-id">scores_tcm</span>, <span class="tok-num">256U</span>);</span>
+                <span class="tok-cmt">/* PC 0x02004A1C */</span>
+              </div>
+              <div class="es-code-line"><span><span class="tok-type">uint32_t</span> <span class="tok-id">r0_delta</span> = <span class="tok-num">0x22040000</span>; <span class="tok-cmt">// R3 = 0x00000000</span></span></div>
+            </div>
+
+            <div class="appearance-controls">
+              <label class="inline-ctrl">
+                <span class="pref-label">Code &amp; Console Font Size</span>
+                <select class="ctrl-select" data-testid="settings-font-size" [value]="prefsStore.prefs().codeFontSizePx" (change)="onFontSizeChange($event)">
+                  @for (sz of fontSizes; track sz) {
+                    <option [value]="sz">{{ sz }} px</option>
+                  }
+                </select>
+              </label>
+              <label class="inline-ctrl">
+                <span class="pref-label">Dim Zero Registers (0x00000000)</span>
+                <input type="checkbox" data-testid="settings-dim-zero-toggle" [checked]="prefsStore.prefs().dimZeroRegisters" (change)="onDimZeroToggle($event)" />
+              </label>
+            </div>
+          }
+
+          @case ('recording') {
+            <div class="pane-head">
+              <div><app-section-kicker label="DETERMINISTIC HISTORY &amp; COW CHECKPOINTS" /><h2 class="pane-title">Session Recording</h2></div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Checkpoint Cadence</div><div class="es-meta">Closed deterministic rounds between sparse RA8SNAP + CoW checkpoints</div></div>
+              <select class="ctrl-select" aria-label="Checkpoint cadence" [value]="prefsStore.prefs().checkpointEveryRounds" (change)="onCheckpointCadenceChange($event)">
+                <option [value]="16">16 rounds</option>
+                <option [value]="64">64 rounds (Default)</option>
+                <option [value]="128">128 rounds</option>
+              </select>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Enable History Recording on Workspace Launch</div><div class="es-meta">Requires daemon started with --history directory</div></div>
+              <input type="checkbox" aria-label="Auto-enable recording" [checked]="prefsStore.prefs().autoRecordOnAttach" (change)="onAutoRecordToggle($event)" />
+            </div>
+          }
+
+          @case ('probes') {
+            <div class="pane-head">
+              <div><app-section-kicker label="HARDWARE PROBES &amp; SERIAL PORT BINDING" /><h2 class="pane-title">Target Probes &amp; Dynamic Port Persistence</h2></div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+            <app-section-kicker label="PORT PERSISTENCE &amp; RECONNECT POLICY" />
+            <div class="pref-row">
+              <div><div class="pref-label">Device Binding Identity</div><div class="es-meta">Lock onto physical probe by USB Serial / UID across OS port changes</div></div>
+              <select class="ctrl-select" data-testid="settings-probe-identity" [value]="prefsStore.prefs().probeBindingIdentity" (change)="onBindingIdentityChange($event)">
+                <option value="usb-serial-vid-pid">USB Serial + VID:PID</option>
+                <option value="uid-only">Probe UID Only</option>
+                <option value="os-port-path">OS Port Path (COM / tty)</option>
+              </select>
+            </div>
+            <div class="pref-row">
+              <div><div class="pref-label">Auto-Rebind VCOM on Reset / Replug</div><div class="es-meta">Follow dynamic COM / tty reassignments automatically</div></div>
+              <input type="checkbox" data-testid="settings-auto-rebind-vcom" [checked]="prefsStore.prefs().autoRebindVcom" (change)="onAutoRebindToggle($event)" />
+            </div>
+            <div class="pref-row">
+              <div class="pref-label">Default SWD Connect Mode</div>
+              <div class="seg-strip" role="radiogroup" aria-label="Default SWD Connect Mode">
+                @for (m of swdModes; track m.id) {
+                  <button
+                    type="button"
+                    role="radio"
+                    class="seg-btn"
+                    [class.is-active]="prefsStore.prefs().defaultSwdConnectMode === m.id"
+                    [attr.aria-checked]="prefsStore.prefs().defaultSwdConnectMode === m.id"
+                    [attr.data-testid]="'settings-swd-' + m.id"
+                    (click)="setSwdMode(m.id)"
+                  >
+                    {{ m.label }}
+                  </button>
+                }
+              </div>
+            </div>
+            <div class="probe-list-head">
+              <app-section-kicker label="DETECTED &amp; SAVED PROBES" />
+              <button type="button" class="es-ghost-link" data-testid="settings-rescan-probes" [disabled]="prefsStore.probeScanBusy()" (click)="prefsStore.rescanProbes()">
+                {{ prefsStore.probeScanBusy() ? 'Scanning...' : 'Rescan Probes' }}
+              </button>
+            </div>
+            <div class="probe-box" data-testid="settings-probes-list">
+              @if (prefsStore.detectedProbes().length > 0) {
+                @for (entry of prefsStore.detectedProbes(); track entry.target.probe_id) {
+                  <div class="probe-row">
+                    <div>
+                      <div class="pref-label">{{ entry.target.vendor }} {{ entry.target.model }} · SN {{ entry.target.probe_serial }}</div>
+                      <div class="es-subline">{{ entry.target.board_id }} · {{ entry.target.transport }} · {{ entry.target.host_id }}</div>
+                    </div>
+                    <app-status-dot [tone]="entry.target.connection === 'connected' ? 'nominal' : 'muted'" [label]="entry.target.connection" />
+                  </div>
+                }
+              } @else {
+                <p class="es-meta empty-note">{{ prefsStore.probeScanMessage() ?? 'Click Rescan Probes when attached to a CAP_TARGETS daemon to enumerate SWD / J-Link / CMSIS-DAP hardware.' }}</p>
+              }
+            </div>
+          }
+
+          @case ('hosts') {
+            <div class="pane-head">
+              <div><app-section-kicker label="REMOTE DAEMONS &amp; SSH TUNNELS" /><h2 class="pane-title">Remote &amp; SSH Hosts</h2></div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+            @for (profile of remoteHosts.profiles(); track profile.id) {
+              <div class="pref-row">
+                <div><div class="pref-label">{{ profile.name }}</div><div class="es-subline">{{ profile.wsUrl }} · {{ profile.transportLabel }}</div></div>
+                <span class="es-meta">{{ profile.authMode }}</span>
+              </div>
+            } @empty {
+              <p class="es-meta empty-note">No saved remote host profiles yet.</p>
+            }
+            <div><app-tonal-button variant="ghost" (pressed)="openHostsManager()">Open Connect &amp; Host Manager</app-tonal-button></div>
+          }
+
+          @case ('toolchains') {
+            <div class="pane-head">
+              <div><app-section-kicker label="BUILD &amp; DEBUGGER SERVER" /><h2 class="pane-title">Toolchains &amp; Keybindings</h2></div>
+              <button type="button" class="close-btn" aria-label="Close settings" (click)="closed.emit()">x</button>
+            </div>
+            <div class="pref-row">
+              <span class="pref-label">Zig Compiler Executable</span>
+              <input type="text" class="line-field mono" aria-label="Zig binary path" [value]="prefsStore.prefs().toolchainZigPath" (input)="onZigPathInput($event)" />
+            </div>
+            <div class="pref-row">
+              <span class="pref-label">Default GDB RSP Port</span>
+              <input type="number" class="line-field mono" aria-label="Default GDB port" [value]="prefsStore.prefs().toolchainGdbPort" (input)="onGdbPortInput($event)" />
+            </div>
+            <div class="pref-row"><span class="es-meta">Full Screen</span><span class="mono">F11 / Ctrl+Cmd+F</span></div>
+            <div class="pref-row"><span class="es-meta">Command Mode / Search Everywhere</span><span class="mono">Ctrl/Cmd+K · Shift+Shift</span></div>
+          }
+        }
+
+        <footer class="settings-foot">
+          <div class="foot-left">
+            <button type="button" class="es-ghost-link" data-testid="settings-export-json" (click)="exportJson()">Export Settings JSON</button>
+            <button type="button" class="es-ghost-link" data-testid="settings-reset-defaults" (click)="prefsStore.resetDefaults()">Reset Defaults</button>
+          </div>
+          <div class="foot-right">
+            <app-tonal-button variant="ghost" (pressed)="closed.emit()">Cancel</app-tonal-button>
+            <app-tonal-button testId="settings-save-btn" (pressed)="saveAndClose()">Save Preferences</app-tonal-button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  </div>
+}
