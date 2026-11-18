@@ -1,0 +1,116 @@
+<div class="code-pane">
+  <div class="code-head">
+    <div class="head-left">
+      <span class="file-title mono">{{ activeFileLabel() }}</span>
+      <div class="mode-tabs">
+        <button type="button" class="seg-tab" [class.is-active]="mode() === 'source'" data-testid="debug-mode-source" (click)="mode.set('source')">Source</button>
+        <button type="button" class="seg-tab" [class.is-active]="mode() === 'disasm'" data-testid="debug-mode-disasm" (click)="mode.set('disasm')">Disasm</button>
+        <button type="button" class="seg-tab" [class.is-active]="mode() === 'mixed'" data-testid="debug-mode-mixed" (click)="mode.set('mixed')">Mixed</button>
+        <button type="button" class="seg-tab" [class.is-active]="mode() === 'decomp'" data-testid="debug-mode-decomp" (click)="mode.set('decomp')">Decomp</button>
+      </div>
+    </div>
+
+    <div class="head-actions">
+      <button type="button" class="mini-btn" [class.is-active]="followPc()" data-testid="debug-follow-pc-btn" (click)="followPc.set(!followPc())">Follow PC</button>
+      @if (execution.cpu1Attached()) {
+        <button type="button" class="mini-btn" [class.is-active]="splitCores()" data-testid="debug-split-cores-btn" (click)="splitCores.set(!splitCores())">Split CPU0 | CPU1</button>
+      }
+      @if (canSkipBkpt()) {
+        <button type="button" class="mini-btn" data-testid="debug-skip-bkpt-btn" [disabled]="rpc.observeOnly()" (click)="execution.skipBkpt()">Skip BKPT</button>
+      }
+      <form class="jump-form" (submit)="onJumpSubmit($event)">
+        <input
+          type="text"
+          class="jump-input mono"
+          list="debug-elf-symbols"
+          data-testid="debug-jump-input"
+          [value]="jumpDraft()"
+          (input)="onJumpInput($event)"
+          placeholder="0x02000100 or symbol"
+        />
+        <datalist id="debug-elf-symbols">
+          @for (sym of symbolOptions(); track sym.name + ':' + sym.address) {
+            <option [value]="sym.name">{{ sym.name }}</option>
+          }
+        </datalist>
+        <button type="submit" class="mini-btn" data-testid="debug-jump-btn">Go</button>
+        <button type="button" class="mini-btn" data-testid="debug-add-break-btn" [disabled]="!rpc.isConnected() || rpc.observeOnly()" (click)="onBreakAction()">+ Break</button>
+      </form>
+    </div>
+  </div>
+
+  @if (vim.enabled()) {
+    <div class="vim-strip mono" data-testid="debug-vim-strip">
+      <span>{{ vim.statusLabel() }}</span>
+      <span>Ln {{ vim.cursor().line + 1 }}, Col {{ vim.cursor().col + 1 }}</span>
+      @if (vim.searchPromptActive()) {
+        <span>Search: {{ vim.searchBuffer() }}</span>
+      }
+    </div>
+  }
+
+  <div
+    #codeViewport
+    class="viewport-wrap"
+    [class.is-split-cores]="splitCores() && mode() === 'disasm'"
+    tabindex="0"
+    data-testid="debug-code-viewport"
+    (keydown)="onCodeKeyDown($event)"
+  >
+    <div class="es-code-buffer code-col" data-testid="debug-disasm">
+      @if (codeLines().length > 0) {
+        @for (line of codeLines(); track line.key) {
+          <div
+            class="es-code-line"
+            [class.is-active]="line.isActive"
+            [class.is-vim-cursor]="vimCursorLine() === $index"
+            [attr.data-vim-line]="$index"
+            [attr.data-addr]="line.address !== null ? hex(line.address) : null"
+          >
+            <button
+              type="button"
+              class="gutter-btn"
+              [attr.data-testid]="line.address !== null ? 'debug-gutter-' + hex(line.address) : null"
+              [disabled]="line.address === null || rpc.observeOnly()"
+              (click)="toggleLineBreakpoint(line.address)"
+              aria-label="Toggle breakpoint"
+            >
+              <span class="es-bp-dot" [class.is-set]="line.hasBreakpoint"></span>
+            </button>
+            <span class="es-code-ln mono">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
+            @if (line.rawHex) {
+              <span class="raw-bytes mono">{{ line.rawHex }}</span>
+            }
+            @if (line.symbol) {
+              <span class="sym-tag mono">&lt;{{ line.symbol }}&gt;</span>
+            }
+            <span class="code-tokens">
+              @for (tok of line.tokens; track $index) {
+                <span [class]="'tok-' + tok.kind">{{ tok.text }}</span>
+              }
+            </span>
+          </div>
+        }
+      } @else {
+        <p class="es-meta empty-note">{{ emptyMessage() }}</p>
+      }
+    </div>
+
+    @if (splitCores() && mode() === 'disasm') {
+      <div class="es-code-buffer code-col split-right">
+        <div class="split-core-hdr mono">CPU1 · Cortex-M33</div>
+        @for (line of cpu1Lines(); track line.key) {
+          <div class="es-code-line" [class.is-active]="line.isActive">
+            <span class="es-bp-dot" [class.is-set]="line.hasBreakpoint"></span>
+            <span class="es-code-ln mono">{{ line.address !== null ? hex(line.address) : padLine(line.lineNumber) }}</span>
+            <span class="code-tokens">
+              @for (tok of line.tokens; track $index) {
+                <span [class]="'tok-' + tok.kind">{{ tok.text }}</span>
+              }
+            </span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

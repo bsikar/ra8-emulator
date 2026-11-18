@@ -71,6 +71,69 @@ export function computeStackMetrics(report: StackReport | null): StackMetrics {
   };
 }
 
+export interface PspWatermark {
+  touched: boolean;
+  psp: number;
+  lowPsp: number;
+  effectivePsp: number;
+  headroomBytes: number | null;
+  overflowBytes: number;
+  nearLimit: boolean;
+  summary: string;
+}
+
+export function computePspWatermark(report: StackReport | null, psplim = 0): PspWatermark {
+  if (!report) {
+    return {
+      touched: false,
+      psp: 0,
+      lowPsp: NEVER_LOW_SP,
+      effectivePsp: 0,
+      headroomBytes: null,
+      overflowBytes: 0,
+      nearLimit: false,
+      summary: 'No PSP sample',
+    };
+  }
+  const psp = report.psp >>> 0;
+  const lowPsp = report.lowPsp >>> 0;
+  const lowTouched = lowPsp !== NEVER_LOW_SP;
+  const effectivePsp = lowTouched ? lowPsp : psp;
+  const touched = lowTouched || psp !== 0;
+  if (!touched) {
+    return {
+      touched: false,
+      psp,
+      lowPsp,
+      effectivePsp: 0,
+      headroomBytes: null,
+      overflowBytes: 0,
+      nearLimit: false,
+      summary: 'PSP untouched',
+    };
+  }
+  const lim = psplim >>> 0;
+  if (lim > 0) {
+    const overflowBytes = effectivePsp < lim ? lim - effectivePsp : 0;
+    const headroomBytes = effectivePsp >= lim ? effectivePsp - lim : 0;
+    const nearLimit = overflowBytes > 0 || headroomBytes <= 512;
+    const hex = `0x${effectivePsp.toString(16).padStart(8, '0')}`;
+    const note = overflowBytes > 0 ? `OVERFLOW +${overflowBytes}B` : `${headroomBytes}B free`;
+    return { touched, psp, lowPsp, effectivePsp, headroomBytes, overflowBytes, nearLimit, summary: `${hex} · ${note}` };
+  }
+  const hex = `0x${effectivePsp.toString(16).padStart(8, '0')}`;
+  return {
+    touched,
+    psp,
+    lowPsp,
+    effectivePsp,
+    headroomBytes: null,
+    overflowBytes: 0,
+    nearLimit: false,
+    summary: lowTouched ? `${hex} (low)` : hex,
+  };
+}
+
 export function formatStackSummary(report: StackReport | null): string {
   const m = computeStackMetrics(report);
   if (!m.hasReservation) return 'No stack reservation';

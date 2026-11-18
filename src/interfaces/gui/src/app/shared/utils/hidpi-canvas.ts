@@ -116,3 +116,11 @@ export function mapClientPointToPanel(
   const clampedY = Math.min(nh - 1, Math.max(0, Math.floor(relY * nh)));
   return { x: clampedX, y: clampedY, inside };
 }
+
+/** Returns null cleanly in headless jsdom environments lacking 2D canvas support. */
+export function get2dContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
+  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) {
+    return null;
+  }
+  return canvas.getContext('2d');
+}

@@ -1,5 +1,6 @@
 import {
   computeAspectLockedRect,
+  get2dContext,
   mapClientPointToPanel,
   observeHiDpiCanvas,
   resolveDevicePixelRatio,
@@ -52,6 +53,7 @@ describe('hidpi-canvas utilities', () => {
 
   it('observes canvas resize and cleans up cleanly without ResizeObserver', () => {
     const canvas = document.createElement('canvas');
+    expect(get2dContext(canvas)).toBeNull();
     let seenWidth = 0;
     const stop = observeHiDpiCanvas(canvas, (m) => {
       seenWidth = m.widthPx;

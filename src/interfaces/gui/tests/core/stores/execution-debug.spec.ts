@@ -136,6 +136,15 @@ describe('ExecutionStore and DebugStore', () => {
 
     expect(await debug.undoWrite()).toBe(true);
     expect(debug.canUndoWrite()).toBe(false);
+
+    debug.addWatchExpression('pc');
+    debug.addWatchExpression('outer_x');
+    expect(debug.watchExpressions()).toEqual(['pc', 'outer_x']);
+    debug.removeWatchExpression('pc');
+    expect(debug.watchExpressions()).toEqual(['outer_x']);
+
+    await debug.selectCore(Core.Cpu1);
+    expect(debug.activeCore()).toBe(Core.Cpu1);
   });
 
   it('enforces Observe read-only mode on execution/debug mutations and syncs external SessionEvent stops', async () => {
