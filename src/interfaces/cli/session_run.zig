@@ -174,7 +174,10 @@ pub fn openSession(
         options.board_profile,
         history_opts,
         second,
-        .{ .card = options.sdhi },
+        .{
+            .card = options.sdhi,
+            .machine = if (options.part_set or options.machine != null) options.resolvedMachine() else null,
+        },
     );
     errdefer setup.deinit();
     if (options.history.camera_set or options.camera.kind != .gradient) {

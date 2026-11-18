@@ -13,6 +13,7 @@ const elf = @import("ra8_board").image.elf;
 const flag_parser = @import("flags.zig");
 const listen = @import("listen.zig");
 const loop = @import("loop.zig");
+const machine_mod = @import("ra8_chip").core.machine;
 const served_camera = @import("ra8_rpc").served_camera;
 const served_setup = @import("ra8_rpc").served_setup;
 const source_spec = @import("ra8_host").camera.source_spec;
@@ -62,6 +63,7 @@ const Asked = struct {
     elf: []const u8,
     folded: bool = false,
     cpu1: ?[]const u8 = null,
+    machine: ?*const machine_mod.Machine = null,
     sdhi: card_setup.Sdhi = .{},
     allow_state_files: bool = false,
     history: ?[]const u8 = null,
@@ -84,8 +86,13 @@ pub const fold_every: u32 = 1000;
 /// The transport and image `argv` asks for, or null for a malformed line.
 /// The options come first, in any order, each at most once.
 pub fn parse(argv: []const []const u8) ?Asked {
+    return parseWithCatalog(argv, &machine_mod.catalog.all);
+}
+
+/// `parse`, with `--part` and `--device` naming a machine in `machines`.
+pub fn parseWithCatalog(argv: []const []const u8, machines: []const *const machine_mod.Machine) ?Asked {
     if (argv.len < 2) return null;
-    var flags: flag_parser.ParsedFlags = .{};
+    var flags: flag_parser.ParsedFlags = .{ .catalog = machines };
     var at: usize = 2;
     while (at < argv.len) : (at += 1) {
         switch (flag_parser.parseFlag(&flags, argv, &at)) {
@@ -108,6 +115,7 @@ pub fn parse(argv: []const []const u8) ?Asked {
     asked.ram_budget = flags.ram_budget;
     asked.checkpoint_every = flags.checkpoint_every;
     asked.cpu1 = flags.cpu1;
+    asked.machine = flags.machine;
     asked.sdhi = flags.sdhi;
     asked.kept = flags.kept;
     asked.reopen = flags.reopen;
@@ -119,7 +127,14 @@ pub fn parse(argv: []const []const u8) ?Asked {
         c.allow_webcam = flags.allow_webcam;
         asked.camera = c;
     }
+    if (!coresAllowed(asked)) return null;
     return if (consistent(asked)) asked else null;
+}
+
+fn coresAllowed(asked: Asked) bool {
+    if (asked.cpu1 == null) return true;
+    const m = asked.machine orelse return true;
+    return m.hasSecond();
 }
 
 /// The transport and image after the options: they are dropped, so the
@@ -174,7 +189,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !
         null,
         history_opts,
         if (asked.cpu1) |path| .{ .path = path } else null,
-        .{ .card = asked.sdhi },
+        .{ .card = asked.sdhi, .machine = asked.machine },
     ) catch |err| {
         std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
         return 1;

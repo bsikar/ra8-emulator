@@ -6,6 +6,8 @@
 const CoreWindows = @import("../windows.zig").CoreWindows;
 const cpu_ctrl = @import("../../periph/cpu_ctrl.zig");
 const Guest = @import("../cpu/memory/guest/guest.zig").Guest;
+const machine = @import("../machine/machine.zig");
+const part = @import("../part/part.zig");
 const reboot = @import("../reboot.zig");
 const registry = @import("../../periph/registry.zig");
 
@@ -22,6 +24,8 @@ pub const Wiring = struct {
     /// Where the board looks for CPU1's store, so INTSELR events reach
     /// CPU1's NVIC and DTC1.
     cpu1: *?Guest,
+    /// The core in slot 1, or null when the machine has no second core.
+    core: ?machine.Core = part.cores.cpu1,
     context: *anyopaque,
     /// Seeds a core's own PPB windows with their reset values.
     primeFn: *const fn (context: *anyopaque, memory: Guest, windows: CoreWindows) anyerror!void,

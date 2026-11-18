@@ -81,7 +81,7 @@ pub fn blocks(board: *Board, out: Writer, timebase: clocks.Clocks) !void {
     try icu.sections(board, out);
     try eventLinks(board, out);
     try transfers(board, out);
-    try dtc1.section(&board.transfers1, out);
+    if (board.desc().hasSecond()) try dtc1.section(&board.transfers1, out);
     try dma.section(board, out);
     try serial.sections(board, out);
     try serial.spi(board, out);

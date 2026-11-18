@@ -4,12 +4,14 @@ const std = @import("std");
 
 const dap = @import("ra8_dap");
 const image_file = @import("image_file.zig");
+const machine_mod = @import("ra8_chip").core.machine;
 const ready = @import("ra8_host").sock.ready;
 const session = @import("ra8_session");
 
 pub const Owner = struct {
     allocator: std.mem.Allocator,
     io: std.Io,
+    machine: *const machine_mod.Machine = &machine_mod.catalog.ra8p1,
     harness: ?session.harness.Harness = null,
 
     pub fn open(context: *anyopaque, path: []const u8) anyerror!dap.adapter.Target {
@@ -17,28 +19,65 @@ pub const Owner = struct {
         if (self.harness != null) return error.TargetAlreadyLoaded;
         const bytes = try image_file.read(self.io, self.allocator, path);
         defer self.allocator.free(bytes);
-        self.harness = try session.harness.open(self.allocator, self.io, .{ .elf_bytes = bytes, .history_frames = 0 });
+        self.harness = try session.harness.open(self.allocator, self.io, .{
+            .elf_bytes = bytes,
+            .machine = self.machine,
+            .history_frames = 0,
+        });
         const h = &self.harness.?;
         h.session().history = null;
         return .{ .session = h.session(), .images = .{ h.image(), null } };
     }
 };
 
-pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
-    if (argv.len < 3 or argv.len > 4) {
-        std.debug.print("usage: ra8_emulator dap PORT [IMAGE]\n", .{});
-        return 1;
+/// What `ra8_emulator dap [--part NAME] PORT [IMAGE]` asked for.
+pub const Args = struct {
+    machine: *const machine_mod.Machine = &machine_mod.catalog.ra8p1,
+    port: u16,
+    image: ?[]const u8 = null,
+};
+
+/// The request `argv` makes, or null for a malformed line. `--part` and
+/// `--device` are taken only after the subcommand and only with a value.
+pub fn parseArgs(argv: []const []const u8, machines: []const *const machine_mod.Machine) ?Args {
+    var machine: *const machine_mod.Machine = &machine_mod.catalog.ra8p1;
+    var rest: [4][]const u8 = undefined;
+    var len: usize = 0;
+    var i: usize = 0;
+    while (i < argv.len) : (i += 1) {
+        if (i >= 2 and isPartFlag(argv[i])) {
+            i += 1;
+            if (i >= argv.len) return null;
+            machine = machine_mod.catalog.findIn(machines, argv[i]) orelse return null;
+        } else {
+            if (len == rest.len) return null;
+            rest[len] = argv[i];
+            len += 1;
+        }
     }
-    const port = std.fmt.parseInt(u16, argv[2], 10) catch return 1;
-    var owner: Owner = .{ .allocator = allocator, .io = io };
+    if (len < 3) return null;
+    const port = std.fmt.parseInt(u16, rest[2], 10) catch return null;
+    return .{ .machine = machine, .port = port, .image = if (len == 4) rest[3] else null };
+}
+
+fn isPartFlag(arg: []const u8) bool {
+    return std.mem.eql(u8, arg, "--part") or std.mem.eql(u8, arg, "--device");
+}
+
+pub fn run(allocator: std.mem.Allocator, io: std.Io, argv: []const []const u8) !u8 {
+    const args = parseArgs(argv, &machine_mod.catalog.all) orelse {
+        std.debug.print("usage: ra8_emulator dap [--part NAME] PORT [IMAGE]\n", .{});
+        return 1;
+    };
+    var owner: Owner = .{ .allocator = allocator, .io = io, .machine = args.machine };
     defer if (owner.harness) |*h| h.deinit();
     var adapter: dap.adapter.Adapter = .{
         .allocator = allocator,
         .opener = .{ .context = &owner, .openFn = Owner.open },
     };
     defer adapter.deinit();
-    if (argv.len == 4) adapter.target = try Owner.open(&owner, argv[3]);
-    try listen(allocator, io, port, &adapter);
+    if (args.image) |path| adapter.target = try Owner.open(&owner, path);
+    try listen(allocator, io, args.port, &adapter);
     return 0;
 }
 

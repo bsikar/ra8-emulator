@@ -211,7 +211,7 @@ fn chipAttribution(board: *Board, out: Writer) !void {
 }
 
 pub fn sections(board: *Board, out: Writer) !void {
-    try secondCore(board, out);
+    if (board.desc().hasSecond()) try secondCore(board, out);
     try regions(board, out);
     try partitions(board, out);
     try attribution(board, out);

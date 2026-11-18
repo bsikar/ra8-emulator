@@ -15,6 +15,7 @@ pub const ctl = @import("ctl/ctl.zig");
 const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const gt911 = @import("ra8_components").gt911;
 pub const host = @import("host/host.zig");
+const machine_args = @import("machine_args.zig");
 const max17048 = @import("ra8_components").max17048;
 const mem_dump = @import("ra8_session").mem_dump;
 const part = @import("ra8_chip").core.part;
@@ -34,24 +35,12 @@ pub const dump_limit: usize = 8;
 /// the whole corpus stays quick.
 pub const budget: usize = 2_000_000;
 
-/// Instructions a run gets when `--stop-sym` is watching a counter. A
-/// watched run has an end of its own and reaches it early, so the budget is
-/// only the ceiling on an app that never gets there: at the throughput this
-/// model runs at, roughly 37 million instructions a second, that ceiling is
-/// a few seconds rather than the fraction of one the default would give.
-/// The suite's own apps need tens of millions (blink_ra8p1 reaches its fifth
-/// tick at about 24 million), which the default budget ends ten times short
-/// of, reporting a clean run for an app that had barely started.
+/// Ceiling when `--stop-sym` watches a counter: long enough for multi-tick
+/// corpus apps (blink_ra8p1 needs ~24M), bounded if the symbol never moves.
 pub const watched_budget: usize = 200_000_000;
 
-/// Instructions one modelled millisecond costs at the fastest core clock
-/// this corpus reaches, which is what bounds a `--ms` run.
-///
-/// The deadline itself is counted in SysTick periods, not here. Once SysTick
-/// is armed, the Zig boundary scales this fixed cadence into cycles at the
-/// image's rate. The ceiling keeps an image which never arms SysTick from
-/// running forever; `budget` extra instructions leave room for boot and for
-/// the boundary cut where firmware arms the timer.
+/// Instructions per modelled millisecond at 1 GHz, bounding `--ms` if SysTick
+/// never arms; `budget` extra instructions cover boot (RA8EMU-526).
 pub const instructions_per_ms: usize = 1_000_000;
 
 pub const Options = struct {
@@ -63,6 +52,10 @@ pub const Options = struct {
     /// carries the Ethos-U55, so this decides whether that window answers.
     part: part.Part = .ra8d2,
     part_set: bool = false,
+    machine: ?*const chip.core.machine.Machine = null,
+    /// The name `--part` or `--device` gave, resolved against a machine
+    /// catalog once the whole line is read (machine_args.zig).
+    part_name: ?[]const u8 = null,
     history: world_flags.HistoryFlags = .{},
     /// CMSAMON.CMS and SFSAMON.SFS, the Secure code MRAM and SiP flash in
     /// 32 KB units. Null leaves the part unprogrammed (RA8EMU-428).
@@ -222,6 +215,10 @@ pub const Options = struct {
         if (self.ms) |milliseconds| return ceilingFor(milliseconds);
         return if (watching) watched_budget else budget;
     }
+
+    pub fn resolvedMachine(self: Options) *const chip.core.machine.Machine {
+        return self.machine orelse chip.core.machine.catalog.ofPart(self.part);
+    }
 };
 
 /// The instruction ceiling a deadline of `milliseconds` gets: one period
@@ -234,9 +231,15 @@ pub fn ceilingFor(milliseconds: u64) usize {
     return std.math.cast(usize, wanted) orelse std.math.maxInt(usize);
 }
 
+pub const parseWithCatalog = machine_args.parseWithCatalog;
+
 pub fn parse(argv: []const []const u8) !Options {
-    if (argv.len >= 2 and std.mem.eql(u8, argv[1], "ctl")) return parseCtl(argv);
-    return parseRun(argv);
+    return machine_args.parseWithCatalog(argv, &chip.core.machine.catalog.all);
+}
+
+/// Every flag of `argv`, with any machine name left unresolved.
+pub fn parseFlags(argv: []const []const u8) !Options {
+    return if (argv.len >= 2 and std.mem.eql(u8, argv[1], "ctl")) parseCtl(argv) else parseRun(argv);
 }
 
 fn parseRun(argv: []const []const u8) !Options {
@@ -292,8 +295,7 @@ fn parseRun(argv: []const []const u8) !Options {
         {
             index += 1;
             if (index >= argv.len) return error.MissingValue;
-            options.part = part.Part.parse(argv[index]) orelse return error.UnknownPart;
-            options.part_set = true;
+            options.part_name = argv[index];
         } else if (std.mem.eql(u8, argv[index], "--dump-mem")) {
             index += 1;
             if (index >= argv.len) return error.MissingValue;

@@ -12,6 +12,7 @@ const rpc = @import("ra8_rpc_wire");
 const Outcome = rpc.Outcome(proto.FoldedText);
 
 pub fn folded(context: *handlers.Context, args: proto.FoldedAsk) Outcome {
+    if (!context.session.hasCore(handlers.core(args.core))) return refuse(handlers.app_codes.no_core);
     const folding = context.folding orelse return refuse(handlers.app_codes.refused);
     if (args.to_ns <= args.from_ns) return refuse(handlers.app_codes.refused);
     const room = @min(context.scratch.len, proto.FoldedText.max_len.text);

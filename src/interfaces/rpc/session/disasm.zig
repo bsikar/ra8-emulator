@@ -9,7 +9,10 @@ const wire = @import("disasm_wire.zig");
 
 pub fn read(context: *handlers.Context, args: wire.Request) rpc.Outcome(wire.Reply) {
     const core: api.Core = if (args.core == .cpu0) .cpu0 else .cpu1;
-    const view = context.session.view(core) catch return refuse();
+    const view = context.session.view(core) catch |err| return if (err == error.CoreNotAttached)
+        .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) }
+    else
+        refuse();
     if (args.count == 0 or args.count > disasm.max_rows) return refuse();
     var rows: [disasm.max_rows]disasm.Row = undefined;
     const next = disasm.capture(view, handlers.imageOf(context, core), args.address, rows[0..args.count]) catch {

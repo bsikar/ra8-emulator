@@ -50,7 +50,7 @@ pub fn attach(self: *served_setup.Served, allocator: std.mem.Allocator, board_pr
         .snapshot_version = history_validity.snapshot_version,
         .emulator_commit = history_validity.commit,
         .model_version = history_validity.model,
-        .part = @tagName(self.owner.board().part),
+        .part = self.owner.board().desc().name,
         .board_profile = board_profile orelse board.profile.ek_ra8d2,
         .pace = .virtual,
         .camera = initial_camera,

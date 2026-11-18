@@ -38,6 +38,7 @@ pub const board_excluded = .{
     .{ .name = "frame_taps", .reason = "Passive boundary frame tap fan-out" },
     .{ .name = "input_landing", .reason = "History input landing observer callback" },
     .{ .name = "panel_vsync", .reason = "Root vsync config; live phase is in display.output.vsync" },
+    .{ .name = "machine", .reason = "Root machine topology; hashed by name alongside board.part" },
 };
 
 comptime {
@@ -240,6 +241,7 @@ fn hashBusRegistryAndInputs(allocator: std.mem.Allocator, h: *Hasher, board: *co
 pub fn peripheralsDigest(allocator: std.mem.Allocator, board: *const Board) !Digest {
     var h: Hasher = .{};
     h.auto(board.part);
+    h.bytes(board.desc().name);
     h.auto(board.time.base);
     h.int(board.time.queue.next_seq);
     const q_count = @min(board.time.queue.count, board.time.queue.items.len);

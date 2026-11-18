@@ -29,4 +29,6 @@ test {
     _ = @import("diff_wire_test.zig");
     _ = @import("nav_rpc_test.zig");
     _ = @import("set_var_test.zig");
+    _ = @import("cores_wire_test.zig");
+    _ = @import("cores_test.zig");
 }

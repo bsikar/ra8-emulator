@@ -48,6 +48,7 @@ const zig_drive = @import("zig/drive.zig");
 const zig_session = @import("zig/session.zig");
 
 pub const Error = error{ CoreNotAttached, NoLoader, NoInput, NoFaults, NoPlugs, NoTime, TooManySubscribers, NoHistory };
+pub const Machine = chip.core.machine.Machine;
 pub const Run = zig_session.Command;
 pub const Ended = zig_drive.Ended;
 pub const BreakId = @import("breaks/table.zig").Id;
@@ -88,6 +89,7 @@ pub const Event = @import("event/stream.zig").Event;
 const BoardRun = struct { tick: BoardTick, guest: Guest };
 pub const Session = struct {
     live: zig_session.ZigSession,
+    machine_desc: *const Machine = &chip.core.machine.catalog.ra8d2,
     metrics: ?device_metrics.Hook = null,
     time_base: ?*const TimeBase = null,
     event_clock: ?EventClock = null,
@@ -344,6 +346,9 @@ pub const Session = struct {
 
     pub fn hasCore(self: *const Session, core: Core) bool {
         return @backingInt(core) == self.live.index or self.live.other != null;
+    }
+    pub fn coreInfo(self: *const Session, core: Core) ?chip.core.machine.Core {
+        return if (self.hasCore(core)) self.machine_desc.core(@fromBackingInt(@intCast(@backingInt(core)))) else null;
     }
     pub fn currentCore(self: *const Session) Core {
         return @fromBackingInt(@intCast(self.live.index));

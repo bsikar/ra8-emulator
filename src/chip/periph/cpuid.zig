@@ -21,9 +21,16 @@ pub const address: u32 = 0xE000_ED00;
 
 pub const field = struct {
     pub const implementer_shift: u5 = 24;
+    pub const variant_shift: u5 = 20;
     pub const architecture_shift: u5 = 16;
     pub const partno_shift: u5 = 4;
     pub const partno_mask: u32 = 0xFFF << partno_shift;
+    pub const revision_mask: u32 = 0xF;
+};
+
+pub const Revision = struct {
+    variant: u4 = 0,
+    patch: u4 = 0,
 };
 
 pub const implementer = struct {
@@ -38,11 +45,18 @@ pub const partno = struct {
     pub const cortex_m33: u12 = 0xD21;
 };
 
+/// One processor's CPUID word at revision `rev` (r`variant`p`patch`).
+pub fn wordAt(number: u12, rev: Revision) u32 {
+    return (implementer.arm << field.implementer_shift) |
+        (@as(u32, rev.variant) << field.variant_shift) |
+        (architecture << field.architecture_shift) |
+        (@as(u32, number) << field.partno_shift) |
+        @as(u32, rev.patch);
+}
+
 /// One processor's CPUID word, built from its part number at r0p0.
 pub fn word(number: u12) u32 {
-    return (implementer.arm << field.implementer_shift) |
-        (architecture << field.architecture_shift) |
-        (@as(u32, number) << field.partno_shift);
+    return wordAt(number, .{});
 }
 
 /// The two cores this board carries.

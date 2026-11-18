@@ -63,12 +63,18 @@ pub const Assembler = struct {
 };
 
 pub fn loadBegin(context: *Context, args: proto.LoadBegin) Ack {
+    if (!context.session.hasCore(handlers.core(args.core))) {
+        return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    }
     const gpa = context.gpa orelse return .{ .err = .bad_args };
     context.chunks.begin(gpa, args.total_len, args.checksum) catch return .{ .err = .bad_args };
     return .{ .ok = .{ .accepted = 1 } };
 }
 
 pub fn loadChunk(context: *Context, args: proto.LoadChunk) Ack {
+    if (!context.session.hasCore(handlers.core(args.core))) {
+        return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    }
     context.chunks.chunk(args.offset, args.bytes) catch return .{ .err = .bad_args };
     return .{ .ok = .{ .accepted = 1 } };
 }
@@ -76,6 +82,10 @@ pub fn loadChunk(context: *Context, args: proto.LoadChunk) Ack {
 /// Commits the assembly through the same call one Load takes, so the
 /// semantics are identical by construction (RA8EMU-1174).
 pub fn loadEnd(context: *Context, args: proto.CoreOnly) Ack {
+    // Checked first, so a refused end leaves another core's assembly in flight.
+    if (!context.session.hasCore(handlers.core(args.core))) {
+        return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    }
     const image = context.chunks.end() catch return .{ .err = .bad_args };
     defer if (context.gpa) |gpa| gpa.free(image);
     return handlers.load(context, .{ .core = args.core, .image = image });

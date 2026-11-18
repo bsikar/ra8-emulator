@@ -29,6 +29,7 @@ const GuestBus = @import("memory/guest/bus.zig").GuestBus;
 const mpu = @import("../../periph/mpu/mpu.zig");
 const mpu_check = @import("mpu_check.zig");
 const NvicSource = @import("exception/nvic_source.zig").NvicSource;
+const profile = @import("profile.zig");
 const QuietSource = @import("exception/quiet_source.zig").QuietSource;
 const Reboot = @import("../reboot.zig").Reboot;
 const registry = @import("../../periph/registry.zig");
@@ -150,6 +151,9 @@ pub const Wiring = struct {
     bus_errors: ?*bus_fault.Tally = null,
     /// `--save-state` / `--load-state` (RA8EMU-660).
     snapshot: ?Snapshot = null,
+    /// Instruction groups and Security Extension for the primary core.
+    profile: profile.Profile = profile.Profile.m85,
+    security: bool = true,
 };
 
 /// The hand-off from main to the CPU the run asked for.
@@ -211,19 +215,19 @@ pub fn runOnBoard(
         .memory = GuestBus.of(&memory, wiring.fast_memory),
         .periph = periph,
         .scs = .{
-            .partitions = wiring.partitions,
+            .partitions = if (wiring.security) wiring.partitions else null,
             .regions = wiring.regions,
-            .regions_ns = wiring.regions_ns,
+            .regions_ns = if (wiring.security) wiring.regions_ns else null,
             .clears = wiring.clears,
             .cut = wiring.cut,
             .itm = wiring.itm,
         },
     };
     var partitions: SauSource = undefined;
-    const source: ?Attribution = if (wiring.partitions) |unit| blk: {
+    const source: ?Attribution = if (wiring.security) if (wiring.partitions) |unit| blk: {
         partitions = .{ .unit = unit, .idau = wiring.idau };
         break :blk partitions.source();
-    } else null;
+    } else null else null;
     return runOn(
         out,
         board.view(),
@@ -239,6 +243,8 @@ pub fn runOnBoard(
             .snapshot = wiring.snapshot,
             .peer = wiring.peer,
             .core = wiring.core,
+            .profile = wiring.profile,
+            .security = wiring.security,
         },
         &board,
         source,
@@ -257,6 +263,8 @@ const Watch = struct {
     snapshot: ?Snapshot = null,
     peer: ?*cpu_mod.Cpu = null,
     core: ?*?*cpu_mod.Cpu = null,
+    profile: profile.Profile = profile.Profile.m85,
+    security: bool = true,
 };
 
 /// The run's decoded-block cache, joined to the machine's fanout; null when
@@ -311,12 +319,11 @@ fn runOn(
     const formed = try formCache(fan, blocks);
     defer if (formed) |cache| fan.detach(&cache.lines);
     cpu.blocks = formed;
-    cpu.retire_listener = watch.retire;
     if (watch.core) |slot| slot.* = &cpu;
     defer if (watch.core) |slot| {
         slot.* = null;
     };
-    cpu.fetch_guard = watch.fetch;
+    armWatch(&cpu, watch);
     var miss: u32 = 0;
     if (watch.bus_errors) |tally| cpu.bus.tally = tally;
     if (watch.bus_errors != null) cpu.bus.miss = &miss;
@@ -328,7 +335,7 @@ fn runOn(
         gate = .{ .source = from, .current = &cpu.banked.current };
         cpu.bus.gate = &gate;
     }
-    if (board) |b| armBoard(&cpu, b, &check);
+    if (board) |b| armBoard(&cpu, b, &check, watch.security);
     if (wrap) |w| if (w.retiredFn) |lend| lend(w.context, &cpu.retired);
     if (wrap) |w| if (w.regsFn) |lend| lend(w.context, &cpu.regs);
     cpu.reset(vector_base) catch {
@@ -354,9 +361,15 @@ fn runOn(
 pub const stretches = stretch_run.stretches;
 pub const report = stop_report.report;
 
-fn armBoard(cpu: *cpu_mod.Cpu, b: *BoardBus, check: *mpu_check.Check) void {
+fn armWatch(cpu: *cpu_mod.Cpu, watch: Watch) void {
+    cpu.profile = watch.profile;
+    cpu.retire_listener = watch.retire;
+    cpu.fetch_guard = watch.fetch;
+}
+
+fn armBoard(cpu: *cpu_mod.Cpu, b: *BoardBus, check: *mpu_check.Check, security: bool) void {
     b.scs.fp = &cpu.fp;
-    b.security = &cpu.banked;
+    b.security = if (security) &cpu.banked else null;
     cpu.cut = b.scs.cut;
     if (b.scs.regions) |unit| {
         check.* = .{ .unit = unit, .unit_ns = b.scs.regions_ns, .state = &cpu.banked.current };

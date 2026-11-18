@@ -3,6 +3,7 @@
 const file_ops = @import("../file_ops.zig");
 const glcdc_vsync = @import("ra8_chip").periph.glcdc.vsync;
 const history_recorder = @import("../history/recorder.zig");
+const machine_mod = @import("ra8_chip").core.machine;
 const part = @import("ra8_chip").core.part;
 
 pub const Options = struct {
@@ -12,6 +13,9 @@ pub const Options = struct {
     /// bytes the caller looked at.
     elf_bytes: ?[]const u8 = null,
     device: part.Part = .ra8p1,
+    /// Explicit machine description (RA8EMU-1342); null uses the catalog
+    /// entry for `device`.
+    machine: ?*const machine_mod.Machine = null,
     input_script: ?[]const u8 = null,
     /// Caller-supplied input script text; when set, `input_script` is not read
     /// through `files`.
@@ -47,4 +51,8 @@ pub const Options = struct {
     /// Host-backed file and state callbacks (ADR 0004 D20). Null keeps the
     /// harness purely in-memory (`elf_bytes` required, state files unavailable).
     files: ?file_ops.Ops = null,
+
+    pub fn resolvedMachine(self: Options) *const machine_mod.Machine {
+        return self.machine orelse machine_mod.catalog.ofPart(self.device);
+    }
 };

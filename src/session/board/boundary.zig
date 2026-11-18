@@ -42,7 +42,11 @@ pub const BoardBoundary = struct {
     idle_skip: bool = true,
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
-        self.cut.clocks = .{ &self.timebase, &self.ns_timebase };
+        const systicks = self.board.desc().primary().systicks;
+        self.cut.clocks = .{
+            if (systicks >= 1) &self.timebase else null,
+            if (systicks >= 2) &self.ns_timebase else null,
+        };
         return .{
             .context = self,
             .tickFn = tick,

@@ -377,13 +377,14 @@ pub const NavQueryArgs = nav_wire.NavQueryArgs;
 pub const NavQueryResult = nav_wire.NavQueryResult;
 pub const MarkerSetArgs = nav_wire.MarkerSetArgs;
 pub const FrameStatusResult = nav_wire.FrameStatusResult;
+pub const cores_wire = @import("cores_wire.zig");
 pub const diff_wire = @import("diff_wire.zig");
+pub const metrics_wire = @import("metrics_wire.zig");
 
 pub const DiffWire = diff_wire.DiffWire;
 pub const DiffArgs = diff_wire.DiffArgs;
-pub const metrics_wire = @import("metrics_wire.zig");
-
 pub const MetricsReport = metrics_wire.MetricsReport;
+pub const CoreList = cores_wire.CoreList;
 /// Calls a client can hold unanswered at once before freeing slots.
 pub const pending_slots = 32;
 pub const Client = rpc.Client(pending_slots, max_payload);

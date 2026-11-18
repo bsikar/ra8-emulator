@@ -16,6 +16,7 @@ const rtos_report = @import("ra8_session").rtos.report;
 pub const Load = struct {
     cpu0: ?rtos_report.Side = null,
     cpu1: ?rtos_report.Side = null,
+    has_second: bool = true,
 };
 
 /// The `cpu_load` object, or null when no load was asked for.
@@ -37,7 +38,7 @@ pub fn document(out: anytype, found: *const Load) !void {
 
 fn contents(j: anytype, found: *const Load) !void {
     try core(j, "cpu0", found.cpu0);
-    try core(j, "cpu1", found.cpu1);
+    if (found.has_second) try core(j, "cpu1", found.cpu1);
 }
 
 fn core(j: anytype, key: []const u8, side: ?rtos_report.Side) !void {

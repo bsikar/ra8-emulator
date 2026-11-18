@@ -17,6 +17,7 @@ pub fn open(
     elf_path: []const u8,
     initial: *served_initial.Images,
     profile: ?[]const u8,
+    startup: setup.Startup,
     bind: ?*history_bind.Bind,
     ram: ?*history_ram.RamHistory,
     history_opts: ?setup.HistoryOpts,
@@ -24,6 +25,7 @@ pub fn open(
     return harness.open(allocator, io, .{
         .elf_path = elf_path,
         .elf_bytes = initial.firstBytes(),
+        .machine = startup.machine,
         .board_profile = profile,
         .history_storage = if (bind) |b| b.storage else if (ram) |r| r.storage else null,
         .history_objects = if (bind) |b| b.objects else if (ram) |r| r.object_space else null,

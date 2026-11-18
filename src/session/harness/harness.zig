@@ -9,12 +9,12 @@ const std = @import("std");
 const Board = @import("ra8_board").board.Board;
 const cpu_mod = @import("ra8_chip").core.cpu.cpu;
 const debug_session = @import("../session.zig");
+const dwt = @import("ra8_chip").periph.dwt;
 const elf = @import("ra8_board").image.elf;
 pub const files = @import("files.zig");
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const input_script = @import("ra8_components").input_script;
 const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
-const part = @import("ra8_chip").core.part;
 const profile = @import("ra8_board").profile;
 const scheduler = @import("ra8_chip").core.scheduler;
 const second_core = @import("ra8_chip").core.second.core;
@@ -229,7 +229,9 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.image = try elf.Image.init(state.bytes);
     state.board = Board.init(allocator);
     errdefer state.board.deinit();
-    state.board.part = options.device;
+    const chosen = options.resolvedMachine();
+    state.board.machine = chosen;
+    state.board.part = chosen.part;
     state.profile = try profile.parse(options.board_profile orelse profile.ek_ra8d2);
     state.board.external_memory = state.profile.memory;
     try state.board.nor.resize(state.profile.memory.ospi.size);
@@ -243,11 +245,12 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBase() orelse return error.NoVectorTable;
     option_memory.apply(&state.board.heartbeat, state.cpu0.own());
+    const primary = chosen.primary();
     state.memory = .{
         .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } },
         .periph = &state.board.bus,
         .scs = .{
-            .partitions = &state.board.partitions,
+            .partitions = if (primary.security) &state.board.partitions else null,
             .regions = &state.board.regions,
             .clears = &state.board.clears,
         },
@@ -256,12 +259,13 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     // the direct path; without it a session core refused nothing (RA8EMU-1148).
     state.check = .{ .unit = &state.board.regions, .state = &state.cpu.banked.current };
     state.memory.armCheck(&state.check);
-    state.machine = .{};
+    state.machine = .{ .dwt = .{ .numcomp = dwt.numcompOf(primary.cpuid) } };
     state.driver = .{ .machine = &state.machine };
     state.watching = .{ .inner = state.memory.view(), .driver = &state.driver };
     state.pending = .{};
     state.quiet = .{ .inner = state.pending.source(), .memory = state.watching.view() };
     state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
+    state.cpu.profile = primary.profile;
     state.cpu.mpu = &state.check;
     state.pending.banked = &state.cpu.banked;
     state.pending.clear_due = &state.quiet.clear_due;
@@ -292,6 +296,7 @@ fn wire(state: *State, allocator: std.mem.Allocator, io: std.Io, options: Option
             .budget = debug_session.limits.default_budget,
             .watch = &state.watching,
         },
+        .machine_desc = options.resolvedMachine(),
     };
     state.session.metrics = .{ .context = state, .readFn = State.metricsRead };
     state.transport = .{ .session = &state.session };

@@ -39,7 +39,7 @@ pub fn describe(source: *setup.Served) !bundle.manifest.Metadata {
     const first = source.owner.loadedImage(.cpu0) orelse return error.NoImage;
     const second = source.owner.loadedImage(.cpu1);
     return .{
-        .board = @tagName(source.owner.board().part),
+        .board = source.owner.board().desc().name,
         .elf0 = image("cpu0.elf", first.bytes),
         .elf1 = if (second) |value| image("cpu1.elf", value.bytes) else null,
     };

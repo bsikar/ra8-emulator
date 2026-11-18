@@ -149,6 +149,10 @@ fn openSecond(
     blocks: bool,
     reader: file_ops.Reader,
 ) ?[16]u8 {
+    if (!board.desc().hasSecond()) {
+        std.debug.print("cannot bring up the second core from {s}: AbsentCore\n", .{named});
+        return null;
+    }
     const identity = session.cpu1.image.openIdentified(
         pair,
         std.heap.page_allocator,

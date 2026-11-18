@@ -11,6 +11,9 @@ const rpc = @import("ra8_rpc_wire");
 const refused = handlers.app_codes.refused;
 
 pub fn map(context: *handlers.Context, args: proto.MapAsk) rpc.Outcome(proto.MapText) {
+    if (!context.session.hasCore(handlers.core(args.core))) {
+        return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
+    }
     const mapping = context.mapping orelse return .{ .err = @fromBackingInt(@intCast(refused)) };
     const room = @min(context.scratch.len, proto.MapText.max_len.text);
     const core = @backingInt(args.core);

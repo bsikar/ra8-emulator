@@ -41,7 +41,7 @@ pub fn zigCore(
     retired: u64,
     bus_errors: bus_fault.Tally,
 ) !void {
-    try report_part.print(out, board.part);
+    try report_part.printMachine(out, board.desc());
     try report.bus(board, out);
     try report_timing.clock(out, timebase);
     if (policy) |asked| {

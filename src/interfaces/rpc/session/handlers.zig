@@ -5,6 +5,7 @@ const api = @import("ra8_session").api;
 const artifact_service = @import("../artifacts/service.zig");
 const artifact_transfer = @import("../artifacts/transfer.zig");
 const board_lib = @import("ra8_board");
+const cores = @import("cores.zig");
 const host = @import("ra8_host");
 const load_chunks = @import("load_chunks.zig");
 const nav_hooks = @import("nav_hooks.zig");
@@ -171,11 +172,11 @@ fn code(value: u16) rpc.Code {
 }
 
 fn refuse(comptime Reply: type, err: anyerror) rpc.Outcome(Reply) {
-    if (err == error.CoreNotAttached) return .{ .err = code(app_codes.no_core) };
+    if (err == error.CoreNotAttached or err == error.AbsentCore) return .{ .err = code(app_codes.no_core) };
     return .{ .err = code(app_codes.refused) };
 }
 
-fn core(of: proto.Core) api.Core {
+pub fn core(of: proto.Core) api.Core {
     return @fromBackingInt(@intCast(@backingInt(of)));
 }
 
@@ -262,6 +263,7 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
 /// `break NAME` resolves modules before the image, waiting if unknown (RA8EMU-1141).
 pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome(proto.NamedPoint) {
     const which = core(args.core);
+    if (cores.absent(context.session, which)) return .{ .err = code(app_codes.no_core) };
     if (context.modules) |table| if (table.addressOf(args.name)) |address| {
         return placeNamed(context, which, address);
     };
@@ -334,6 +336,7 @@ pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
 }
 
 pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
+    if (cores.absent(context.session, core(args.core))) return .{ .err = code(app_codes.no_core) };
     context.topics[@backingInt(args.core)] &= ~bit(args.topic);
     if (!context.wants(args.core, .lcd_dirty)) {
         context.lcd_rate[@backingInt(args.core)] = 0;

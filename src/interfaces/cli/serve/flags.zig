@@ -3,6 +3,7 @@ const std = @import("std");
 
 const card_setup = @import("../card/setup.zig");
 const host = @import("ra8_host");
+const machine_mod = @import("ra8_chip").core.machine;
 const source_spec = @import("ra8_host").camera.source_spec;
 
 pub const ParsedFlags = struct {
@@ -14,6 +15,9 @@ pub const ParsedFlags = struct {
     folded: bool = false,
     allow_state: bool = false,
     cpu1: ?[]const u8 = null,
+    machine: ?*const machine_mod.Machine = null,
+    /// The machines `--part` and `--device` may name.
+    catalog: []const *const machine_mod.Machine = &machine_mod.catalog.all,
     sdhi: card_setup.Sdhi = .{},
     history_root: ?[]const u8 = null,
     history_off: bool = false,
@@ -71,6 +75,11 @@ fn parseInputs(flags: *ParsedFlags, argv: []const []const u8, at: *usize) FlagSt
     } else if (std.mem.eql(u8, argv[idx], "--cpu1") and flags.cpu1 == null and valued) {
         at.* += 1;
         flags.cpu1 = argv[at.*];
+    } else if ((std.mem.eql(u8, argv[idx], "--part") or std.mem.eql(u8, argv[idx], "--device")) and
+        flags.machine == null and valued)
+    {
+        at.* += 1;
+        flags.machine = machine_mod.catalog.findIn(flags.catalog, argv[at.*]) orelse return .bad;
     } else return .stop;
     return .taken;
 }

@@ -53,6 +53,7 @@ pub const Cpu1 = struct {
         path: []const u8,
     ) !void {
         if (opened.session().root != null) return error.HistoryAlreadyRooted;
+        _ = try opened.board().desc().cores.require(.cpu1);
         const bytes = try reader.readAlloc(io, path, allocator, second_core.limits.image_bytes);
         defer allocator.free(bytes);
         try self.openBytes(allocator, opened, bytes);
@@ -63,7 +64,9 @@ pub const Cpu1 = struct {
     pub fn openBytes(self: *Cpu1, allocator: std.mem.Allocator, opened: *harness.Harness, bytes: []const u8) !void {
         if (opened.session().root != null) return error.HistoryAlreadyRooted;
         if (opened.session().live.other != null) return error.SecondCoreAlreadyOpen;
+        const desc = try opened.board().desc().cores.require(.cpu1);
         errdefer self.* = .{};
+        self.machine = .{ .dwt = .{ .numcomp = dwt.numcompOf(desc.cpuid) } };
         self.bytes = try allocator.dupe(u8, bytes);
         errdefer allocator.free(self.bytes);
         _ = try cpu1_image.openBytes(&self.pair, board_wiring.cpu1(opened.board()), self.bytes, opened.guest());
