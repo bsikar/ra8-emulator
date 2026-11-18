@@ -243,7 +243,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.metrics_tracking = .{ .{}, .{} };
     errdefer state.cpu0.close();
     _ = try state.cpu0.attachStore(&state.board, state.image);
-    const vector = state.image.vectorBase() orelse return error.NoVectorTable;
+    const vector = state.image.vectorBaseFor(state.board.desc().memory) orelse return error.NoVectorTable;
     option_memory.apply(&state.board.heartbeat, state.cpu0.own());
     const primary = chosen.primary();
     state.memory = .{

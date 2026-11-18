@@ -2,6 +2,7 @@
 //! src/chip/core/cpu; its memory, exception model, FPU, MVE and disassembler
 //! each have an index of their own.
 pub const alignment = @import("cpu/alignment.zig");
+pub const block_cache = @import("cpu/block/cache.zig");
 pub const board_bus = @import("cpu/board_bus.zig");
 pub const boot = @import("cpu/boot.zig");
 pub const bus = @import("cpu/bus.zig");

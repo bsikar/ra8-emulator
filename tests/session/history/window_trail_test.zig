@@ -198,7 +198,7 @@ test "window trail: code-cache invalidation observed on undo and redo" {
     defer store.deinit();
 
     var lines: code_lines.CodeLines = undefined;
-    lines.clear();
+    lines.init();
     try store.fanMut().attach(&lines);
     defer store.fanMut().detach(&lines);
 

@@ -36,17 +36,20 @@ pub const CoreAliases = struct {
     port_sdram: bool,
 };
 
+const max_regions = ra8.chip.core.machine.memory.max_regions;
+
 pub const AliasState = struct {
     cpu0: CoreAliases,
     cpu1: ?CoreAliases = null,
-    shared_pages: [memmap.ram.len]?u8 = @splat(null),
+    shared_pages: [max_regions]?u8 = @splat(null),
 };
 
 pub fn regionSlice(store: *const Store, base: u32) ?[]const u8 {
-    for (memmap.ram, 0..) |entry, idx| {
-        if (entry.base == base) {
-            return if (store.pages[idx]) |slice| slice else null;
-        }
+    if (store.map_desc.indexOf(base)) |idx| {
+        return if (store.pages[idx]) |slice| slice else null;
+    }
+    if (store.map_desc.aliasIndexOf(base)) |idx| {
+        return if (store.alias_pages[idx]) |slice| slice else null;
     }
     return null;
 }
@@ -67,8 +70,8 @@ pub fn coreAliases(store: *const Store) CoreAliases {
     };
 }
 
-pub fn sharedPages(first: *const Store, second: *const Store) [memmap.ram.len]?u8 {
-    var out: [memmap.ram.len]?u8 = @splat(null);
+pub fn sharedPages(first: *const Store, second: *const Store) [max_regions]?u8 {
+    var out: [max_regions]?u8 = @splat(null);
     for (second.pages, 0..) |page, idx| if (page) |sec_slice| {
         for (first.pages, 0..) |prev, slot| if (prev) |pri_slice| {
             if (sec_slice.ptr == pri_slice.ptr and sec_slice.len == pri_slice.len) {
@@ -107,6 +110,10 @@ pub fn storeDigest(store: *const Store) Digest {
     for (store.pages, 0..) |page, idx| {
         h.boolean(page != null);
         if (page) |slice| hashSpanWithAlias(&h, store.pages[0..idx], slice);
+    }
+    for (store.alias_pages) |page| {
+        h.boolean(page != null);
+        if (page) |slice| hashSpanWithAlias(&h, &store.pages, slice);
     }
     for (store.extra.windows) |win| {
         h.boolean(win != null);

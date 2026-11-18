@@ -89,7 +89,15 @@ pub const QuietSource = struct {
     pub fn bus(self: *QuietSource) bus_mod.Bus {
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek },
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .latch = latch,
+                .repeat = repeat,
+                .peek = peek,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
+            },
             .direct = self.memory.direct,
             .lines = self.memory.lines,
             .register_state = self.memory.register_state,
@@ -184,6 +192,16 @@ pub const QuietSource = struct {
         const self: *QuietSource = @ptrCast(@alignCast(ctx));
         self.stirAll();
         return self.memory.latch(address, bits);
+    }
+
+    fn allowsExec(ctx: *anyopaque, address: u32, len: usize) bool {
+        const self: *QuietSource = @ptrCast(@alignCast(ctx));
+        return self.memory.allowsExec(address, len);
+    }
+
+    fn touchesPeriph(ctx: *anyopaque, address: u32, len: usize) ?bool {
+        const self: *QuietSource = @ptrCast(@alignCast(ctx));
+        return self.memory.touchesPeriph(address, len);
     }
 
     /// ICER or ICPR, in either copy of the SCS.

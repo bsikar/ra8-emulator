@@ -1,5 +1,6 @@
-//! The Zig core's host-backed memory store. Off-chip SDRAM and OSPI sit
-//! behind the external port the board attaches (RA8EMU-1041).
+//! The Zig core's host-backed memory store. Region ownership, aliases, and
+//! permissions come from the machine's `MemoryMap` (RA8EMU-1343); off-chip
+//! SDRAM and OSPI sit behind the external port when attached (RA8EMU-1041).
 const touched_api = @import("touched.zig");
 
 const std = @import("std");
@@ -8,75 +9,67 @@ const code_lines = @import("../code_lines.zig");
 const external_port = @import("external_port.zig");
 const extra = @import("extra.zig");
 const Initiator = @import("initiator.zig").Initiator;
-const memmap = @import("../../memmap.zig");
+const memory_map = @import("../../machine/memory.zig");
 const observer = @import("observer.zig");
 
 pub const Error = error{OutOfMemory};
 pub const AccessError = error{Unmapped} || Error;
 pub const MapError = extra.Error;
-
-/// Where a byte access lands: the canonical backing region's base, the
-/// offset inside it, and the read-only host bytes (RA8EMU-D1). Aliases fold
-/// onto the region they view, so every access into one storage reports one
-/// identity.
 pub const Located = struct { base: u32, offset: usize, bytes: []const u8 };
-
-/// Mutable backing resolution reserved for hooked writers and raw restore.
 pub const LocatedMut = struct { base: u32, offset: usize, bytes: []u8 };
-
 pub const SdramSet = std.StaticBitSet(128 * 1024 * 1024 / 4096);
 
 pub const Store = struct {
+    map_desc: *const memory_map.MemoryMap = &memory_map.ra8,
     touched: touched_api.Tracker = .{},
     sdram_resident: SdramSet = .empty,
     sdram_demand_zero: bool = false,
-    pages: [memmap.ram.len]?[]u8 = @splat(null),
-    owned: [memmap.ram.len]bool = @splat(false),
+    pages: [memory_map.max_regions]?[]u8 = @splat(null),
+    alias_pages: [memory_map.max_aliases]?[]u8 = @splat(null),
+    owned: [memory_map.max_regions]bool = @splat(false),
     extra: extra.Extra = .{},
     port: ?external_port.Port = null,
     owns_port: bool = false,
-    /// The trail hook this store feeds (H1); null records nothing.
     observer: ?*const observer.Observer = null,
-    /// This machine's block fanout, which its writes invalidate.
     fanout: code_lines.Fanout = .{},
-    /// The store shared regions were borrowed from, when this is a second
-    /// core's store: its fanout and trail are the machine's.
     lender: ?*Store = null,
 
-    /// Back every fixed region. A second core borrows shared SRAM/SDRAM and
-    /// the same external port, while retaining private MRAM, TCM and PPB.
     pub fn init(lender: ?*Store) Error!Store {
-        var self: Store = .{};
+        return initFor(lender, if (lender) |first| first.map_desc else &memory_map.ra8);
+    }
+
+    pub fn initFor(lender: ?*Store, desc: *const memory_map.MemoryMap) Error!Store {
+        var self: Store = .{
+            .map_desc = desc,
+            .touched = .{ .sram_base = desc.sramBase(), .sdram_base = desc.sdramBase() },
+            .fanout = .{ .layout = code_lines.Layout.fromMap(desc) },
+        };
         errdefer self.deinit();
-        for (memmap.ram, 0..) |entry, index| {
-            if (viewOf(entry.base) != null) continue;
-            if (lender) |first| if (shared(entry.base)) {
+        const count = @min(desc.regions.len, memory_map.max_regions);
+        for (desc.regions[0..count], 0..) |entry, index| {
+            if (lender) |first| if (entry.shared) {
                 self.pages[index] = first.pages[index];
                 continue;
             };
             self.pages[index] = try allocate(entry.size);
             self.owned[index] = true;
         }
-        for (memmap.ram, 0..) |entry, index| {
-            const secure = viewOf(entry.base) orelse continue;
-            self.pages[index] = self.pages[indexOf(secure).?];
-        }
         if (lender) |first| {
             self.port = first.port;
             self.sdram_demand_zero = first.sdram_demand_zero;
         }
         self.lender = lender;
+        self.syncAliases();
         return self;
     }
 
-    /// Put the board's off-chip memory behind the SDRAM and OSPI apertures.
-    /// The board owns the backing and frees it after this store is gone.
     pub fn attachExternal(self: *Store, port: external_port.Port) void {
-        const secure_index = indexOf(memmap.sdram_base).?;
-        if (self.owned[secure_index]) if (self.pages[secure_index]) |old| std.heap.PageAllocator.unmap(@alignCast(old));
-        self.pages[secure_index] = port.sdram;
-        self.owned[secure_index] = false;
-        self.pages[indexOf(memmap.ns_sdram_base).?] = port.sdram;
+        if (self.sdramIndex()) |idx| {
+            if (self.owned[idx]) if (self.pages[idx]) |old| std.heap.PageAllocator.unmap(@alignCast(old));
+            self.pages[idx] = port.sdram;
+            self.owned[idx] = false;
+        }
+        self.syncAliases();
         self.port = port;
         self.owns_port = true;
         self.sdram_demand_zero = port.demand_zero;
@@ -84,16 +77,23 @@ pub const Store = struct {
         self.barrier(.attach_external);
     }
 
-    pub fn deinit(self: *Store) void {
-        if (self.owns_port) {
-            self.pages[indexOf(memmap.sdram_base).?] = null;
-            self.pages[indexOf(memmap.ns_sdram_base).?] = null;
+    fn syncAliases(self: *Store) void {
+        const count = @min(self.map_desc.aliases.len, memory_map.max_aliases);
+        for (self.map_desc.aliases[0..count], 0..) |alias, idx| {
+            self.alias_pages[idx] = if (self.map_desc.indexOf(alias.of)) |target| self.pages[target] else null;
         }
+    }
+
+    pub fn deinit(self: *Store) void {
+        if (self.owns_port) if (self.sdramIndex()) |idx| {
+            self.pages[idx] = null;
+        };
         for (&self.pages, &self.owned) |*held, *mine| {
             if (mine.*) if (held.*) |bytes| std.heap.PageAllocator.unmap(@alignCast(bytes));
             held.* = null;
             mine.* = false;
         }
+        @memset(&self.alias_pages, null);
         self.extra.deinit();
         self.port = null;
         self.owns_port = false;
@@ -101,24 +101,9 @@ pub const Store = struct {
         self.lender = null;
     }
 
-    /// Zero every region this store owns and drop the windows it mapped,
-    /// so a live store reads as a fresh one before a snapshot fills it
-    /// (RA8EMU-768). Borrowed regions are the lender's to clear.
     pub fn wipe(self: *Store) void {
-        if (self.owns_port) {
-            const sdram = self.port.?.sdram;
-            if (self.sdram_demand_zero and sdram.len <= 128 * 1024 * 1024) {
-                var it = self.sdram_resident.iterator(.{});
-                while (it.next()) |page| {
-                    const off = page * 4096;
-                    if (off < sdram.len) @memset(sdram[off..@min(off + 4096, sdram.len)], 0);
-                }
-                self.sdram_resident = .empty;
-            } else {
-                @memset(sdram, 0);
-            }
-        }
-        self.touched = .{};
+        if (self.owns_port) self.wipeSdram();
+        self.touched = .{ .sram_base = self.map_desc.sramBase(), .sdram_base = self.map_desc.sdramBase() };
         self.barrier(.wipe);
         for (self.pages, self.owned) |held, mine| {
             if (mine) if (held) |bytes| @memset(bytes, 0);
@@ -127,9 +112,20 @@ pub const Store = struct {
         self.notifyCodeRanges();
     }
 
+    fn wipeSdram(self: *Store) void {
+        const sdram = self.port.?.sdram;
+        if (self.sdram_demand_zero and sdram.len <= 128 * 1024 * 1024) {
+            var it = self.sdram_resident.iterator(.{});
+            while (it.next()) |page| {
+                const off = page * 4096;
+                if (off < sdram.len) @memset(sdram[off..@min(off + 4096, sdram.len)], 0);
+            }
+            self.sdram_resident = .empty;
+        } else @memset(sdram, 0);
+    }
+
     pub fn sdramResident(self: *const Store) *const SdramSet {
-        if (self.lender) |first| return first.sdramResident();
-        return &self.sdram_resident;
+        return if (self.lender) |first| first.sdramResident() else &self.sdram_resident;
     }
 
     pub fn noteSdramResident(self: *Store, offset: usize, len: usize) void {
@@ -143,34 +139,26 @@ pub const Store = struct {
     }
 
     pub fn touches(self: *const Store) *const touched_api.Tracker {
-        if (self.lender) |first| return first.touches();
-        return &self.touched;
+        return if (self.lender) |first| first.touches() else &self.touched;
     }
 
     pub fn touchesMut(self: *Store) *touched_api.Tracker {
-        if (self.lender) |first| return first.touchesMut();
-        return &self.touched;
+        return if (self.lender) |first| first.touchesMut() else &self.touched;
     }
 
     pub fn region(self: *const Store, base: u32) ?[]const u8 {
-        return self.pages[indexOf(base) orelse return null];
+        return self.pages[self.canonicalIndex(base) orelse return null];
     }
 
-    /// A directly addressable host span. Mapped OSPI stays behind read/write
-    /// so its erased inversion and NOR program semantics cannot be bypassed.
     pub fn span(self: *const Store, address: u32, len: usize) ?[]const u8 {
-        const hit = self.locate(address, len) orelse return null;
-        return hit.bytes;
+        return (self.locate(address, len) orelse return null).bytes;
     }
 
-    /// Resolve a read-only access to its backing storage, with the canonical
-    /// region base the trail records (RA8EMU-D1). OSPI stays out: its
-    /// erased inversion and NOR program semantics cannot be bypassed.
     pub fn locate(self: *const Store, address: u32, len: usize) ?Located {
         if (self.port) |*port| {
             if (port.geometry.locate(address, len)) |hit| {
                 if (hit.kind == .sdram) return .{
-                    .base = memmap.sdram_base,
+                    .base = self.sdramBase(),
                     .offset = hit.offset,
                     .bytes = port.sdram[hit.offset..][0..len],
                 };
@@ -178,25 +166,42 @@ pub const Store = struct {
             }
             if (port.geometry.overlaps(address, len)) return null;
         }
-        for (memmap.ram, 0..) |entry, index| {
-            if (address < entry.base or address >= entry.end()) continue;
-            const offset = address - entry.base;
-            const bytes = self.pages[index] orelse return null;
-            if (offset > bytes.len or len > bytes.len - offset) return null;
-            const base = viewOf(entry.base) orelse entry.base;
-            return .{ .base = base, .offset = offset, .bytes = bytes[offset..][0..len] };
-        }
+        if (self.locateFixedRead(address, len)) |hit| return hit;
         const hit = self.extra.locate(address, len) orelse return null;
         return .{ .base = hit.base, .offset = hit.offset, .bytes = hit.bytes };
     }
 
-    /// Resolve an access to the mutable backing storage it mutates; reserved
-    /// for hooked writers and raw restore (RA8EMU-D1).
+    fn locateFixedRead(self: *const Store, address: u32, len: usize) ?Located {
+        const count = @min(self.map_desc.regions.len, memory_map.max_regions);
+        for (self.map_desc.regions[0..count], 0..) |entry, idx| {
+            if (!entry.covers(address, len)) continue;
+            if (!entry.perms.read) return null;
+            const bytes = self.pages[idx] orelse return null;
+            const offset = address - entry.base;
+            const span_bytes = sliceAt(bytes, offset, len) orelse return null;
+            return .{ .base = entry.base, .offset = offset, .bytes = span_bytes };
+        }
+        const alias_count = @min(self.map_desc.aliases.len, memory_map.max_aliases);
+        for (self.map_desc.aliases[0..alias_count], 0..) |alias, idx| {
+            if (!alias.covers(address, len)) continue;
+            if (!alias.perms.read) return null;
+            const bytes = self.alias_pages[idx] orelse return null;
+            const offset = address - alias.view;
+            const span_bytes = sliceAt(bytes, offset, len) orelse return null;
+            return .{ .base = alias.of, .offset = offset, .bytes = span_bytes };
+        }
+        return null;
+    }
+
     pub fn locateMut(self: *Store, address: u32, len: usize) ?LocatedMut {
+        return self.locateWritable(address, len, false);
+    }
+
+    fn locateWritable(self: *Store, address: u32, len: usize, check_perm: bool) ?LocatedMut {
         if (self.port) |*port| {
             if (port.geometry.locate(address, len)) |hit| {
                 if (hit.kind == .sdram) return .{
-                    .base = memmap.sdram_base,
+                    .base = self.sdramBase(),
                     .offset = hit.offset,
                     .bytes = port.sdram[hit.offset..][0..len],
                 };
@@ -204,16 +209,31 @@ pub const Store = struct {
             }
             if (port.geometry.overlaps(address, len)) return null;
         }
-        for (memmap.ram, 0..) |entry, index| {
-            if (address < entry.base or address >= entry.end()) continue;
-            const offset = address - entry.base;
-            const bytes = self.pages[index] orelse return null;
-            if (offset > bytes.len or len > bytes.len - offset) return null;
-            const base = viewOf(entry.base) orelse entry.base;
-            return .{ .base = base, .offset = offset, .bytes = bytes[offset..][0..len] };
-        }
+        if (self.locateFixedMut(address, len, check_perm)) |hit| return hit;
         const hit = self.extra.locateMut(address, len) orelse return null;
         return .{ .base = hit.base, .offset = hit.offset, .bytes = hit.bytes };
+    }
+
+    fn locateFixedMut(self: *Store, address: u32, len: usize, check_perm: bool) ?LocatedMut {
+        const count = @min(self.map_desc.regions.len, memory_map.max_regions);
+        for (self.map_desc.regions[0..count], 0..) |entry, idx| {
+            if (!entry.covers(address, len)) continue;
+            if (check_perm and !entry.perms.write) return null;
+            const bytes = self.pages[idx] orelse return null;
+            const offset = address - entry.base;
+            const span_bytes = sliceAtMut(bytes, offset, len) orelse return null;
+            return .{ .base = entry.base, .offset = offset, .bytes = span_bytes };
+        }
+        const alias_count = @min(self.map_desc.aliases.len, memory_map.max_aliases);
+        for (self.map_desc.aliases[0..alias_count], 0..) |alias, idx| {
+            if (!alias.covers(address, len)) continue;
+            if (check_perm and !alias.perms.write) return null;
+            const bytes = self.alias_pages[idx] orelse return null;
+            const offset = address - alias.view;
+            const span_bytes = sliceAtMut(bytes, offset, len) orelse return null;
+            return .{ .base = alias.of, .offset = offset, .bytes = span_bytes };
+        }
+        return null;
     }
 
     pub fn read(self: *Store, initiator: Initiator, address: u32, into: []u8) AccessError!void {
@@ -229,41 +249,48 @@ pub const Store = struct {
         @memcpy(into, self.span(address, into.len) orelse return AccessError.Unmapped);
     }
 
-    /// A byte write (H1): the pre-image leaves through the trail observer
-    /// before the bytes move, with the initiator that made the write.
-    /// OSPI writes take the Flash model's own hooks (H3) and record nothing
-    /// here; a NOR write is not a byte overwrite.
     pub fn write(self: *Store, initiator: Initiator, address: u32, bytes: []const u8) AccessError!void {
+        return self.writeMode(initiator, address, bytes, true);
+    }
+
+    pub fn program(self: *Store, initiator: Initiator, address: u32, bytes: []const u8) AccessError!void {
+        return self.writeMode(initiator, address, bytes, false);
+    }
+
+    fn writeMode(
+        self: *Store,
+        initiator: Initiator,
+        address: u32,
+        bytes: []const u8,
+        check_perm: bool,
+    ) AccessError!void {
         if (bytes.len == 0) return;
         if (self.port) |*port| if (port.geometry.locate(address, bytes.len)) |hit| {
-            switch (hit.kind) {
-                .ospi => if (!(try port.flash.write(hit.offset, bytes))) return AccessError.Unmapped,
-                .sdram => {
-                    self.hookBytes(
-                        initiator,
-                        memmap.sdram_base,
-                        hit.offset,
-                        port.sdram[hit.offset..][0..bytes.len],
-                        bytes,
-                    );
-                    @memcpy(port.sdram[hit.offset..][0..bytes.len], bytes);
-                },
-            }
-            port.meter.note(initiator, hit, .write, bytes.len);
-            return;
+            return self.writeExternal(port, initiator, hit, bytes);
         };
-        const target = self.locateMut(address, bytes.len) orelse return AccessError.Unmapped;
+        const target = self.locateWritable(address, bytes.len, check_perm) orelse return AccessError.Unmapped;
         self.hookBytes(initiator, target.base, target.offset, target.bytes, bytes);
         @memcpy(target.bytes, bytes);
     }
 
-    /// The undo trail's raw restore: `bytes` land at `address` past the
-    /// gates, the MPU, write-one-to-clear and NOR program semantics,
-    /// matching what the trail recorded (RA8EMU-D1). The restore records
-    /// nothing itself, but code the restored bytes reach must re-execute,
-    /// so the block fanout hears the range. OSPI-backed bytes land through
-    /// the Flash model's own raw path (H6): past NOR semantics, recording
-    /// nothing, the sectors the shadow restores re-executing as usual.
+    fn writeExternal(
+        self: *Store,
+        port: *external_port.Port,
+        initiator: Initiator,
+        hit: external_port.Hit,
+        bytes: []const u8,
+    ) AccessError!void {
+        switch (hit.kind) {
+            .ospi => if (!(try port.flash.write(hit.offset, bytes))) return AccessError.Unmapped,
+            .sdram => {
+                const dest = port.sdram[hit.offset..][0..bytes.len];
+                self.hookBytes(initiator, self.sdramBase(), hit.offset, dest, bytes);
+                @memcpy(dest, bytes);
+            },
+        }
+        port.meter.note(initiator, hit, .write, bytes.len);
+    }
+
     pub fn rawWrite(self: *Store, address: u32, bytes: []const u8) AccessError!void {
         if (bytes.len == 0) return;
         self.touchesMut().invalidate();
@@ -282,9 +309,6 @@ pub const Store = struct {
         self.notifyCodeRanges();
     }
 
-    /// A structural change around byte writes (H5): the trail stamps one
-    /// barrier entry, and ranges this store zeroes drop formed blocks so
-    /// restored code executes fresh.
     pub fn barrier(self: *Store, event: observer.Barrier) void {
         if (event == .snapshot_load) self.touchesMut().invalidate();
         if (self.trail()) |o| o.barrier(event);
@@ -295,51 +319,50 @@ pub const Store = struct {
         return self.span(address, len) != null;
     }
 
+    pub fn allowsExec(self: *const Store, address: u32, len: usize) bool {
+        return self.map_desc.allowsExec(address, len) orelse self.backed(address, len);
+    }
+
     pub fn map(self: *Store, base: u32, size: u32) MapError!void {
-        if (self.span(base, 1) != null) return MapError.Mapped;
-        if (external_port.supportedOverlap(base, size)) return MapError.Mapped;
+        if (self.map_desc.overlapsFixed(base, size) or self.span(base, 1) != null) return MapError.Mapped;
+        if (self.map_desc.has_external and external_port.supportedOverlap(base, size)) return MapError.Mapped;
         try self.extra.map(base, size);
         self.barrier(.{ .mapped = .{ .base = base, .size = size } });
     }
 
-    /// The fanout this store's writes invalidate. A borrower shares the
-    /// lender's, so a write through either core's store drops both cores'
-    /// blocks (RA8EMU-D1).
     pub fn fan(self: *const Store) *const code_lines.Fanout {
-        if (self.lender) |first| return first.fan();
-        return &self.fanout;
+        return if (self.lender) |first| first.fan() else &self.fanout;
     }
 
-    /// The fanout a run attaches its block cache to, through the lender
-    /// when this store borrows shared regions.
     pub fn fanMut(self: *Store) *code_lines.Fanout {
-        if (self.lender) |first| return first.fanMut();
-        return &self.fanout;
+        return if (self.lender) |first| first.fanMut() else &self.fanout;
     }
 
-    /// The trail this store feeds. A borrower feeds the lender's, so one
-    /// machine records one trail however many cores write.
     pub fn trail(self: *const Store) ?*const observer.Observer {
-        if (self.lender) |first| return first.trail();
-        return self.observer;
+        return if (self.lender) |first| first.trail() else self.observer;
     }
 
-    /// Tell the block fanout about every tracked code range this store
-    /// owns, after those bytes changed outside a write path.
     pub fn notifyCodeRanges(self: *const Store) void {
-        for (memmap.ram, self.owned) |entry, mine| {
-            if (!mine) continue;
-            if (entry.base != memmap.dtcm_base and
-                entry.base != memmap.mram_base and
-                entry.base != memmap.sram_base) continue;
-            self.fan().notify(entry.base, @intCast(entry.end() - entry.base));
+        const count = @min(self.map_desc.regions.len, memory_map.max_regions);
+        for (self.map_desc.regions[0..count], self.owned[0..count]) |entry, mine| {
+            if (mine and entry.track_code) self.fan().notify(entry.base, entry.size);
         }
     }
 
-    /// The mutable host bytes of one fixed region, for the core's
-    /// fast-path backing and a snapshot's apply; hook sites only (RA8EMU-D1).
     pub fn mutRegion(self: *Store, base: u32) ?[]u8 {
-        return self.pages[indexOf(base) orelse return null];
+        return self.pages[self.canonicalIndex(base) orelse return null];
+    }
+
+    fn canonicalIndex(self: *const Store, base: u32) ?usize {
+        return self.map_desc.indexOf(self.map_desc.targetOf(base) orelse base);
+    }
+
+    fn sdramIndex(self: *const Store) ?usize {
+        return self.map_desc.indexOf((self.map_desc.regionByRole(.sdram) orelse return null).base);
+    }
+
+    pub fn sdramBase(self: *const Store) u32 {
+        return self.map_desc.sdramBase();
     }
 
     inline fn hookBytes(
@@ -350,36 +373,26 @@ pub const Store = struct {
         pre: []const u8,
         new: []const u8,
     ) void {
-        if (base == memmap.sdram_base) self.noteSdramResident(offset, new.len);
+        if (base == self.sdramBase()) self.noteSdramResident(offset, new.len);
         self.touchesMut().note(base, offset, new.len);
-        if (self.trail()) |o| o.bytes(
-            .{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new },
-        );
+        if (self.trail()) |o| {
+            o.bytes(.{ .base = base, .offset = offset, .initiator = initiator, .pre = pre, .new = new });
+        }
     }
 };
 
-fn viewOf(base: u32) ?u32 {
-    if (base == memmap.ns_mram_base) return memmap.mram_base;
-    for (memmap.alias_of) |pair| if (pair.view == base) return pair.of;
-    return null;
-}
-
-fn shared(base: u32) bool {
-    for (memmap.alias_of) |pair| if (pair.of == base) return true;
-    return false;
-}
-
-fn indexOf(base: u32) ?usize {
-    for (memmap.ram, 0..) |entry, index| if (entry.base == base) return index;
-    return null;
-}
-
 fn allocate(size: u32) Error![]u8 {
-    const ptr = std.heap.PageAllocator.map(
-        size,
-        .fromByteUnits(
-            std.heap.page_size_min,
-        ),
-    ) orelse return Error.OutOfMemory;
+    const align_min: std.mem.Alignment = .fromByteUnits(std.heap.page_size_min);
+    const ptr = std.heap.PageAllocator.map(size, align_min) orelse return Error.OutOfMemory;
     return ptr[0..size];
+}
+
+fn sliceAt(bytes: []const u8, offset: usize, len: usize) ?[]const u8 {
+    if (offset > bytes.len or len > bytes.len - offset) return null;
+    return bytes[offset..][0..len];
+}
+
+fn sliceAtMut(bytes: []u8, offset: usize, len: usize) ?[]u8 {
+    if (offset > bytes.len or len > bytes.len - offset) return null;
+    return bytes[offset..][0..len];
 }

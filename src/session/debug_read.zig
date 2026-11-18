@@ -14,7 +14,8 @@ const registry = @import("ra8_chip").periph.registry;
 
 pub fn read(b: bus.Bus, address: u32, into: []u8) bus.Error!void {
     if (into.len == 0) return;
-    if (!touchesWindow(address, into.len) and !nvic_registers.touches(address, into.len)) return b.read(address, into);
+    const periph = b.touchesPeriph(address, into.len) orelse touchesWindow(address, into.len);
+    if (!periph and !nvic_registers.touches(address, into.len)) return b.read(address, into);
     var done: usize = 0;
     while (done < into.len) {
         const at = address +% @as(u32, @truncate(done));

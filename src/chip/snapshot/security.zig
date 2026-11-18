@@ -29,7 +29,7 @@ const parts = [_]Part{
     .{ .name = "chip_attribution", .skip = &.{"protection"} },
     .{ .name = "sram_attribution" },
     .{ .name = "memory_monitors" },
-    .{ .name = "idau", .skip = &.{ "sram", "banks" } },
+    .{ .name = "idau", .skip = &.{ "custom", "sram", "banks" } },
     .{ .name = "second_core" },
     .{ .name = "causes", .skip = &.{"masks"} },
     .{ .name = "causes", .sub = "masks", .skip = &.{ "protection", "watchdog_armed", "heartbeat_armed" } },

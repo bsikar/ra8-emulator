@@ -26,6 +26,7 @@ const std = @import("std");
 
 const elf = @import("ra8_board").image.elf;
 pub const json = @import("json.zig");
+const machine_memory = @import("ra8_chip").core.machine.memory;
 const memmap = @import("ra8_chip").core.memmap;
 const sections = @import("../../sections.zig");
 const symbols = @import("../../symbols.zig");
@@ -141,4 +142,22 @@ pub fn stackOf(image: elf.Image, regions: []const Region) ?Stack {
     if (size > top) return null;
     const base = top - size;
     return .{ .base = base, .size = size, .region = regionAt(regions, base, size) };
+}
+
+/// Linker regions for `mem`: `ek_ra8d2` on the default RA8 map, else the
+/// non-PPB regions and aliases declared by `mem`.
+pub fn regionsFor(mem: *const machine_memory.MemoryMap, buf: *[max_regions]Region) []const Region {
+    if (mem == &machine_memory.ra8) return &ek_ra8d2;
+    var n: usize = 0;
+    for (mem.regions) |entry| {
+        if (entry.role == .ppb or n >= max_regions) continue;
+        buf[n] = .{ .name = entry.name, .base = entry.base, .size = entry.size };
+        n += 1;
+    }
+    for (mem.aliases) |alias| {
+        if (n >= max_regions) break;
+        buf[n] = .{ .name = alias.name, .base = alias.view, .size = alias.size };
+        n += 1;
+    }
+    return buf[0..n];
 }

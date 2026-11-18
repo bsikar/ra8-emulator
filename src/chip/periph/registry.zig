@@ -1,38 +1,77 @@
 //! The peripheral window and the blocks that live in it.
 //!
-//! The RA8D2 puts every Renesas peripheral in one window at 0x40000000, with a
-//! Non-secure alias 0x10000000 above it. Firmware reaches that window long
-//! before it reaches anything interesting, so the bus has to answer every
-//! access: a modelled block answers for its own range, and everything else
-//! falls through to a sparse register file that remembers what was written.
-//!
-//! The sparse fallback is not laziness, it is what lets unported firmware get
-//! anywhere. A driver writes a control register and reads it back to check the
-//! write took, so reads return the last value written. A driver then spins on a
-//! status bit waiting for "ready", and a register nothing models would spin
-//! forever, so an address read repeatedly with nothing written to it alternates
-//! between zero and all-ones: a poll for either polarity of a single bit falls
-//! through instead of hanging.
+//! By default the RA8D2 puts every Renesas peripheral in `0x4000_0000` with a
+//! Non-secure alias `0x1000_0000` above it; a machine description may instead
+//! install its own `MmioWindow` list and `UnknownPolicy` on `Bus` so unmapped
+//! gaps and unmodelled registers fault as the target specifies (RA8EMU-1343).
 const snapshot = @import("ra8_snapshot");
 
 const std = @import("std");
 
-/// The Secure peripheral window. These are silicon facts, not options.
+/// The default RA8 Secure peripheral window and Non-secure alias.
 pub const base: u32 = 0x4000_0000;
 pub const size: u32 = 0x1000_0000;
-/// The IDAU bit[28] Non-secure alias of the same window.
 pub const ns_offset: u32 = 0x1000_0000;
 pub const ns_base: u32 = base + ns_offset;
 
 pub const Access = enum { read, write };
-
-/// The core an access came from. The bus is one block list both cores
-/// reach, but a few RA8 blocks (the per-core ICU above all) answer the core
-/// in front of them, so each core goes on the bus through its own Port and
-/// the bus remembers whose access it is serving.
 pub const Issuer = enum { cpu0, cpu1 };
 
-/// One core's way onto the bus: what an engine's MMIO hook is handed.
+pub const ResolvedMmio = struct {
+    canonical: u32,
+    nonsecure: bool,
+};
+
+/// Peripheral MMIO aperture, with an optional Non-secure alias window of the
+/// same size that folds onto `base`.
+pub const MmioWindow = struct {
+    base: u32,
+    size: u32,
+    ns_alias: ?u32 = null,
+
+    pub fn end(self: MmioWindow) u64 {
+        return @as(u64, self.base) + self.size;
+    }
+
+    pub fn covers(self: MmioWindow, address: u32, len: usize) bool {
+        const stop = @as(u64, address) + len;
+        if (address >= self.base and stop <= self.end()) return true;
+        const alias = self.ns_alias orelse return false;
+        return address >= alias and stop <= @as(u64, alias) + self.size;
+    }
+
+    pub fn touches(self: MmioWindow, address: u32, len: usize) bool {
+        if (len == 0) return false;
+        const first: u64 = address;
+        const stop = first + len;
+        if (first < self.end() and stop > self.base) return true;
+        const alias = self.ns_alias orelse return false;
+        return first < @as(u64, alias) + self.size and stop > alias;
+    }
+
+    pub fn resolve(self: MmioWindow, address: u32) ?ResolvedMmio {
+        if (address >= self.base and address < self.end()) {
+            return .{ .canonical = address, .nonsecure = false };
+        }
+        const alias = self.ns_alias orelse return null;
+        if (address >= alias and address < @as(u64, alias) + self.size) {
+            return .{ .canonical = self.base + (address - alias), .nonsecure = true };
+        }
+        return null;
+    }
+};
+
+pub const UnknownPolicy = enum {
+    /// RA8 unmodelled-register shadow cell with alternating poll readback.
+    shadow_alternating,
+    /// Refuse unmodelled register accesses as unmapped (`BusFault`).
+    fault,
+};
+
+pub const default_windows = [_]MmioWindow{
+    .{ .base = base, .size = size, .ns_alias = ns_base },
+};
+
 pub const Port = struct {
     bus: *Bus,
     issuer: Issuer,
@@ -48,10 +87,6 @@ pub const Port = struct {
     }
 };
 
-/// A veto over the whole window, consulted before anything answers. The
-/// module-stop gate in src/chip/periph/mstp/mstp.zig is the one that exists: a
-/// peripheral whose module-stop bit is set is unclocked, so it does not answer
-/// the bus at all.
 pub const Gate = struct {
     context: *anyopaque,
     stoppedFn: *const fn (context: *anyopaque, address: u32) bool,
@@ -64,9 +99,6 @@ pub const Gate = struct {
     }
 };
 
-/// A modelled peripheral block: an absolute register range and the two
-/// handlers that answer for it. A block owns its own state; the bus only
-/// routes.
 pub const Block = struct {
     name: []const u8,
     base: u32,
@@ -74,12 +106,7 @@ pub const Block = struct {
     context: *anyopaque,
     readFn: *const fn (context: *anyopaque, address: u32, width: u3) u32,
     writeFn: *const fn (context: *anyopaque, address: u32, width: u3, value: u32) void,
-    /// Counts `times` more reads that answer as the last did; false when
-    /// the register cannot promise that. Null repeats nothing (RA8EMU-595).
     repeatFn: ?*const fn (context: *anyopaque, address: u32, width: u3, times: u64) bool = null,
-    /// The stored value with none of a read's side effects, for a report
-    /// looking at a register after the run. Null leaves it unreadable
-    /// rather than risk a clear-on-read or a FIFO pop (RA8EMU-631).
     peekFn: ?*const fn (context: *anyopaque, address: u32, width: u3) u32 = null,
 
     pub fn end(self: Block) u64 {
@@ -97,8 +124,6 @@ pub const Error = error{
     OutsideWindow,
 };
 
-/// One sparse register: the last value written, and how many times it has been
-/// read with nothing ever written to it.
 const Cell = struct {
     value: u32 = 0,
     written: bool = false,
@@ -111,30 +136,17 @@ pub const Counters = struct {
     modelled: u64 = 0,
 };
 
-/// How many modelled blocks the bus holds. It was 64 and exactly 64 were
-/// attached, so the next block of any kind failed attach with
-/// TooManyBlocks. A peripheral whose registers sit in two or three separate
-/// runs needs an entry per run, so the ceiling has to lead the tree rather
-/// than sit flush against it. 96 filled the same way once the CPSCU SRAM
-/// attribution windows arrived (RA8EMU-230).
 pub const max_blocks = 192;
 
-/// The peripheral bus: a small registry of modelled blocks plus the sparse
-/// register file behind them.
 pub const Bus = struct {
     blocks: [max_blocks]Block = undefined,
     count: usize = 0,
     cells: std.AutoHashMap(u32, Cell),
     counters: Counters = .{},
-    /// Set once the module-stop model is attached; null leaves every address
-    /// clocked, which is what the smaller tests and the loader want.
+    windows: []const MmioWindow = &default_windows,
+    unknown: UnknownPolicy = .shadow_alternating,
     gate: ?Gate = null,
-    /// Whether the access being served came through the Non-secure alias.
-    /// The fold below hands every block the Secure address, so a block whose
-    /// answer depends on the alias (MSTP, RA8EMU-354) reads it here.
     nonsecure: bool = false,
-    /// Whose access is being served. Set by the Port the access came
-    /// through; CPU0 when nothing has said otherwise.
     issuer: Issuer = .cpu0,
     ports: [2]Port = undefined,
 
@@ -142,8 +154,6 @@ pub const Bus = struct {
         return .{ .cells = std.AutoHashMap(u32, Cell).init(allocator) };
     }
 
-    /// The port `issuer` reaches the bus through. Its address is stable for
-    /// as long as the bus is, which is what an MMIO hook needs.
     pub fn port(self: *Bus, issuer: Issuer) *Port {
         const slot = &self.ports[@backingInt(issuer)];
         slot.* = .{ .bus = self, .issuer = issuer };
@@ -154,7 +164,34 @@ pub const Bus = struct {
         self.cells.deinit();
     }
 
-    /// Sparse cells are ordered by address, independently of hash-map layout.
+    pub fn inWindow(self: *const Bus, address: u32, len: usize) bool {
+        for (self.windows) |window| {
+            if (window.covers(address, len)) return true;
+        }
+        return false;
+    }
+
+    pub fn touchesWindow(self: *const Bus, address: u32, len: usize) bool {
+        for (self.windows) |window| {
+            if (window.touches(address, len)) return true;
+        }
+        return false;
+    }
+
+    pub fn resolve(self: *const Bus, address: u32) ?ResolvedMmio {
+        for (self.windows) |window| {
+            if (window.resolve(address)) |hit| return hit;
+        }
+        return null;
+    }
+
+    fn canonicalFitsWindow(self: *const Bus, start: u32, stop: u64) bool {
+        for (self.windows) |window| {
+            if (start >= window.base and stop <= window.end()) return true;
+        }
+        return false;
+    }
+
     pub fn saveSnapshot(self: *const Bus, writer: *std.Io.Writer) !void {
         const fields = snapshot.fields;
         const keys = try self.cells.allocator.alloc(u32, self.cells.count());
@@ -175,7 +212,6 @@ pub const Bus = struct {
         }
     }
 
-    /// Allocates the replacement map before replacing any guest state.
     pub fn loadSnapshot(self: *Bus, payload: []const u8) !void {
         const fields = snapshot.fields;
         var cursor: fields.Cursor = .{ .bytes = payload };
@@ -189,7 +225,7 @@ pub const Bus = struct {
         var previous: ?u32 = null;
         for (0..count) |_| {
             const key = try fields.read(u32, &cursor);
-            if (key < base or key >= base + size) return error.BadValue;
+            if (!self.canonicalFitsWindow(key, @as(u64, key) + 1)) return error.BadValue;
             if (previous) |last| if (key <= last) return error.BadValue;
             previous = key;
             try cells.put(key, try fields.read(Cell, &cursor));
@@ -202,12 +238,9 @@ pub const Bus = struct {
         self.issuer = issuer;
     }
 
-    /// Register a block. Ranges are disjoint by construction: registering an
-    /// overlapping one is a programming error and is refused here rather than
-    /// silently shadowing whichever block was added first.
     pub fn add(self: *Bus, block: Block) Error!void {
         if (self.count == max_blocks) return Error.TooManyBlocks;
-        if (block.base < base or block.end() > @as(u64, base) + size) return Error.OutsideWindow;
+        if (!self.canonicalFitsWindow(block.base, block.end())) return Error.OutsideWindow;
         for (self.blocks[0..self.count]) |existing| {
             if (block.base < existing.end() and existing.base < block.end()) return Error.OverlappingBlock;
         }
@@ -222,85 +255,83 @@ pub const Bus = struct {
         return null;
     }
 
-    pub fn read(self: *Bus, address: u32, width: u3) u32 {
+    pub fn tryRead(self: *Bus, address: u32, width: u3) ?u32 {
+        const hit = self.resolve(address) orelse return null;
         self.counters.reads += 1;
-        const canonical = canonicalize(address);
-        self.nonsecure = canonical != address;
-        // An unclocked peripheral reads zero on silicon, whether or not this
-        // emulator models the block behind the address.
+        self.nonsecure = hit.nonsecure;
         if (self.gate) |gate| {
-            if (gate.drops(canonical, .read)) return 0;
+            if (gate.drops(hit.canonical, .read)) return 0;
         }
-        if (self.blockFor(canonical)) |block| {
+        if (self.blockFor(hit.canonical)) |block| {
             self.counters.modelled += 1;
-            return block.readFn(block.context, canonical, width);
+            return block.readFn(block.context, hit.canonical, width);
         }
-        const entry = self.cells.getOrPut(canonical) catch return 0;
+        if (self.unknown == .fault) return null;
+        const entry = self.cells.getOrPut(hit.canonical) catch return 0;
         if (!entry.found_existing) entry.value_ptr.* = .{};
         const cell = entry.value_ptr;
         if (cell.written) return mask(cell.value, width);
         cell.reads += 1;
-        // Alternate so a ready-bit poll of either polarity completes.
         return if (cell.reads % 2 == 0) mask(0xFFFF_FFFF, width) else 0;
     }
 
-    /// `times` more reads of `address`, counted without asking the block for
-    /// a value, when its block says each would answer as the last did. Times
-    /// 0 only asks. An unclocked or unmodelled address never repeats.
+    pub fn read(self: *Bus, address: u32, width: u3) u32 {
+        return self.tryRead(address, width) orelse 0;
+    }
+
     pub fn repeat(self: *Bus, address: u32, width: u3, times: u64) bool {
-        const canonical = canonicalize(address);
-        if (self.gate) |gate| if (gate.stoppedFn(gate.context, canonical)) return false;
-        const block = self.blockFor(canonical) orelse return false;
+        const hit = self.resolve(address) orelse return false;
+        if (self.gate) |gate| if (gate.stoppedFn(gate.context, hit.canonical)) return false;
+        const block = self.blockFor(hit.canonical) orelse return false;
         const answer = block.repeatFn orelse return false;
-        self.nonsecure = canonical != address;
-        if (!answer(block.context, canonical, width, times)) return false;
+        self.nonsecure = hit.nonsecure;
+        if (!answer(block.context, hit.canonical, width, times)) return false;
         self.counters.reads += times;
         self.counters.modelled += times;
         return true;
     }
 
-    /// The value at `address` as a report sees it: no counters, no
-    /// clear-on-read, no step of the ready-bit alternation. Unclocked reads
-    /// zero as silicon does. Null when the block keeps no peek or nothing
-    /// was ever written to an unmodelled address (RA8EMU-631).
     pub fn peek(self: *Bus, address: u32, width: u3) ?u32 {
-        const canonical = canonicalize(address);
-        if (self.gate) |gate| if (gate.stoppedFn(gate.context, canonical)) return 0;
-        if (self.blockFor(canonical)) |block| {
+        const hit = self.resolve(address) orelse return null;
+        if (self.gate) |gate| if (gate.stoppedFn(gate.context, hit.canonical)) return 0;
+        if (self.blockFor(hit.canonical)) |block| {
             const look = block.peekFn orelse return null;
-            return look(block.context, canonical, width);
+            return look(block.context, hit.canonical, width);
         }
-        const cell = self.cells.get(canonical) orelse return null;
+        if (self.unknown == .fault) return null;
+        const cell = self.cells.get(hit.canonical) orelse return null;
         return if (cell.written) mask(cell.value, width) else null;
     }
 
-    pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {
+    pub fn tryWrite(self: *Bus, address: u32, width: u3, value: u32) bool {
+        const hit = self.resolve(address) orelse return false;
         self.counters.writes += 1;
-        const canonical = canonicalize(address);
-        self.nonsecure = canonical != address;
+        self.nonsecure = hit.nonsecure;
         if (self.gate) |gate| {
-            if (gate.drops(canonical, .write)) return;
+            if (gate.drops(hit.canonical, .write)) return true;
         }
-        if (self.blockFor(canonical)) |block| {
+        if (self.blockFor(hit.canonical)) |block| {
             self.counters.modelled += 1;
-            block.writeFn(block.context, canonical, width, value);
-            return;
+            block.writeFn(block.context, hit.canonical, width, value);
+            return true;
         }
-        const entry = self.cells.getOrPut(canonical) catch return;
+        if (self.unknown == .fault) return false;
+        const entry = self.cells.getOrPut(hit.canonical) catch return true;
         if (!entry.found_existing) entry.value_ptr.* = .{};
         entry.value_ptr.value = mask(value, width);
         entry.value_ptr.written = true;
+        return true;
     }
 
-    /// How many distinct peripheral addresses the firmware has touched that
-    /// nothing models. The porting worklist, in one number.
+    pub fn write(self: *Bus, address: u32, width: u3, value: u32) void {
+        _ = self.tryWrite(address, width, value);
+    }
+
     pub fn unmodelledAddresses(self: *const Bus) usize {
         return self.cells.count();
     }
 };
 
-/// Fold the Non-secure alias onto the Secure address. One model answers both
-/// windows, the way one block of silicon does.
 pub fn canonicalize(address: u32) u32 {
     if (address >= ns_base and address < ns_base +% size) return address - ns_offset;
     return address;

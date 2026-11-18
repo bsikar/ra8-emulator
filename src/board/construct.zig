@@ -17,23 +17,33 @@ const Board = @import("board.zig").Board;
 const acmphs = @import("ra8_chip").periph.acmphs;
 const adc = @import("ra8_chip").periph.adc;
 const agt = @import("ra8_chip").periph.agt;
+const bkup = @import("ra8_chip").periph.bkup;
 const bus_card = @import("ra8_components").sd_card.bus_card;
 const cac = @import("ra8_chip").periph.cac;
 const cache = @import("ra8_chip").periph.cache;
 const canfd = @import("ra8_chip").periph.canfd;
 const ceu = @import("ra8_chip").periph.ceu;
+const ckcr = @import("ra8_chip").periph.ckcr;
+const ckdiv = @import("ra8_chip").periph.ckdiv;
+const cpscu = @import("ra8_chip").periph.cpscu;
 const crc = @import("ra8_chip").periph.crc;
 const dac = @import("ra8_chip").periph.dac;
+const dmac = @import("ra8_chip").periph.dmac;
 const doc = @import("ra8_chip").periph.doc;
 const dotf = @import("ra8_chip").periph.dotf;
+const drw = @import("ra8_chip").periph.drw;
 const dtc = @import("ra8_chip").periph.dtc;
 const elc = @import("ra8_chip").periph.elc;
 const fault_clear = @import("ra8_chip").periph.fault.clear;
+const glcdc = @import("ra8_chip").periph.glcdc;
 const gpt = @import("ra8_chip").periph.gpt;
 const gptp = @import("ra8_chip").periph.gptp;
+const gtclkcr = @import("ra8_chip").periph.gtclkcr;
+const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const icu = @import("ra8_chip").periph.icu;
 const ipc = @import("ra8_chip").periph.ipc;
 const iwdt = @import("ra8_chip").periph.iwdt;
+const lpm = @import("ra8_chip").periph.lpm;
 const lvd = @import("ra8_chip").periph.lvd;
 const mipi_csi = @import("ra8_chip").periph.mipi.csi;
 const mipi_dsi = @import("ra8_chip").periph.mipi.dsi;
@@ -43,9 +53,13 @@ const mpu_guard = @import("ra8_chip").core.mpu_guard;
 const mram = @import("ra8_chip").periph.mram;
 const nor_flash = @import("ra8_components").nor_flash;
 const npu = @import("ra8_chip").periph.npu;
+const octaclk = @import("ra8_chip").periph.octaclk;
+const oscsf = @import("ra8_chip").periph.oscsf;
+const pdctr = @import("ra8_chip").periph.pdctr;
 const pdm = @import("ra8_chip").periph.pdm;
 const periph = @import("ra8_chip").periph.registry;
 const pfs = @import("ra8_chip").periph.pfs;
+const pll = @import("ra8_chip").periph.pll;
 const poeg = @import("ra8_chip").periph.poeg;
 const prcr = @import("ra8_chip").periph.prcr;
 const reset = @import("ra8_chip").periph.reset;
@@ -58,8 +72,12 @@ const sdhi = @import("ra8_chip").periph.sdhi;
 const spi = @import("ra8_chip").periph.spi;
 const sram = @import("ra8_chip").periph.sram;
 const ssie = @import("ra8_chip").periph.ssie;
+const subclock = @import("ra8_chip").periph.subclock;
 const switches = @import("switches.zig");
+const sysclk = @import("ra8_chip").periph.sysclk;
 const ulpt = @import("ra8_chip").periph.ulpt;
+const voltage_hazard = @import("ra8_chip").periph.voltage_hazard;
+const vscr = @import("ra8_chip").periph.vscr;
 const wdt = @import("ra8_chip").periph.wdt;
 
 /// A fresh board, with nothing on the bus yet.
@@ -141,4 +159,36 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .guard = mpu_guard.Guard.init(),
         .partitions = sau.Sau.init(),
     };
+}
+
+/// Initializes every self-referential field left `undefined` in `build` once
+/// `self` has its final address, whether or not RA8 peripheral blocks go onto
+/// `self.bus`. Keeps snapshots, display hosts, reports, and boundary ticks
+/// free of uninitialized fields on non-RA8 machines.
+pub fn seed(self: *Board, memory: Guest) void {
+    self.backup = bkup.Bkup.init(&self.protection);
+    self.battery_switch = bkup.pcr1.Pcr1.init(&self.protection);
+    self.oscillators = oscsf.Oscillators.init(&self.protection);
+    self.subclk = subclock.Unit.init(&self.protection);
+    self.loco = subclock.loco.Unit.init(&self.protection);
+    self.voltage = vscr.Unit.init(&self.protection);
+    self.brownout = voltage_hazard.Watch.init(&self.voltage);
+    self.tree = sysclk.Tree.init(&self.protection, &self.oscillators, &self.brownout);
+    self.branches = ckcr.Ckcr.init(&self.protection);
+    self.octa = octaclk.Octa.init(&self.branches);
+    self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);
+    self.plls = pll.Unit.init(&self.protection, &self.oscillators);
+    self.gpt_clock = gtclkcr.Unit.init(&self.modules);
+    self.low_power = lpm.Unit.init(&self.protection);
+    self.domains = pdctr.Domains.init(&self.protection);
+    self.display = glcdc.Glcdc.init(&self.domains.graphics);
+    self.raster = drw.Drw.init(&self.domains.graphics);
+    self.chip_attribution = cpscu.Unit.init(&self.protection);
+    self.transfer_attribution = dtc.attribution.Unit.init(&self.protection);
+    self.dma = dmac.Dmac.init(&self.dma_module);
+    self.dma.memory = memory.asInitiator(.dmac);
+    self.sd_line = sd_card.line.Line.init(&self.sd);
+    self.trace.memory = memory;
+    self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
+    self.idau.custom = self.desc().memory.idau;
 }

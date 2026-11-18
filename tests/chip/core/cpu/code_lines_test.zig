@@ -6,7 +6,7 @@ const code_lines = ra8.chip.core.cpu.decode.code_lines;
 
 fn fresh() code_lines.CodeLines {
     var lines: code_lines.CodeLines = undefined;
-    lines.clear();
+    lines.init();
     return lines;
 }
 
