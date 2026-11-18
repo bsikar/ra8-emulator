@@ -43,6 +43,7 @@ fn dispatch(init: std.process.Init, argv: []const []const u8) !?u8 {
     if (argv.len == 2 and std.mem.eql(u8, argv[1], "--internal-host-move")) return try app.host.relocation.peer(init);
     if (try control(init, argv)) |code| return code;
     if (std.mem.eql(u8, verb, "--map")) return try app.map_main.run(allocator, io, argv);
+    if (std.mem.eql(u8, verb, "probe-agent")) return try app.probe_agent.run(allocator, io, argv);
     if (std.mem.eql(u8, verb, "serve")) return try app.serve.main.run(allocator, io, argv);
     if (std.mem.eql(u8, verb, "dap")) return try app.dap.run(allocator, io, argv);
     if (std.mem.eql(u8, verb, "sweep")) return try app.sweep.cli.run(io, init.environ_map, argv);

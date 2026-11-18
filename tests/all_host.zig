@@ -1,10 +1,23 @@
 test {
     _ = @import("interfaces/cli/ctl/disasm_test.zig");
     _ = @import("host/targets_test.zig");
+    _ = @import("host/target_lease_test.zig");
+    _ = @import("host/jlink/emu_list_test.zig");
+    _ = @import("host/jlink/identity_test.zig");
+    _ = @import("host/jlink/run_test.zig");
+    _ = @import("host/jlink/commander_test.zig");
+    _ = @import("host/jlink/uart_test.zig");
+    _ = @import("host/jlink/uart/linux_test.zig");
+    _ = @import("host/jlink/uart/windows_test.zig");
+    _ = @import("host/probe_host/auth_test.zig");
+    _ = @import("host/probe_host/wire_test.zig");
     _ = @import("interfaces/cli/ctl/targets_test.zig");
     _ = @import("interfaces/rpc/targets_test.zig");
     _ = @import("interfaces/rpc/targets_wire_test.zig");
     _ = @import("interfaces/cli/serve/targets_test.zig");
+    _ = @import("interfaces/cli/serve/jlink_test.zig");
+    _ = @import("interfaces/cli/serve/agent_test.zig");
+    _ = @import("interfaces/cli/probe_agent_test.zig");
     _ = @import("interfaces/cli/artifacts/main_test.zig");
     _ = @import("snapshot/all.zig");
     _ = @import("interfaces/rpc/artifacts/all.zig");

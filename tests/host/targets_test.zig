@@ -114,3 +114,102 @@ test "provider operation metadata is bounded before publication" {
     target.operations = &operations;
     try std.testing.expectError(error.InvalidCapabilities, registry.add(target, log.provider()));
 }
+
+const Hooks = struct {
+    claimed: usize = 0,
+    released: usize = 0,
+    busy: bool = false,
+    custodian_token: u64 = 10,
+    custodian_released: u64 = 0,
+    fn claim(ctx: *anyopaque) !void {
+        const self: *Hooks = @ptrCast(@alignCast(ctx));
+        if (self.busy) return error.TargetBusy;
+        self.claimed += 1;
+    }
+    fn release(ctx: *anyopaque) void {
+        const self: *Hooks = @ptrCast(@alignCast(ctx));
+        self.released += 1;
+    }
+    fn authorize(ctx: *anyopaque, _: model.Descriptor, _: u64) !u64 {
+        const self: *Hooks = @ptrCast(@alignCast(ctx));
+        return self.custodian_token;
+    }
+    fn custodianRelease(ctx: *anyopaque, _: model.Descriptor, token: u64) void {
+        const self: *Hooks = @ptrCast(@alignCast(ctx));
+        self.custodian_released = token;
+    }
+};
+
+test "hotplug presence bumps generation on connect unplug and UART renumbering" {
+    var registry: model.Registry = .{};
+    var hooks: Hooks = .{};
+    var log: Log = .{};
+    var owner: u8 = 0;
+    var target = descriptor("board", "probe");
+    target.connection = .disconnected;
+    target.identity_verified = false;
+    _ = try registry.add(target, .{
+        .context = &log,
+        .performFn = Log.perform,
+        .claimFn = @ptrCast(&Hooks.claim),
+        .releaseFn = @ptrCast(&Hooks.release),
+    });
+    registry.entries[0].?.provider = .{
+        .context = &hooks,
+        .performFn = struct {
+            fn f(_: *anyopaque, _: model.Action, _: []u8) ![]const u8 {
+                return "{\"ok\":true}";
+            }
+        }.f,
+        .claimFn = Hooks.claim,
+        .releaseFn = Hooks.release,
+    };
+    try registry.present(&registry.entries[0].?, true, "COM13");
+    const first = registry.entries[0].?.generation;
+    try registry.reserve(&owner, selection("board", "probe", first));
+    try std.testing.expectEqual(@as(usize, 1), hooks.claimed);
+    try registry.present(&registry.entries[0].?, true, "COM13");
+    try std.testing.expectEqual(first, registry.entries[0].?.generation);
+    try registry.present(&registry.entries[0].?, false, "");
+    try std.testing.expectEqual(@as(usize, 1), hooks.released);
+    try std.testing.expect(registry.entries[0].?.owner == null);
+    try std.testing.expectError(error.StaleSelection, registry.reserve(&owner, selection("board", "probe", first)));
+    try registry.present(&registry.entries[0].?, true, "COM14");
+    const replugged = registry.entries[0].?.generation;
+    try std.testing.expect(replugged > first);
+    try std.testing.expectEqualStrings("COM14", registry.entries[0].?.target.uart);
+}
+
+test "custodian hook gates managed targets and releases custodian lease when claim fails" {
+    var registry: model.Registry = .{};
+    var hooks: Hooks = .{};
+    var owner: u8 = 0;
+    var target = descriptor("board", "probe");
+    target.managed = true;
+    const gen = try registry.add(target, .{
+        .context = &hooks,
+        .performFn = struct {
+            fn f(_: *anyopaque, _: model.Action, _: []u8) ![]const u8 {
+                return "{\"ok\":true}";
+            }
+        }.f,
+        .claimFn = Hooks.claim,
+        .releaseFn = Hooks.release,
+    });
+    const sel = selection("board", "probe", gen);
+    try std.testing.expectError(error.CustodianUnavailable, registry.reserve(&owner, sel));
+    registry.custodian = .{
+        .context = &hooks,
+        .authorizeFn = Hooks.authorize,
+        .releaseFn = Hooks.custodianRelease,
+    };
+    hooks.busy = true;
+    try std.testing.expectError(error.TargetBusy, registry.reserve(&owner, sel));
+    try std.testing.expectEqual(@as(u64, 10), hooks.custodian_released);
+    hooks.busy = false;
+    hooks.custodian_token = 22;
+    try registry.reserve(&owner, sel);
+    _ = try registry.perform(&owner, sel, .halt, &.{});
+    registry.release(&owner);
+    try std.testing.expectEqual(@as(u64, 22), hooks.custodian_released);
+}
