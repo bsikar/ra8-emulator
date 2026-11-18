@@ -28,6 +28,7 @@ const std = @import("std");
 
 const cli = @import("cli.zig");
 const cpu_choice = @import("ra8_chip").core.cpu.choice;
+const machine_mod = @import("ra8_chip").core.machine;
 const script = @import("ra8_session").script;
 const zig_debug_front = @import("zig/debug_front.zig");
 
@@ -53,6 +54,8 @@ pub const flags = struct {
     pub const gdb = "--gdb";
     pub const cpu1 = "--cpu1";
     pub const cpu = "--cpu";
+    pub const part = "--part";
+    pub const device = "--device";
 };
 
 pub const Mode = union(enum) {
@@ -71,6 +74,8 @@ pub const Request = struct {
     image: []const u8 = "",
     /// Which CPU the session drives (`--cpu`, anywhere on the line).
     cpu: cpu_choice.Choice = .zig,
+    /// Which machine the session models (`--part`, anywhere on the line).
+    machine: *const machine_mod.Machine = &machine_mod.catalog.ra8d2,
 };
 
 /// The most arguments a debugger command line carries.
@@ -80,24 +85,62 @@ const max_args = 16;
 /// an ordinary run. A malformed debugger command line is reported as such
 /// rather than handed to the ordinary parser.
 pub fn wanted(argv: []const []const u8) ?error{BadUsage}!Request {
-    for (argv) |arg| {
-        if (isDebugFlag(arg)) break;
-    } else {
-        return null;
-    }
+    return wantedWithCatalog(argv, &machine_mod.catalog.all);
+}
+
+pub fn wantedWithCatalog(
+    argv: []const []const u8,
+    machines: []const *const machine_mod.Machine,
+) ?error{BadUsage}!Request {
+    if (!hasDebugFlag(argv)) return null;
     var rest_buffer: [max_args][]const u8 = undefined;
-    var rest: std.ArrayList([]const u8) = .initBuffer(&rest_buffer);
-    var cpu: ?cpu_choice.Choice = .zig;
-    var index: usize = 0;
+    const globals = stripGlobals(argv, machines, &rest_buffer) catch |err| return err;
+    var request = (plain(globals.rest) orelse return null) catch |err| return err;
+    request.cpu = globals.cpu;
+    request.machine = globals.machine;
+    if (request.cpu1 != null and !request.machine.hasSecond()) return error.BadUsage;
+    return request;
+}
+
+const Globals = struct {
+    rest: []const []const u8,
+    cpu: cpu_choice.Choice,
+    machine: *const machine_mod.Machine,
+};
+
+fn hasDebugFlag(argv: []const []const u8) bool {
+    for (argv) |arg| if (isDebugFlag(arg)) return true;
+    return false;
+}
+
+fn stripGlobals(
+    argv: []const []const u8,
+    machines: []const *const machine_mod.Machine,
+    buf: *[max_args][]const u8,
+) error{BadUsage}!Globals {
+    var rest: std.ArrayList([]const u8) = .initBuffer(buf);
+    var cpu: cpu_choice.Choice = .zig;
+    var chosen: *const machine_mod.Machine = &machine_mod.catalog.ra8d2;
+    // The program name is never a flag, whatever it is called.
+    const program = argv[0..@min(1, argv.len)];
+    rest.appendSliceAssumeCapacity(program);
+    var index: usize = program.len;
     while (index < argv.len) : (index += 1) {
-        if (std.mem.eql(u8, argv[index], flags.cpu) and index + 1 < argv.len) {
-            cpu = cpu_choice.Choice.parse(argv[index + 1]);
+        if (std.mem.eql(u8, argv[index], flags.cpu)) {
             index += 1;
+            if (index >= argv.len) return error.BadUsage;
+            cpu = cpu_choice.Choice.parse(argv[index]) orelse return error.BadUsage;
+        } else if (isPartFlag(argv[index])) {
+            index += 1;
+            if (index >= argv.len) return error.BadUsage;
+            chosen = machine_mod.catalog.findIn(machines, argv[index]) orelse return error.BadUsage;
         } else rest.appendBounded(argv[index]) catch return error.BadUsage;
     }
-    var request = (plain(rest.items) orelse return null) catch |err| return err;
-    request.cpu = cpu orelse return error.BadUsage;
-    return request;
+    return .{ .rest = rest.items, .cpu = cpu, .machine = chosen };
+}
+
+fn isPartFlag(arg: []const u8) bool {
+    return std.mem.eql(u8, arg, flags.part) or std.mem.eql(u8, arg, flags.device);
 }
 
 /// `wanted` with `--cpu` taken out.

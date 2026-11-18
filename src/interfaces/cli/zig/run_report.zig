@@ -56,7 +56,8 @@ pub fn zig(
         rtos_hook.Memory{ .guest = clock.memory },
     );
     if (options.report_json) {
-        const load = loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1, second_tracers);
+        var load = loadOf(clock.memory, if (tracer.*) |*found| found else null, clock.cpu1, second_tracers);
+        load.has_second = board.desc().hasSecond();
         var sites: ?json_run.json_sites.Sites = null;
         if (ends.hits != null) sites = .{ .image = image, .hits = ends.hits };
         try json_run.document(
@@ -196,16 +197,16 @@ pub fn afterRun(
     if (options.cpu == .zig) {
         // The core lent its retired count; `ran` holds the final count.
         if (tracer.*) |*found| found.trace.fine = ran;
-        if (options.ctl_cpu_load) return ctlLoad(
-            out,
-            loadOf(
+        if (options.ctl_cpu_load) {
+            var load = loadOf(
                 clock.memory,
                 if (tracer.*) |*found| found else null,
                 clock.cpu1,
                 second_tracers,
-            ),
-            status,
-        );
+            );
+            load.has_second = board.desc().hasSecond();
+            return ctlLoad(out, load, status);
+        }
         try zig(
             out,
             io,

@@ -15,7 +15,6 @@ const std = @import("std");
 const BlockCache = @import("../../cpu/block/cache.zig").BlockCache;
 const BoardBus = @import("../../cpu/board_bus.zig").BoardBus;
 const cpu_mod = @import("../../cpu/cpu.zig");
-const cpuid = @import("../../../periph/cpuid.zig");
 const DecodeCache = @import("../../cpu/decode/cache.zig").DecodeCache;
 const fault_clear = @import("../../../periph/fault/clear.zig");
 const Guest = @import("../../cpu/memory/guest/guest.zig").Guest;
@@ -26,6 +25,7 @@ const mpu_check = @import("../../cpu/mpu_check.zig");
 const mpu_guard = @import("../../mpu_guard.zig");
 const NvicSource = @import("../../cpu/exception/nvic_source.zig").NvicSource;
 const part = @import("../../part/part.zig");
+const profile = @import("../../cpu/profile.zig");
 const QuietSource = @import("../../cpu/exception/quiet_source.zig").QuietSource;
 const registry = @import("../../../periph/registry.zig");
 pub const run = @import("run.zig");
@@ -34,6 +34,7 @@ const scb = @import("../../../periph/scb/scb.zig");
 const Second = @import("../core.zig").Second;
 const second_core = @import("../core.zig");
 const Store = @import("../../cpu/memory/store.zig").Store;
+const topology = @import("../../machine/topology.zig");
 const Wiring = @import("../wiring.zig").Wiring;
 
 /// What CPU1's Zig core reads from outside its memory: its own SAU, MPU
@@ -43,6 +44,8 @@ pub const Units = struct {
     regions: *mpu.Mpu,
     clears: *fault_clear.Clears,
     vector_base: u32,
+    profile: profile.Profile = part.cpu1_profile,
+    security: bool = true,
 
     pub fn of(second: *Second) Units {
         return .{
@@ -76,17 +79,21 @@ pub const SecondZig = struct {
             .memory = GuestBus.of(&self.memory, false),
             .periph = periph,
             .issuer = .cpu1,
-            .scs = .{ .partitions = units.partitions, .regions = units.regions, .clears = units.clears },
+            .scs = .{
+                .partitions = if (units.security) units.partitions else null,
+                .regions = units.regions,
+                .clears = units.clears,
+            },
         };
         self.quiet = .{ .inner = self.pending.source(), .memory = self.board.view() };
         self.cpu = .{
             .bus = self.quiet.bus(),
             .source = self.quiet.source(),
             .quiet = &self.quiet,
-            .profile = part.cpu1_profile,
+            .profile = units.profile,
         };
         self.cpu.decoded = &self.decoded;
-        self.board.security = &self.cpu.banked;
+        self.board.security = if (units.security) &self.cpu.banked else null;
         // CPACR reaches CPU1's own FP state (RA8EMU-950).
         self.board.scs.fp = &self.cpu.fp;
         self.pending.banked = &self.cpu.banked;
@@ -174,12 +181,14 @@ pub fn bringUp(
     parts: Parts,
     image: loaded_image.Image,
 ) !second_core.Seeded {
+    const desc = wiring.core orelse return topology.Error.AbsentCore;
     const setup = memory.asInitiator(.none);
     try wiring.prime(setup, .{
         .partitions = parts.partitions,
         .regions = parts.regions,
         .guard = parts.guard,
-        .identity = cpuid.cpu1,
+        .identity = desc.cpuid,
+        .security = desc.security,
         .control = parts.control,
         .clears = parts.clears,
     });
@@ -189,6 +198,8 @@ pub fn bringUp(
         .regions = parts.regions,
         .clears = parts.clears,
         .vector_base = seeded.vector_base,
+        .profile = desc.profile,
+        .security = desc.security,
     };
     try core.openOn(memory, units, wiring.bus);
     return seeded;

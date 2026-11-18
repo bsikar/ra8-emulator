@@ -98,7 +98,8 @@ pub const Loop = struct {
         self.clock = makeClock(io, memory, board, timebase, image, options, cpu1, cpu1_identity, ends);
         const clock = &self.clock;
         if (options.state.wanted()) _ = clock.snapshotBinding();
-        var cut: systick_cut.Cut = .{ .clocks = .{ timebase, &clock.ns_timebase } };
+        const primary = board.desc().primary();
+        var cut = systickCut(primary.systicks, timebase, &clock.ns_timebase);
         if (ends.policy) |asked| if (asked.soak.armed) soak_symbols.resolve(image, &asked.soak.threads);
         // --trace-rtos listens in front of the core (src/session/rtos/zig.zig).
         self.tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtos) else null;
@@ -129,10 +130,10 @@ pub const Loop = struct {
             .cpu0,
         ), &board.bus, vector_base, options.budget, &self.ran, .{
             .boundary = edge,
-            .partitions = &board.partitions,
+            .partitions = primarySau(board, primary.security),
             .idau = &board.idau,
             .regions = &board.regions,
-            .regions_ns = &board.regions_ns,
+            .regions_ns = primaryMpuNs(board, primary.security),
             .clears = &board.clears,
             .cut = &cut,
             .fast_memory = options.watch_place == null and wrap == null,
@@ -147,11 +148,28 @@ pub const Loop = struct {
             .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
             .snapshot = zig_snapshot.hook(clock),
             .peer = if (cpu1) |second| &second.core.cpu else null,
+            .profile = primary.profile,
+            .security = primary.security,
         });
         try wall.finish(clock, self.ran);
         if (options.console) try itm_port.flush(out, true);
     }
 };
+
+fn systickCut(systicks: u2, s: *clocks.Clocks, ns: *clocks.Clocks) systick_cut.Cut {
+    return .{ .clocks = .{
+        if (systicks >= 1) s else null,
+        if (systicks >= 2) ns else null,
+    } };
+}
+
+fn primarySau(board: *Board, security: bool) ?*@FieldType(Board, "partitions") {
+    return if (security) &board.partitions else null;
+}
+
+fn primaryMpuNs(board: *Board, security: bool) ?*@FieldType(Board, "regions_ns") {
+    return if (security) &board.regions_ns else null;
+}
 
 fn makeClock(
     io: std.Io,

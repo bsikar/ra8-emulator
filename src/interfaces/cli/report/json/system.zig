@@ -6,6 +6,7 @@
 //! part.zig and backup.zig print. Every key is always present.
 const Board = @import("ra8_board").board.Board;
 const json_options = @import("options.zig");
+const machine_mod = @import("ra8_chip").core.machine;
 const part = @import("ra8_chip").core.part;
 
 /// The five objects, keyed inside the document after `capture`.
@@ -13,7 +14,7 @@ pub fn section(j: anytype, board: *Board) !void {
     try icu(j, board);
     try pinfunc(j, board);
     try json_options.section(j, &board.options);
-    try partInfo(j, board.part);
+    try partInfo(j, board.desc());
     try backup(j, board);
 }
 
@@ -41,18 +42,20 @@ fn pinfunc(j: anytype, board: *Board) !void {
     try j.close('}');
 }
 
-fn partInfo(j: anytype, which: part.Part) !void {
-    const geometry = part.map.of(which);
+fn partInfo(j: anytype, which: *const machine_mod.Machine) !void {
+    const geometry = part.map.of(which.part);
     try j.open("part", '{');
-    try j.field("name", which.label());
+    try j.field("name", which.label);
     try j.field("mram_base", geometry.mram_base);
     try j.field("mram_bytes", geometry.mram_bytes);
     try j.field("sram_base", geometry.sram_base);
     try j.field("sram_bytes", geometry.sram_bytes);
     try j.field("cpu0_tcm_bytes", geometry.cpu0TcmBytes());
     try j.field("cpu0_cache_bytes", 2 * geometry.cpu0_cache_bank_bytes);
-    try j.field("cpu1_tcm_bytes", geometry.cpu1TcmBytes());
-    try j.field("cpu1_cache_bytes", 2 * geometry.cpu1_cache_bank_bytes);
+    if (which.hasSecond()) {
+        try j.field("cpu1_tcm_bytes", geometry.cpu1TcmBytes());
+        try j.field("cpu1_cache_bytes", 2 * geometry.cpu1_cache_bank_bytes);
+    }
     try j.field("source", geometry.source);
     try j.close('}');
 }

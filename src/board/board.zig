@@ -50,6 +50,7 @@ const ipc = @import("ra8_chip").periph.ipc;
 const iwdt = @import("ra8_chip").periph.iwdt;
 const lpm = @import("ra8_chip").periph.lpm;
 const lvd = @import("ra8_chip").periph.lvd;
+const machine_mod = @import("ra8_chip").core.machine;
 const mipi_csi = @import("ra8_chip").periph.mipi.csi;
 const mipi_dsi = @import("ra8_chip").periph.mipi.dsi;
 const mipi_phy = @import("ra8_chip").periph.mipi.phy;
@@ -296,7 +297,7 @@ pub const Board = struct {
     /// the observable is which pokes were for it and which messages the four
     /// stages actually carried.
     mailbox: ipc.Ipc,
-    /// The Ethos-U55 micro-NPU. Only the RA8P1 carries one, so `part`
+    /// The Ethos-U55 micro-NPU. Only the RA8P1 carries one, so `machine`
     /// decides whether attach() puts it on the bus at all; on the RA8D2 the
     /// window falls through to the sparse bus exactly as it does on dev.
     npu: npu.Npu,
@@ -353,6 +354,12 @@ pub const Board = struct {
     frame_tap: ?*frame_tap.Tap = null,
     frame_taps: frame_tap.FanOut = .{},
     part: part.Part = .ra8d2,
+    /// Explicit machine description; null uses the catalog entry for `part`.
+    machine: ?*const machine_mod.Machine = null,
+
+    pub fn desc(self: *const Board) *const machine_mod.Machine {
+        return self.machine orelse machine_mod.catalog.ofPart(self.part);
+    }
 
     pub fn addFrameTap(self: *Board, tap: *frame_tap.Tap) void {
         _ = self.frame_taps.add(tap);

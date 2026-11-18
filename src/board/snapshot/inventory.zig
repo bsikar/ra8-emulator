@@ -123,6 +123,7 @@ pub const omitted = .{
     .{ .name = "frame_taps", .reason = "Passive frame tap subscriber fan-out" },
     .{ .name = "input_landing", .reason = "Input landing observer wiring" },
     .{ .name = "panel_vsync", .reason = "Root configuration; the display's vsync section carries the clock state" },
+    .{ .name = "machine", .reason = "Root machine topology; part section validates the fabric part" },
 };
 pub fn complete(comptime Board: type) bool {
     return fields.complete(Board, saved, omitted);

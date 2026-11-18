@@ -86,7 +86,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
     try j.field("schema", schema);
     try run(&j, board, of);
     try j.open("cores", '{');
-    try cpu1(&j, &board.second_core);
+    if (board.desc().hasSecond()) try cpu1(&j, &board.second_core);
     try mailbox(&j, &board.mailbox);
     try j.close('}');
     try json_protect.section(&j, board);
@@ -116,7 +116,7 @@ pub fn document(out: anytype, board: *Board, of: Run) !void {
 
 fn run(j: anytype, board: *Board, of: Run) !void {
     try j.open("run", '{');
-    try j.field("part", board.part.label());
+    try j.field("part", board.desc().label);
     try j.field("engine", of.engine);
     try j.field("elapsed_instructions", of.elapsed);
     try j.field("elapsed_cycles", of.elapsed_cycles);
