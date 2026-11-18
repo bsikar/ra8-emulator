@@ -30,10 +30,9 @@ pub const LoaderState = struct {
         const index = @backingInt(core);
         const cpu = self.cpu[index] orelse return error.CoreNotAttached;
         const memory = self.memory[index] orelse return error.CoreNotAttached;
-        // The same map and option-window claim a `--cpu zig` run loads with (RA8EMU-760).
-        const loaded = try read_image.read(image);
+        const loaded = try read_image.readFor(image, memory.store.map_desc);
         _ = try memory_load.image(memory, loaded.image());
-        const base = image.vectorBase() orelse return error.NoVectorTable;
+        const base = image.vectorBaseFor(memory.store.map_desc) orelse return error.NoVectorTable;
         try cpu.reset(base);
         // CPU1 exposes its initial table through VTOR after reset clears SCS.
         if (core == .cpu1) try cpu.bus.writeWord(memmap.scb.vtor, base);

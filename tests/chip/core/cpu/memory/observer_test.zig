@@ -56,7 +56,7 @@ fn listen(store: *Store) void {
 
 fn freshLines() code_lines.CodeLines {
     var lines: code_lines.CodeLines = undefined;
-    lines.clear();
+    lines.init();
     return lines;
 }
 
@@ -209,11 +209,8 @@ test "a missed hook is caught" {
     try std.testing.expectEqualSlices(u8, shadow, store.span(memmap.sram_base, 64).?);
     // The negative control: a mutation that skips the hook leaves the
     // shadow behind, which is how a missed write is caught.
-    var sram_index: ?usize = null;
-    for (memmap.ram, 0..) |entry, index| {
-        if (entry.base == memmap.sram_base) sram_index = index;
-    }
-    const sram = store.pages[sram_index.?].?;
+    const sram_index = store.map_desc.indexOf(memmap.sram_base).?;
+    const sram = store.pages[sram_index].?;
     sram[8] = 0xAA;
     try std.testing.expect(!std.mem.eql(u8, shadow, store.span(memmap.sram_base, 64).?));
 }

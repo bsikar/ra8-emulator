@@ -1,9 +1,8 @@
 //! An ELF image read into the chip's loaded-image value (RA8EMU-1039,
-//! ADR 0004). The board parses the format; the chip only writes what this
-//! hands it. The value's slices point into the ELF bytes and into the
-//! `Loaded` that holds them, so both outlive the load.
+//! RA8EMU-1343).
 const elf = @import("elf.zig");
 const loaded_image = @import("ra8_chip").core.loaded_image;
+const machine_memory = @import("ra8_chip").core.machine.memory;
 const pages = @import("pages.zig");
 
 /// Load segments with file bytes one image may carry.
@@ -26,9 +25,14 @@ pub const Loaded = struct {
     }
 };
 
-/// The segments, merged pages and vector table of `source`.
+/// The segments, merged pages and vector table of `source` for the default RA8 map.
 pub fn read(source: elf.Image) Error!Loaded {
-    var loaded = Loaded{ .maps = try pages.forImage(source), .vector_base = source.vectorBase() };
+    return readFor(source, &machine_memory.ra8);
+}
+
+/// The segments, merged pages and vector table of `source` for `map`.
+pub fn readFor(source: elf.Image, map: *const machine_memory.MemoryMap) Error!Loaded {
+    var loaded = Loaded{ .maps = try pages.forImage(source), .vector_base = source.vectorBaseFor(map) };
     var index: u16 = 0;
     while (index < source.segmentCount()) : (index += 1) {
         const segment = source.loadSegment(index) orelse continue;

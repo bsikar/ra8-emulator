@@ -36,6 +36,18 @@ pub const Guest = struct {
         self.store.fan().notify(address, bytes.len);
     }
 
+    /// Program initial ELF segment bytes into backing storage (including
+    /// read-only flash regions).
+    pub fn program(self: Guest, address: u32, bytes: []const u8) Error!void {
+        if (bytes.len == 0) return;
+        self.store.program(self.initiator, address, bytes) catch return Error.Unmapped;
+        self.store.fan().notify(address, bytes.len);
+    }
+
+    pub fn allowsExtraPages(self: Guest) bool {
+        return self.store.map_desc.allow_extra_pages;
+    }
+
     pub fn backed(self: Guest, address: u32, len: usize) bool {
         return self.store.backed(address, len);
     }

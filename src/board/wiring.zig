@@ -16,6 +16,7 @@ const sau = @import("ra8_chip").periph.sau;
 const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
 
 const Board = @import("board.zig").Board;
+const construct = @import("construct.zig");
 const plug = @import("plug.zig");
 const second_wiring = @import("ra8_chip").core.second.wiring;
 
@@ -85,6 +86,14 @@ fn attachWire(self: *Board) !void {
 /// paint or read RAM get `memory`: the Zig core's store, whose own PPB
 /// windows `primeWindows` seeds.
 pub fn attachBlocks(self: *Board, memory: Guest) !void {
+    const mem_desc = self.desc().memory;
+    self.bus.windows = mem_desc.mmio;
+    self.bus.unknown = mem_desc.unknown_mmio;
+    construct.seed(self, memory);
+    if (mem_desc.attach_ra8_blocks) try attachRa8Blocks(self, memory);
+}
+
+fn attachRa8Blocks(self: *Board, memory: Guest) !void {
     try attachGate(self);
     try self.bus.add(self.pins.block());
     try self.bus.add(self.pinfunc.block());
@@ -304,6 +313,7 @@ fn attachProtected(self: *Board) !void {
         try self.bus.add(window);
     }
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
+    self.idau.custom = self.desc().memory.idau;
     for (self.memory_monitors.blocks()) |window| {
         try self.bus.add(window);
     }

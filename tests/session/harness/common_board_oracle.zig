@@ -105,7 +105,7 @@ fn hashClocksAndSecurity(h: *Hasher, board: *const Board) void {
     h.autoExcept(board.modules, .{ "attribution", "bus", "octa", "last_gated", "dropped" });
     h.autoExcept(board.transfer_attribution, .{"protection"});
     h.autoExcept(board.chip_attribution, .{"protection"});
-    h.autoExcept(board.idau, .{ "sram", "banks" });
+    h.autoExcept(board.idau, .{ "custom", "sram", "banks" });
     h.autoExcept(board.causes, .{"masks"});
     h.autoExcept(board.causes.masks, .{ "protection", "watchdog_armed", "heartbeat_armed" });
     h.autoExcept(board.guard, .{"unit"});

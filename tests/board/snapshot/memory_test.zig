@@ -78,7 +78,7 @@ fn expectLegacyEncoding(store: *const memory.Store, kind: file.Kind) !void {
     for (store.owned) |owned| count += @intFromBool(owned);
     for (store.extra.windows) |held| count += @intFromBool(held != null);
     try payload.writer.writeInt(u32, count, .little);
-    for (memmap.ram, 0..) |entry, index| {
+    for (store.map_desc.regions, 0..) |entry, index| {
         if (store.owned[index]) try legacyRegion(entry.base, store.pages[index].?, &payload.writer);
     }
     if (store.owns_port) try legacyRegion(memmap.sdram_base, store.region(memmap.sdram_base).?, &payload.writer);
@@ -102,7 +102,7 @@ test "saved memory bytes match the legacy format across sparse owned and borrowe
     defer first.deinit();
     try first.map(window_base, memory.page + 17);
     try first.map(window_base + 0x10000, 1);
-    for (memmap.ram, 0..) |entry, index| {
+    for (first.map_desc.regions, 0..) |entry, index| {
         if (!first.owned[index]) continue;
         put(&first, entry.base, "first");
         const bytes = first.pages[index].?;

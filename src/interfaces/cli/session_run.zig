@@ -157,7 +157,7 @@ pub fn openSession(
     options: cli.Options,
 ) !u32 {
     const image = try elf.Image.init(elf_bytes);
-    const vector_base = try zig_main.vectorBase(image);
+    const vector_base = try zig_main.vectorBaseFor(image, options.resolvedMachine().memory);
     const history_opts: served_setup.HistoryOpts = .{
         .root = options.history.root,
         .checkpoint_every = options.history.checkpoint_every orelse 64,

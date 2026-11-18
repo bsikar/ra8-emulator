@@ -27,7 +27,13 @@ pub const Listener = struct {
         self.inner_bus = inner;
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .latch = latch },
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .latch = latch,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
+            },
             .lines = self.inner_bus.lines,
             .register_state = self.inner_bus.register_state,
         };
@@ -72,6 +78,16 @@ fn write(ctx: *anyopaque, address: u32, bytes: []const u8) bus.Error!void {
 fn latch(ctx: *anyopaque, address: u32, bits: u32) bus.Error!void {
     const self: *Listener = @ptrCast(@alignCast(ctx));
     return self.inner_bus.latch(address, bits);
+}
+
+fn allowsExec(ctx: *anyopaque, address: u32, len: usize) bool {
+    const self: *Listener = @ptrCast(@alignCast(ctx));
+    return self.inner_bus.allowsExec(address, len);
+}
+
+fn touchesPeriph(ctx: *anyopaque, address: u32, len: usize) ?bool {
+    const self: *Listener = @ptrCast(@alignCast(ctx));
+    return self.inner_bus.touchesPeriph(address, len);
 }
 
 fn winner(ctx: *anyopaque, through: bus.Bus) bus.Error!?Entry {

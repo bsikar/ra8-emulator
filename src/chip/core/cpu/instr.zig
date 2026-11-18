@@ -20,9 +20,9 @@ pub const Instr = struct {
     /// Fetch the instruction at `address`, reading the second halfword only
     /// when the first one says there is one.
     pub fn fetch(from: bus.Bus, address: u32) bus.Error!Instr {
-        const hw1 = try from.readHalf(address);
+        const hw1 = try from.fetchHalf(address);
         if (!isWide(hw1)) return .{ .address = address, .hw1 = hw1, .size = 2 };
-        const hw2 = try from.readHalf(address +% 2);
+        const hw2 = try from.fetchHalf(address +% 2);
         return .{ .address = address, .hw1 = hw1, .hw2 = hw2, .size = 4 };
     }
 

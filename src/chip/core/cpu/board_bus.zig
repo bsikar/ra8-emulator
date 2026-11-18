@@ -79,6 +79,8 @@ pub const BoardBus = struct {
                 .latch = latch,
                 .repeat = repeat,
                 .peek = peekRegister,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
             },
             .direct = memory.direct,
             .lines = memory.lines,
@@ -126,16 +128,23 @@ pub const BoardBus = struct {
         if (scs_route.wired(self.security, given)) |halves| return self.readSplit(halves, given, into);
         const address = self.landing(given) orelse return @memset(into, 0);
         if (self.check) |c| if (!c.allows(given, .load)) return bus.Error.Unmapped;
-        if (!inWindow(address, into.len)) {
-            if (self.scs.load(address, into)) {
-                if (self.touched) |t| t.touch(address, false);
-                return;
-            }
-            return self.memory.view().read(address, into);
+        if (!self.periph.inWindow(address, into.len)) return self.readNonPeriph(address, into);
+        return self.readPeriph(address, into);
+    }
+
+    fn readNonPeriph(self: *BoardBus, address: u32, into: []u8) bus.Error!void {
+        if (self.scs.load(address, into)) {
+            if (self.touched) |t| t.touch(address, false);
+            return;
         }
-        if (self.touched) |t| t.touch(address, false);
+        return self.memory.view().read(address, into);
+    }
+
+    fn readPeriph(self: *BoardBus, address: u32, into: []u8) bus.Error!void {
+        const w = try width(into.len);
         self.periph.issuer = self.issuer;
-        const value = self.periph.read(address, try width(into.len));
+        const value = self.periph.tryRead(address, w) orelse return bus.Error.Unmapped;
+        if (self.touched) |t| t.touch(address, false);
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, value, .little);
         @memcpy(into, bytes[0..into.len]);
@@ -146,7 +155,7 @@ pub const BoardBus = struct {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (scs_route.wired(self.security, given) != null) return false;
         const address = self.landing(given) orelse return false;
-        if (!inWindow(address, len)) return false;
+        if (!self.periph.inWindow(address, len)) return false;
         if (self.check) |c| if (!c.allows(given, .load)) return false;
         const w = width(len) catch return false;
         self.periph.issuer = self.issuer;
@@ -160,7 +169,7 @@ pub const BoardBus = struct {
         const self: *BoardBus = @ptrCast(@alignCast(ctx));
         if (scs_route.wired(self.security, given) != null) return false;
         const address = self.landing(given) orelse return false;
-        if (!inWindow(address, into.len)) return false;
+        if (!self.periph.inWindow(address, into.len)) return false;
         if (self.check) |c| if (!c.allows(given, .load)) return false;
         const w = width(into.len) catch return false;
         self.periph.issuer = self.issuer;
@@ -169,6 +178,17 @@ pub const BoardBus = struct {
         std.mem.writeInt(u32, &bytes, value, .little);
         @memcpy(into, bytes[0..into.len]);
         return true;
+    }
+
+    fn allowsExec(ctx: *anyopaque, address: u32, len: usize) bool {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        if (self.periph.touchesWindow(address, len)) return false;
+        return self.memory.view().allowsExec(address, len);
+    }
+
+    fn touchesPeriph(ctx: *anyopaque, address: u32, len: usize) ?bool {
+        const self: *BoardBus = @ptrCast(@alignCast(ctx));
+        return self.periph.touchesWindow(address, len);
     }
 
     fn write(ctx: *anyopaque, given: u32, bytes: []const u8) bus.Error!void {
@@ -181,18 +201,26 @@ pub const BoardBus = struct {
         if (scs_route.wired(self.security, given)) |halves| return self.writeSplit(halves, given, bytes);
         const address = self.landing(given) orelse return;
         if (self.check) |c| if (!c.allows(given, .store)) return bus.Error.Unmapped;
-        if (!inWindow(address, bytes.len)) {
-            if (address >= memmap.ppb_base and address < memmap.ppb_base + 0x0010_0000) {
-                if (self.touched) |t| t.touch(address, true);
-            }
-            return self.scs.store(self.memory, address, bytes);
+        if (!self.periph.inWindow(address, bytes.len)) return self.writeNonPeriph(address, bytes);
+        return self.writePeriph(address, bytes);
+    }
+
+    fn writeNonPeriph(self: *BoardBus, address: u32, bytes: []const u8) bus.Error!void {
+        if (address >= memmap.ppb_base and address < memmap.ppb_base + 0x0010_0000) {
+            if (self.touched) |t| t.touch(address, true);
         }
-        if (self.touched) |t| t.touch(address, true);
+        return self.scs.store(self.memory, address, bytes);
+    }
+
+    fn writePeriph(self: *BoardBus, address: u32, bytes: []const u8) bus.Error!void {
         var padded = @as([4]u8, @splat(0));
         const w = try width(bytes.len);
         @memcpy(padded[0..bytes.len], bytes);
         self.periph.issuer = self.issuer;
-        self.periph.write(address, w, std.mem.readInt(u32, &padded, .little));
+        if (!self.periph.tryWrite(address, w, std.mem.readInt(u32, &padded, .little))) {
+            return bus.Error.Unmapped;
+        }
+        if (self.touched) |t| t.touch(address, true);
     }
 
     /// Where an access lands, or null for RES0: the SCS bank the core's

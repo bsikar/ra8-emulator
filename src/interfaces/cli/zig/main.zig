@@ -14,6 +14,7 @@ const elf = @import("ra8_board").image.elf;
 const fault_file = @import("ra8_session").fault_file;
 const file_ops = @import("ra8_session").file_ops;
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
+const machine_memory = @import("ra8_chip").core.machine.memory;
 const option_memory = @import("ra8_chip").periph.iwdt.option_memory;
 const Parts = @import("../parts.zig").Parts;
 const Reboot = @import("ra8_chip").core.reboot.Reboot;
@@ -43,7 +44,7 @@ pub fn run(allocator: std.mem.Allocator, io: std.Io, image: elf.Image, options: 
     defer parts.deinit();
     const written = try prepare(&cpu0, &board, io, image, &parts, options);
     if (options.ns_path) |path| loadNonSecure(allocator, io, &cpu0, path) catch return 1;
-    const vector_base = vectorBase(image) catch return 1;
+    const vector_base = vectorBaseFor(image, board.desc().memory) catch return 1;
     const memory = cpu0.own();
     var stdout = std.Io.File.stdout().writerStreaming(io, &.{});
     const out = &stdout.interface;
@@ -122,7 +123,14 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
 /// Where the image's vector table is, or a printed complaint when it has
 /// no executable segment to reset into. Shared with main's engine path.
 pub fn vectorBase(image: elf.Image) error{NoVectors}!u32 {
-    return image.vectorBase() orelse {
+    return vectorBaseFor(image, &machine_memory.ra8);
+}
+
+pub fn vectorBaseFor(
+    image: elf.Image,
+    map: *const machine_memory.MemoryMap,
+) error{NoVectors}!u32 {
+    return image.vectorBaseFor(map) orelse {
         std.debug.print("no executable segment, nothing to reset into\n", .{});
         return error.NoVectors;
     };

@@ -34,7 +34,14 @@ pub const WatchBus = struct {
     pub fn view(self: *WatchBus) bus.Bus {
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .peek = peek, .latch = latch },
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .peek = peek,
+                .latch = latch,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
+            },
             .lines = self.inner.lines,
             .register_state = self.inner.register_state,
         };
@@ -69,6 +76,16 @@ pub const WatchBus = struct {
     fn peek(ctx: *anyopaque, address: u32, into: []u8) bool {
         const self: *WatchBus = @ptrCast(@alignCast(ctx));
         return self.inner.peek(address, into);
+    }
+
+    fn allowsExec(ctx: *anyopaque, address: u32, len: usize) bool {
+        const self: *WatchBus = @ptrCast(@alignCast(ctx));
+        return self.inner.allowsExec(address, len);
+    }
+
+    fn touchesPeriph(ctx: *anyopaque, address: u32, len: usize) ?bool {
+        const self: *WatchBus = @ptrCast(@alignCast(ctx));
+        return self.inner.touchesPeriph(address, len);
     }
 
     /// The core raising a fault status bit is not a guest access: no

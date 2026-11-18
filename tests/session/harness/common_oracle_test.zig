@@ -196,21 +196,21 @@ test "COMMON NC-03 and NC-04 all 12 SpaceId backing spaces component storage and
 
     // NC-04: Break TrustZone NS_MRAM / NS_SRAM aliases and cross-core shared SRAM borrow
     const base_cap = try oracle.capture(&h);
-    const ns_mram_orig = cpu0_store.pages[1].?;
-    const detached_mram = try t.allocator.dupe(u8, ns_mram_orig);
+    const ns_mram = &cpu0_store.alias_pages[cpu0_store.map_desc.aliasIndexOf(memmap.ns_mram_base).?];
+    const ns_mram_orig = ns_mram.*;
+    const detached_mram = try t.allocator.dupe(u8, ns_mram_orig.?);
     defer t.allocator.free(detached_mram);
-    cpu0_store.pages[1] = detached_mram;
+    ns_mram.* = detached_mram;
     try changed(base_cap, try oracle.capture(&h), "aliases");
-    cpu0_store.pages[1] = ns_mram_orig;
-
-    const borrowed_sram = cpu1_store.pages[3].?;
-    const detached_sram = try t.allocator.dupe(u8, borrowed_sram);
+    ns_mram.* = ns_mram_orig;
+    const sram_slot = &cpu1_store.pages[cpu1_store.map_desc.indexOf(memmap.sram_base).?];
+    const ns_sram_slot = &cpu1_store.alias_pages[cpu1_store.map_desc.aliasIndexOf(memmap.ns_sram_base).?];
+    const borrowed_sram = sram_slot.*;
+    const detached_sram = try t.allocator.dupe(u8, borrowed_sram.?);
     defer t.allocator.free(detached_sram);
-    cpu1_store.pages[3] = detached_sram;
-    cpu1_store.pages[4] = detached_sram;
+    for ([_]*?[]u8{ sram_slot, ns_sram_slot }) |s| s.* = detached_sram;
     try changed(base_cap, try oracle.capture(&h), "aliases");
-    cpu1_store.pages[3] = borrowed_sram;
-    cpu1_store.pages[4] = borrowed_sram;
+    for ([_]*?[]u8{ sram_slot, ns_sram_slot }) |s| s.* = borrowed_sram;
     try same(base_cap, try oracle.capture(&h));
 }
 

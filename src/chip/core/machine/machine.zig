@@ -9,11 +9,13 @@
 //! composition its blocks follow.
 pub const catalog = @import("catalog.zig");
 pub const core = @import("core.zig");
+pub const memory = @import("memory.zig");
 pub const topology = @import("topology.zig");
 
 const Part = @import("../part/part.zig").Part;
 
 pub const Core = core.Core;
+pub const MemoryMap = memory.MemoryMap;
 pub const Slot = topology.Slot;
 pub const Topology = topology.Topology;
 
@@ -23,9 +25,10 @@ pub const Machine = struct {
     /// How a report prints it.
     label: []const u8,
     cores: Topology,
-    /// The on-chip register and memory map the board composes beside the
-    /// cores. Until the map comes from the description itself (RA8EMU-1343),
-    /// every machine sits on one of the RA8 compositions.
+    /// Region ownership, aliases, permissions, MMIO routing, and optional
+    /// vendor IDAU attribution (RA8EMU-1343).
+    memory: *const MemoryMap = &memory.ra8,
+    /// The on-chip peripheral composition beside the cores.
     part: Part,
 
     pub fn primary(self: *const Machine) Core {

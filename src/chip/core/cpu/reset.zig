@@ -46,5 +46,5 @@ pub fn cpu(core: *Cpu, vtor: u32) bus.Error!void {
     core.trip = .{};
     if (core.quiet) |q| q.stirAll();
     if (core.cut) |edge| _ = edge.take();
-    if (core.blocks) |cache| cache.init();
+    if (core.blocks) |cache| cache.clear();
 }

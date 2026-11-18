@@ -16,7 +16,7 @@ const external = @import("../external/memory.zig");
 const external_backing = @import("../external/backing.zig");
 const fields = @import("ra8_snapshot").fields;
 const file = @import("ra8_snapshot").file;
-const memmap = @import("ra8_chip").core.memmap;
+const machine_memory = @import("ra8_chip").core.machine.memory;
 const store_mod = @import("ra8_chip").core.cpu.memory.store;
 
 pub const Store = store_mod.Store;
@@ -31,17 +31,18 @@ pub fn save(store: *const Store, writer: anytype) !void {
 }
 
 pub fn saveAs(store: *const Store, kind: file.Kind, writer: anytype) !void {
-    var live: LiveCounts = undefined;
+    var live: LiveCounts = @splat(0);
     try file.writeSectionHeader(writer, kind, payloadLen(store, &live));
     try writer.writeInt(u32, regionCount(store), .little);
-    for (memmap.ram, 0..) |entry, index| {
+    const fixed_count = @min(store.map_desc.regions.len, machine_memory.max_regions);
+    for (store.map_desc.regions[0..fixed_count], 0..) |entry, index| {
         if (!store.owned[index]) continue;
         try saveRegion(entry.base, store.pages[index].?, live[index], writer);
     }
-    if (store.owns_port) try saveSdramRegion(store, live[memmap.ram.len], writer);
+    if (store.owns_port) try saveSdramRegion(store, live[machine_memory.max_regions], writer);
     for (store.extra.windows, 0..) |held, index| {
         const window = held orelse continue;
-        try saveRegion(window.base, window.bytes, live[memmap.ram.len + 1 + index], writer);
+        try saveRegion(window.base, window.bytes, live[machine_memory.max_regions + 1 + index], writer);
     }
     const state: ?external.State = if (external_backing.fabricOf(store)) |fabric| fabric.state() else null;
     try fields.write(writer, state);
@@ -153,7 +154,7 @@ fn apply(store: *Store, payload: []const u8) void {
             const offset = int(payload, &at) catch unreachable;
             const size = @min(page, len - offset);
             @memcpy(bytes[offset..][0..size], payload[at..][0..size]);
-            if (base == memmap.sdram_base) store.noteSdramResident(offset, size);
+            if (base == store.sdramBase()) store.noteSdramResident(offset, size);
             at += size;
         }
     }
@@ -166,40 +167,69 @@ pub fn validate(store: *const Store, payload: []const u8) Error!void {
     var at: usize = 0;
     const count = try int(payload, &at);
     if (count > store.pages.len + store.extra.windows.len + 1) return Error.BadValue;
-    var bases: [memmap.ram.len + 33]u32 = undefined;
-    var fixed_seen: [memmap.ram.len]bool = @splat(false);
+    var bases: [machine_memory.max_regions + 33]u32 = undefined;
+    var fixed_seen: [machine_memory.max_regions]bool = @splat(false);
     var sdram_seen = false;
     for (0..count) |index| {
-        const base = try int(payload, &at);
-        const len = try int(payload, &at);
-        if (len == 0 or @as(u64, base) + len > 0x1_0000_0000) return Error.BadValue;
-        for (bases[0..index]) |previous| if (previous == base) return Error.BadValue;
-        bases[index] = base;
-        if (fixedBacking(store, base)) |bytes| {
-            if (bytes.len != len) return Error.SizeMismatch;
-            for (memmap.ram, 0..) |entry, slot| if (entry.base == base) {
-                if (!store.owned[slot] and !(base == memmap.sdram_base and store.owns_port)) return Error.Unbacked;
-                fixed_seen[slot] = true;
-            };
-            if (base == memmap.sdram_base) sdram_seen = true;
-        } else {
-            for (memmap.ram) |entry| if (base < entry.end() and
-                entry.base < @as(u64, base) + len) return Error.Unbacked;
-        }
-        const pages = try int(payload, &at);
-        var previous: ?u32 = null;
-        for (0..pages) |_| {
-            const offset = try int(payload, &at);
-            if (offset >= len or offset % page != 0) return Error.BadValue;
-            if (previous) |last| if (offset <= last) return Error.BadValue;
-            previous = offset;
-            const size = @min(page, len - offset);
-            if (payload.len - at < size) return Error.Truncated;
-            at += size;
-        }
+        try validateOne(store, payload, &at, bases[0..index], &bases[index], &fixed_seen, &sdram_seen);
     }
     for (store.owned, fixed_seen) |mine, seen| if (mine and !seen) return Error.Unbacked;
     if (store.owns_port and !sdram_seen) return Error.Unbacked;
+    try validateTail(store, payload, at);
+}
+
+fn validateOne(
+    store: *const Store,
+    payload: []const u8,
+    at: *usize,
+    seen_bases: []const u32,
+    out_base: *u32,
+    fixed_seen: *[machine_memory.max_regions]bool,
+    sdram_seen: *bool,
+) Error!void {
+    const base = try int(payload, at);
+    const len = try int(payload, at);
+    if (len == 0 or @as(u64, base) + len > 0x1_0000_0000) return Error.BadValue;
+    for (seen_bases) |previous| if (previous == base) return Error.BadValue;
+    out_base.* = base;
+    try checkRegionSlot(store, base, len, fixed_seen, sdram_seen);
+    try validatePages(payload, at, len);
+}
+
+fn checkRegionSlot(
+    store: *const Store,
+    base: u32,
+    len: u32,
+    fixed_seen: *[machine_memory.max_regions]bool,
+    sdram_seen: *bool,
+) Error!void {
+    if (fixedBacking(store, base)) |bytes| {
+        if (bytes.len != len) return Error.SizeMismatch;
+        const slot = store.map_desc.indexOf(base).?;
+        const port_sdram = base == store.sdramBase() and store.owns_port;
+        if (!store.owned[slot] and !port_sdram) return Error.Unbacked;
+        fixed_seen[slot] = true;
+        if (base == store.sdramBase()) sdram_seen.* = true;
+        return;
+    }
+    if (store.map_desc.overlapsFixed(base, len)) return Error.Unbacked;
+}
+
+fn validatePages(payload: []const u8, at: *usize, len: u32) Error!void {
+    const pages = try int(payload, at);
+    var previous: ?u32 = null;
+    for (0..pages) |_| {
+        const offset = try int(payload, at);
+        if (offset >= len or offset % page != 0) return Error.BadValue;
+        if (previous) |last| if (offset <= last) return Error.BadValue;
+        previous = offset;
+        const size = @min(page, len - offset);
+        if (payload.len - at.* < size) return Error.Truncated;
+        at.* += size;
+    }
+}
+
+fn validateTail(store: *const Store, payload: []const u8, at: usize) Error!void {
     var cursor: fields.Cursor = .{ .bytes = payload, .at = at };
     const state = try fields.read(?external.State, &cursor);
     if ((state != null) != (external_backing.fabricOf(store) != null)) return Error.LayoutMismatch;
@@ -210,8 +240,8 @@ pub fn validate(store: *const Store, payload: []const u8) Error!void {
 }
 
 fn fixedBacking(store: *const Store, base: u32) ?[]u8 {
-    for (memmap.ram, 0..) |entry, index| if (entry.base == base) return store.pages[index];
-    return null;
+    const index = store.map_desc.indexOf(base) orelse return null;
+    return store.pages[index];
 }
 
 fn saveRegion(base: u32, bytes: []const u8, live: u32, writer: anytype) !void {
@@ -232,8 +262,7 @@ fn saveRegion(base: u32, bytes: []const u8, live: u32, writer: anytype) !void {
 /// The host bytes a saved region goes back into, mapping a window outside
 /// memmap the way its peripheral did at attach.
 fn backing(store: *Store, base: u32, len: u32) Error![]u8 {
-    for (memmap.ram, 0..) |entry, index| {
-        if (entry.base != base) continue;
+    if (store.map_desc.indexOf(base)) |index| {
         const bytes = store.pages[index] orelse return Error.Unbacked;
         if (bytes.len != len) return Error.SizeMismatch;
         return bytes;
@@ -247,23 +276,24 @@ fn backing(store: *Store, base: u32, len: u32) Error![]u8 {
     return (store.extra.locateMut(base, len) orelse return Error.Unbacked).bytes;
 }
 
-const LiveCounts = [memmap.ram.len + 1 + @as(Store, .{}).extra.windows.len]u32;
+const LiveCounts = [machine_memory.max_regions + 1 + @as(Store, .{}).extra.windows.len]u32;
 
 fn payloadLen(store: *const Store, live: *LiveCounts) u64 {
     var len: u64 = 4;
-    for (memmap.ram, 0..) |_, index| {
+    const fixed_count = @min(store.map_desc.regions.len, machine_memory.max_regions);
+    for (0..fixed_count) |index| {
         if (store.owned[index]) len += regionLen(store.pages[index].?, &live[index]);
     }
-    if (store.owns_port) len += sdramRegionLen(store, &live[memmap.ram.len]);
+    if (store.owns_port) len += sdramRegionLen(store, &live[machine_memory.max_regions]);
     for (store.extra.windows, 0..) |held, index| {
-        if (held) |window| len += regionLen(window.bytes, &live[memmap.ram.len + 1 + index]);
+        if (held) |window| len += regionLen(window.bytes, &live[machine_memory.max_regions + 1 + index]);
     }
     len += stateLen(store);
     return len;
 }
 
 fn sdramRegionLen(store: *const Store, live: *u32) u64 {
-    const bytes = store.region(memmap.sdram_base).?;
+    const bytes = store.region(store.sdramBase()).?;
     const tracker = store.touches();
     const set = if (store.sdram_demand_zero and bytes.len <= 128 * 1024 * 1024)
         store.sdramResident()
@@ -287,15 +317,16 @@ fn sdramRegionLen(store: *const Store, live: *u32) u64 {
 }
 
 fn saveSdramRegion(store: *const Store, live: u32, writer: anytype) !void {
-    const bytes = store.region(memmap.sdram_base).?;
+    const sdram_base = store.sdramBase();
+    const bytes = store.region(sdram_base).?;
     const tracker = store.touches();
     const set = if (store.sdram_demand_zero and bytes.len <= 128 * 1024 * 1024)
         store.sdramResident()
     else if (tracker.valid)
         &tracker.sdram
     else
-        return saveRegion(memmap.sdram_base, bytes, live, writer);
-    try writer.writeInt(u32, memmap.sdram_base, .little);
+        return saveRegion(sdram_base, bytes, live, writer);
+    try writer.writeInt(u32, sdram_base, .little);
     try writer.writeInt(u32, @intCast(bytes.len), .little);
     try writer.writeInt(u32, live, .little);
     if (live == 0) return;

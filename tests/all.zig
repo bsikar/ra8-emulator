@@ -153,6 +153,7 @@ test {
     _ = @import("chip/core/machine/topology_test.zig");
     _ = @import("chip/core/machine/catalog_test.zig");
     _ = @import("chip/core/machine/machine_test.zig");
+    _ = @import("chip/core/machine/memory_test.zig");
     _ = @import("chip/core/rate_test.zig");
     _ = @import("board/image/ra8app_test.zig");
     _ = @import("chip/core/module_place_test.zig");

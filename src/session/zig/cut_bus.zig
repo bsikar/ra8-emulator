@@ -9,7 +9,15 @@ pub const CutBus = struct {
     pub fn view(self: *CutBus) bus.Bus {
         return .{
             .ctx = self,
-            .vtable = &.{ .read = read, .write = write, .latch = latch, .repeat = repeat, .peek = peek },
+            .vtable = &.{
+                .read = read,
+                .write = write,
+                .latch = latch,
+                .repeat = repeat,
+                .peek = peek,
+                .allowsExec = allowsExec,
+                .touchesPeriph = touchesPeriph,
+            },
             .lines = self.inner.lines,
             .register_state = self.inner.register_state,
         };
@@ -39,5 +47,15 @@ pub const CutBus = struct {
     fn peek(context: *anyopaque, address: u32, into: []u8) bool {
         const self: *CutBus = @ptrCast(@alignCast(context));
         return self.inner.peek(address, into);
+    }
+
+    fn allowsExec(context: *anyopaque, address: u32, len: usize) bool {
+        const self: *CutBus = @ptrCast(@alignCast(context));
+        return self.inner.allowsExec(address, len);
+    }
+
+    fn touchesPeriph(context: *anyopaque, address: u32, len: usize) ?bool {
+        const self: *CutBus = @ptrCast(@alignCast(context));
+        return self.inner.touchesPeriph(address, len);
     }
 };

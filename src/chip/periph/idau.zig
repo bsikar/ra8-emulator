@@ -78,7 +78,19 @@ pub fn cmsBytes(area: u9) u32 {
 }
 const last_region_base: u32 = 0x5000_0000;
 
+pub const Callback = struct {
+    context: ?*const anyopaque = null,
+    answerFn: *const fn (context: ?*const anyopaque, address: u32) sau_attr.Idau,
+
+    pub fn answer(self: Callback, address: u32) sau_attr.Idau {
+        return self.answerFn(self.context, address);
+    }
+};
+
 pub const Map = struct {
+    /// Pluggable vendor IDAU attribution callback (RA8EMU-1343); null uses
+    /// the RA8 bit-28 + SRAMSABARn/CMSAMON model below.
+    custom: ?Callback = null,
     /// The SRAMSABARn words. With none, SRAM follows the bit-28 rule alone.
     sram: ?*const cpscu_sram.Unit = null,
     banks: *const [cpscu_sram.bank_count]Bank = &ra8d2_banks,
@@ -93,6 +105,7 @@ pub const Map = struct {
 
     /// The IDAU's answer for `address`.
     pub fn answer(self: Map, address: u32) sau_attr.Idau {
+        if (self.custom) |cb| return cb.answer(address);
         const region = regionOf(address);
         return .{ .state = self.stateOf(address, region), .region = region };
     }

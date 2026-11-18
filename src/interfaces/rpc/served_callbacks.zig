@@ -57,11 +57,13 @@ pub fn mapImage(context: *anyopaque, core: usize, json: bool, out: []u8) anyerro
     const owner: *harness.Harness = @ptrCast(@alignCast(context));
     const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
     const image = owner.loadedImage(which) orelse return error.NoImage;
+    var region_buf: [region_map.max_regions]region_map.Region = undefined;
+    const regions = region_map.regionsFor(owner.board().desc().memory, &region_buf);
     var w: std.Io.Writer = .fixed(out);
     if (json) {
-        try region_map_json.write(&w, image, &region_map.ek_ra8d2);
+        try region_map_json.write(&w, image, regions);
     } else {
-        try region_map_text.render(&w, image, &region_map.ek_ra8d2);
+        try region_map_text.render(&w, image, regions);
     }
     return w.buffered();
 }
@@ -101,7 +103,8 @@ pub fn stackOf(context: *anyopaque, core: usize) ?region_map.Stack {
     const owner: *harness.Harness = @ptrCast(@alignCast(context));
     const which: session_api.Core = if (core == 0) .cpu0 else .cpu1;
     const image = owner.loadedImage(which) orelse return null;
-    return region_map.stackOf(image, &region_map.ek_ra8d2);
+    var region_buf: [region_map.max_regions]region_map.Region = undefined;
+    return region_map.stackOf(image, region_map.regionsFor(owner.board().desc().memory, &region_buf));
 }
 /// A core's last loaded image, for the backtrace's names and lines.
 pub fn imageOf(context: *anyopaque, core: usize) ?symbols.Image {
