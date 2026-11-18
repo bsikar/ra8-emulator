@@ -11,10 +11,16 @@ const wire = ra8.host.probe_host.wire;
 
 const LogProvider = struct {
     calls: usize = 0,
+    flashes: usize = 0,
     fn perform(ctx: *anyopaque, _: model.Action, _: []u8) ![]const u8 {
         const self: *LogProvider = @ptrCast(@alignCast(ctx));
         self.calls += 1;
         return "{\"pc\":1234}";
+    }
+    fn flash(ctx: *anyopaque, elf: []const u8, out: []u8) ![]const u8 {
+        const self: *LogProvider = @ptrCast(@alignCast(ctx));
+        self.flashes += 1;
+        return std.fmt.bufPrint(out, "{{\"flashed\":true,\"verified\":true,\"bytes\":{d}}}", .{elf.len});
     }
 };
 
@@ -56,6 +62,12 @@ fn serveSession(
                 .chunk = true,
                 .stream = @tagName(parsed.value.action),
             });
+        } else if (parsed.value.op == .flash_commit) {
+            try wire.send(&writer.interface, &peer.session, wire.Reply{
+                .ok = true,
+                .chunk = true,
+                .stream = "flash:program_verify",
+            });
         }
         var out: [4096]u8 = undefined;
         var snaps: [32]wire.Snapshot = undefined;
@@ -82,9 +94,9 @@ test "authenticated probe-host adapter syncs claims streams chunks and disconnec
         .uart = "COM13",
         .identity_verified = true,
         .managed = false,
-        .operations = &.{ .registers, .halt },
-        .capabilities = .{ .hardware_debug = true },
-    }, .{ .context = &log, .performFn = LogProvider.perform });
+        .operations = &.{ .registers, .halt, .flash },
+        .capabilities = .{ .hardware_debug = true, .flash = true },
+    }, .{ .context = &log, .performFn = LogProvider.perform, .flashFn = LogProvider.flash });
     var agent_state: probe_agent.State = .{ .io = io, .host_id = "agent-host", .registry = &remote_reg };
 
     var bind = try std.Io.net.IpAddress.parse("127.0.0.1", 0);
@@ -113,8 +125,8 @@ test "authenticated probe-host adapter syncs claims streams chunks and disconnec
     var res: [2]Run = undefined;
     var sel: std.Io.Select(Run) = .init(io, &res);
     defer _ = sel.cancel();
-    // Serve 3 requests (list, claim, perform), then close to simulate agent loss.
-    try sel.concurrent(.server, serveSession, .{ io, &server, "agent-host", key, &agent_state, 3 });
+    // Serve 6 requests (list, claim, perform, flash_begin, flash_chunk, flash_commit), then close.
+    try sel.concurrent(.server, serveSession, .{ io, &server, "agent-host", key, &agent_state, 6 });
     try sel.concurrent(.client, clientFlow, .{ &hosts, &targets, &local_reg });
     try (switch (try sel.await()) {
         .server => |r| r,
@@ -125,7 +137,8 @@ test "authenticated probe-host adapter syncs claims streams chunks and disconnec
         .client => |r| r,
     });
     try std.testing.expectEqual(@as(usize, 1), log.calls);
-    try std.testing.expectEqual(@as(usize, 1), hosts[0].chunks_seen);
+    try std.testing.expectEqual(@as(usize, 1), log.flashes);
+    try std.testing.expectEqual(@as(usize, 2), hosts[0].chunks_seen);
 }
 
 fn clientFlow(hosts: *[1]agent.Host, targets: *[1]agent.Target, registry: *model.Registry) anyerror!void {
@@ -143,7 +156,9 @@ fn clientFlow(hosts: *[1]agent.Host, targets: *[1]agent.Target, registry: *model
     var out: [256]u8 = undefined;
     const reply = try registry.perform(&owner, chosen, .registers, &out);
     try std.testing.expectEqualStrings("{\"pc\":1234}", reply);
-    // Next perform hits EOF because the agent dropped after 3 requests.
+    const flashed = try registry.flash(&owner, chosen, "remote-elf-bytes", &out);
+    try std.testing.expectEqualStrings("{\"flashed\":true,\"verified\":true,\"bytes\":16}", flashed);
+    // Next perform hits EOF because the agent dropped after 6 requests.
     try std.testing.expectError(error.AgentDisconnected, registry.perform(&owner, chosen, .halt, &out));
     // Next scan disconnects agent-host and removes the stale entry.
     agent.scanHosts(hosts, targets, registry);
