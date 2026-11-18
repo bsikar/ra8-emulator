@@ -1,8 +1,10 @@
 //! Import into a separate owned machine. The application may swap sessions only after success.
 const std = @import("std");
 
+const board_snap = @import("ra8_board").snapshot.board;
 const Bridge = @import("../history_bridge.zig").Bridge;
 const bundle = @import("ra8_snapshot").bundle;
+const catalog = @import("ra8_chip").core.machine.catalog;
 const history = @import("ra8_host").history;
 const packs = @import("packs.zig");
 const session = @import("ra8_session");
@@ -15,6 +17,8 @@ pub const Options = struct {
     /// Required for recording bundles; receives only a newly created, leased history ID.
     history_root: ?[]const u8 = null,
     expected_board: ?[]const u8 = null,
+    /// Explicit machine description; null uses `catalog.ra8p1`.
+    machine: ?*const session.api.Machine = null,
     /// Snapshot-only bundles need the original images; recording roots embed them.
     elf0: ?[]const u8 = null,
     elf1: ?[]const u8 = null,
@@ -33,19 +37,22 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, input: *std.Io.Reader, options: 
     const state = try reader.readAlloc(gpa, 1024 * 1024 * 1024);
     defer gpa.free(state);
     try validation.snapshotSections(gpa, state);
+    const chosen = options.machine orelse &catalog.ra8p1;
+    try board_snap.machineOf(chosen, state);
     if (metadata.recording) return recorded(gpa, io, &reader, state, options);
     if (try reader.next() != null) return error.UnexpectedEntry;
     const first = options.elf0 orelse return error.MissingImage;
     try images(metadata, first, options.elf1);
     const candidate = try gpa.create(setup.Served);
     errdefer gpa.destroy(candidate);
-    try candidate.openInitial(
+    try candidate.openInputs(
         gpa,
         io,
         "",
         options.board_profile,
         .{ .elf_bytes = first },
         if (options.elf1) |bytes| .{ .bytes = bytes } else null,
+        .{ .machine = options.machine },
     );
     errdefer candidate.deinit();
     try candidate.owner.state.files.readFrom(state);
@@ -82,7 +89,9 @@ fn staged(
     const root_bytes = try stage.read(gpa, .top, "root.bin", 64 * 1024 * 1024);
     defer gpa.free(root_bytes);
     const root = try session.history_root.decode(root_bytes);
-    try validity.check(root);
+    const chosen = options.machine orelse &catalog.ra8p1;
+    try validity.checkFor(root, chosen.name);
+    if (root.elf1 != null and !chosen.hasSecond()) return error.AbsentCore;
     try images(reader.metadata.value, root.elf0.bytes, if (root.elf1) |image| image.bytes else null);
     if (options.board_profile) |profile| {
         if (!std.mem.eql(u8, profile, root.board_profile)) return error.BoardMismatch;
@@ -99,15 +108,16 @@ fn staged(
     try packs.check(gpa, stage, options.limits.total_bytes);
     const candidate = try gpa.create(setup.Served);
     errdefer gpa.destroy(candidate);
-    const bind = try stage.adopt(gpa);
-    // openInitial consumes the bind even on failure; the stage no longer owns its handles.
-    try candidate.openInitial(
+    const bind = try stage.adoptFor(gpa, chosen.name);
+    // openInputs consumes the bind even on failure; the stage no longer owns its handles.
+    try candidate.openInputs(
         gpa,
         io,
         "",
         root.board_profile,
         .{ .imported = bind, .elf_bytes = root.elf0.bytes },
         if (root.elf1) |image| .{ .bytes = image.bytes } else null,
+        .{ .machine = options.machine },
     );
     errdefer candidate.deinit();
     logs.store = history.storage.Store.from(&bind.session);

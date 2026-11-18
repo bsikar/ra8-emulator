@@ -23,7 +23,10 @@ pub const inventory = @import("inventory.zig");
 const Part = @import("ra8_chip").core.part.Part;
 const time = @import("ra8_chip").snapshot.time;
 
+const catalog = chip.core.machine.catalog;
+const Machine = chip.core.machine.Machine;
 pub const Error = file.Error || fields.Error || error{ Missing, WrongPart, UnsupportedAttachments };
+pub const named_part_tag: u8 = 0xFF;
 
 /// The board-shaped sections after time, in kind order. Appending is a
 /// format change.
@@ -62,8 +65,7 @@ pub fn saveAttached(board: anytype, writer: anytype) !void {
 fn saveMode(board: anytype, writer: anytype, owned: bool) !void {
     if (!owned and board.asks.needsOwner()) return error.UnsupportedAttachments;
     comptime if (!inventory.complete(@TypeOf(board.*))) @compileError("unclassified Board snapshot field");
-    try file.writeSectionHeader(writer, .part, 1);
-    try fields.write(writer, @as(u8, @backingInt(board.part)));
+    try writePart(boardDesc(board), writer);
     try time.save(&board.time, writer);
     inline for (sections) |section| {
         try section.save(board, writer);
@@ -83,7 +85,7 @@ pub fn load(board: anytype, bytes: []const u8) !void {
 }
 
 fn decode(board: anytype, bytes: []const u8) LoadError()!void {
-    try partOf(board.part, bytes);
+    try machineOf(boardDesc(board), bytes);
     try time.load(&board.time, bytes);
     inline for (sections) |section| {
         try section.load(board, bytes);
@@ -144,6 +146,7 @@ pub fn prepareAttached(board: anytype, bytes: []const u8) !Prepared(@TypeOf(boar
 
 fn prepareMode(board: anytype, bytes: []const u8, owned: bool) !Prepared(@TypeOf(board.*)) {
     if (!owned and board.asks.needsOwner()) return error.UnsupportedAttachments;
+    try machineOf(boardDesc(board), bytes);
     const B = @TypeOf(board.*);
     const next = try std.heap.page_allocator.create(B);
     next.* = board.*;
@@ -188,11 +191,62 @@ fn rebaseUsb(next: anytype, live: anytype) void {
     }
 }
 
-/// Refuses a file without a part section or from a different part.
-pub fn partOf(expected: Part, bytes: []const u8) Error!void {
+pub fn boardDesc(board: anytype) *const Machine {
+    const B = @TypeOf(board.*);
+    if (@hasDecl(B, "desc")) return board.desc();
+    return catalog.ofPart(board.part);
+}
+
+fn legacyTag(desc: *const Machine) ?u8 {
+    const shipped = catalog.find(desc.name) orelse return null;
+    if (desc != shipped and !std.meta.eql(desc.*, shipped.*)) return null;
+    return @backingInt(shipped.part);
+}
+
+fn writePart(desc: *const Machine, writer: anytype) !void {
+    if (legacyTag(desc)) |tag| {
+        try file.writeSectionHeader(writer, .part, 1);
+        try writer.writeByte(tag);
+        return;
+    }
+    if (desc.name.len == 0) return error.BadValue;
+    try file.writeSectionHeader(writer, .part, 1 + desc.name.len);
+    try writer.writeByte(named_part_tag);
+    try writer.writeAll(desc.name);
+}
+
+/// Returns the machine name encoded in `bytes`'s `.part` section.
+pub fn machineNameOf(bytes: []const u8) Error![]const u8 {
     const section = try file.Reader.find(bytes, .part) orelse return Error.Missing;
-    var cursor: fields.Cursor = .{ .bytes = section.payload };
-    const tag = try fields.read(u8, &cursor);
-    if (!cursor.done()) return Error.BadValue;
-    if (tag != @backingInt(expected)) return Error.WrongPart;
+    if (section.payload.len == 0) return Error.Truncated;
+    const tag = section.payload[0];
+    if (tag == named_part_tag) {
+        const name = section.payload[1..];
+        if (name.len == 0) return Error.BadValue;
+        return name;
+    }
+    if (section.payload.len != 1) return Error.BadValue;
+    const which = std.enums.fromInt(Part, tag) orelse return Error.WrongPart;
+    return catalog.ofPart(which).name;
+}
+
+/// Refuses a file without a part section or from a different machine.
+pub fn machineOf(expected: *const Machine, bytes: []const u8) Error!void {
+    const section = try file.Reader.find(bytes, .part) orelse return Error.Missing;
+    if (section.payload.len == 0) return Error.Truncated;
+    const tag = section.payload[0];
+    if (tag == named_part_tag) {
+        const name = section.payload[1..];
+        if (name.len == 0) return Error.BadValue;
+        if (legacyTag(expected) != null or !std.mem.eql(u8, name, expected.name)) return Error.WrongPart;
+        return;
+    }
+    if (section.payload.len != 1) return Error.BadValue;
+    const wanted = legacyTag(expected) orelse return Error.WrongPart;
+    if (tag != wanted) return Error.WrongPart;
+}
+
+/// Refuses a file without a part section or from a different shipped part.
+pub fn partOf(expected: Part, bytes: []const u8) Error!void {
+    return machineOf(catalog.ofPart(expected), bytes);
 }
