@@ -10,7 +10,7 @@ describe('bundle-summary helpers', () => {
     expect(formatByteSize(3 * 1024 * 1024)).toBe('3.0 MB');
   });
 
-  it('builds structured Screen 03 rows for recording + snapshot bundles', () => {
+  it('builds structured bundle inspection rows for recording + snapshot archives', () => {
     const preview: BundlePreview = {
       compressed: true,
       totalTarBytes: 65536,

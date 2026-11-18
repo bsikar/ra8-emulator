@@ -4,7 +4,7 @@ import { appRoutes } from '../../src/app/app.routes';
 import { WorkspaceStore } from '../../src/app/core/stores/workspace.store';
 import { LaunchRouteComponent } from '../../src/app/routes/launch.route';
 
-describe('LaunchRouteComponent (Screen 01)', () => {
+describe('LaunchRouteComponent', () => {
   beforeEach(() => {
     localStorage.clear();
   });
@@ -119,7 +119,7 @@ describe('LaunchRouteComponent (Screen 01)', () => {
     expect(el.querySelector('[data-testid="launch-command-card"]')).toBeNull();
   });
 
-  it('navigates to /connect (Screen 02) when clicking Connect Remote', async () => {
+  it('navigates to /connect when clicking Connect Remote', async () => {
     TestBed.configureTestingModule({
       providers: [provideRouter(appRoutes)],
     });

@@ -49,14 +49,14 @@ export function saveSavedBoards(
   writeJsonList(CUSTOM_BOARDS_KEY, 'Board storage', list, onError);
 }
 
-/** Load reusable custom silicon presets (`04f` -> `04e`). */
+/** Load reusable custom silicon presets. */
 export function loadCustomSiliconPresets(
   onError?: (err: unknown, context: string) => void
 ): ComposerMcuSocket[] {
   return readJsonList<ComposerMcuSocket>(CUSTOM_SILICON_KEY, 'Custom silicon storage', onError);
 }
 
-/** Save reusable custom silicon presets (`04f`). */
+/** Save reusable custom silicon presets. */
 export function saveCustomSiliconPresets(
   list: readonly ComposerMcuSocket[],
   onError?: (msg: string) => void
@@ -64,14 +64,14 @@ export function saveCustomSiliconPresets(
   writeJsonList(CUSTOM_SILICON_KEY, 'Custom silicon storage', list, onError);
 }
 
-/** Load reusable custom component definitions (`04c` -> `04h`). */
+/** Load reusable custom component definitions. */
 export function loadCustomComponentLibrary(
   onError?: (err: unknown, context: string) => void
 ): ComposerComponentAttachment[] {
   return readJsonList<ComposerComponentAttachment>(CUSTOM_COMPONENTS_KEY, 'Custom component storage', onError);
 }
 
-/** Save reusable custom component definitions (`04c`). */
+/** Save reusable custom component definitions. */
 export function saveCustomComponentLibrary(
   list: readonly ComposerComponentAttachment[],
   onError?: (msg: string) => void

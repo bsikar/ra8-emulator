@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { auditEditorialSlateScreen } from './helpers/editorial-slate-audit';
 import { startServeFixture, type ServedEmulatorHandle } from './helpers/serve-fixture';
 
-test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (07/07b), Splits & Fullscreen', () => {
+test.describe('Custom Board Composer, Settings Schemes, Splits & Fullscreen', () => {
   let served: ServedEmulatorHandle;
 
   test.beforeAll(async () => {
@@ -13,7 +13,7 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
     await served?.stop();
   });
 
-  test('Custom Board Composer (04b-04h): composes multi-MCU custom board, audits all sub-modals, and persists .board', async ({
+  test('Custom Board Composer: composes multi-MCU custom board, audits all sub-modals, and persists .board', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -26,39 +26,39 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
       { width: 1280, height: 720 },
     ]) {
       await page.setViewportSize(vp);
-      await auditEditorialSlateScreen(page, `screen04b-composer-${vp.width}x${vp.height}`);
+      await auditEditorialSlateScreen(page, `board-composer-${vp.width}x${vp.height}`);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    // 04d: Configure Cores
+    // Configure Cores
     await page.getByTestId('composer-edit-mcu-U1').click();
     await expect(page.getByTestId('composer-cores-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04d-cores-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-cores-1440x900');
     await page.getByTestId('cores-apply-btn').click();
 
-    // 04e -> 04f: Add Preset MCU & Custom Silicon
+    // Add Preset MCU & Custom Silicon
     await page.getByTestId('composer-open-preset-mcu').click();
     await expect(page.getByTestId('composer-preset-mcu-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04e-preset-mcu-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-preset-mcu-1440x900');
     await page.getByTestId('switch-to-custom-silicon').click();
     await expect(page.getByTestId('composer-custom-silicon-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04f-custom-silicon-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-custom-silicon-1440x900');
     await page.getByTestId('custom-silicon-submit').click();
     await expect(page.getByTestId('composer-mcu-row-U2')).toBeVisible();
 
-    // 04g: Add Memory Region
+    // Add Memory Region
     await page.getByTestId('composer-open-add-memory').click();
     await expect(page.getByTestId('composer-memory-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04g-memory-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-memory-1440x900');
     await page.getByTestId('memory-submit-btn').click();
 
-    // 04h -> 04c: Component Catalog & Custom Component
+    // Component Catalog & Custom Component
     await page.getByTestId('composer-open-add-component').click();
     await expect(page.getByTestId('composer-add-component-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04h-add-comp-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-add-comp-1440x900');
     await page.getByTestId('switch-to-custom-component').click();
     await expect(page.getByTestId('composer-custom-component-modal')).toBeVisible();
-    await auditEditorialSlateScreen(page, 'screen04c-custom-comp-1440x900');
+    await auditEditorialSlateScreen(page, 'board-composer-custom-comp-1440x900');
     await page.getByTestId('custom-comp-submit').click();
 
     await page.getByTestId('composer-board-name').fill('Dual-MCU Motor Carrier');
@@ -77,7 +77,7 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
     await expect(page.getByTestId('preset-dual-mcu-motor')).toBeVisible();
   });
 
-  test('Settings Modal (07 & 07b): updates code-buffer scheme vars without altering chrome, rescans probes, and triggers View > Full Screen', async ({
+  test('Settings Modal: updates code-buffer scheme vars without altering chrome, rescans probes, and triggers View > Full Screen', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -97,7 +97,7 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
       { width: 1280, height: 720 },
     ]) {
       await page.setViewportSize(vp);
-      await auditEditorialSlateScreen(page, `screen07b-schemes-${vp.width}x${vp.height}`);
+      await auditEditorialSlateScreen(page, `settings-schemes-${vp.width}x${vp.height}`);
     }
 
     const tokKw = await page.evaluate(() => document.documentElement.style.getPropertyValue('--es-tok-kw'));
@@ -106,7 +106,7 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByTestId('settings-tab-probes').click();
     await page.getByTestId('settings-rescan-probes').click();
-    await auditEditorialSlateScreen(page, 'screen07-probes-1440x900');
+    await auditEditorialSlateScreen(page, 'settings-probes-1440x900');
 
     await page.getByTestId('settings-save-btn').click();
     await expect(dialog).toBeHidden();
@@ -121,6 +121,6 @@ test.describe('Milestone 4: Custom Board Composer (04b-04h), Settings Schemes (0
     await expect(handle).toBeVisible();
     await handle.focus();
     await page.keyboard.press('ArrowRight');
-    await auditEditorialSlateScreen(page, 'm4-split-pane-resized');
+    await auditEditorialSlateScreen(page, 'split-pane-resized');
   });
 });

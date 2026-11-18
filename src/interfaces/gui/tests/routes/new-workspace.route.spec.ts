@@ -6,7 +6,7 @@ import { WorkspaceStore } from '../../src/app/core/stores/workspace.store';
 import { NewWorkspaceRouteComponent } from '../../src/app/routes/new-workspace.route';
 
 describe('NewWorkspaceRouteComponent (/workspace/new)', () => {
-  it('creates a workspace in standalone Screen 04 route and navigates back to /launch', async () => {
+  it('creates a workspace in standalone route and navigates back to /launch', async () => {
     localStorage.clear();
     TestBed.configureTestingModule({ providers: [provideRouter(appRoutes)] });
     const router = TestBed.inject(Router);

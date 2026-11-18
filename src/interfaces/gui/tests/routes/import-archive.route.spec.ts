@@ -27,7 +27,7 @@ function makeTar(manifest: Record<string, unknown>): Uint8Array {
   return tar;
 }
 
-describe('ImportArchiveRouteComponent (Screen 03)', () => {
+describe('ImportArchiveRouteComponent', () => {
   beforeEach(() => {
     localStorage.clear();
   });
