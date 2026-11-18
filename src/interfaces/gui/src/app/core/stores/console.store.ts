@@ -2,8 +2,10 @@ import { Injectable, OnDestroy, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { Core, type UartEvent } from 'ra8-rpc-client';
 import { RpcConnectionStore } from '../rpc/rpc-connection.store';
+import { ExecutionStore } from './execution.store';
 
 export const MAX_CONSOLE_ENTRIES = 2000;
+export type ConsoleLineEnding = 'lf' | 'crlf' | 'none';
 
 export interface ConsoleEntry {
   id: number;
@@ -18,6 +20,7 @@ export interface ConsoleEntry {
 @Injectable({ providedIn: 'root' })
 export class ConsoleStore implements OnDestroy {
   private readonly rpc = inject(RpcConnectionStore);
+  private readonly execution = inject(ExecutionStore);
   private readonly decoder = new TextDecoder();
   private readonly encoder = new TextEncoder();
   private readonly subs = new Subscription();
@@ -57,21 +60,35 @@ export class ConsoleStore implements OnDestroy {
     this.appendEntry(entry);
   }
 
-  public async sendInput(rawText: string, core: Core = this.activeCore()): Promise<boolean> {
+  public async sendInput(
+    rawText: string,
+    core: Core = this.activeCore(),
+    lineEnding: ConsoleLineEnding = 'lf',
+    localEcho = true
+  ): Promise<boolean> {
     const client = this.rpc.activeClient;
     if (!client) return false;
-    const payloadText = rawText.endsWith('\n') ? rawText : `${rawText}\n`;
+    const payloadText =
+      lineEnding === 'none'
+        ? rawText
+        : lineEnding === 'crlf'
+          ? `${rawText.replace(/\r?\n$/, '')}\r\n`
+          : rawText.endsWith('\n')
+            ? rawText
+            : `${rawText}\n`;
     const bytes = this.encoder.encode(payloadText);
     const channel = this.selectedChannel() === 'all' ? 0 : (this.selectedChannel() as number);
-    this.appendEntry({
-      id: this.nextId++,
-      core,
-      channel,
-      virtualNs: 0n,
-      bytes: new Uint8Array(bytes),
-      text: payloadText,
-      isInput: true,
-    });
+    if (localEcho) {
+      this.appendEntry({
+        id: this.nextId++,
+        core,
+        channel,
+        virtualNs: this.execution.virtualTimeNs(),
+        bytes: new Uint8Array(bytes),
+        text: payloadText,
+        isInput: true,
+      });
+    }
     try {
       return await client.sendConsoleInput(core, bytes);
     } catch (err) {
