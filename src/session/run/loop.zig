@@ -99,21 +99,10 @@ pub const Loop = struct {
         const clock = &self.clock;
         if (options.state.wanted()) _ = clock.snapshotBinding();
         const primary = board.desc().primary();
-        var cut = systickCut(primary.systicks, timebase, &clock.ns_timebase);
+        var cut = armSystickCut(primary.systicks, timebase, &clock.ns_timebase);
         if (ends.policy) |asked| if (asked.soak.armed) soak_symbols.resolve(image, &asked.soak.threads);
-        // --trace-rtos listens in front of the core (src/session/rtos/zig.zig).
-        self.tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtos) else null;
         var listener: rtos_hook.zig.Listener = undefined;
-        if (self.tracer) |*found| {
-            found.now = &timebase.ticks;
-            listener = .{ .tracer = found };
-        }
-        const wrap = self.watcher.arm(
-            image,
-            options.watch_place,
-            if (self.tracer != null) listener.wrap() else null,
-            &timebase.ticks,
-        );
+        const wrap = self.armWrap(image, options, timebase, &listener);
         self.retire = .{ .table = profile_table, .point = ends.point, .hits = ends.hits };
         var stacks = stack_profile.Run.of(
             profile_table,
@@ -122,41 +111,75 @@ pub const Loop = struct {
             &clock.wall_cycles,
             if (self.tracer) |*found| &found.trace else null,
         );
-        var itm_port = itm_console.opened(); // --console opens the ITM as a probe would (RA8EMU-629)
+        var itm_port = itm_console.opened();
         if (options.console) try itm_console.prime(clock.memory, &itm_port);
         var edge = try fault_file.boundary(ends.schedule, clock.boundary());
         edge.saved = &clock.saved;
-        self.status = try boot.start(said, options.cpu, clock.memory.asInitiator(
-            .cpu0,
-        ), &board.bus, vector_base, options.budget, &self.ran, .{
-            .boundary = edge,
-            .partitions = primarySau(board, primary.security),
-            .idau = &board.idau,
-            .regions = &board.regions,
-            .regions_ns = primaryMpuNs(board, primary.security),
-            .clears = &board.clears,
-            .cut = &cut,
-            .fast_memory = options.watch_place == null and wrap == null,
-            .blocks = options.blocks,
-            .wrap = wrap,
-            .retire_listener = stacks.listener(self.watcher.listener(self.retire.listener())),
-            .core = stacks.lend(if (cpu1) |second| &second.core.cpu else null),
-            .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
-            .until = if (options.cpu == .zig) until else null,
-            .final = &self.final,
-            .itm = if (options.console) &itm_port else null,
-            .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
-            .snapshot = zig_snapshot.hook(clock),
-            .peer = if (cpu1) |second| &second.core.cpu else null,
-            .profile = primary.profile,
-            .security = primary.security,
-        });
+        const initiator = clock.memory.asInitiator(.cpu0);
+        self.status = try boot.start(
+            said,
+            options.cpu,
+            initiator,
+            &board.bus,
+            vector_base,
+            options.budget,
+            &self.ran,
+            .{
+                .boundary = edge,
+                .partitions = primarySau(board, primary.security),
+                .idau = &board.idau,
+                .regions = &board.regions,
+                .regions_ns = primaryMpuNs(board, primary.security),
+                .clears = &board.clears,
+                .cut = &cut,
+                .fast_memory = options.watch_place == null and wrap == null,
+                .blocks = options.blocks,
+                .wrap = wrap,
+                .retire_listener = stacks.listener(self.watcher.listener(self.retire.listener())),
+                .core = stacks.lend(if (cpu1) |second| &second.core.cpu else null),
+                .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
+                .until = if (options.cpu == .zig) until else null,
+                .final = &self.final,
+                .itm = if (options.console) &itm_port else null,
+                .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
+                .snapshot = zig_snapshot.hook(clock),
+                .peer = if (cpu1) |second| &second.core.cpu else null,
+                .profile = primary.profile,
+                .security = primary.security,
+                .systicks = primary.systicks,
+                .scs = primary.scs,
+                .dwt_numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m),
+                .fpb_wired = true,
+            },
+        );
         try wall.finish(clock, self.ran);
         if (options.console) try itm_port.flush(out, true);
     }
+
+    fn armWrap(
+        self: *Loop,
+        image: elf.Image,
+        options: Options,
+        timebase: *clocks.Clocks,
+        listener: *rtos_hook.zig.Listener,
+    ) ?boot.Wrap {
+        self.tracer = if (options.cpu == .zig) rtos_hook.resolve(image, options.rtos) else null;
+        if (self.tracer) |*found| {
+            found.now = &timebase.ticks;
+            listener.* = .{ .tracer = found };
+        }
+        return self.watcher.arm(
+            image,
+            options.watch_place,
+            if (self.tracer != null) listener.wrap() else null,
+            &timebase.ticks,
+        );
+    }
 };
 
-fn systickCut(systicks: u2, s: *clocks.Clocks, ns: *clocks.Clocks) systick_cut.Cut {
+fn armSystickCut(systicks: u2, s: *clocks.Clocks, ns: *clocks.Clocks) systick_cut.Cut {
+    s.words.present = systicks >= 1;
+    ns.words.present = systicks >= 2;
     return .{ .clocks = .{
         if (systicks >= 1) s else null,
         if (systicks >= 2) ns else null,

@@ -12,7 +12,7 @@ const stop_machine = @import("stop_machine.zig");
 /// The word at the word-aligned `address` as a load sees it, or null when
 /// no debug unit owns it. `stored` is what memory holds there.
 pub fn word(machine: *const stop_machine.Machine, address: u32, stored: u32) ?u32 {
-    if (inside(address, fpb.base, fpb.limits.span)) return machine.fpb.read(address - fpb.base);
+    if (inside(address, fpb.base, fpb.limits.max_span)) return machine.fpb.read(address - fpb.base);
     if (address == dwt.base) return machine.dwt.ctrlWord(stored);
     if (inside(address, dwt.base, dwt.limits.end)) return machine.dwt.peek(address - dwt.base);
     if (inside(address, itm.base, itm.limits.span)) return machine.itm.peek(address - itm.base);

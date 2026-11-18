@@ -43,6 +43,8 @@ pub const BoardBoundary = struct {
 
     pub fn hook(self: *BoardBoundary) zig_boundary.Boundary {
         const systicks = self.board.desc().primary().systicks;
+        self.timebase.words.present = systicks >= 1;
+        self.ns_timebase.words.present = systicks >= 2;
         self.cut.clocks = .{
             if (systicks >= 1) &self.timebase else null,
             if (systicks >= 2) &self.ns_timebase else null,

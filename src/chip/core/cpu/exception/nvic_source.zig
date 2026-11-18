@@ -36,7 +36,7 @@ const Port = struct {
     memo: Memo = .{},
 
     pub fn readWord(self: *Port, address: u32) bus.Error!u32 {
-        if (nvic_registers.covers(address)) return self.through.registers().readWord(address);
+        if (bypassesCommands(address)) return self.through.registers().readWord(address);
         const slot = Memo.slotOf(address) orelse return self.through.readWord(address);
         if (self.memo.get(slot)) |value| return value;
         const value = try self.through.readWord(address);
@@ -48,7 +48,7 @@ const Port = struct {
         if (Memo.slotOf(address)) |slot| self.memo.forget(slot);
         var bytes: [4]u8 = undefined;
         std.mem.writeInt(u32, &bytes, value, .little);
-        const memory = if (nvic_registers.covers(address)) self.through.registers() else self.through;
+        const memory = if (bypassesCommands(address)) self.through.registers() else self.through;
         return memory.write(address, &bytes);
     }
 
@@ -137,7 +137,7 @@ pub const NvicSource = struct {
         // Fold the write-to-clear registers first, as the model's own
         // dispatch does: on this bus they are plain memory.
         if (self.linesDue()) {
-            try nvic_clear.lines(&port, nvic.irq_words);
+            try nvic_clear.linesFor(&port, self.model.irq_lines);
             if (self.clear_due) |due| due.* = false;
         }
         try nvic_clear.pends(&port, nvic.clear_bits);
@@ -175,3 +175,12 @@ pub const NvicSource = struct {
         try nvic.setActiveBit(&port, number, false);
     }
 };
+
+fn bypassesCommands(address: u32) bool {
+    if (nvic_registers.covers(address)) return true;
+    const normal = if (address >= scs_alias.scs_ns.first and address <= scs_alias.scs_ns.last)
+        address - scs_alias.offset
+    else
+        address;
+    return normal >= memmap.nvic.iabr and normal - memmap.nvic.iabr < 0x40;
+}

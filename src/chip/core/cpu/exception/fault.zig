@@ -59,6 +59,10 @@ fn setPending(cpu: *const Cpu, bit: u32) bus.Error!void {
 
 /// The most urgent configurable fault synthesized during exception entry.
 pub fn pending(on: bus.Bus) ?active.Entry {
+    return pendingFor(on, 0xFF);
+}
+
+pub fn pendingFor(on: bus.Bus, prio_mask: u8) ?active.Entry {
     const shcsr = on.readWord(memmap.scb.shcsr) catch return null;
     const shpr1 = on.readWord(memmap.scb.shpr1) catch 0;
     const shpr2 = on.readWord(memmap.scb.shpr2) catch 0;
@@ -67,12 +71,13 @@ pub fn pending(on: bus.Bus) ?active.Entry {
         if (shcsr & pendingBit(kind) == 0 or shcsr & fault_route.enable(kind) == 0) continue;
         const candidate: active.Entry = .{
             .number = @intCast(fault_route.exception(kind)),
-            .priority = fault_route.priority(kind, shpr1),
+            .priority = fault_route.priority(kind, shpr1) & prio_mask,
         };
         if (winner == null or precedes(candidate, winner.?)) winner = candidate;
     }
     if (shcsr & (1 << 15) != 0) {
-        const svc: active.Entry = .{ .number = 11, .priority = @truncate(shpr2 >> 24) };
+        const svc_prio: u8 = @truncate(shpr2 >> 24);
+        const svc: active.Entry = .{ .number = 11, .priority = svc_prio & prio_mask };
         if (winner == null or precedes(svc, winner.?)) winner = svc;
     }
     return winner;
@@ -159,10 +164,12 @@ pub fn pendIn(cpu: *Cpu, cause: status.Cause, state: State) bus.Error!void {
 fn latch(cpu: *Cpu, cause: status.Cause) Error!active.Entry {
     const r = &cpu.regs;
     const level = active.executionPriority(&cpu.active, r.primask, r.basepri, r.faultmask, dispatch.prigroup(cpu.bus));
+    const pmask: u32 = cpu.profile.prioMask();
+    const shpr1_mask: u32 = pmask | (pmask << 8) | (pmask << 16) | (pmask << 24);
     const route = fault_route.route(
         cause.fault(),
         cpu.bus.readWord(memmap.scb.shcsr) catch 0,
-        cpu.bus.readWord(memmap.scb.shpr1) catch 0,
+        (cpu.bus.readWord(memmap.scb.shpr1) catch 0) & shpr1_mask,
         running(level),
     );
     if (route.escalated and (level < 0 or inHardFaultOrNmi(cpu))) return error.Lockup;

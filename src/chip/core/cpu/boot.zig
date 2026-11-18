@@ -36,6 +36,7 @@ const registry = @import("../../periph/registry.zig");
 const sau = @import("../../periph/sau/sau.zig");
 const SauSource = @import("sau_source.zig").SauSource;
 const scheduler = @import("../scheduler/scheduler.zig");
+const scs_mod = @import("../machine/scs.zig");
 const Source = @import("exception/source.zig").Source;
 const Until = @import("../until.zig").Until;
 
@@ -85,11 +86,8 @@ pub const Wrap = struct {
     regsFn: ?*const fn (context: *anyopaque, regs: *const Regs) void = null,
 };
 
-/// Save and restore for a `--cpu zig` run (RA8EMU-695): `loadFn` runs right
-/// after the core resets, before its first instruction; `saveFn` runs once
-/// the budget is spent. Each is handed the core, which lives only in runOn.
-/// Both carry what the run owes its clocks (`Owed`, RA8EMU-700): a load
-/// returns what the saved run owed, a save is handed what this one owes.
+/// Save and restore for a `--cpu zig` run: `loadFn` runs right after the core
+/// resets, before its first instruction; `saveFn` runs once the budget is spent.
 pub const Snapshot = struct {
     context: *anyopaque,
     loadFn: ?*const fn (context: *anyopaque, core: *cpu_mod.Cpu) anyerror!u32 = null,
@@ -100,12 +98,7 @@ pub const Snapshot = struct {
     atFn: ?*const fn (context: *anyopaque, core: *const cpu_mod.Cpu) anyerror!void = null,
 };
 
-/// Instructions a stretch retired but has not charged to the clocks yet
-/// (RA8EMU-700). A budget that ends inside a stretch would close it short,
-/// which a straight run never does, so a run that saves holds that stretch
-/// open (`hold`), saves what it owes (`out`), then closes it. A loaded run
-/// starts `in` instructions into its first stretch, so its boundaries, and
-/// every SysTick pend they carry, land where the straight run's do.
+/// Instructions a stretch retired but has not charged to the clocks yet.
 pub const Owed = struct { in: u32 = 0, hold: bool = false, out: u32 = 0 };
 
 /// What the board hands a `--cpu zig` run besides its peripheral bus: the
@@ -154,6 +147,10 @@ pub const Wiring = struct {
     /// Instruction groups and Security Extension for the primary core.
     profile: profile.Profile = profile.Profile.m85,
     security: bool = true,
+    systicks: u2 = 2,
+    scs: scs_mod.ScsConfig = .{},
+    dwt_numcomp: ?u4 = null,
+    fpb_wired: bool = false,
 };
 
 /// The hand-off from main to the CPU the run asked for.
@@ -221,6 +218,11 @@ pub fn runOnBoard(
             .clears = wiring.clears,
             .cut = wiring.cut,
             .itm = wiring.itm,
+            .config = wiring.scs,
+            .systicks = wiring.systicks,
+            .has_security = wiring.security,
+            .dwt_numcomp = wiring.dwt_numcomp,
+            .fpb_wired = wiring.fpb_wired,
         },
     };
     var partitions: SauSource = undefined;
@@ -245,6 +247,8 @@ pub fn runOnBoard(
             .core = wiring.core,
             .profile = wiring.profile,
             .security = wiring.security,
+            .systicks = wiring.systicks,
+            .scs = wiring.scs,
         },
         &board,
         source,
@@ -265,6 +269,8 @@ const Watch = struct {
     core: ?*?*cpu_mod.Cpu = null,
     profile: profile.Profile = profile.Profile.m85,
     security: bool = true,
+    systicks: u2 = 2,
+    scs: scs_mod.ScsConfig = .{},
 };
 
 /// The run's decoded-block cache, joined to the machine's fanout; null when
@@ -293,7 +299,7 @@ fn runOn(
     until: ?*Until,
     final: ?*Regs,
 ) !u8 {
-    var pending: NvicSource = .{};
+    var pending = initNvicSource(watch);
     // A wrapped run listens to every poll, so it keeps the plain one.
     var quiet: QuietSource = .{ .inner = pending.source(), .memory = memory };
     var cpu: cpu_mod.Cpu = if (wrap) |w|
@@ -313,8 +319,6 @@ fn runOn(
     var decoded: DecodeCache = .{};
     cpu.decoded = &decoded;
     var local: code_lines.Fanout = .{};
-    // The machine's fanout when the bus has a store behind it; a run-local
-    // one otherwise, so a run with blocks still invalidates itself.
     const fan: *code_lines.Fanout = memory.lines orelse &local;
     const formed = try formCache(fan, blocks);
     defer if (formed) |cache| fan.detach(&cache.lines);
@@ -360,6 +364,14 @@ fn runOn(
 
 pub const stretches = stretch_run.stretches;
 pub const report = stop_report.report;
+
+fn initNvicSource(watch: Watch) NvicSource {
+    return .{ .model = .{
+        .irq_lines = watch.scs.irq_lines,
+        .prio_bits = watch.scs.prio_bits,
+        .systicks = watch.systicks,
+    } };
+}
 
 fn armWatch(cpu: *cpu_mod.Cpu, watch: Watch) void {
     cpu.profile = watch.profile;

@@ -57,3 +57,27 @@ test "Cortex-M33 reports 0xD21 and omits Armv8.1-M, MVE and LOB" {
     try std.testing.expect(m33.hasFpu());
     try std.testing.expectEqual(core.Fpu.single, m33.fpu);
 }
+
+test "Cortex-M33 and Cortex-M85 propagate ScsConfig into Core and Profile" {
+    const custom = core.cortexM33(.{
+        .security = true,
+        .fpu = .none,
+        .systicks = 1,
+        .scs = .{
+            .irq_lines = 98,
+            .prio_bits = 3,
+            .sau_regions = 0,
+            .mpu_regions_s = 4,
+            .mpu_regions_ns = 0,
+            .dwt_comparators = 2,
+            .fpb_code = 4,
+            .init_vtor = 0x0800_0000,
+            .syst_calib = 0x4000_270F,
+        },
+    });
+    try std.testing.expectEqual(core.Fpu.none, custom.profile.fpu);
+    try std.testing.expectEqual(@as(u16, 98), custom.profile.irq_lines);
+    try std.testing.expectEqual(@as(u4, 3), custom.profile.prio_bits);
+    try std.testing.expectEqual(@as(?u32, 0x0800_0000), custom.profile.init_vtor);
+    try std.testing.expectEqual(@as(u8, 4), custom.scs.mpu_regions_s);
+}
