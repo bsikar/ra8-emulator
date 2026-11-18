@@ -44,8 +44,15 @@ describe('DebugLocalsPaneComponent', () => {
     (el.querySelector('[data-testid="debug-local-val-count"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     const editInput = el.querySelector('[data-testid="debug-local-edit-input"]') as HTMLInputElement;
-    editInput.value = '42';
-    editInput.dispatchEvent(new Event('input'));
+    editInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="debug-local-edit-input"]')).toBeNull();
+
+    (el.querySelector('[data-testid="debug-local-val-count"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const editInput2 = el.querySelector('[data-testid="debug-local-edit-input"]') as HTMLInputElement;
+    editInput2.value = '42';
+    editInput2.dispatchEvent(new Event('input'));
     (el.querySelector('[data-testid="debug-local-save-btn"]') as HTMLButtonElement).click();
     await fixture.whenStable();
     fixture.detectChanges();

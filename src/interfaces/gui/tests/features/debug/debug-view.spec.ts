@@ -2,6 +2,7 @@ import { Core, Register } from 'ra8-rpc-client';
 import { describe, expect, it } from 'vitest';
 import {
   boardHasNpu,
+  buildCallStackEntries,
   buildCodeBufferLines,
   buildMemoryHexRows,
   evaluateWatchExpressions,
@@ -99,5 +100,12 @@ describe('debug-view helpers', () => {
     expect(parseRegisterOrMemoryValue('bad')).toBeNull();
     expect(boardHasNpu(null, 'npu=ethos_u55')).toBe(true);
     expect(Core.Cpu0).toBe(0);
+
+    const stackEntries = buildCallStackEntries([
+      { pc: 0x0200_0100, interrupted: 0, offset: 0, line: 10, name: 'ceu_frame_isr', file: 'ceu.c' },
+      { pc: 0x0200_0200, interrupted: 54, offset: 32, line: 88, name: 'vision_task', file: 'vision.c' },
+    ]);
+    expect(stackEntries.map((e) => e.kind)).toEqual(['frame', 'exception', 'frame']);
+    expect(stackEntries[1]?.kind === 'exception' ? stackEntries[1].excTag : '').toBe('IRQ 54');
   });
 });

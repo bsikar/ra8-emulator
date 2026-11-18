@@ -9,7 +9,7 @@ import { SectionKickerComponent } from '../../shared/ui/section-kicker.component
 import { StatusDotComponent } from '../../shared/ui/status-dot.component';
 import { formatHex32, parseHexAddress } from '../../shared/utils/hex';
 import { computePspWatermark, formatStackSummary } from '../../shared/utils/stack-math';
-import { boardHasNpu } from './debug-view';
+import { boardHasNpu, buildCallStackEntries } from './debug-view';
 
 @Component({
   selector: 'app-debug-targets-stack',
@@ -20,7 +20,7 @@ import { boardHasNpu } from './debug-view';
       <section class="sec">
         <div class="sec-head">
           <app-section-kicker label="TARGETS & THREADS" />
-          <span class="es-meta">Sync Halt: {{ execution.cpu1Attached() ? 'ON' : 'CPU0' }}</span>
+          <span class="es-meta mono">Sync Halt: {{ execution.cpu1Attached() ? 'ON' : 'CPU0' }}</span>
         </div>
         <button
           type="button"
@@ -60,7 +60,7 @@ import { boardHasNpu } from './debug-view';
 
       <section class="sec">
         <div class="sec-head">
-          <app-section-kicker label="CALL STACK" />
+          <app-section-kicker [label]="debug.activeCore() === cpu1 ? 'CALL STACK · M33' : 'CALL STACK · M85'" />
           <span class="mono es-meta" data-testid="debug-stack-watermark">{{ mspSummary() }}</span>
         </div>
         @if (mspPercent() > 0) {
@@ -68,22 +68,31 @@ import { boardHasNpu } from './debug-view';
         }
         @if (pspInfo().touched) {
           <div class="static-row">
-            <span class="es-meta">PSP</span>
+            <span class="es-meta mono">PSP</span>
             <span class="mono" [class.fault-txt]="pspInfo().nearLimit">{{ pspInfo().summary }}</span>
           </div>
+          <div class="stack-bar"><div class="stack-fill" [class.is-fault]="pspInfo().nearLimit" [style.width.%]="pspInfo().nearLimit ? 88 : 42"></div></div>
         }
-        @if (frames().length > 0) {
-          @for (frame of frames(); track $index) {
-            <button
-              type="button"
-              class="frame-row"
-              [class.is-active]="debug.selectedFrameIndex() === $index"
-              [attr.data-testid]="'debug-frame-' + $index"
-              (click)="debug.selectFrame($index)"
-            >
-              <span class="ellipsis frame-fn mono">#{{ $index }} {{ frame.name || hex(frame.pc) }}</span>
-              <span class="mono es-meta">{{ frame.file ? frame.file + ':' + frame.line : hex(frame.pc) }}</span>
-            </button>
+        @if (stackEntries().length > 0) {
+          @for (entry of stackEntries(); track entry.key) {
+            @if (entry.kind === 'exception') {
+              <div class="exc-sep mono" data-testid="debug-callstack-exception">
+                <span class="exc-rule"></span>
+                <span>{{ entry.label }} · {{ entry.excTag }}</span>
+                <span class="exc-rule"></span>
+              </div>
+            } @else {
+              <button
+                type="button"
+                class="frame-row"
+                [class.is-active]="debug.selectedFrameIndex() === entry.frameIndex"
+                [attr.data-testid]="'debug-frame-' + entry.frameIndex"
+                (click)="selectStackFrame(entry.frameIndex, entry.frame.offset)"
+              >
+                <span class="ellipsis frame-fn mono">#{{ entry.frameIndex }} {{ entry.frame.name || hex(entry.frame.pc) }}</span>
+                <span class="mono es-meta">{{ formatFrameLoc(entry.frame.file, entry.frame.line, entry.frame.pc) }}</span>
+              </button>
+            }
           }
         } @else {
           <p class="es-meta note">No stack frames sampled.</p>
@@ -139,12 +148,35 @@ import { boardHasNpu } from './debug-view';
 
         @for (bp of debug.allBreakpoints(); track bp.core + ':' + bp.id + ':' + bp.label) {
           <div class="bp-row" [attr.data-testid]="'debug-bp-item-' + bp.label">
-            <span class="bp-dot"></span>
-            <span class="mono ellipsis">{{ bp.label }}</span>
+            <button
+              type="button"
+              class="bp-toggle"
+              aria-label="Disable breakpoint"
+              [disabled]="bp.deferred || rpc.observeOnly()"
+              (click)="disableBreakpoint(bp)"
+            >
+              <span class="bp-dot"></span>
+            </button>
+            <button type="button" class="bp-jump mono ellipsis" (click)="jumpToBreakpoint(bp)">{{ bp.label }}</button>
             @if (bp.deferred) {
               <span class="pending-tag mono">pending</span>
             }
             <button type="button" class="rm-btn" [disabled]="rpc.observeOnly()" (click)="removeBreakpoint(bp)">×</button>
+          </div>
+        }
+        @for (bp of disabledBreakpoints(); track bp.core + ':dis:' + bp.address + ':' + bp.label) {
+          <div class="bp-row is-disabled">
+            <button
+              type="button"
+              class="bp-toggle"
+              aria-label="Enable breakpoint"
+              [disabled]="rpc.observeOnly()"
+              (click)="enableBreakpoint(bp)"
+            >
+              <span class="bp-dot is-off"></span>
+            </button>
+            <span class="mono ellipsis">{{ bp.label }}</span>
+            <button type="button" class="rm-btn" (click)="dropDisabledBreakpoint(bp)">×</button>
           </div>
         }
         @for (wp of debug.watchpoints(); track wp.core + ':' + wp.id) {
@@ -154,7 +186,7 @@ import { boardHasNpu } from './debug-view';
             <button type="button" class="rm-btn" [disabled]="rpc.observeOnly()" (click)="removeWatchpoint(wp)">×</button>
           </div>
         }
-        @if (debug.allBreakpoints().length === 0 && debug.watchpoints().length === 0) {
+        @if (debug.allBreakpoints().length === 0 && disabledBreakpoints().length === 0 && debug.watchpoints().length === 0) {
           <p class="es-meta note">Click code gutter or + Add to arm.</p>
         }
       </section>
@@ -169,14 +201,20 @@ import { boardHasNpu } from './debug-view';
       .frame-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; border: 0; border-left: 2px solid transparent; background: transparent; color: var(--es-text-secondary); padding: 4px 6px; cursor: pointer; text-align: left; font-size: 12px; min-width: 0; }
       .target-row:hover, .frame-row:hover { background: var(--es-interactive); }
       .target-row.is-active, .frame-row.is-active { background: var(--es-interactive); border-left-color: var(--es-signal-cursor); color: var(--es-text-primary); }
+      .exc-sep { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 12px; color: var(--es-text-muted); }
+      .exc-rule { flex: 1; height: 1px; background: var(--es-divider); }
       .static-row, .bp-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 3px 4px; min-width: 0; }
       .bp-row { justify-content: flex-start; border-bottom: 1px solid var(--es-divider); }
+      .bp-row.is-disabled { opacity: 0.55; }
+      .bp-toggle, .bp-jump { border: 0; background: transparent; padding: 0; color: inherit; cursor: pointer; display: inline-flex; align-items: center; }
+      .bp-jump { text-align: left; flex: 1; }
       .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
       .frame-fn { color: var(--es-text-primary); width: 100%; }
       .val-txt { color: var(--es-text-primary); }
       .fault-txt { color: var(--es-signal-fault); }
       .stack-bar { height: 3px; background: var(--es-interactive-high); border-radius: var(--es-radius-sm); overflow: hidden; }
       .stack-fill { height: 100%; background: var(--es-signal-cursor); }
+      .stack-fill.is-fault { background: var(--es-signal-fault); }
       .icon-add, .mini-tab, .rm-btn, .submit-btn { border: 1px solid var(--es-border); background: transparent; color: var(--es-text-secondary); border-radius: var(--es-radius-sm); font-size: 12px; padding: 2px 8px; cursor: pointer; }
       .mini-tab.is-active { border-color: var(--es-signal-cursor); color: var(--es-text-primary); background: var(--es-interactive); }
       .rm-btn { margin-left: auto; border: 0; color: var(--es-text-muted); padding: 0 4px; }
@@ -184,7 +222,8 @@ import { boardHasNpu } from './debug-view';
       .mode-row, .wp-opts { display: flex; gap: 6px; }
       .es-input, .es-select { background: transparent; border: 0; border-bottom: 1px solid var(--es-border); color: var(--es-text-primary); font-size: 12px; padding: 4px 2px; min-width: 0; width: 100%; }
       .es-select { background: var(--es-container); }
-      .bp-dot, .wp-dot { width: 6px; height: 6px; border-radius: var(--es-radius-full); background: var(--es-signal-fault); flex-shrink: 0; }
+      .bp-dot, .wp-dot { width: 6px; height: 6px; border-radius: var(--es-radius-full); background: var(--es-signal-fault); flex-shrink: 0; display: inline-block; }
+      .bp-dot.is-off { background: transparent; border: 1px solid var(--es-text-muted); }
       .wp-dot { background: var(--es-signal-cursor); }
       .pending-tag { font-size: 12px; color: var(--es-text-muted); border: 1px solid var(--es-border); padding: 0 4px; }
       .note { margin: 0; padding: 2px 0; }
@@ -205,9 +244,10 @@ export class DebugTargetsStackComponent {
   protected readonly targetInput = signal<string>('');
   protected readonly wpAccess = signal<'write' | 'read' | 'access'>('write');
   protected readonly wpSize = signal<number>(4);
+  protected readonly disabledBreakpoints = signal<BreakpointEntry[]>([]);
 
   protected readonly hasNpu = computed(() => boardHasNpu(this.board.selectedPreset(), this.board.boardProfileRaw()));
-  protected readonly frames = computed(() => this.debug.backtrace()?.frames ?? []);
+  protected readonly stackEntries = computed(() => buildCallStackEntries(this.debug.backtrace()?.frames ?? []));
   protected readonly activeStack = computed(() =>
     this.debug.activeCore() === Core.Cpu1 ? this.profile.cpu1Stack() : this.profile.cpu0Stack()
   );
@@ -222,6 +262,15 @@ export class DebugTargetsStackComponent {
 
   protected hex(val: number): string {
     return formatHex32(val);
+  }
+
+  protected formatFrameLoc(file: string, line: number, pc: number): string {
+    if (!file) return this.hex(pc);
+    return line > 0 ? `${file}:${line}` : file;
+  }
+
+  protected selectStackFrame(frameIndex: number, offset: number): void {
+    void this.debug.selectFrame(frameIndex, offset > 0 ? offset : undefined);
   }
 
   protected onTargetInput(event: Event): void {
@@ -251,6 +300,25 @@ export class DebugTargetsStackComponent {
     }
     this.targetInput.set('');
     this.addOpen.set(false);
+  }
+
+  protected async disableBreakpoint(bp: BreakpointEntry): Promise<void> {
+    if (bp.deferred) return;
+    const ok = await this.debug.toggleBreakpoint(bp.address, bp.core);
+    if (ok) this.disabledBreakpoints.update((list) => [...list, bp]);
+  }
+
+  protected async enableBreakpoint(bp: BreakpointEntry): Promise<void> {
+    const ok = await this.debug.toggleBreakpoint(bp.address, bp.core, bp.label);
+    if (ok) this.dropDisabledBreakpoint(bp);
+  }
+
+  protected dropDisabledBreakpoint(bp: BreakpointEntry): void {
+    this.disabledBreakpoints.update((list) => list.filter((x) => !(x.address === bp.address && x.core === bp.core)));
+  }
+
+  protected jumpToBreakpoint(bp: BreakpointEntry): void {
+    if (!bp.deferred && bp.address > 0) void this.debug.refreshDisassembly(bp.core, bp.address, 32);
   }
 
   protected removeBreakpoint(bp: BreakpointEntry): void {

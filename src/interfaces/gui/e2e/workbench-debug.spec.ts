@@ -55,13 +55,17 @@ test.describe('Workbench Debug (/debug) with Live Emulator RPC', () => {
     await regInput.press('Enter');
     await expect(page.locator('[data-reg="r0"]')).toContainText('0x00001234', { timeout: 10_000 });
 
-    // Gutter breakpoint toggle + Decomp switch
+    // Gutter breakpoint toggle + Decomp / Mixed switch + tabular-nums .mono check
     const gutterBtn = page.locator('[data-testid^="debug-gutter-"]').nth(1);
     await gutterBtn.click();
     await expect(page.locator('[data-testid^="debug-bp-item-"]')).toHaveCount(1, { timeout: 10_000 });
     await page.getByTestId('debug-mode-decomp').click();
     await expect(page.getByTestId('debug-disasm')).toBeVisible();
+    await page.getByTestId('debug-mode-mixed').click();
+    await expect(page.getByTestId('debug-disasm')).toBeVisible();
     await page.getByTestId('debug-mode-disasm').click();
+    const pcFontVar = await page.locator('[data-reg="pc"] .reg-val').evaluate((el) => getComputedStyle(el).fontVariantNumeric);
+    expect(pcFontVar).toContain('tabular-nums');
 
     // Memory SRAM jump + byte poke
     await page.getByTestId('debug-tab-memory').click();
@@ -95,6 +99,11 @@ test.describe('Workbench Debug (/debug) with Live Emulator RPC', () => {
     await expect(pcRow).not.toHaveText(beforePc, { timeout: 10_000 });
 
     await expect(page.getByTestId('debug-frame-0')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('debug-frame-0').click();
+    await page.getByTestId('debug-mode-source').click();
+    await expect(page.getByTestId('debug-disasm')).toBeVisible();
+    await page.getByTestId('debug-mode-disasm').click();
+
     await page.getByTestId('debug-watch-input').fill('pc');
     await page.getByTestId('debug-watch-add-btn').click();
     await expect(page.getByTestId('debug-watch-row-pc')).toContainText(/0x[0-9a-f]{8}/);
