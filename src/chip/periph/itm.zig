@@ -16,6 +16,7 @@
 const std = @import("std");
 
 const Bounded = @import("../core/bounded.zig").Bounded;
+const Until = @import("../core/until.zig").Until;
 
 pub const base: u32 = 0xE000_0000;
 
@@ -82,6 +83,15 @@ pub const Itm = struct {
         return true;
     }
 
+    /// Store `width` bytes of `value` to `offset`, feeding any completed port 0
+    /// lines to `until` when present.
+    pub fn writeWatched(self: *Itm, offset: u32, value: u32, width: u8, until: ?*Until) bool {
+        const prev = self.text.len;
+        if (!self.write(offset, value, width)) return false;
+        if (until) |wait| feedCompletedLines(self.text.constSlice(), prev, wait);
+        return true;
+    }
+
     /// What port 0 has been sent so far.
     pub fn output(self: *const Itm) []const u8 {
         return self.text.constSlice();
@@ -130,6 +140,17 @@ pub const Itm = struct {
         }
     }
 };
+
+fn feedCompletedLines(text: []const u8, prev: usize, wait: *Until) void {
+    if (text.len <= prev) return;
+    var start: usize = if (std.mem.lastIndexOfScalar(u8, text[0..prev], '\n')) |nl| nl + 1 else 0;
+    var scan = prev;
+    while (std.mem.indexOfScalarPos(u8, text, scan, '\n')) |end| {
+        wait.line(std.mem.trimEnd(u8, text[start..end], "\r"));
+        start = end + 1;
+        scan = start;
+    }
+}
 
 fn stimPort(offset: u32) ?u32 {
     if (offset >= limits.ports * 4 or offset % 4 != 0) return null;

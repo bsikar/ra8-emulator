@@ -68,6 +68,12 @@ pub const Error = error{
     TooManySwitches,
 } || request.Error || external.Error;
 
+/// Parse `text` when supplied, or default to EK-RA8D2 only when `attach_ra8` is true.
+pub fn resolveDefault(text: ?[]const u8, attach_ra8: bool) Error!Profile {
+    if (text) |supplied| return parse(supplied);
+    return if (attach_ra8) parse(ek_ra8d2) else .{};
+}
+
 /// Read the stable version-1 profile. Memory and front-panel keys are
 /// optional so existing profiles retain the generous defaults; unknown and
 /// duplicate keys fail closed rather than silently selecting a different

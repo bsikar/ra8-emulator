@@ -8,6 +8,7 @@ const Board = @import("ra8_board").board.Board;
 const json_options = @import("options.zig");
 const machine_mod = @import("ra8_chip").core.machine;
 const part = @import("ra8_chip").core.part;
+const std = @import("std");
 
 /// The five objects, keyed inside the document after `capture`.
 pub fn section(j: anytype, board: *Board) !void {
@@ -43,9 +44,22 @@ fn pinfunc(j: anytype, board: *Board) !void {
 }
 
 fn partInfo(j: anytype, which: *const machine_mod.Machine) !void {
-    const geometry = part.map.of(which.part);
     try j.open("part", '{');
     try j.field("name", which.label);
+    if (which.memory != &machine_mod.memory.ra8) {
+        const flash = which.memory.regionByRole(.flash);
+        const sram = which.memory.regionByRole(.sram);
+        try j.field("mram_base", if (flash) |f| f.base else 0);
+        try j.field("mram_bytes", if (flash) |f| f.size else 0);
+        try j.field("sram_base", if (sram) |s| s.base else 0);
+        try j.field("sram_bytes", if (sram) |s| s.size else 0);
+        try j.field("cpu0_tcm_bytes", customTcmBytes(which.memory));
+        try j.field("cpu0_cache_bytes", @as(u32, 0));
+        try j.field("source", which.source orelse "machine memory map");
+        try j.close('}');
+        return;
+    }
+    const geometry = part.map.of(which.part);
     try j.field("mram_base", geometry.mram_base);
     try j.field("mram_bytes", geometry.mram_bytes);
     try j.field("sram_base", geometry.sram_base);
@@ -58,6 +72,14 @@ fn partInfo(j: anytype, which: *const machine_mod.Machine) !void {
     }
     try j.field("source", geometry.source);
     try j.close('}');
+}
+
+fn customTcmBytes(map: *const machine_mod.MemoryMap) u32 {
+    var total: u32 = 0;
+    for (map.regions) |r| {
+        if (std.mem.eql(u8, r.name, "ITCM") or std.mem.eql(u8, r.name, "DTCM")) total += r.size;
+    }
+    return total;
 }
 
 fn backup(j: anytype, board: *Board) !void {

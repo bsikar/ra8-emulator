@@ -52,9 +52,9 @@ pub fn fit(board: *Board, allocator: std.mem.Allocator, io: std.Io, options: cli
     board.clock.pace.mode = .virtual;
     if (options.rtc_start) |start| board.clock.seed(try rtc_start.resolve(start, io));
     board.panel_vsync = options.panel_vsync;
-    const profile_fits = try loadProfile(allocator, io, options.board_profile);
+    const profile_fits = try loadProfile(allocator, io, options.board_profile, chosen.memory.attach_ra8_blocks);
     board.external_memory = profile_fits.memory;
-    try board.nor.resize(profile_fits.memory.ospi.size);
+    if (chosen.memory.has_external) try board.nor.resize(profile_fits.memory.ospi.size);
     var asks: [profile.max_fits + request.max]request.Request = undefined;
     var count: usize = 0;
     for (profile_fits.fits[0..profile_fits.count]) |fitted| {
@@ -115,9 +115,9 @@ fn setBattery(board: *Board, options: cli.Options) !void {
     };
 }
 
-/// Load a selected profile, or the shipped EK-RA8D2 default.
-fn loadProfile(allocator: std.mem.Allocator, io: std.Io, path: ?[]const u8) !profile.Profile {
-    const profile_path = path orelse return profile.parse(profile.ek_ra8d2);
+/// Load a selected profile, or the shipped EK-RA8D2 default when RA8 blocks attach.
+fn loadProfile(allocator: std.mem.Allocator, io: std.Io, path: ?[]const u8, attach_ra8: bool) !profile.Profile {
+    const profile_path = path orelse return profile.resolveDefault(null, attach_ra8);
     const contents = try std.Io.Dir.cwd().readFileAlloc(io, profile_path, allocator, .limited(64 * 1024));
     return profile.parse(contents);
 }

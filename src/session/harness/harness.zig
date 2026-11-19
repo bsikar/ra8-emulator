@@ -228,9 +228,9 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     const chosen = options.resolvedMachine();
     state.board.machine = chosen;
     state.board.part = chosen.part;
-    state.profile = try profile.parse(options.board_profile orelse profile.ek_ra8d2);
+    state.profile = try profile.resolveDefault(options.board_profile, chosen.memory.attach_ra8_blocks);
     state.board.external_memory = state.profile.memory;
-    try state.board.nor.resize(state.profile.memory.ospi.size);
+    if (chosen.memory.has_external) try state.board.nor.resize(state.profile.memory.ospi.size);
     state.board.clock.pace.mode = .virtual;
     state.board.panel_vsync = options.panel_vsync;
     try load_input.load(allocator, io, options.files, &state.board, options.input_script, options.input_script_bytes);

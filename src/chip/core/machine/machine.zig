@@ -9,6 +9,7 @@
 //! composition its blocks follow.
 pub const catalog = @import("catalog.zig");
 pub const core = @import("core.zig");
+pub const generic = @import("generic.zig");
 pub const memory = @import("memory.zig");
 pub const topology = @import("topology.zig");
 
@@ -22,6 +23,8 @@ pub const Topology = topology.Topology;
 pub const Machine = struct {
     /// What `--part` selects it by; unique within the catalog.
     name: []const u8,
+    /// Compatibility names accepted when resolving `--part` / `--device`.
+    aliases: []const []const u8 = &.{},
     /// How a report prints it.
     label: []const u8,
     cores: Topology,
@@ -30,6 +33,8 @@ pub const Machine = struct {
     memory: *const MemoryMap = &memory.ra8,
     /// The on-chip peripheral composition beside the cores.
     part: Part,
+    /// Hardware or architecture citation reported for custom memory maps.
+    source: ?[]const u8 = null,
 
     pub fn primary(self: *const Machine) Core {
         return self.cores.primary;

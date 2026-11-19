@@ -156,8 +156,13 @@ test {
     _ = @import("chip/core/machine/scs_test.zig");
     _ = @import("chip/core/machine/topology_test.zig");
     _ = @import("chip/core/machine/catalog_test.zig");
+    _ = @import("chip/core/machine/generic_test.zig");
     _ = @import("chip/core/machine/machine_test.zig");
     _ = @import("chip/core/machine/memory_test.zig");
+    _ = @import("chip/vendor_test.zig");
+    _ = @import("chip/vendor/renesas/renesas_test.zig");
+    _ = @import("chip/vendor/renesas/ra8d2_test.zig");
+    _ = @import("chip/vendor/renesas/ra8p1_test.zig");
     _ = @import("chip/core/rate_test.zig");
     _ = @import("board/image/ra8app_test.zig");
     _ = @import("chip/core/module_place_test.zig");
@@ -175,5 +180,14 @@ test {
     _ = @import("session/board/attachment_ownership_test.zig");
     _ = @import("tools/all_test.zig");
     const ra8 = @import("ra8");
-    inline for (.{ ra8.chip.core, ra8.chip.periph, ra8.board, ra8.session, ra8.rpc, ra8.gdb, @import("cli_app") }) |module| std.testing.refAllDecls(module);
+    inline for (.{
+        ra8.chip.core,
+        ra8.chip.periph,
+        ra8.chip.vendor,
+        ra8.board,
+        ra8.session,
+        ra8.rpc,
+        ra8.gdb,
+        @import("cli_app"),
+    }) |module| std.testing.refAllDecls(module);
 }

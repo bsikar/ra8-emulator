@@ -127,6 +127,10 @@ fn worklist(j: anytype, board: *Board) !void {
 
 fn externalRegions(j: anytype, board: *Board, memory: ?Guest, elapsed: u64) !void {
     try j.open("external_regions", '[');
+    if (!board.desc().memory.has_external) {
+        try j.close(']');
+        return;
+    }
     inline for (.{ external.Kind.ospi, external.Kind.sdram }) |kind| {
         const config = board.external_memory.region(kind);
         const counters = if (memory) |guest|
