@@ -1,10 +1,5 @@
-//! A run on the Zig core.
-//!
-//! The image is loaded and the board RAM mapped; the Zig core then resets out of the same vector table and runs until
-//! its budget is spent or it meets something it cannot do yet, most often an
-//! encoding no group in src/chip/core/cpu/ops/table.zig claims. This file prints
-//! one line saying which, so a corpus sweep can tell how far each image
-//! gets; main then prints the board's own report (report/run.zig, zigCore).
+//! A run on the Zig core: resets out of the loaded vector table, drives
+//! boundaries and SCS models, and reports why execution stopped.
 const itm_api = @import("../../periph/itm.zig");
 const stop_report = @import("stop_report.zig");
 const stretch_run = @import("stretches.zig");
@@ -218,6 +213,7 @@ pub fn runOnBoard(
             .clears = wiring.clears,
             .cut = wiring.cut,
             .itm = wiring.itm,
+            .itm_until = wiring.until,
             .config = wiring.scs,
             .systicks = wiring.systicks,
             .has_security = wiring.security,

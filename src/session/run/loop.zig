@@ -111,8 +111,9 @@ pub const Loop = struct {
             &clock.wall_cycles,
             if (self.tracer) |*found| &found.trace else null,
         );
-        var itm_port = itm_console.opened();
+        var itm_port = if (options.console) itm_console.opened() else @TypeOf(itm_console.opened()){};
         if (options.console) try itm_console.prime(clock.memory, &itm_port);
+        const wire_itm = options.console or (options.cpu == .zig and until != null);
         var edge = try fault_file.boundary(ends.schedule, clock.boundary());
         edge.saved = &clock.saved;
         const initiator = clock.memory.asInitiator(.cpu0);
@@ -140,7 +141,7 @@ pub const Loop = struct {
                 .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
                 .until = if (options.cpu == .zig) until else null,
                 .final = &self.final,
-                .itm = if (options.console) &itm_port else null,
+                .itm = if (wire_itm) &itm_port else null,
                 .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
                 .snapshot = zig_snapshot.hook(clock),
                 .peer = if (cpu1) |second| &second.core.cpu else null,

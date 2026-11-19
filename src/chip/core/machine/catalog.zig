@@ -2,6 +2,7 @@
 //! is refused rather than quietly falling back to a default.
 const std = @import("std");
 
+const generic = @import("generic.zig");
 const Machine = @import("machine.zig").Machine;
 const Part = @import("../part/part.zig").Part;
 const ra8_cores = @import("../part/cores.zig");
@@ -23,7 +24,13 @@ pub const ra8p1: Machine = .{
     .part = .ra8p1,
 };
 
-pub const all = [_]*const Machine{ &ra8d2, &ra8p1 };
+/// Minimal single-core Cortex-M33 with SCS, flash, and SRAM only.
+pub const cortex_m33 = generic.cortex_m33;
+
+/// Minimal single-core Cortex-M85 with SCS, flash, and SRAM only.
+pub const cortex_m85 = generic.cortex_m85;
+
+pub const all = [_]*const Machine{ &ra8d2, &ra8p1, &cortex_m33, &cortex_m85 };
 
 /// The machine called `name` in `machines`, or null when absent.
 pub fn findIn(machines: []const *const Machine, name: []const u8) ?*const Machine {

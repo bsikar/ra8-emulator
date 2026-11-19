@@ -13,6 +13,7 @@ const scs_mod = @import("../machine/scs.zig");
 const scs_regs = @import("scs_regs.zig");
 const std = @import("std");
 const systick_cut = @import("systick_cut.zig");
+const Until = @import("../until.zig").Until;
 
 /// The models inside a core that a plain store into its PPB RAM must reach,
 /// the store side of the models src/board/wiring.zig wires.
@@ -32,6 +33,8 @@ pub const Scs = struct {
     cut: ?*systick_cut.Cut = null,
     /// The ITM a plain run keeps port 0's text in.
     itm: ?*itm_port.Itm = null,
+    /// Optional `--until` line matcher fed by ITM stimulus port 0.
+    itm_until: ?*Until = null,
     /// Per-core SCS configuration and timer/security geometry.
     config: scs_mod.ScsConfig = .{},
     systicks: u2 = 2,
@@ -82,7 +85,7 @@ pub const Scs = struct {
             try bankRegion(memory, unit, normal, effective, mpu_ns.offset);
         };
         if (self.fp) |state| try fileFp(memory, state, address, effective);
-        if (self.itm) |port| try fileItm(memory, port, address, effective);
+        if (self.itm) |port| try fileItmWatched(memory, port, self.itm_until, address, effective);
     }
 };
 
@@ -131,12 +134,22 @@ pub fn fileFp(memory: bus.Bus, state: *fp_state.State, address: u32, bytes: []co
 /// register sees, so a stimulus port polled after a character still reads
 /// FIFOREADY rather than the character (RA8EMU-629).
 pub fn fileItm(memory: bus.Bus, port: *itm_port.Itm, address: u32, bytes: []const u8) bus.Error!void {
+    return fileItmWatched(memory, port, null, address, bytes);
+}
+
+pub fn fileItmWatched(
+    memory: bus.Bus,
+    port: *itm_port.Itm,
+    until: ?*Until,
+    address: u32,
+    bytes: []const u8,
+) bus.Error!void {
     if (address < itm_port.base or address - itm_port.base >= itm_port.limits.span) return;
     const offset = address - itm_port.base;
     const width = @min(bytes.len, 4);
     var padded = @as([4]u8, @splat(0));
     @memcpy(padded[0..width], bytes[0..width]);
-    if (!port.write(offset, std.mem.readInt(u32, &padded, .little), @intCast(width))) return;
+    if (!port.writeWatched(offset, std.mem.readInt(u32, &padded, .little), @intCast(width), until)) return;
     if (port.peek(offset)) |word| try putWord(memory, address, word);
 }
 
