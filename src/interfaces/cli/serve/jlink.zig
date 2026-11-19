@@ -20,13 +20,7 @@ pub const operations_debug: []const model.Action = &.{ .registers, .halt, .step,
 pub const operations_uart: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .reset, .uart };
 pub const operations_flash_debug: []const model.Action = &.{ .registers, .halt, .step, .@"resume", .flash, .reset };
 pub const operations_flash_uart: []const model.Action = &.{
-    .registers,
-    .halt,
-    .step,
-    .@"resume",
-    .flash,
-    .reset,
-    .uart,
+    .registers, .halt, .step, .@"resume", .flash, .reset, .uart,
 };
 
 pub const Probe = struct {
@@ -169,39 +163,34 @@ pub const Probe = struct {
     }
 };
 
+fn writeJson(out: []u8, value: anytype) ![]const u8 {
+    var writer: std.Io.Writer = .fixed(out);
+    try std.json.Stringify.value(value, .{}, &writer);
+    return writer.buffered();
+}
+
 fn formatOutcome(action: model.Action, outcome: commander.Outcome, token: u64, out: []u8) ![]const u8 {
     var digits: [20]u8 = undefined;
-    const serial = emu_list.format(outcome.identity.serial, &digits);
-    const cpuid = outcome.identity.cpuid;
-    const part = outcome.identity.partSlice();
+    var cpuid_buf: [12]u8 = undefined;
+    const s = emu_list.format(outcome.identity.serial, &digits);
+    const c = try std.fmt.bufPrint(&cpuid_buf, "0x{X:0>8}", .{outcome.identity.cpuid});
+    const p = outcome.identity.partSlice();
+    const r = outcome.registers;
     return switch (action) {
-        .registers => std.fmt.bufPrint(
+        .registers => writeJson(
             out,
-            "{{\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
+            .{ .serial = s, .cpuid = c, .part = p, .pc = r.?.pc, .sp = r.?.sp, .lease = token },
         ),
-        .halt => std.fmt.bufPrint(
+        .halt => writeJson(
             out,
-            "{{\"halted\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\"," ++
-                "\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
+            .{ .halted = true, .serial = s, .cpuid = c, .part = p, .pc = r.?.pc, .sp = r.?.sp, .lease = token },
         ),
-        .step => std.fmt.bufPrint(
+        .step => writeJson(
             out,
-            "{{\"stepped\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\"," ++
-                "\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
+            .{ .stepped = true, .serial = s, .cpuid = c, .part = p, .pc = r.?.pc, .sp = r.?.sp, .lease = token },
         ),
-        .@"resume" => std.fmt.bufPrint(
-            out,
-            "{{\"resumed\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"lease\":{d}}}",
-            .{ serial, cpuid, part, token },
-        ),
-        .reset => std.fmt.bufPrint(
-            out,
-            "{{\"reset\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"lease\":{d}}}",
-            .{ serial, cpuid, part, token },
-        ),
+        .@"resume" => writeJson(out, .{ .resumed = true, .serial = s, .cpuid = c, .part = p, .lease = token }),
+        .reset => writeJson(out, .{ .reset = true, .serial = s, .cpuid = c, .part = p, .lease = token }),
         .flash, .uart => error.Unsupported,
     };
 }
@@ -272,6 +261,14 @@ fn extractFlashSpec(fields: anytype) !FlashSpec {
     return spec;
 }
 
+fn isPartIdentifier(text: []const u8) bool {
+    if (text.len == 0 or text.len > 16) return false;
+    for (text) |ch| {
+        if (!std.ascii.isAlphanumeric(ch) and ch != '-' and ch != '_') return false;
+    }
+    return true;
+}
+
 fn extractPartSpec(fields: anytype) !commander.PartSpec {
     const Fields = @TypeOf(fields);
     const spec: commander.PartSpec = .{
@@ -279,7 +276,30 @@ fn extractPartSpec(fields: anytype) !commander.PartSpec {
         .expected = if (@hasField(Fields, "expected_part")) fields.expected_part else "",
     };
     if ((spec.addr == 0) != (spec.expected.len == 0)) return error.InvalidEndpoint;
+    if (spec.expected.len != 0 and !isPartIdentifier(spec.expected)) return error.InvalidEndpoint;
     return spec;
+}
+
+fn hasManualIdentityOverrides(fields: anytype) bool {
+    const Fields = @TypeOf(fields);
+    const has_cpuid = if (@hasField(Fields, "cpuid")) fields.cpuid.len != 0 else false;
+    const has_addr = if (@hasField(Fields, "part_addr")) fields.part_addr != 0 else false;
+    const has_part = if (@hasField(Fields, "expected_part")) fields.expected_part.len != 0 else false;
+    return has_cpuid or has_addr or has_part;
+}
+
+fn hasManualFlashOverrides(fields: anytype) bool {
+    const Fields = @TypeOf(fields);
+    const enabled = if (@hasField(Fields, "flash_enabled")) fields.flash_enabled else false;
+    const has_base = if (@hasField(Fields, "flash_base")) fields.flash_base != 0 else false;
+    const has_size = if (@hasField(Fields, "flash_size")) fields.flash_size != 0 else false;
+    return enabled or has_base or has_size;
+}
+
+pub fn checkNoProfileOverrides(fields: anytype) !void {
+    if (hasManualIdentityOverrides(fields) or hasManualFlashOverrides(fields)) {
+        return error.InvalidEndpoint;
+    }
 }
 
 pub const ResolvedProfile = struct {
@@ -339,6 +359,7 @@ pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
 }
 
 fn configureFromProfile(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
+    try checkNoProfileOverrides(fields);
     const resolved = try resolveProfile(target.board_id);
     if (fields.device.len != 0 and !std.mem.eql(u8, fields.device, resolved.device)) return error.InvalidEndpoint;
     return .{

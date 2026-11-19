@@ -75,8 +75,8 @@ pub const all = [_]Profile{
         .mcu_part = "R7FA8E1AFDCFB",
         .core_topology = "single Arm Cortex-M85 r0p2 (Armv8.1-M, MVE, TrustZone)",
         .memory_summary = "1 MiB Code Flash @ 0x02000000, 12 KiB Data Flash @ 0x27000000, " ++
-            "64 KiB ITCM @ 0x00000000, 64 KiB DTCM @ 0x20000000, 32 KiB SRAM0 @ 0x22000000, " ++
-            "512 KiB SRAM1 @ 0x22060000; Option Flash @ 0x0300A100 fenced",
+            "16 KiB ITCM @ 0x00000000, 16 KiB DTCM @ 0x20000000, 512 KiB SRAM1 @ 0x22060000, " ++
+            "1 KiB Standby SRAM @ 0x26000000 (no SRAM0 @ 0x22000000); Option Flash @ 0x0300A100 fenced",
         .flash_window = .{
             .base = 0x0200_0000,
             .size = 0x0010_0000,
@@ -112,6 +112,7 @@ pub const all = [_]Profile{
         .sources = &.{
             "Renesas R20UT5474EG0100 Rev.1.00 (FPB-RA8E1 v1 User's Manual)",
             "Renesas R01UH1129EJ0110 Rev.1.10 (RA8E1 Group User's Manual: Hardware)",
+            "Renesas R01DS0455EJ0110 Rev.1.10 (RA8E1 Group Datasheet)",
             "https://www.renesas.com/en/design-resources/boards-kits/fpb-ra8e1",
         },
     },
@@ -121,7 +122,8 @@ pub const all = [_]Profile{
         .orderable_part = "RTK7FPA4T1S00001BE",
         .board_revision = "v1.00",
         .mcu_part = "R7FA4T1BB3CFM",
-        .core_topology = "single Arm Cortex-M33 r0p4 (Armv8-M Mainline, DSP, FPU, TrustZone)",
+        .core_topology = "single Arm Cortex-M33 r0p4 (Armv8-M Mainline, DSP, " ++
+            "single-precision FPU FPv5-SP-D16, TrustZone; no MVE)",
         .memory_summary = "256 KiB Code Flash @ 0x00000000, 4 KiB Data Flash @ 0x08000000, " ++
             "40 KiB SRAM0 @ 0x20000000; Option Flash @ 0x0100A100 fenced",
         .flash_window = .{
@@ -160,6 +162,7 @@ pub const all = [_]Profile{
         .sources = &.{
             "Renesas R20UT5524EG0100 Rev.1.00 (FPB-RA4T1 v1 User's Manual, Fig. 4 & Table 3)",
             "Renesas R01UH0999EJ0140 Rev.1.40 (RA4T1 Group User's Manual: Hardware)",
+            "Renesas R01DS0415EJ0140 Rev.1.40 (RA4T1 Group Datasheet)",
             "https://www.renesas.com/en/design-resources/boards-kits/fpb-ra4t1",
         },
     },

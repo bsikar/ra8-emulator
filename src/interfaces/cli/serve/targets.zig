@@ -301,6 +301,7 @@ fn hasJlinkOnlyFields(binding: Binding) bool {
 fn applyJlinkDescriptor(descriptor: *model.Descriptor, binding: Binding) !void {
     descriptor.identity_verified = false;
     descriptor.disambiguation = "";
+    if (binding.use_board_profile) try jlink.checkNoProfileOverrides(binding);
     const resolved = if (binding.use_board_profile) try jlink.resolveProfile(descriptor.board_id) else null;
     const has_flash = if (resolved) |r| r.flash_enabled else binding.flash_enabled;
     const wired = if (resolved) |r| r.uart_wired else binding.uart_wired;

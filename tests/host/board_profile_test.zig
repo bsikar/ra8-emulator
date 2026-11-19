@@ -19,11 +19,19 @@ test "board profiles separate arrived bench qualification from absent or unpurch
     try std.testing.expectEqual(@as(u32, 0x0300_A100), e1.flash_window.?.option_setting_base);
     try std.testing.expectEqual(@as(u32, 0x410F_D232), e1.swd.?.cpuid);
     try std.testing.expectEqualStrings("R7FA8E1AFDCFB", e1.swd.?.part_readback.?.expected_ascii);
+    try std.testing.expect(std.mem.indexOf(u8, e1.memory_summary, "16 KiB ITCM @ 0x00000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, e1.memory_summary, "16 KiB DTCM @ 0x20000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, e1.memory_summary, "512 KiB SRAM1 @ 0x22060000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, e1.memory_summary, "1 KiB Standby SRAM @ 0x26000000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, e1.memory_summary, "no SRAM0 @ 0x22000000") != null);
+    try std.testing.expectEqual(@as(usize, 4), e1.sources.len);
 
     const t1 = try board_profile.find("fpb-ra4t1");
     try std.testing.expectEqual(board_profile.Availability.arrived_qualified, t1.availability);
     try std.testing.expectEqualStrings("RTK7FPA4T1S00001BE", t1.orderable_part);
     try std.testing.expectEqualStrings("R7FA4T1BB3CFM", t1.mcu_part);
+    try std.testing.expect(std.mem.indexOf(u8, t1.core_topology, "FPv5-SP-D16") != null);
+    try std.testing.expectEqual(@as(usize, 4), t1.sources.len);
     try std.testing.expect(!t1.uart_wired);
     try std.testing.expectEqual(board_profile.CapabilityStatus.unsupported, t1.capabilities.uart);
     try std.testing.expectEqual(@as(u32, 0x0000_0000), t1.flash_window.?.base);

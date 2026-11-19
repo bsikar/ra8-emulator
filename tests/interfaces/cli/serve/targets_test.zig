@@ -242,4 +242,35 @@ test "use_board_profile populates arrived Renesas board parameters and refuses a
             .target = testDescriptor("bench", absent, "jlink-x", "001083322193"),
         }}, error.ProfileUnavailable);
     }
+
+    try expectBindingError(&tmp, "override-cpuid.json", &.{.{
+        .kind = .jlink,
+        .program = "JLink",
+        .scratch = scratch_dir,
+        .use_board_profile = true,
+        .cpuid = "0x410FD214",
+        .target = testDescriptor("bench", "fpb-ra8e1", "jlink-e1", "001083322193"),
+    }}, error.InvalidEndpoint);
+
+    try expectBindingError(&tmp, "override-flash.json", &.{.{
+        .kind = .jlink,
+        .program = "JLink",
+        .scratch = scratch_dir,
+        .use_board_profile = true,
+        .flash_enabled = true,
+        .flash_base = 0x0200_0000,
+        .flash_size = 0x0010_0000,
+        .target = testDescriptor("bench", "fpb-ra8e1", "jlink-e1", "001083322193"),
+    }}, error.InvalidEndpoint);
+
+    try expectBindingError(&tmp, "bad-part-chars.json", &.{.{
+        .kind = .jlink,
+        .program = "JLink",
+        .scratch = scratch_dir,
+        .device = "R7FA8E1AF",
+        .cpuid = "0x410FD232",
+        .part_addr = 0x0300_80F0,
+        .expected_part = "R7FA8\"E1",
+        .target = testDescriptor("bench", "fpb-ra8e1", "jlink-e1", "001083322193"),
+    }}, error.InvalidEndpoint);
 }
