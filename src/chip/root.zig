@@ -7,3 +7,4 @@
 pub const core = @import("core.zig");
 pub const periph = @import("periph.zig");
 pub const snapshot = @import("snapshot.zig");
+pub const vendor = @import("vendor.zig");
