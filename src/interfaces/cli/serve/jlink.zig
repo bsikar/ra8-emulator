@@ -1,12 +1,13 @@
 //! Onboard J-Link targets: presence and the probe CDC interface come from a
 //! USB scan keyed by the operator-pinned probe serial, ownership from a
 //! host-wide lease, and every operation names the probe by serial and checks
-//! the expected core before executing or writing flash.
+//! the expected core and optional factory part number before acting.
 const builtin = @import("builtin");
 const std = @import("std");
 
 const host = @import("ra8_host");
 
+const board_profile = host.board_profile;
 const commander = host.jlink.commander;
 const emu_list = host.jlink.emu_list;
 const identity = host.jlink.identity;
@@ -34,6 +35,7 @@ pub const Probe = struct {
     tool: commander.Tool,
     device: []const u8,
     cpuid: u32,
+    part: commander.PartSpec = .{},
     uart_wired: bool = true,
     flash_enabled: bool = false,
     flash_base: u32 = 0,
@@ -59,12 +61,13 @@ pub const Probe = struct {
         try self.fence.admit(lease.token);
         if (!self.flash_enabled) return error.Unsupported;
         var text: [32768]u8 = undefined;
-        const outcome = try commander.flashAndVerify(
+        const outcome = try commander.flashAndVerifyProfile(
             self.io,
             self.tool,
             self.serial,
             self.device,
             self.cpuid,
+            self.part,
             self.flash_base,
             self.flash_size,
             elf,
@@ -79,6 +82,7 @@ pub const Probe = struct {
             .verified = true,
             .serial = emu_list.format(outcome.identity.serial, &digits),
             .cpuid = cpuid_hex,
+            .part = outcome.identity.partSlice(),
             .sha256 = &outcome.sha256,
             .segments = outcome.segments,
             .bytes = outcome.bytes,
@@ -97,15 +101,25 @@ pub const Probe = struct {
             self.vcom = serial_port.Port.openBySerial(self.io, self.serial) catch null;
         }
         var text: [16384]u8 = undefined;
-        const outcome = try commander.operate(self.io, self.tool, self.serial, self.device, self.cpuid, action, &text);
+        const outcome = try commander.operateProfile(
+            self.io,
+            self.tool,
+            self.serial,
+            self.device,
+            self.cpuid,
+            self.part,
+            action,
+            &text,
+        );
         return formatOutcome(action, outcome, lease.token, out);
     }
 
     fn readUart(self: *Probe, token: u64, out: []u8) ![]const u8 {
         if (!self.uart_wired) return error.Unsupported;
         var text: [16384]u8 = undefined;
-        const found = try commander.identify(self.io, self.tool, self.serial, self.device, &text);
-        try identity.check(found, self.serial, self.cpuid);
+        const part_addr: ?u32 = if (self.part.addr != 0) self.part.addr else null;
+        const found = try commander.identifyPart(self.io, self.tool, self.serial, self.device, part_addr, &text);
+        try identity.checkWithPart(found, self.serial, self.cpuid, self.part.expected);
         var vcom = self.vcom orelse ((try serial_port.Port.openBySerial(self.io, self.serial)) orelse
             return error.NoUart);
         self.vcom = null;
@@ -119,6 +133,7 @@ pub const Probe = struct {
         try std.json.Stringify.value(.{
             .serial = emu_list.format(found.serial, &digits),
             .cpuid = cpuid_hex,
+            .part = found.partSlice(),
             .uart = vcom.name(),
             .bytes = count,
             .text = captured[0..count],
@@ -158,31 +173,34 @@ fn formatOutcome(action: model.Action, outcome: commander.Outcome, token: u64, o
     var digits: [20]u8 = undefined;
     const serial = emu_list.format(outcome.identity.serial, &digits);
     const cpuid = outcome.identity.cpuid;
+    const part = outcome.identity.partSlice();
     return switch (action) {
         .registers => std.fmt.bufPrint(
             out,
-            "{{\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, outcome.registers.?.pc, outcome.registers.?.sp, token },
+            "{{\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
+            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
         ),
         .halt => std.fmt.bufPrint(
             out,
-            "{{\"halted\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"pc\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, outcome.registers.?.pc, token },
+            "{{\"halted\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\"," ++
+                "\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
+            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
         ),
         .step => std.fmt.bufPrint(
             out,
-            "{{\"stepped\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"pc\":{d},\"lease\":{d}}}",
-            .{ serial, cpuid, outcome.registers.?.pc, token },
+            "{{\"stepped\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\"," ++
+                "\"part\":\"{s}\",\"pc\":{d},\"sp\":{d},\"lease\":{d}}}",
+            .{ serial, cpuid, part, outcome.registers.?.pc, outcome.registers.?.sp, token },
         ),
         .@"resume" => std.fmt.bufPrint(
             out,
-            "{{\"resumed\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"lease\":{d}}}",
-            .{ serial, cpuid, token },
+            "{{\"resumed\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"lease\":{d}}}",
+            .{ serial, cpuid, part, token },
         ),
         .reset => std.fmt.bufPrint(
             out,
-            "{{\"reset\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"lease\":{d}}}",
-            .{ serial, cpuid, token },
+            "{{\"reset\":true,\"serial\":\"{s}\",\"cpuid\":\"0x{X:0>8}\",\"part\":\"{s}\",\"lease\":{d}}}",
+            .{ serial, cpuid, part, token },
         ),
         .flash, .uart => error.Unsupported,
     };
@@ -254,11 +272,57 @@ fn extractFlashSpec(fields: anytype) !FlashSpec {
     return spec;
 }
 
+fn extractPartSpec(fields: anytype) !commander.PartSpec {
+    const Fields = @TypeOf(fields);
+    const spec: commander.PartSpec = .{
+        .addr = if (@hasField(Fields, "part_addr")) fields.part_addr else 0,
+        .expected = if (@hasField(Fields, "expected_part")) fields.expected_part else "",
+    };
+    if ((spec.addr == 0) != (spec.expected.len == 0)) return error.InvalidEndpoint;
+    return spec;
+}
+
+pub const ResolvedProfile = struct {
+    device: []const u8,
+    cpuid: u32,
+    part: commander.PartSpec,
+    uart_wired: bool,
+    flash_enabled: bool,
+    flash_base: u32,
+    flash_size: u32,
+};
+
+pub fn resolveProfile(board_id: []const u8) !ResolvedProfile {
+    const prof = try board_profile.find(board_id);
+    if (prof.availability != .arrived_qualified) return error.ProfileUnavailable;
+    const swd = prof.swd orelse return error.ProfileUnavailable;
+    const win = prof.flash_window orelse return error.ProfileUnavailable;
+    const part: commander.PartSpec = if (swd.part_readback) |pr|
+        .{ .addr = pr.address, .expected = pr.expected_ascii }
+    else
+        .{};
+    return .{
+        .device = swd.jlink_device,
+        .cpuid = swd.cpuid,
+        .part = part,
+        .uart_wired = prof.uart_wired,
+        .flash_enabled = true,
+        .flash_base = win.base,
+        .flash_size = win.size,
+    };
+}
+
 pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
-    const flash_spec = try extractFlashSpec(fields);
+    const Fields = @TypeOf(fields);
+    const use_prof = if (@hasField(Fields, "use_board_profile")) fields.use_board_profile else false;
     if (!std.mem.eql(u8, target.transport, transport)) return error.InvalidEndpoint;
-    if (fields.program.len == 0 or fields.scratch.len == 0 or fields.device.len == 0) return error.InvalidEndpoint;
-    if (!std.fs.path.isAbsolute(fields.scratch)) return error.InvalidEndpoint;
+    if (fields.program.len == 0 or fields.scratch.len == 0 or !std.fs.path.isAbsolute(fields.scratch)) {
+        return error.InvalidEndpoint;
+    }
+    if (use_prof) return configureFromProfile(io, target, fields);
+    const flash_spec = try extractFlashSpec(fields);
+    const part_spec = try extractPartSpec(fields);
+    if (fields.device.len == 0) return error.InvalidEndpoint;
     const hex = if (std.mem.startsWith(u8, fields.cpuid, "0x")) fields.cpuid[2..] else return error.InvalidEndpoint;
     return .{
         .io = io,
@@ -266,9 +330,27 @@ pub fn configure(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
         .tool = .{ .program = fields.program, .scratch = fields.scratch },
         .device = fields.device,
         .cpuid = std.fmt.parseInt(u32, hex, 16) catch return error.InvalidEndpoint,
+        .part = part_spec,
         .uart_wired = fields.uart_wired and hostSupportsUart(),
         .flash_enabled = flash_spec.enabled,
         .flash_base = flash_spec.base,
         .flash_size = flash_spec.size,
+    };
+}
+
+fn configureFromProfile(io: std.Io, target: model.Descriptor, fields: anytype) !Probe {
+    const resolved = try resolveProfile(target.board_id);
+    if (fields.device.len != 0 and !std.mem.eql(u8, fields.device, resolved.device)) return error.InvalidEndpoint;
+    return .{
+        .io = io,
+        .serial = try emu_list.serialOf(target.probe_serial),
+        .tool = .{ .program = fields.program, .scratch = fields.scratch },
+        .device = resolved.device,
+        .cpuid = resolved.cpuid,
+        .part = resolved.part,
+        .uart_wired = resolved.uart_wired and hostSupportsUart(),
+        .flash_enabled = resolved.flash_enabled,
+        .flash_base = resolved.flash_base,
+        .flash_size = resolved.flash_size,
     };
 }

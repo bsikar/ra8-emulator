@@ -194,3 +194,52 @@ test "jlink flash_enabled requires bounded flash window and non-jlink kinds reje
         .target = desc,
     }}, error.InvalidEndpoint);
 }
+
+test "use_board_profile populates arrived Renesas board parameters and refuses absent or bootloader-only boards" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    const alloc = std.testing.allocator;
+    const scratch_dir = try tmp.dir.realPathFileAlloc(io, ".", alloc);
+    defer alloc.free(scratch_dir);
+
+    const valid_raw = try std.json.Stringify.valueAlloc(alloc, &[_]cli.target_bindings.Binding{
+        .{
+            .kind = .jlink,
+            .program = "JLink",
+            .scratch = scratch_dir,
+            .use_board_profile = true,
+            .target = testDescriptor("bench", "fpb-ra8e1", "jlink-e1", "001083322193"),
+        },
+        .{
+            .kind = .jlink,
+            .program = "JLink",
+            .scratch = scratch_dir,
+            .use_board_profile = true,
+            .target = testDescriptor("bench", "fpb-ra4t1", "jlink-t1", "001088957027"),
+        },
+    }, .{});
+    defer alloc.free(valid_raw);
+    try tmp.dir.writeFile(io, .{ .sub_path = "profiles.json", .data = valid_raw });
+    const valid_path = try tmp.dir.realPathFileAlloc(io, "profiles.json", alloc);
+    defer alloc.free(valid_path);
+
+    var inventory: cli.target_bindings.Inventory = .{};
+    defer inventory.close();
+    try inventory.open(alloc, io, valid_path, null);
+    try std.testing.expectEqual(@as(usize, 2), inventory.probe_count);
+    try std.testing.expectEqualStrings("R7FA8E1AFDCFB", inventory.probes[0].part.expected);
+    try std.testing.expectEqual(@as(u32, 0x0200_0000), inventory.probes[0].flash_base);
+    try std.testing.expectEqualStrings("R7FA4T1BB3CFM", inventory.probes[1].part.expected);
+    try std.testing.expect(!inventory.probes[1].uart_wired);
+
+    for ([_][]const u8{ "grove-vision-ai-v2", "ra8d2", "ra8p1" }) |absent| {
+        try expectBindingError(&tmp, "absent.json", &.{.{
+            .kind = .jlink,
+            .program = "JLink",
+            .scratch = scratch_dir,
+            .use_board_profile = true,
+            .target = testDescriptor("bench", absent, "jlink-x", "001083322193"),
+        }}, error.ProfileUnavailable);
+    }
+}
