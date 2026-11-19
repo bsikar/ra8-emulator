@@ -75,6 +75,11 @@ file that carries the directory's name is the block's or the part's own
 `src/chip/periph/gpt/channel.zig` is tested by
 `tests/chip/periph/gpt/channel_test.zig`.
 
+Vendor-neutral Arm machines (`cortex-m33`, `cortex-m55`, `cortex-m85`) live in
+`src/chip/core/machine/generic.zig`. Vendor MCU definitions and board wiring
+live under `src/chip/vendor/<vendor>/` and `src/board/vendor/<vendor>/`,
+mirrored by `tests/chip/vendor/<vendor>/` and `tests/board/vendor/<vendor>/`.
+
 There is no `@cImport` in the tree and no SDL or translate-c dependency.
 
 ## Documentation and tickets

@@ -111,8 +111,9 @@ pub const Loop = struct {
             &clock.wall_cycles,
             if (self.tracer) |*found| &found.trace else null,
         );
-        var itm_port = itm_console.opened();
-        if (options.console) try itm_console.prime(clock.memory, &itm_port);
+        const wire_itm = wireItm(options, until);
+        var itm_port = if (wire_itm) itm_console.opened() else @TypeOf(itm_console.opened()){};
+        if (wire_itm) try itm_console.prime(clock.memory, &itm_port);
         var edge = try fault_file.boundary(ends.schedule, clock.boundary());
         edge.saved = &clock.saved;
         const initiator = clock.memory.asInitiator(.cpu0);
@@ -124,36 +125,54 @@ pub const Loop = struct {
             vector_base,
             options.budget,
             &self.ran,
-            .{
-                .boundary = edge,
-                .partitions = primarySau(board, primary.security),
-                .idau = &board.idau,
-                .regions = &board.regions,
-                .regions_ns = primaryMpuNs(board, primary.security),
-                .clears = &board.clears,
-                .cut = &cut,
-                .fast_memory = options.watch_place == null and wrap == null,
-                .blocks = options.blocks,
-                .wrap = wrap,
-                .retire_listener = stacks.listener(self.watcher.listener(self.retire.listener())),
-                .core = stacks.lend(if (cpu1) |second| &second.core.cpu else null),
-                .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
-                .until = if (options.cpu == .zig) until else null,
-                .final = &self.final,
-                .itm = if (options.console) &itm_port else null,
-                .bus_errors = if (options.bus_errors) &clock.bus_tally else null,
-                .snapshot = zig_snapshot.hook(clock),
-                .peer = if (cpu1) |second| &second.core.cpu else null,
-                .profile = primary.profile,
-                .security = primary.security,
-                .systicks = primary.systicks,
-                .scs = primary.scs,
-                .dwt_numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m),
-                .fpb_wired = true,
-            },
+            self.buildWiring(board, options, until, cpu1, ends, wrap, &cut, &stacks, &itm_port, edge),
         );
         try wall.finish(clock, self.ran);
         if (options.console) try itm_port.flush(out, true);
+    }
+
+    fn buildWiring(
+        self: *Loop,
+        board: *Board,
+        options: Options,
+        until: ?*Until,
+        cpu1: ?*second_core.zig.run.Driver,
+        ends: Ends,
+        wrap: ?boot.Wrap,
+        cut: *systick_cut.Cut,
+        stacks: *stack_profile.Run,
+        itm_port: anytype,
+        edge: boot.Boundary,
+    ) boot.Wiring {
+        const primary = board.desc().primary();
+        const second_cpu = if (cpu1) |second| &second.core.cpu else null;
+        return .{
+            .boundary = edge,
+            .partitions = primarySau(board, primary.security),
+            .idau = &board.idau,
+            .regions = &board.regions,
+            .regions_ns = primaryMpuNs(board, primary.security),
+            .clears = &board.clears,
+            .cut = cut,
+            .fast_memory = options.watch_place == null and wrap == null,
+            .blocks = options.blocks,
+            .wrap = wrap,
+            .retire_listener = stacks.listener(self.watcher.listener(self.retire.listener())),
+            .core = stacks.lend(second_cpu),
+            .fetch_guard = if (ends.undefined_sites) |found| undefined_sites.guard(found) else null,
+            .until = if (options.cpu == .zig) until else null,
+            .final = &self.final,
+            .itm = if (wireItm(options, until)) itm_port else null,
+            .bus_errors = if (options.bus_errors) &self.clock.bus_tally else null,
+            .snapshot = zig_snapshot.hook(&self.clock),
+            .peer = second_cpu,
+            .profile = primary.profile,
+            .security = primary.security,
+            .systicks = primary.systicks,
+            .scs = primary.scs,
+            .dwt_numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m),
+            .fpb_wired = true,
+        };
     }
 
     fn armWrap(
@@ -176,6 +195,10 @@ pub const Loop = struct {
         );
     }
 };
+
+fn wireItm(options: Options, until: ?*Until) bool {
+    return options.console or (options.cpu == .zig and until != null);
+}
 
 fn armSystickCut(systicks: u2, s: *clocks.Clocks, ns: *clocks.Clocks) systick_cut.Cut {
     s.words.present = systicks >= 1;
