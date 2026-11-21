@@ -206,6 +206,25 @@ jobs:
           python -B tools/target_smoke/run.py --emulator "zig-out/bin/ra8_emulator$suffix" --fixture zig-out/bin/debug_conformance.elf --output "$env:RUNNER_TEMP/debug-conformance/targets" --timeout 120
           if ($LASTEXITCODE -ne 0) { throw 'Configured target inventory conformance failed' }
 
+      - name: End-to-end IDE project, debug and simulated target conformance
+        if: always() && steps.emulator.outcome == 'success' && steps.fixtures.outcome == 'success' && (runner.os != 'Linux' || steps.gdb.outcome == 'success')
+        shell: pwsh
+        timeout-minutes: 10
+        run: |
+          $suffix = if ($IsWindows) { '.exe' } else { '' }
+          $compiler = (Get-Command zig).Source
+          $ideArgs = @(
+            '-B', 'tools/ide_conformance/run.py',
+            '--emulator', "zig-out/bin/ra8_emulator$suffix",
+            '--zig', $compiler,
+            '--fixture', 'zig-out/bin/debug_conformance.elf',
+            '--output', "$env:RUNNER_TEMP/debug-conformance/ide",
+            '--timeout', '480'
+          )
+          if ($IsLinux) { $ideArgs += @('--gdb', 'gdb-multiarch') }
+          python @ideArgs
+          if ($LASTEXITCODE -ne 0) { throw 'IDE conformance failed' }
+
       - name: Preserve terminal results and sanitized transcripts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
