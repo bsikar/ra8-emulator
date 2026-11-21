@@ -21,3 +21,25 @@ test "CPUID and serial verification rejects mismatched probe or core" {
     try std.testing.expectEqual(@as(u32, 0x02000996), regs.pc);
     try std.testing.expectEqual(@as(u32, 0x22000610), regs.sp);
 }
+
+test "factory PNR0..3 readback decodes exact Renesas part numbers and rejects part mismatches" {
+    const sample_e1 =
+        "S/N: 1083322193\r\n" ++
+        "E000ED00 = 410FD232 \r\n" ++
+        "030080F0 = 41463752 41314538 46434446 20202042 \r\n";
+    const found_e1 = try identity.parseWithPart(sample_e1, 0x0300_80F0);
+    try std.testing.expectEqualStrings("R7FA8E1AFDCFB", found_e1.partSlice());
+    try identity.checkWithPart(found_e1, 1083322193, 0x410FD232, "R7FA8E1AFDCFB");
+    try std.testing.expectError(
+        error.WrongPart,
+        identity.checkWithPart(found_e1, 1083322193, 0x410FD232, "R7FA4T1BB3CFM"),
+    );
+
+    const sample_t1 =
+        "S/N: 1088957027\r\n" ++
+        "E000ED00 = 410FD214 \r\n" ++
+        "010080F0 = 41463752 42315434 46433342 2020204D \r\n";
+    const found_t1 = try identity.parseWithPart(sample_t1, 0x0100_80F0);
+    try std.testing.expectEqualStrings("R7FA4T1BB3CFM", found_t1.partSlice());
+    try identity.checkWithPart(found_t1, 1088957027, 0x410FD214, "R7FA4T1BB3CFM");
+}

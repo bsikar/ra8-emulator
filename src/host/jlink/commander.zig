@@ -1,7 +1,7 @@
 //! J-Link Commander invocations: list the attached probes, read one probe's
-//! core identity, and run verified core debug, flash/verify, and reset actions.
-//! Every call names the probe by USB serial, never by list position, and runs
-//! within a bounded deadline with atomic cancellation support.
+//! core and optional factory part-number identity, and run verified core debug,
+//! flash/verify, and reset actions. Every call names the probe by USB serial,
+//! never by list position, and runs within a bounded deadline with cancellation.
 const std = @import("std");
 
 const elf_image = @import("elf_image.zig");
@@ -17,6 +17,11 @@ pub const Tool = struct {
     scratch: []const u8,
     timeout_ms: u32 = 15_000,
     cancel: ?*const std.atomic.Value(bool) = null,
+};
+
+pub const PartSpec = struct {
+    addr: u32 = 0,
+    expected: []const u8 = "",
 };
 
 pub const Outcome = struct {
@@ -40,18 +45,32 @@ pub fn list(io: std.Io, tool: Tool, out: []emu_list.Probe, text: []u8) ![]emu_li
 /// Connects over SWD to the probe with `serial` and reads CPUID without
 /// halting or writing anything.
 pub fn identify(io: std.Io, tool: Tool, serial: u64, device: []const u8, text: []u8) !identity.Identity {
-    var digits: [20]u8 = undefined;
-    const usb = emu_list.format(serial, &digits);
-    const extra = [_][]const u8{ "-USB", usb, "-Device", device, "-If", "SWD", "-Speed", "1000", "-AutoConnect", "1" };
-    const result = try script(io, tool, usb, "mem32 0xE000ED00 1\nexit\n", &extra, text);
-    if (result.code != 0) return error.ProbeToolFailed;
-    return identity.parse(result.output);
+    return identifyPart(io, tool, serial, device, null, text);
 }
 
-/// Verifies `serial` and `cpuid` first, then executes `action` on that probe.
-/// The check and the action are two Commander sessions, each selected by
-/// `-USB serial`. Commander scripts cannot branch on a read value, so the
-/// serial is checked again only after the action session has run.
+/// Connects over SWD to `serial` and reads CPUID plus optional 4-word factory
+/// part-number registers at `part_addr` without halting or writing flash.
+pub fn identifyPart(
+    io: std.Io,
+    tool: Tool,
+    serial: u64,
+    device: []const u8,
+    part_addr: ?u32,
+    text: []u8,
+) !identity.Identity {
+    var digits: [20]u8 = undefined;
+    const usb = emu_list.format(serial, &digits);
+    var cmd_buf: [96]u8 = undefined;
+    const commands = if (part_addr) |addr|
+        try std.fmt.bufPrint(&cmd_buf, "mem32 0xE000ED00 1\nmem32 0x{X:0>8} 4\nexit\n", .{addr})
+    else
+        "mem32 0xE000ED00 1\nexit\n";
+    const extra = [_][]const u8{ "-USB", usb, "-Device", device, "-If", "SWD", "-Speed", "1000", "-AutoConnect", "1" };
+    const result = try script(io, tool, usb, commands, &extra, text);
+    if (result.code != 0) return error.ProbeToolFailed;
+    return identity.parseWithPart(result.output, part_addr);
+}
+
 pub fn operate(
     io: std.Io,
     tool: Tool,
@@ -61,23 +80,37 @@ pub fn operate(
     action: targets.Action,
     text: []u8,
 ) !Outcome {
+    return operateProfile(io, tool, serial, device, cpuid, .{}, action, text);
+}
+
+/// Verifies `serial`, `cpuid`, and optional factory `part` first, then executes
+/// `action` on that probe.
+pub fn operateProfile(
+    io: std.Io,
+    tool: Tool,
+    serial: u64,
+    device: []const u8,
+    cpuid: u32,
+    part: PartSpec,
+    action: targets.Action,
+    text: []u8,
+) !Outcome {
     const commands = switch (action) {
-        .registers => "h\nregs\nexit\n",
-        .halt => "h\nexit\n",
+        .registers, .halt => "h\nregs\nexit\n",
         .step => "h\ns\nregs\nexit\n",
         .@"resume" => "g\nexit\n",
         .reset => "r\ng\nexit\n",
         .flash, .uart => return error.Unsupported,
     };
-    const found = try identify(io, tool, serial, device, text);
-    try identity.check(found, serial, cpuid);
+    const part_addr: ?u32 = if (part.addr != 0) part.addr else null;
+    const found = try identifyPart(io, tool, serial, device, part_addr, text);
+    try identity.checkWithPart(found, serial, cpuid, part.expected);
     var digits: [20]u8 = undefined;
     const usb = emu_list.format(serial, &digits);
     const extra = [_][]const u8{ "-USB", usb, "-Device", device, "-If", "SWD", "-Speed", "1000", "-AutoConnect", "1" };
     const result = try script(io, tool, usb, commands, &extra, text);
     if (result.code != 0) return error.ProbeToolFailed;
-    const checked = try parseSerial(result.output);
-    if (checked != serial) return error.WrongProbe;
+    if ((try parseSerial(result.output)) != serial) return error.WrongProbe;
     const need_regs = action == .registers or action == .halt or action == .step;
     return .{
         .identity = found,
@@ -85,9 +118,6 @@ pub fn operate(
     };
 }
 
-/// Validates `elf` against `flash_base..flash_base+flash_size`, verifies
-/// `serial` and `cpuid` over SWD, programs via `loadfile`, and verifies every
-/// loadable segment byte-for-byte via `verifybin`.
 pub fn flashAndVerify(
     io: std.Io,
     tool: Tool,
@@ -99,11 +129,30 @@ pub fn flashAndVerify(
     elf: []const u8,
     text: []u8,
 ) !FlashOutcome {
+    return flashAndVerifyProfile(io, tool, serial, device, cpuid, .{}, flash_base, flash_size, elf, text);
+}
+
+/// Validates `elf` against `flash_base..flash_base+flash_size`, verifies
+/// `serial`, `cpuid`, and optional factory `part` over SWD, programs via
+/// `loadfile`, and verifies every loadable segment byte-for-byte via `verifybin`.
+pub fn flashAndVerifyProfile(
+    io: std.Io,
+    tool: Tool,
+    serial: u64,
+    device: []const u8,
+    cpuid: u32,
+    part: PartSpec,
+    flash_base: u32,
+    flash_size: u32,
+    elf: []const u8,
+    text: []u8,
+) !FlashOutcome {
     var seg_buf: [elf_image.max_segments]elf_image.Segment = undefined;
     const summary = try elf_image.parse(elf, &seg_buf);
     try elf_image.checkWindow(summary.segments, flash_base, flash_size);
-    const found = try identify(io, tool, serial, device, text);
-    try identity.check(found, serial, cpuid);
+    const part_addr: ?u32 = if (part.addr != 0) part.addr else null;
+    const found = try identifyPart(io, tool, serial, device, part_addr, text);
+    try identity.checkWithPart(found, serial, cpuid, part.expected);
 
     var digits: [20]u8 = undefined;
     const usb = emu_list.format(serial, &digits);

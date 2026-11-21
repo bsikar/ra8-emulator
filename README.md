@@ -685,7 +685,14 @@ replacement.
 
 Managed Zig setup uses `ra8_emulator toolchain setup HOST TARGET --cache-root ABS --download`,
 or `--archive ABS --offline` for an offline kit. `toolchain doctor HOST TARGET --cache-root ABS --offline`
-checks an installation. Builds select it with `project build ... --toolchain-cache ABS` or
+checks an installation. `ra8_emulator toolchain profiles [TARGET]` prints the manufacturer-sourced
+hardware profiles (`fpb-ra8e1`, `fpb-ra4t1`, `ra8d2`, `grove-vision-ai-v2`, `ra8p1`), including
+flash windows, option-flash fences, SWD CPUID and factory `PNR0..3` part-number readback rules,
+user-installed SEGGER J-Link licensing requirements, and bench availability. Setting
+`"use_board_profile":true` on a `"kind":"jlink"` binding populates verified board parameters for
+arrived boards (`fpb-ra8e1`, `fpb-ra4t1`), checks both `SCB.CPUID` and `PNR0..3` before acting,
+and refuses unavailable or bootloader-only targets (`ra8d2`, `grove-vision-ai-v2`, `ra8p1`).
+Builds select the provisioned compiler with `project build ... --toolchain-cache ABS` or
 `serve --workspace DIR --build-toolchain-cache ABS`; builds never install or download a compiler.
 
 Runnable images and their source are in [examples/](examples/). Build them with

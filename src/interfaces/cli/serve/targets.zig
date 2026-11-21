@@ -27,6 +27,9 @@ pub const Binding = struct {
     scratch: []const u8 = "",
     device: []const u8 = "",
     cpuid: []const u8 = "",
+    part_addr: u32 = 0,
+    expected_part: []const u8 = "",
+    use_board_profile: bool = false,
     uart_wired: bool = true,
     flash_enabled: bool = false,
     flash_base: u32 = 0,
@@ -290,14 +293,31 @@ fn endpointConflicts(other: Binding, binding: Binding) bool {
         std.mem.eql(u8, other.target.host_id, binding.target.host_id));
 }
 
+fn hasJlinkOnlyFields(binding: Binding) bool {
+    return binding.flash_enabled or binding.flash_base != 0 or binding.flash_size != 0 or
+        binding.use_board_profile or binding.part_addr != 0 or binding.expected_part.len != 0;
+}
+
+fn applyJlinkDescriptor(descriptor: *model.Descriptor, binding: Binding) !void {
+    descriptor.identity_verified = false;
+    descriptor.disambiguation = "";
+    if (binding.use_board_profile) try jlink.checkNoProfileOverrides(binding);
+    const resolved = if (binding.use_board_profile) try jlink.resolveProfile(descriptor.board_id) else null;
+    const has_flash = if (resolved) |r| r.flash_enabled else binding.flash_enabled;
+    const wired = if (resolved) |r| r.uart_wired else binding.uart_wired;
+    const has_uart = wired and jlink.hostSupportsUart();
+    descriptor.operations = jlink.operationsFor(has_flash, has_uart);
+    descriptor.capabilities.hardware_debug = true;
+    descriptor.capabilities.flash = has_flash;
+    descriptor.capabilities.uart = has_uart;
+}
+
 fn describe(binding: Binding) !model.Descriptor {
     var descriptor = binding.target;
     descriptor.capabilities = .{};
     descriptor.connection = .configured;
     descriptor.uart = "";
-    if (binding.kind != .jlink and (binding.flash_enabled or binding.flash_base != 0 or binding.flash_size != 0)) {
-        return error.InvalidEndpoint;
-    }
+    if (binding.kind != .jlink and hasJlinkOnlyFields(binding)) return error.InvalidEndpoint;
     switch (binding.kind) {
         .rsp => {
             if (binding.port == 0 or binding.host.len == 0) return error.InvalidEndpoint;
@@ -311,15 +331,7 @@ fn describe(binding: Binding) !model.Descriptor {
             descriptor.capabilities.emulation = true;
             descriptor.connection = .connected;
         },
-        .jlink => {
-            descriptor.identity_verified = false;
-            descriptor.disambiguation = "";
-            const has_uart = binding.uart_wired and jlink.hostSupportsUart();
-            descriptor.operations = jlink.operationsFor(binding.flash_enabled, has_uart);
-            descriptor.capabilities.hardware_debug = true;
-            descriptor.capabilities.flash = binding.flash_enabled;
-            descriptor.capabilities.uart = has_uart;
-        },
+        .jlink => try applyJlinkDescriptor(&descriptor, binding),
         .agent => {
             try validateAgentBinding(binding);
             descriptor.identity_verified = false;
