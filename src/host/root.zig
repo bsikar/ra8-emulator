@@ -5,6 +5,7 @@
 //! never import it: a component that needs host data declares an interface,
 //! and the application fills it from here.
 pub const app_dirs = @import("app_dirs.zig");
+pub const board_profile = @import("board_profile.zig");
 pub const build = @import("build/root.zig");
 pub const console = @import("console.zig");
 pub const disk_file = @import("disk_file.zig");
