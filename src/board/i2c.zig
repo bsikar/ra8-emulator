@@ -53,6 +53,12 @@ pub const Wire = struct {
         }
     }
 
+    /// Attach only the RIIC controller (`0x4025_E000`) for parts without I3C
+    /// or EK-RA8D2-soldered I2C board components.
+    pub fn attachRiicOnly(self: *Wire, window: *periph.Bus) !void {
+        try window.add(self.block());
+    }
+
     /// Point every RIIC channel's receive path at the board's virtual time,
     /// so a part that stretches the clock lands its bytes on it.
     pub fn clock(self: *Wire, base: *const timebase.TimeBase) void {

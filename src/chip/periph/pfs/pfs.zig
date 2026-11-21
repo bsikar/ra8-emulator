@@ -69,6 +69,22 @@ pub const Pfs = struct {
         return .{};
     }
 
+    /// Non-zero `PmnPFS` reset values on RA8E1 (`R01UH1129EJ0110` §19.2.5 Note 1 p. 509).
+    pub fn resetRa8e1(self: *Pfs) void {
+        const resets = [_]struct { port: u32, pin: u32, value: u32 }{
+            .{ .port = 2, .pin = 1, .value = 0x0000_0010 },
+            .{ .port = 2, .pin = 8, .value = 0x0001_0010 },
+            .{ .port = 2, .pin = 9, .value = 0x0001_0400 },
+            .{ .port = 2, .pin = 10, .value = 0x0001_0410 },
+            .{ .port = 2, .pin = 11, .value = 0x0001_0010 },
+            .{ .port = 8, .pin = 14, .value = 0x1301_0000 },
+            .{ .port = 8, .pin = 15, .value = 0x1301_0000 },
+        };
+        for (resets) |entry| {
+            self.entries[indexOf(entry.port, entry.pin)] = entry.value;
+        }
+    }
+
     pub fn quiet(self: *const Pfs) bool {
         return self.programmed == 0 and self.direction_refused == 0 and self.guard.quiet() and self.ordering.quiet();
     }
@@ -147,6 +163,29 @@ pub const Pfs = struct {
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
+        };
+    }
+
+    /// RA8E1 `PORT0..9` pin function registers plus `PMISC` (`0x4040_0D00..0x4040_0D7F`),
+    /// leaving unimplemented `PORT10..14` unmapped.
+    pub fn blocksRa8e1(self: *Pfs) [2]periph.Block {
+        return .{
+            .{
+                .name = "PFS0..9",
+                .base = win_base,
+                .size = 10 * limits.pin_count * 4,
+                .context = self,
+                .readFn = readThunk,
+                .writeFn = writeThunk,
+            },
+            .{
+                .name = "PMISC",
+                .base = win_base + region.pmisc,
+                .size = region.pmisc_words * 4,
+                .context = self,
+                .readFn = readThunk,
+                .writeFn = writeThunk,
+            },
         };
     }
 };

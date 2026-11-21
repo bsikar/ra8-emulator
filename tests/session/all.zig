@@ -163,6 +163,7 @@ test {
     _ = @import("rtc/rtc_test.zig");
     _ = @import("rtc/start_test.zig");
     _ = @import("periph_list_test.zig");
+    _ = @import("fpb_ra8e1_test.zig");
     _ = @import("pc_hits_test.zig");
     _ = @import("watchpoint_test.zig");
     _ = @import("spacing_test.zig");

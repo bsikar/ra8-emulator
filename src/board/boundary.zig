@@ -63,33 +63,12 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
 }
 
 pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
-    if (!self.desc().memory.attach_ra8_blocks) return tickBare(self, core, instructions, issuer);
+    const mode = self.desc().memory.resolvedPeripherals();
+    if (mode == .none) return tickBare(self, core, instructions, issuer);
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
-    const elapsed_ns = self.time.base.now() - before_ns;
-    self.watchdog.tickFor(elapsed_ns);
-    self.heartbeat.tickFor(elapsed_ns);
-    try self.watchdog.arm(&self.time.queue, self.time.base.now());
-    try self.heartbeat.arm(&self.time.queue, self.time.base.now());
-    self.lowpower.tick();
-    self.microphone.tick();
-    self.clock.tickFor(elapsed_ns);
-    try rtc_sched.arm(&self.clock, &self.time.queue, self.time.base.now());
-    agt_sched.tickFor(&self.interval, before_ns, self.time.base.now());
-    try agt_sched.arm(&self.interval, &self.time.queue, self.time.base.now());
-    gpt_sched.tickFor(&self.pwm, before_ns, self.time.base.now());
-    self.ptp.tick(elapsed_ns);
-    self.trace.tick();
-    self.rswitch.tick();
-    self.usb.tick();
-    if (self.display.output.vsync) |*frame| {
-        const now = self.time.base.now();
-        if (frame.tick(now)) {
-            self.display.frameEvent();
-            frame.notify(now);
-        }
-    }
+    try tickTimers(self, mode, before_ns);
     notifyFrameTaps(self);
     core_clock.retune(self);
     try takeResetRequestsFrom(self, core, issuer);
@@ -97,6 +76,44 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
         if (channel.device) |device| device.tick(&self.pins);
     }
     self.console_input.poll(&self.serial);
+    if (mode == .ra8_dual) pollDualInputs(self);
+    try raisePinEdges(self, core);
+    try drainEvents(self, core, mode);
+    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
+    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
+    // Drains after the reset request may have latched a line again.
+    if (self.reboot) |pending| if (pending.requested) clearIrqLatches(self);
+    if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
+}
+
+fn tickTimers(self: *Board, mode: chip.core.machine.memory.PeripheralSet, before_ns: u64) !void {
+    const now = self.time.base.now();
+    const elapsed_ns = now - before_ns;
+    self.watchdog.tickFor(elapsed_ns);
+    self.heartbeat.tickFor(elapsed_ns);
+    try self.watchdog.arm(&self.time.queue, now);
+    try self.heartbeat.arm(&self.time.queue, now);
+    self.lowpower.tick();
+    self.clock.tickFor(elapsed_ns);
+    try rtc_sched.arm(&self.clock, &self.time.queue, now);
+    agt_sched.tickFor(&self.interval, before_ns, now);
+    try agt_sched.arm(&self.interval, &self.time.queue, now);
+    gpt_sched.tickFor(&self.pwm, before_ns, now);
+    self.trace.tick();
+    self.usb.tick();
+    if (mode != .ra8_dual) return;
+    self.microphone.tick();
+    self.ptp.tick(elapsed_ns);
+    self.rswitch.tick();
+    if (self.display.output.vsync) |*frame| {
+        if (frame.tick(now)) {
+            self.display.frameEvent();
+            frame.notify(now);
+        }
+    }
+}
+
+fn pollDualInputs(self: *Board) void {
     self.touch_input.poll(&self.wire.panel, &self.pins);
     self.input_script.dispatchObserved(
         self.time.base.now(),
@@ -105,12 +122,12 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
         &self.touch_input,
         self.input_landing,
     );
-    try raisePinEdges(self, core);
+}
+
+fn drainEvents(self: *Board, core: Guest, mode: chip.core.machine.memory.PeripheralSet) !void {
     try drain(self, core, self.serial.dueEvents());
     try drain(self, core, self.lowpower.dueEvents());
-    try drain(self, core, self.mailbox.dueEvents());
     try drain(self, core, self.can.dueEvents());
-    try drain(self, core, self.npu.dueEvents());
     try drain(self, core, self.clock.dueEvents());
     try drain(self, core, self.interval.dueEvents());
     try drain(self, core, self.pwm.dueEvents());
@@ -118,11 +135,9 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
     try drain(self, core, self.dma.dueEvents());
     try drain(self, core, self.usb.dueEvents());
     try drain(self, core, self.links.takeEvents());
-    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
-    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
-    // Drains after the reset request may have latched a line again.
-    if (self.reboot) |pending| if (pending.requested) clearIrqLatches(self);
-    if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
+    if (mode != .ra8_dual) return;
+    try drain(self, core, self.mailbox.dueEvents());
+    try drain(self, core, self.npu.dueEvents());
 }
 
 fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {

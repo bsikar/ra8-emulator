@@ -39,8 +39,8 @@ pub const Input = struct {
                 h.feedFn(h.context, self.reply.text);
                 h.feedFn(h.context, "\n");
             } else {
-                unit.feed(sci.console_channel, self.reply.text);
-                unit.feed(sci.console_channel, "\n");
+                unit.feedConsole(self.reply.text);
+                unit.feedConsole("\n");
             }
         }
         const source = self.source orelse return;
@@ -54,6 +54,6 @@ pub const Input = struct {
             h.feedFn(h.context, bytes[0..count]);
             return;
         }
-        unit.feed(sci.console_channel, bytes[0..count]);
+        unit.feedConsole(bytes[0..count]);
     }
 };

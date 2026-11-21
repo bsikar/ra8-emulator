@@ -185,3 +185,21 @@ test "a Non-secure alias store to an undelegated bit lands as before" {
     bus.write(win_base + periph.ns_offset + 4, 4, reset_rest & ~@as(u32, 1 << 31));
     try std.testing.expectEqual(reset_rest & ~@as(u32, 1 << 31), bus.read(win_base + 4, 4));
 }
+
+test "resetRa8e1 sets MSTPCRA defaults and maps GPT5 to MSTPE26 independently of GPT4" {
+    var modules = Mstp{};
+    modules.resetRa8e1();
+    try std.testing.expectEqual(@as(u32, 0xFFB7_7FFC), modules.regs[0]);
+    const gpt4 = 0x4032_2400;
+    const gpt5 = 0x4032_2500;
+    try std.testing.expect(modules.stopped(gpt4));
+    try std.testing.expect(modules.stopped(gpt5));
+
+    modules.applyWrite(win_base + 16, 4, reset_rest & ~(@as(u32, 1) << 27));
+    try std.testing.expect(!modules.stopped(gpt4));
+    try std.testing.expect(modules.stopped(gpt5));
+
+    modules.applyWrite(win_base + 16, 4, reset_rest & ~(@as(u32, 1) << 26));
+    try std.testing.expect(modules.stopped(gpt4));
+    try std.testing.expect(!modules.stopped(gpt5));
+}

@@ -36,6 +36,7 @@ const eink = @import("ra8_components").eink;
 const elc = @import("ra8_chip").periph.elc;
 const esp_hosted = @import("ra8_components").esp_hosted;
 const fault_clear = @import("ra8_chip").periph.fault.clear;
+const fcache = @import("ra8_chip").vendor.renesas.ra8e1.fcache;
 const frame_tap = @import("frame_tap.zig");
 const glcdc = @import("ra8_chip").periph.glcdc;
 const gpio = @import("ra8_chip").periph.gpio;
@@ -146,6 +147,8 @@ pub const Board = struct {
     /// into high impedance, and the state bit firmware reads back to prove it.
     shutoff: poeg.Poeg,
     protection: prcr.Prcr,
+    /// Flash cache and wait-cycle control (`FCACHE` @ `0x4001_C100`).
+    fcache: fcache.Fcache,
     backup: bkup.Bkup,
     /// VBTBPCR1: the battery power-supply switch stop.
     battery_switch: bkup.pcr1.Pcr1,
@@ -372,19 +375,9 @@ pub const Board = struct {
         self.frame_tap = self.frame_taps.first();
     }
 
-    /// A fresh board; what each block starts as lives in construct.zig.
+    /// A fresh board; initialization and teardown live in construct.zig.
     pub const init = construct.build;
-
-    pub fn deinit(self: *Board) void {
-        self.capture.source.close();
-        self.c6.deinit();
-        self.sd.deinit();
-        self.host_card.deinit();
-        self.options.deinit();
-        self.nor.deinit();
-        self.bus.deinit();
-        self.panel.deinit();
-    }
+    pub const deinit = construct.destroy;
     pub const tick = boundary.tick;
     pub const tickFrom = boundary.tickFrom;
     pub const raise = boundary.raise;

@@ -63,6 +63,13 @@ pub const Usb = struct {
         try bus.add(self.device.block());
     }
 
+    /// Attach only the full-speed controller (`USBFS` @ `0x4025_0000`) for
+    /// parts without `USBHS`.
+    pub fn attachFs(self: *Usb, bus: *periph.Bus) periph.Error!void {
+        self.device.connectVbus();
+        try bus.add(self.device.block());
+    }
+
     /// Cable the HS host jack to the board's own FS device jack. The board
     /// has to be at its final address: both ends keep pointers into it.
     pub fn loopBack(self: *Usb) void {

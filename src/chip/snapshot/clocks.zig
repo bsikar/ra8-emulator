@@ -35,7 +35,7 @@ const parts = [_]Part{
     .{ .name = "standby_cancel" },
     .{ .name = "gpt_clock", .skip = &.{"modules"} },
     .{ .name = "octa", .skip = &.{"clocks"} },
-    .{ .name = "modules", .skip = &.{ "attribution", "bus", "octa", "last_gated", "dropped" } },
+    .{ .name = "modules", .skip = &.{ "attribution", "bus", "octa", "last_gated", "dropped", "ra8e1" } },
 };
 
 pub fn save(board: anytype, writer: anytype) !void {

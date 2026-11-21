@@ -110,7 +110,7 @@ pub fn prepare(cpu0: *Cpu0, board: *Board, io: std.Io, image: elf.Image, parts: 
         options.profile_folded != null,
         if (options.cpu == .zig) options.cpu1_path else null,
     );
-    option_memory.apply(&board.heartbeat, cpu0.own());
+    option_memory.applyForMachine(&board.heartbeat, cpu0.own(), board.desc().memory);
     if (!options.ctl_cpu_load) _ = try report.frames.out.Armed.armForCli(
         std.heap.page_allocator,
         io,

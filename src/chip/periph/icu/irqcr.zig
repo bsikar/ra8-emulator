@@ -38,17 +38,20 @@
 pub const channels: usize = 32;
 pub const first_run: usize = 16;
 pub const off_a: u32 = 0x0000;
+pub const off_nmicr: u32 = 0x0010;
 pub const off_b: u32 = 0x0014;
 
 /// The window covers both runs and the four reserved bytes between them.
 pub const win_span: u32 = off_b + first_run;
 
-/// IRQCRi fields (HUM Ch 14.2.12 p 535). Bits 2, 3 and 6 are reserved.
+/// IRQCRi and NMICR fields (R01UH1129EJ0110 §13.2). Bits 2, 3 and 6 are reserved.
 pub const field = struct {
     pub const irqmd: u8 = 0x03;
     pub const fclksel: u8 = 0x30;
     pub const flten: u8 = 0x80;
     pub const occupied: u8 = irqmd | fclksel | flten;
+    pub const nmimd: u8 = 0x01;
+    pub const nmicr_occupied: u8 = nmimd | fclksel | flten;
 };
 
 /// The ELC event number an IRQ channel raises. ra8_elc_regs.h gives IRQ0 as
@@ -67,15 +70,16 @@ pub fn channelAt(offset: u32) ?usize {
     return null;
 }
 
-/// The thirty-two control bytes and the rewrites the manual forbids.
+/// The thirty-two control bytes, NMICR, and the rewrites the manual forbids.
 pub const Irqcr = struct {
     pins: [channels]u8 = @splat(0),
+    nmicr: u8 = 0,
     /// Stores that changed a pin's byte while its event was routed.
     rewrites_while_routed: u32 = 0,
 
     /// A run that never configured a pin stays out of the report.
     pub fn quiet(self: *const Irqcr) bool {
-        if (self.rewrites_while_routed != 0) return false;
+        if (self.rewrites_while_routed != 0 or self.nmicr != 0) return false;
         for (self.pins) |pin| {
             if (pin != 0) return false;
         }
@@ -83,8 +87,14 @@ pub const Irqcr = struct {
     }
 
     pub fn read(self: *const Irqcr, offset: u32) u8 {
+        if (offset == off_nmicr) return self.nmicr;
         const channel = channelAt(offset) orelse return 0;
         return self.pins[channel];
+    }
+
+    /// Take a store to `NMICR` (`+0x10`).
+    pub fn storeNmicr(self: *Irqcr, value: u8) void {
+        self.nmicr = value & field.nmicr_occupied;
     }
 
     /// Take a store. `routed` is whether the ICU currently links this

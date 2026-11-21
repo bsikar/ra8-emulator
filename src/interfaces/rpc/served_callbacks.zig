@@ -1,5 +1,4 @@
 //! Session RPC callback adapters for clocks, inspection, and host input.
-const chip = @import("ra8_chip");
 const harness = @import("ra8_session").harness;
 const periph_list = @import("ra8_session").periph_list;
 const region_map = @import("ra8_session").region.map;
@@ -46,7 +45,7 @@ pub fn closeC6(context: *anyopaque) void {
 }
 pub fn feedConsoleDirect(context: *anyopaque, bytes: []const u8) anyerror!void {
     const self: *Served = @ptrCast(@alignCast(context));
-    self.owner.board().serial.feed(chip.periph.sci.console_channel, bytes);
+    self.owner.board().serial.feedConsole(bytes);
 }
 pub fn listParts(context: *anyopaque, out: []u8) anyerror![]const u8 {
     const plugs: *session_plug.Plugs = @ptrCast(@alignCast(context));

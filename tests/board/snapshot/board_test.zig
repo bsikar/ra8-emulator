@@ -165,3 +165,64 @@ test "shipped D2 and P1 keep 1-byte part tags while non-catalog machines encode 
     try std.testing.expectError(error.WrongPart, section.load(&m85.board, m33_bytes.written()));
     try std.testing.expectEqual(@as(u8, 0x33), m85.board.c6.reply[0]);
 }
+
+fn allocRig() !*Rig {
+    const rig = try std.testing.allocator.create(Rig);
+    errdefer std.testing.allocator.destroy(rig);
+    try rig.build();
+    return rig;
+}
+
+fn freeRig(rig: *Rig) void {
+    rig.deinit();
+    std.testing.allocator.destroy(rig);
+}
+
+test "ra8e1 snapshot encodes machine name and refuses WrongPart across targets" {
+    var e1_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer e1_bytes.deinit();
+    {
+        const e1 = try allocRig();
+        defer freeRig(e1);
+        e1.board.machine = &machine_mod.catalog.ra8e1;
+        e1.board.fcache.flwt = 4;
+        try saved(&e1.board, &e1_bytes);
+        const e1_part = (try file.Reader.find(e1_bytes.written(), .part)).?;
+        try std.testing.expectEqualSlices(u8, &([_]u8{section.named_part_tag} ++ "ra8e1".*), e1_part.payload);
+    }
+
+    {
+        const e1_fresh = try allocRig();
+        defer freeRig(e1_fresh);
+        e1_fresh.board.machine = &machine_mod.catalog.ra8e1;
+        try section.load(&e1_fresh.board, e1_bytes.written());
+        try std.testing.expectEqual(@as(u8, 4), e1_fresh.board.fcache.flwt);
+    }
+
+    const mismatched = [_]*const machine_mod.Machine{
+        &machine_mod.catalog.ra8d2,
+        &machine_mod.catalog.ra8p1,
+        &machine_mod.catalog.cortex_m33,
+        &machine_mod.catalog.cortex_m85,
+    };
+    for (mismatched) |other| {
+        const rig = try allocRig();
+        defer freeRig(rig);
+        rig.board.machine = other;
+        rig.board.part = other.part;
+        rig.board.fcache.flwt = 2;
+        try std.testing.expectError(error.WrongPart, section.load(&rig.board, e1_bytes.written()));
+        try std.testing.expectEqual(@as(u8, 2), rig.board.fcache.flwt);
+
+        var other_bytes = std.Io.Writer.Allocating.init(std.testing.allocator);
+        defer other_bytes.deinit();
+        try saved(&rig.board, &other_bytes);
+
+        const e1_target = try allocRig();
+        defer freeRig(e1_target);
+        e1_target.board.machine = &machine_mod.catalog.ra8e1;
+        e1_target.board.fcache.flwt = 1;
+        try std.testing.expectError(error.WrongPart, section.load(&e1_target.board, other_bytes.written()));
+        try std.testing.expectEqual(@as(u8, 1), e1_target.board.fcache.flwt);
+    }
+}

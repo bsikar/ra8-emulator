@@ -210,10 +210,16 @@ pub const Icu = struct {
     }
 
     pub fn block(self: *Icu) periph.Block {
+        return self.blockSlots(slots);
+    }
+
+    /// Expose the first `slot_count` `IELSR` slots (RA8E1 provides 96: `IELSR0..95`).
+    pub fn blockSlots(self: *Icu, slot_count: u32) periph.Block {
+        const capped: u32 = @min(slot_count, @as(u32, slots));
         return .{
             .name = "ICU event links",
             .base = win_base,
-            .size = win_span,
+            .size = capped * 4,
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,
@@ -233,11 +239,28 @@ pub const Icu = struct {
         return .{ self.select.block(), self.nmi.block() };
     }
 
+    /// The NMI/wake-up block alone, for single-core parts without `INTSELR`.
+    pub fn nmiBlock(self: *Icu) periph.Block {
+        return self.nmi.block();
+    }
+
     pub fn pinsBlock(self: *Icu) periph.Block {
         return .{
             .name = "ICU IRQ pins",
             .base = icu_base,
             .size = irqcr.win_span,
+            .context = self,
+            .readFn = pinsReadThunk,
+            .writeFn = pinsWriteThunk,
+        };
+    }
+
+    /// RA8E1 `IRQCR0..IRQCR15` (`+0x00..+0x0F`) and `NMICR` (`+0x10`, `R01UH1129EJ0110` §13.2).
+    pub fn pinsBlockRa8e1(self: *Icu) periph.Block {
+        return .{
+            .name = "ICU IRQ pins",
+            .base = icu_base,
+            .size = irqcr.off_nmicr + 1,
             .context = self,
             .readFn = pinsReadThunk,
             .writeFn = pinsWriteThunk,
@@ -348,8 +371,12 @@ fn pinsWriteThunk(context: *anyopaque, address: u32, width: u3, value: u32) void
     var step: u32 = 0;
     while (step < width) : (step += 1) {
         const offset = first + step;
-        const channel = irqcr.channelAt(offset) orelse continue;
         const byte: u8 = @truncate(value >> @intCast(step * 8));
+        if (offset == irqcr.off_nmicr) {
+            self.pins.storeNmicr(byte);
+            continue;
+        }
+        const channel = irqcr.channelAt(offset) orelse continue;
         self.pins.store(offset, byte, self.pinRouted(channel));
     }
 }

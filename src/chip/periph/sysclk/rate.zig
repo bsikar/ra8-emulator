@@ -33,6 +33,7 @@ pub const Inputs = struct {
     divcr2: u16,
     pll1: pll_config.Config,
     pll2: pll_config.Config,
+    hoco_hz: u64 = hoco_hz,
 };
 
 /// CPUCLK0 or CPUCLK1 in Hz, or null when the tree does not say.
@@ -49,24 +50,29 @@ pub fn coreHz(inputs: Inputs, core: Core) ?u64 {
 pub fn sourceHz(inputs: Inputs) ?u64 {
     return switch (inputs.source) {
         .moco => moco_hz,
-        .hoco => hoco_hz,
+        .hoco => inputs.hoco_hz,
         .main => xtal_hz,
-        .pll1 => pllP(inputs.pll1),
-        .pll2 => pllP(inputs.pll2),
+        .pll1 => pllPFor(inputs.pll1, inputs.hoco_hz),
+        .pll2 => pllPFor(inputs.pll2, inputs.hoco_hz),
         .loco, .subck, .reserved => null,
     };
 }
 
-/// A PLL's P output: input / PLIDIV x PLLMUL / PLODIVP. The multiplier is
-/// in quarters (PLLMULNF), so the product is taken in quarters too.
-pub fn pllP(config: pll_config.Config) ?u64 {
+/// A PLL's P output with an explicit HOCO frequency in Hz.
+pub fn pllPFor(config: pll_config.Config, selected_hoco_hz: u64) ?u64 {
     const input: u64 = switch (config.source()) {
         .main => xtal_hz,
-        .hoco => hoco_hz,
+        .hoco => selected_hoco_hz,
     };
     const in_ratio = config.inputRatio() orelse return null;
     const p = config.outputRatios()[0] orelse return null;
     const quarters: u64 = config.multiplier().quarters;
     if (quarters == 0) return null;
     return input * quarters / (4 * @as(u64, in_ratio) * p);
+}
+
+/// A PLL's P output: input / PLIDIV x PLLMUL / PLODIVP. The multiplier is
+/// in quarters (PLLMULNF), so the product is taken in quarters too.
+pub fn pllP(config: pll_config.Config) ?u64 {
+    return pllPFor(config, hoco_hz);
 }

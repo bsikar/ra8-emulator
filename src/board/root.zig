@@ -29,4 +29,5 @@ pub const sizing = @import("sizing.zig");
 pub const snapshot = @import("snapshot.zig");
 pub const switches = @import("switches.zig");
 pub const usb = @import("usb/usb.zig");
+pub const vendor = @import("vendor.zig");
 pub const wiring = @import("wiring.zig");

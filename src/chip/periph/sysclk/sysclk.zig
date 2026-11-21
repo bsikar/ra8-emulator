@@ -166,6 +166,11 @@ pub const Tree = struct {
         };
     }
 
+    /// RA8E1 reset clock selection (`R01UH1129EJ0110` §8.2.2): `SCKSCR = 0x01` (MOCO).
+    pub fn resetRa8e1(self: *Tree) void {
+        self.cksel = @backingInt(Source.moco);
+    }
+
     /// Untouched units stay out of the end-of-run report.
     pub fn quiet(self: *const Tree) bool {
         return self.programmed == 0 and self.selects == 0 and

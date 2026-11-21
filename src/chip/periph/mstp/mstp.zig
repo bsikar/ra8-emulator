@@ -53,6 +53,8 @@ const reg_b: u16 = 1;
 const reg_c: u16 = 2;
 const reg_d: u16 = 3;
 const reg_e: u16 = 4;
+const id_none: u16 = 0xFFFF;
+const gpt_base: u32 = 0x4032_2000;
 
 // MSTPCRB, HUM 11.2.7 p 444-445: SCI0..SCI9 are bits 31 down to 22.
 const ids_sci = [_]u16{
@@ -72,6 +74,12 @@ const ids_adc = [_]u16{id(reg_d, 21)};
 const ids_gpt = [_]u16{
     id(reg_e, 31), id(reg_e, 30), id(reg_e, 29), id(reg_e, 28), id(reg_e, 27),
     id(reg_e, 27), id(reg_e, 27), id(reg_e, 27), id(reg_e, 27), id(reg_e, 27),
+    id(reg_e, 21), id(reg_e, 20), id(reg_e, 19), id(reg_e, 18),
+};
+// RA8E1 MSTPCRE (R01UH1129EJ0110 §10.2.5): GPT0..5 -> b31..b26, GPT6..9 absent.
+const ids_gpt_ra8e1 = [_]u16{
+    id(reg_e, 31), id(reg_e, 30), id(reg_e, 29), id(reg_e, 28), id(reg_e, 27),
+    id(reg_e, 26), id_none,       id_none,       id_none,       id_none,
     id(reg_e, 21), id(reg_e, 20), id(reg_e, 19), id(reg_e, 18),
 };
 const ids_ulpt = [_]u16{ id(reg_e, 9), id(reg_e, 8) };
@@ -111,7 +119,7 @@ pub const families = [_]Family{
     .{ .base = 0x4025_E000, .stride = 0x100, .ids = &ids_riic, .name = "RIIC" },
     .{ .base = 0x4035_F000, .stride = 0x214, .ids = &ids_i3c, .name = "I3C" },
     .{ .base = 0x4022_1000, .stride = 0x100, .ids = &ids_agt, .name = "AGT" },
-    .{ .base = 0x4032_2000, .stride = 0x100, .ids = &ids_gpt, .name = "GPT" },
+    .{ .base = gpt_base, .stride = 0x100, .ids = &ids_gpt, .name = "GPT" },
     .{ .base = 0x4022_0000, .stride = 0x100, .ids = &ids_ulpt, .name = "ULPT" },
     .{ .base = 0x4023_3000, .stride = 0x100, .ids = &ids_dac, .name = "DAC_B" },
     .{ .base = 0x4025_D000, .stride = 0x100, .ids = &ids_ssie, .name = "SSIE" },
@@ -165,9 +173,23 @@ pub const Mstp = struct {
     /// The same drops, split by peripheral, so the end of the run can ask the
     /// gate again and tell a probe from a driver that never ungated.
     dropped: drops.Log = .{},
+    /// Selects RA8E1 per-channel GPT0..5 bits (MSTPE31..26).
+    ra8e1: bool = false,
 
     pub fn reset(self: *Mstp) void {
         self.* = .{};
+    }
+
+    /// RA8E1 reset defaults (`R01UH1129EJ0110` §10.2.1): `MSTPCRA = 0xFFB7_7FFC`.
+    pub fn resetRa8e1(self: *Mstp) void {
+        self.reset();
+        self.regs[0] = 0xFFB7_7FFC;
+        self.ra8e1 = true;
+    }
+
+    fn packedId(self: *const Mstp, owner: Owner) u16 {
+        if (self.ra8e1 and owner.family.base == gpt_base) return ids_gpt_ra8e1[owner.index];
+        return owner.family.ids[owner.index];
     }
 
     /// True while the peripheral owning `address` is unclocked. An address no
@@ -175,7 +197,7 @@ pub const Mstp = struct {
     /// exactly as it did before this slice.
     pub fn stopped(self: *const Mstp, address: u32) bool {
         const owner = ownerOf(address) orelse return false;
-        const packed_id = owner.family.ids[owner.index];
+        const packed_id = self.packedId(owner);
         const register = packed_id >> 8;
         const bit: u5 = @intCast(packed_id & 0x1F);
         if (register >= reg_count) return false;

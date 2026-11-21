@@ -85,6 +85,7 @@ pub const regs = struct {
     pub const pllcr: u32 = 0x00;
     pub const mosccr: u32 = 0x08;
     pub const hococr: u32 = 0x0C;
+    pub const hococr2: u32 = 0x0D;
     pub const oscsf: u32 = 0x12;
     pub const pll2cr: u32 = 0x20;
 };
@@ -134,6 +135,25 @@ pub const Oscillators = struct {
         self.shadow[regs.pllcr] = stop;
         self.shadow[regs.pll2cr] = stop;
         return self;
+    }
+
+    /// RA8E1 reset defaults (R01UH1129EJ0110 §8.2): HOCO stopped with blank
+    /// OFS1.HOCOFRQ0 selecting 48 MHz (`HOCOCR2 = 0x07`).
+    pub fn resetRa8e1(self: *Oscillators) void {
+        self.shadow[regs.hococr] = stop;
+        self.shadow[regs.hococr2] = 0x07;
+    }
+
+    /// HOCO frequency decoded from `HOCOCR2[2:0]` (`R01UH1129EJ0110` §8.2).
+    pub fn hocoHz(self: *const Oscillators) ?u64 {
+        return switch (self.shadow[regs.hococr2] & 0x07) {
+            0 => 16_000_000,
+            1 => 18_000_000,
+            2 => 20_000_000,
+            4 => 32_000_000,
+            7 => 48_000_000,
+            else => null,
+        };
     }
 
     /// Untouched units stay out of the end-of-run report.

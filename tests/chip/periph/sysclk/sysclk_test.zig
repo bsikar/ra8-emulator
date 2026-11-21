@@ -202,3 +202,12 @@ test "an uncited source, an unconfigured PLL and a prohibited divider leave the 
     const prohibited = rate.Inputs{ .source = .hoco, .divcr2 = 0x0007, .pll1 = .{}, .pll2 = .{} };
     try std.testing.expectEqual(@as(?u64, null), rate.coreHz(prohibited, .cpu0));
 }
+
+test "RA8E1 tree resets to MOCO and prices HOCO at configured 48 MHz" {
+    var fix: Fixture = undefined;
+    fix.init();
+    fix.tree.resetRa8e1();
+    try std.testing.expectEqual(sysclk.Source.moco, fix.tree.source());
+    const inputs = rate.Inputs{ .source = .hoco, .divcr2 = 0, .pll1 = .{}, .pll2 = .{}, .hoco_hz = 48_000_000 };
+    try std.testing.expectEqual(@as(?u64, 48_000_000), rate.coreHz(inputs, .cpu0));
+}

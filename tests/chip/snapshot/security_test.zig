@@ -5,6 +5,7 @@
 const std = @import("std");
 const ra8 = @import("ra8");
 const p = ra8.chip.periph;
+const fcache = ra8.chip.vendor.renesas.ra8e1.fcache;
 const mpu_guard = ra8.chip.core.mpu_guard;
 const file = ra8.snapshot.file;
 const security = ra8.chip.snapshot.security;
@@ -33,6 +34,7 @@ const Stand = struct {
     control: p.scb.Scb,
     clears: p.fault.status.clear.Clears,
     caches: p.cache.Cache,
+    fcache: fcache.Fcache,
     regions: p.mpu.Mpu,
     regions_ns: p.mpu.Mpu,
     guard: mpu_guard.Guard,
@@ -52,6 +54,7 @@ fn fresh(live: *Live, ra8p1: bool) Stand {
         .control = p.scb.Scb.init(),
         .clears = p.fault.status.clear.Clears.init(),
         .caches = p.cache.Cache.init(),
+        .fcache = fcache.Fcache.init(&live.protection),
         .regions = p.mpu.Mpu.init(),
         .regions_ns = p.mpu.Mpu.init(),
         .guard = mpu_guard.Guard.init(),
@@ -78,6 +81,9 @@ fn busy() Stand {
     board.clears.hfsr.dirty = true;
     board.caches.selected = 1;
     board.caches.enables = 5;
+    board.fcache.flwt = 2;
+    board.fcache.fcachee = 1;
+    board.fcache.stores = 3;
     board.regions.table[3] = .{ .base = 0x2000_0000, .limit = 0x2000_FFFF, .enabled = true, .rbar = 0x2000_0001, .rlar = 0x2000_FFE1 };
     board.regions.selected = 3;
     board.regions_ns.ctrl = 5;
@@ -114,6 +120,7 @@ test "a load keeps the target's wiring" {
     try std.testing.expectEqual(&second.sram, target.idau.sram.?);
     try std.testing.expectEqual(banks, target.idau.banks);
     try std.testing.expectEqual(&second.protection, target.chip_attribution.protection.?);
+    try std.testing.expectEqual(&second.protection, target.fcache.protection.?);
     try std.testing.expectEqual(&second.watchdog, target.causes.masks.watchdog_armed);
     try std.testing.expectEqual(@as(u32, 3), target.causes.masks.dropped_locked);
     try std.testing.expectEqual(@as(?u32, 0x0010_0000), target.idau.code_secure);

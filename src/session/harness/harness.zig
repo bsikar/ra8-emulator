@@ -240,7 +240,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     errdefer state.cpu0.close();
     _ = try state.cpu0.attachStore(&state.board, state.image);
     const vector = state.image.vectorBaseFor(state.board.desc().memory) orelse return error.NoVectorTable;
-    option_memory.apply(&state.board.heartbeat, state.cpu0.own());
+    option_memory.applyForMachine(&state.board.heartbeat, state.cpu0.own(), chosen.memory);
     const primary = chosen.primary();
     wirePrimaryScs(state, primary);
     state.quiet = .{ .inner = state.pending.source(), .memory = state.watching.view() };

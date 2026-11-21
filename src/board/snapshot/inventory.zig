@@ -98,6 +98,7 @@ pub const saved = .{
     "control",
     "clears",
     "caches",
+    "fcache",
     "regions",
     "regions_ns",
 

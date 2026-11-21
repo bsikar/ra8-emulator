@@ -40,8 +40,8 @@ pub const Reply = struct {
     /// Queues the due reply and its newline on the console SCI's RX.
     pub fn poll(self: *Reply, unit: *sci.Sci) void {
         if (!self.due) return;
-        unit.feed(sci.console_channel, self.text);
-        unit.feed(sci.console_channel, "\n");
+        unit.feedConsole(self.text);
+        unit.feedConsole("\n");
         self.due = false;
         self.sent = true;
     }

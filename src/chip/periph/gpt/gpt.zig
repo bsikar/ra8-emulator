@@ -244,6 +244,29 @@ pub const Gpt = struct {
             .writeFn = writeThunk,
         };
     }
+
+    /// RA8E1 implements `GPT32` channels `0..5` and `GPT16` channels `10..13`
+    /// (`R01UH1129EJ0110` §21.1); channels `6..9` do not exist.
+    pub fn blocksRa8e1(self: *Gpt) [2]periph.Block {
+        return .{
+            .{
+                .name = "GPT 0..5",
+                .base = win_base,
+                .size = 6 * stride,
+                .context = self,
+                .readFn = readThunk,
+                .writeFn = writeThunk,
+            },
+            .{
+                .name = "GPT 10..13",
+                .base = win_base + 10 * stride,
+                .size = 4 * stride,
+                .context = self,
+                .readFn = readThunk,
+                .writeFn = writeThunk,
+            },
+        };
+    }
 };
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
