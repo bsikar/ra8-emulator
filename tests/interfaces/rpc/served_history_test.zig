@@ -1,8 +1,10 @@
 //! Persisted dual roots and reopen startup use both initial images.
 const std = @import("std");
+
 const builtin = @import("builtin");
 const ra8 = @import("ra8");
 const rig = @import("regression_rig.zig");
+
 const gpa = std.testing.allocator;
 const root_mod = ra8.session.history_root;
 
@@ -46,6 +48,7 @@ test "ordinary reopen refuses invalid provenance before image access or log repa
         .{ .value = changed(root, "emulator_commit", @as([20]u8, @splat(7))), .err = error.BuildMismatch },
         .{ .value = changed(root, "model_version", "different model"), .err = error.ModelMismatch },
         .{ .value = changed(root, "snapshot_version", root.snapshot_version + 1), .err = error.SnapshotVersionMismatch },
+        .{ .value = changed(root, "part", "sole-m33"), .err = error.UnsupportedRootPart },
         .{ .value = changed(root, "board_profile", "version=2\n"), .err = error.BadVersion },
         .{ .value = changed(root, "grid", "unsupported grid"), .err = error.UnsupportedRootGrid },
         .{ .value = changed(root, "idle_skip", false), .err = error.UnsupportedRootIdleSkip },

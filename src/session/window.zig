@@ -96,5 +96,33 @@ pub fn rewind(self: *api.Session, core: api.Core, back: u32) anyerror!void {
 
 /// Puts the run back one recorded stop on `core`.
 pub fn stepBack(self: *api.Session, core: api.Core) anyerror!void {
-    return rewind(self, core, 1);
+    if (self.window_driver) |driver| driver.settleFn(driver.context, self);
+    if (self.window) |w| {
+        if (canStepBack(w, core, 1)) {
+            _ = try canonical_step.stepBack(w, toTrailCore(core));
+            self.publish(.{ .core = core, .kind = .rewound });
+            return;
+        }
+    }
+    return session_control.stepBack(self, core);
+}
+
+/// Rewinds to the newest breakpoint or fault behind the cursor, or the oldest stop.
+pub fn reverseContinue(self: *api.Session, core: api.Core) anyerror!void {
+    if (self.window_driver) |driver| driver.settleFn(driver.context, self);
+    if (self.window) |w| {
+        if (canStepBack(w, core, 1)) return rewindWindowToBreak(self, w, core);
+    }
+    return session_control.reverseContinue(self, core);
+}
+
+fn rewindWindowToBreak(self: *api.Session, w: *window_engine.ReverseWindow, core: api.Core) anyerror!void {
+    const tc = toTrailCore(core);
+    const machine = try self.machine(core);
+    while (canStepBack(w, core, 1)) {
+        _ = try canonical_step.stepBack(w, tc);
+        const pc = try self.register(core, .pc);
+        if (machine.breaks.hit(pc) != null) break;
+    }
+    self.publish(.{ .core = core, .kind = .rewound });
 }

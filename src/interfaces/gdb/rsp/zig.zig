@@ -55,6 +55,7 @@ pub fn handles(request: []const u8) bool {
     if (request.len == 0) return false;
     if (std.mem.startsWith(u8, request, "vCont")) return true;
     if (std.mem.eql(u8, request, "qfThreadInfo") or std.mem.eql(u8, request, "qsThreadInfo")) return true;
+    if (std.mem.startsWith(u8, request, "qThreadExtraInfo,")) return true;
     if (std.mem.eql(u8, request, "qC")) return true;
     return switch (request[0]) {
         'b', 'c', 's', '?', 'H', 'T' => true,
@@ -66,18 +67,21 @@ pub fn handles(request: []const u8) bool {
 pub fn answer(target: *Target, request: []const u8, out: []u8) Error![]const u8 {
     if (std.mem.eql(u8, request, "vCont?")) return copy(out, vcont_actions);
     if (std.mem.startsWith(u8, request, "vCont;")) return vcont(target, request["vCont;".len..], out);
-    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (!target.session.hasCore(.cpu1))
+    if (std.mem.eql(u8, request, "qfThreadInfo")) return copy(out, if (!secondAttached(target))
         "m1"
     else
         "m1,2");
     if (std.mem.eql(u8, request, "qsThreadInfo")) return copy(out, "l");
+    if (std.mem.startsWith(u8, request, "qThreadExtraInfo,")) {
+        return threadExtraInfo(target, request["qThreadExtraInfo,".len..], out);
+    }
     if (std.mem.eql(u8, request, "qC")) return print(out, "QC{d}", .{thread(target)});
     return switch (request[0]) {
         'b' => reverse(target, request, out),
         'c' => resume_(target, .cont, out),
         's' => resume_(target, .step, out),
         '?' => stopReply(target, out),
-        'H' => copy(out, if (request.len > 1 and select(target, request[2..])) "OK" else request_error),
+        'H' => copy(out, if (validSelect(request) and select(target, request[2..])) "OK" else request_error),
         'T' => copy(out, if (alive(target, request[1..])) "OK" else request_error),
         else => out[0..0],
     };
@@ -214,6 +218,32 @@ fn watchName(target: *Target, hit: watch_table.Hit) []const u8 {
     };
 }
 
+fn secondAttached(target: *const Target) bool {
+    return target.session.machine_desc.hasSecond() and target.session.hasCore(.cpu1);
+}
+
+fn validSelect(request: []const u8) bool {
+    return request.len > 2 and (request[1] == 'g' or request[1] == 'c');
+}
+
+/// On single-core machines, reports CPU0's core name and ISA architecture;
+/// dual-core machines keep the empty reply so existing thread labels stand.
+fn threadExtraInfo(target: *const Target, text: []const u8, out: []u8) Error![]const u8 {
+    if (target.session.machine_desc.hasSecond()) return out[0..0];
+    if (!alive(target, text)) return copy(out, request_error);
+    const info = target.session.coreInfo(.cpu0) orelse return copy(out, request_error);
+    const arch = if (info.profile.v8_1m) "armv8.1-m.main" else "armv8-m.main";
+    var label: [64]u8 = undefined;
+    const shown = std.fmt.bufPrint(&label, "CPU0 ({s}, {s})", .{ info.name, arch }) catch return Error.NoSpace;
+    if (shown.len * 2 > out.len) return Error.NoSpace;
+    for (shown, 0..) |byte, i| {
+        const hex = std.fmt.hex(byte);
+        out[i * 2] = hex[0];
+        out[i * 2 + 1] = hex[1];
+    }
+    return out[0 .. shown.len * 2];
+}
+
 /// The selected core's thread id: CPU0 is 1, CPU1 is 2.
 fn thread(target: *const Target) u32 {
     return @as(u32, @backingInt(target.session.currentCore())) + 1;
@@ -224,11 +254,11 @@ fn anyThread(text: []const u8) bool {
     return std.mem.eql(u8, text, "0") or std.mem.eql(u8, text, "-1");
 }
 
-/// Thread 1 is always there; thread 2 only with CPU1 attached.
+/// Thread 1 is always there; thread 2 only when the machine has a second core attached.
 fn alive(target: *const Target, text: []const u8) bool {
     if (anyThread(text)) return true;
     const id = std.fmt.parseInt(u32, text, 16) catch return false;
-    return id == 1 or (id == 2 and target.session.hasCore(.cpu1));
+    return id == 1 or (id == 2 and secondAttached(target));
 }
 
 /// Give the session to the core behind thread `text`; false when there is none.

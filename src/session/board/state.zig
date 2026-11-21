@@ -9,6 +9,7 @@ const chip = @import("ra8_chip");
 
 const Cpu = chip.core.cpu.cpu.Cpu;
 const Store = chip.core.cpu.memory.store.Store;
+const board_snap = @import("ra8_board").snapshot.board;
 const run_file = @import("ra8_board").snapshot.run;
 
 const systick = chip.snapshot.systick;
@@ -99,6 +100,7 @@ pub const Files = struct {
     /// Restores only `parts`; the board's attachments follow the board.
     pub fn readParts(self: *Files, bytes: []const u8, parts: run_file.Parts) !void {
         try self.single();
+        try board_snap.machineOf(self.board.desc(), bytes);
         var bases = .{ self.edge.timebase, self.edge.ns_timebase };
         try systick.load(.{ &bases[0], &bases[1] }, bytes);
         _ = try file.Reader.find(bytes, .stretch) orelse return error.Missing;

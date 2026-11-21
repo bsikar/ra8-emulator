@@ -1,13 +1,13 @@
 const std = @import("std");
-const ra8 = @import("ra8");
 
 const fixture = @import("fixture.zig");
-const bundle = ra8.snapshot.bundle;
-const importer = ra8.rpc.bundle_import;
+const ra8 = @import("ra8");
 const rig = @import("../regression_rig.zig");
-const gpa = std.testing.allocator;
-const elf = fixture.elf;
 
+const bundle = ra8.snapshot.bundle;
+const gpa = std.testing.allocator;
+const importer = ra8.rpc.bundle_import;
+const elf = fixture.elf;
 const metadata = fixture.metadata;
 
 test "snapshot bundle restores a separate session and leaves its source machine unchanged" {
@@ -90,6 +90,43 @@ test "malformed snapshot sections fail before creating any history storage" {
     try writer.finish();
     var input = std.Io.Reader.fixed(out.written());
     try std.testing.expectError(error.Truncated, importer.open(gpa, std.testing.io, &input, .{ .elf0 = elf }));
+}
+
+test "bundle import refuses cross-target snapshot and recording archives before creating history" {
+    const machine_mod = ra8.chip.core.machine;
+    const sole_m33: machine_mod.Machine = .{
+        .name = "sole-m33",
+        .label = "SOLE-M33",
+        .cores = .{
+            .primary = machine_mod.core.cortexM33(.{
+                .security = false,
+                .fpu = .single,
+                .systicks = 1,
+            }),
+        },
+        .part = .ra8d2,
+    };
+    var archive = try fixture.recording(false);
+    defer archive.deinit();
+    var temp = std.testing.tmpDir(.{});
+    defer temp.cleanup();
+    const path = try temp.dir.realPathFileAlloc(std.testing.io, ".", gpa);
+    defer gpa.free(path);
+    var input = std.Io.Reader.fixed(archive.bytes.written());
+    try std.testing.expectError(
+        error.WrongPart,
+        importer.open(gpa, std.testing.io, &input, .{
+            .history_root = path,
+            .expected_board = "ek-ra8d2",
+            .machine = &sole_m33,
+        }),
+    );
+    try std.testing.expectError(
+        error.Unmarked,
+        ra8.host.history.base.Base.existingConfigured(gpa, std.testing.io, path, .cache, .{
+            .recover = false,
+        }),
+    );
 }
 
 const Wall = struct {

@@ -7,6 +7,7 @@ const std = @import("std");
 
 const board_c6 = @import("ra8_session").board.recorded_c6;
 const board_rtc = @import("ra8_session").board.rtc;
+const catalog = @import("ra8_chip").core.machine.catalog;
 const cpu1_bringup = @import("ra8_session").cpu1.bringup;
 const harness = @import("ra8_session").harness;
 const proto = @import("session/rpc.zig");
@@ -33,12 +34,7 @@ const served_second = @import("served_second.zig");
 const session_branch = @import("ra8_session").history_branch;
 const session_fork = @import("ra8_session").history_fork_router;
 
-/// How a served session's persistent history is rooted, when the caller
-/// asks for one (RA8EMU-1196). A root puts every record on the host's
-/// disk through the application-owned bind; a null root keeps the
-/// history RAM-only through history_ram, capped by the RAM share, so
-/// nothing it writes lands on the disk. No options at all records
-/// nothing.
+/// How a served session's persistent or RAM-only history is rooted (RA8EMU-1196).
 pub const HistoryOpts = struct {
     /// Consumed even on open failure; an admitted import keeps its existing lease.
     imported: ?*history_bind.Bind = null,
@@ -154,7 +150,8 @@ pub const Served = struct {
         errdefer if (ram) |r| r.deinit();
         if (history_opts) |opts| if (bind == null) {
             if (opts.root) |root| {
-                bind = try openHistory(allocator, io, root, board_profile, opts, &initial);
+                const expected_part = (startup.machine orelse &catalog.ra8p1).name;
+                bind = try openHistory(allocator, io, root, board_profile, opts, &initial, expected_part);
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
@@ -386,6 +383,7 @@ fn openHistory(
     board_profile: ?[]const u8,
     opts: HistoryOpts,
     initial: *served_initial.Images,
+    expected_part: []const u8,
 ) !*history_bind.Bind {
     const id = if (opts.reopen) |text| try history.name.id(text) else null;
     return history_bind.Bind.open(allocator, io, root, .{
@@ -394,5 +392,6 @@ fn openHistory(
         .reopen = id,
         .board_profile = board_profile,
         .images = initial,
+        .expected_part = expected_part,
     });
 }
