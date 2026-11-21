@@ -81,6 +81,7 @@ pub const Driver = struct {
         self.ns_timebase.words.present = desc.systicks >= 2;
         units.state = .{
             .written = seeded.written,
+            .held = wiring.initial_hold and !wiring.releaseRunning(),
             .vector_base = seeded.vector_base,
             .interrupts = .{
                 .vector_base = seeded.vector_base,

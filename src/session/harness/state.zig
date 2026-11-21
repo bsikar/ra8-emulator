@@ -3,6 +3,7 @@ const advance_mod = @import("advance.zig");
 const Board = @import("ra8_board").board.Board;
 const board_boundary = @import("../board/boundary.zig");
 const BoardBus = @import("ra8_chip").core.cpu.board_bus.BoardBus;
+const bus_fault = @import("ra8_chip").periph.bus_fault;
 const checkpoints = @import("checkpoints.zig");
 const chunk_clock = @import("../chunk_clock.zig");
 const Cpu0 = @import("ra8_board").cpu0_store.Cpu0;
@@ -14,12 +15,15 @@ const files = @import("files.zig");
 const history_trail = @import("../history/trail.zig");
 const input_script = @import("ra8_components").input_script;
 const LoaderState = @import("loader_state.zig").LoaderState;
+const machine_mod = @import("ra8_chip").core.machine;
 const metrics = @import("metrics.zig");
 const mpu_check = @import("ra8_chip").core.cpu.board_bus.mpu_check;
 const NvicSource = @import("ra8_chip").core.cpu.exception.nvic_source.NvicSource;
+const Options = @import("options.zig").Options;
 const profile = @import("ra8_board").profile;
 const QuietSource = @import("ra8_chip").core.cpu.exception.quiet_source.QuietSource;
 const Reboot = @import("ra8_chip").core.reboot.Reboot;
+const SauSource = @import("ra8_chip").core.cpu.sau_source.SauSource;
 
 const rtos_hook = step_hook.rtos.hook;
 const rtos_publish = step_hook.rtos.publish;
@@ -50,6 +54,9 @@ pub const State = struct {
     memory: BoardBus,
     /// CPU0's MPU check, armed as a plain run arms it (boot.zig).
     check: mpu_check.Check,
+    sau: SauSource = undefined,
+    bus_miss: u32 = 0,
+    bus_tally: bus_fault.Tally = .{},
     machine: stop_machine.Machine,
     driver: step_hook.Driver,
     watching: watch_bus.WatchBus,
@@ -91,6 +98,17 @@ pub const State = struct {
     module_watch: txm_publish.Watcher,
     /// Set by watchModules and pairModules; the state is built without defaults.
     modules: txm_debug.Table,
+
+    pub fn armRuntime(self: *State, machine: *const machine_mod.Machine, options: Options) void {
+        if (machine.primary().security and (options.attribution or machine.peripheralsKind() == .hx6538)) {
+            self.sau = .{ .unit = &self.board.partitions, .idau = &self.board.idau };
+            self.cpu.attribution = self.sau.source();
+        }
+        if (options.bus_errors) {
+            self.cpu.bus.miss = &self.bus_miss;
+            self.cpu.bus.tally = &self.bus_tally;
+        }
+    }
 
     pub fn metricsRead(context: *anyopaque, core: u1) device_metrics.Snapshot {
         const self: *State = @ptrCast(@alignCast(context));

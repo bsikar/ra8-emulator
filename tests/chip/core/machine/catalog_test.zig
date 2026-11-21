@@ -6,13 +6,15 @@ const std = @import("std");
 const catalog = ra8.chip.core.machine.catalog;
 const cpuid = ra8.chip.periph.cpuid;
 
-test "ra8d2, ra8p1, ra8e1, ra4t1, cortex-m33, cortex-m55, and cortex-m85 resolve and refuse unknown names" {
+test "catalog machines resolve by exact name and alias, and refuse unknown names" {
     try std.testing.expectEqual(&catalog.ra8d2, catalog.find("ra8d2").?);
     try std.testing.expectEqual(&catalog.ra8p1, catalog.find("ra8p1").?);
     try std.testing.expectEqual(&catalog.ra8e1, catalog.find("ra8e1").?);
     try std.testing.expectEqual(&catalog.ra8e1, catalog.find("fpb-ra8e1").?);
     try std.testing.expectEqual(&catalog.ra4t1, catalog.find("ra4t1").?);
     try std.testing.expectEqual(&catalog.ra4t1, catalog.find("fpb-ra4t1").?);
+    try std.testing.expectEqual(&catalog.hx6538, catalog.find("hx6538").?);
+    try std.testing.expectEqual(&catalog.hx6538, catalog.find("grove-vision-ai-v2").?);
     try std.testing.expectEqual(&catalog.cortex_m33, catalog.find("cortex-m33").?);
     try std.testing.expectEqual(&catalog.cortex_m55, catalog.find("cortex-m55").?);
     try std.testing.expectEqual(&catalog.cortex_m85, catalog.find("cortex-m85").?);
@@ -24,7 +26,7 @@ test "ra8d2, ra8p1, ra8e1, ra4t1, cortex-m33, cortex-m55, and cortex-m85 resolve
     try std.testing.expectEqual(@as(?*const ra8.chip.core.machine.Machine, null), catalog.find(""));
 }
 
-test "ra8d2 and ra8p1 carry M85 primary and M33 secondary while ra8e1 is single-core M85" {
+test "catalog machines carry accurate core topologies and NPU capability" {
     for ([_]*const ra8.chip.core.machine.Machine{ &catalog.ra8d2, &catalog.ra8p1 }) |m| {
         try std.testing.expect(m.hasSecond());
         try std.testing.expectEqual(cpuid.cpu0, m.primary().cpuid);
@@ -40,6 +42,10 @@ test "ra8d2 and ra8p1 carry M85 primary and M33 secondary while ra8e1 is single-
     try std.testing.expect(!catalog.ra4t1.hasSecond());
     try std.testing.expect(!catalog.ra4t1.hasNpu());
     try std.testing.expectEqual(@as(u32, 0x410F_D214), catalog.ra4t1.primary().cpuid);
+    try std.testing.expect(catalog.hx6538.hasSecond());
+    try std.testing.expect(!catalog.hx6538.hasNpu());
+    try std.testing.expect(!catalog.cortex_m33.hasSecond());
+    try std.testing.expect(!catalog.cortex_m85.hasSecond());
 }
 
 test "cortex-m33 and cortex-m85 are single-core machines without CPU1 or NPU" {

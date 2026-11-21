@@ -42,6 +42,7 @@ pub const State = struct {
 
     /// CPU1's turn, in instructions, for one CPU0 round of `round`.
     pub fn turn(self: *const State, round: u32) u32 {
+        if (self.wiring) |w| if (w.clock_ratio) |ratio| return rate.ratioTurn(round, ratio);
         const word = if (self.dividers) |at| at.* else 0;
         return rate.turn(round, word);
     }
@@ -50,12 +51,16 @@ pub const State = struct {
     /// it, its VTOR is primed through `memory` and it is marked unvectored.
     pub fn heldInReset(self: *State, memory: Guest) bool {
         const wiring = self.wiring orelse return self.held;
-        const pending = wiring.reboot.* orelse return self.held;
-        if (pending.performed != self.resets_seen) {
-            self.resets_seen = pending.performed;
-            self.held = true;
+        if (wiring.reboot.*) |pending| {
+            if (pending.performed != self.resets_seen) {
+                self.resets_seen = pending.performed;
+                self.held = true;
+            }
+        } else if (!wiring.hold_while_gated) {
+            return self.held;
         }
-        if (self.held and wiring.release.running()) self.leaveReset(memory, wiring.release.initvtor);
+        if (wiring.hold_while_gated and !wiring.releaseRunning()) self.held = true;
+        if (self.held and wiring.releaseRunning()) self.leaveReset(memory, wiring.releaseInitVtor());
         return self.held;
     }
 

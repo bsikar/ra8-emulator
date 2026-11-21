@@ -60,3 +60,32 @@ test "while the host is held nothing is read from stdin and a due reply is retir
     reader.poll(&unit);
     try std.testing.expectEqual(@as(u32, 1), Held.reads);
 }
+
+const Sink = struct {
+    buf: [16]u8 = undefined,
+    len: usize = 0,
+
+    pub fn pushRx(self: *Sink, ch: u8) void {
+        if (self.len < self.buf.len) {
+            self.buf[self.len] = ch;
+            self.len += 1;
+        }
+    }
+};
+
+test "pollPush delivers due reply and stdin bytes to generic receiver" {
+    const fds = try ra8.host.pipe_pair.create(.{});
+    defer ra8.host.read.close(fds[0]);
+    defer ra8.host.read.close(fds[1]);
+
+    try send(fds[1], "ab");
+    var sink: Sink = .{};
+    var reader: input.Input = .{
+        .source = host_bytes.of(fds[0]),
+        .reply = .{ .text = "ok", .due = true },
+    };
+    reader.pollPush(&sink);
+
+    try std.testing.expectEqualStrings("ok\nab", sink.buf[0..sink.len]);
+    try std.testing.expect(reader.reply.sent and !reader.reply.due);
+}

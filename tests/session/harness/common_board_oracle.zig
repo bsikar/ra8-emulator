@@ -23,7 +23,7 @@ pub const board_included = .{
     "clock",           "can",         "mailbox",              "npu",            "lowpower",   "interval",         "pwm",
     "pwm_delay",       "ptp",         "monitors",             "watchdog",       "heartbeat",  "link",             "receiver",
     "host",            "causes",      "control",              "clears",         "caches",     "regions",          "regions_ns",
-    "guard",           "partitions",  "ra4t1",                "reboot",         "part",       "fcache",
+    "guard",           "partitions",  "ra4t1",                "reboot",         "part",       "fcache",           "hx",
 };
 
 pub const board_excluded = .{
@@ -145,6 +145,7 @@ fn hashDatapathAndMedia(h: *Hasher, board: *const Board) void {
     h.autoExcept(board.audio, .{"channels.listener"});
     h.autoExcept(board.spi, .{"channels.device"});
     h.autoExcept(board.npu, .{"memory"});
+    h.autoExcept(board.hx, .{"periph.uarts.channels.console"});
     h.autoExcept(board.raster, .{ "domain", "memory" });
     h.autoExcept(board.rswitch, .{
         "ports.domain", "ports.mdio",          "gateway.fwpc",

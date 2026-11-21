@@ -65,7 +65,6 @@
     {"count": 1, "fingerprint": "4bbf936ebff6c00c2522aefa26e61ba89a1b5cebd6e5f25e8e0417521f1b86d8", "path": "src/chip/periph/npu/vela/order.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "a0629440e9bd08f2c053a4cf512ad77d4b175fa437beae4ca81f1f8af69672a4", "path": "src/chip/periph/npu/vela/weights.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "99b4fe3ffef418260148669061ecdb81bf8018dbcfec55cc4efb89807925bfed", "path": "src/chip/periph/scb/bank.zig", "rule": "complexity"},
-    {"count": 1, "fingerprint": "d555cfe801f343d937e401c17e00fcd3daa071f5ee8d2ea446fa21cd8a677f1d", "path": "src/chip/periph/sci/input.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "88866aff36ae31e440bc28a960a2122a58de240571960c5c940b18aa6ec71112", "path": "src/chip/periph/usbfs/host.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "090c2f90210567b0581e6f8d7b639ac247eaceaf40b2042f92179c45deb6a7c1", "path": "src/components/eink_it8951/snapshot.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "999db4c1b1c6fe5cf2c61d11d088a4e40878b7a9daa6dcc34fd7c483e9b8477e", "path": "src/components/esp32c6_hosted/link.zig", "rule": "no_swallow_error"},

@@ -16,6 +16,10 @@ pub const Options = struct {
     /// Explicit machine description (RA8EMU-1342); null uses the catalog
     /// entry for `device`.
     machine: ?*const machine_mod.Machine = null,
+    /// Wire SAU/IDAU security attribution on the harness core (enabled automatically for HX6538).
+    attribution: bool = false,
+    /// Deliver architectural BusFaults instead of stopping immediately on an unmapped access.
+    bus_errors: bool = false,
     input_script: ?[]const u8 = null,
     /// Caller-supplied input script text; when set, `input_script` is not read
     /// through `files`.

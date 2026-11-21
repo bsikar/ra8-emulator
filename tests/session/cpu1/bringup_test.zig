@@ -4,6 +4,8 @@ const ra8 = @import("ra8");
 const gpa = std.testing.allocator;
 const first = @embedFile("../../fixtures/trustzone/cpu1_pingpong_ipc.elf");
 const second = @embedFile("../../fixtures/trustzone/cpu1_pingpong_ipc_cpu1.elf");
+const hx_cm55m = @embedFile("../../fixtures/hx6538/cm55m.elf");
+const hx_cm55s = @embedFile("../../fixtures/hx6538/cm55s.elf");
 const tree_address: u32 = 0x20000200;
 
 /// Keep the executable segments, replacing only the debug symbol tables.
@@ -145,4 +147,51 @@ test "CPU1 close and reinitialize retain the M33 DWT capability" {
         try std.testing.expectEqual(@as(u4, 4), cpu1.machine.dwt.numcomp);
         try std.testing.expect(!cpu1.machine.dwt.trcena);
     }
+}
+
+test "HX6538 dual-M55 fixture enforces cold hold, SCU release, mailbox, timer0, UART0, IDAU, MVE, and negative gates" {
+    var h = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = "cm55m.elf",
+        .elf_bytes = hx_cm55m,
+        .machine = &ra8.chip.core.machine.catalog.hx6538,
+        .bus_errors = true,
+        .history_frames = 0,
+    });
+    defer h.deinit();
+    var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
+    try cpu1.openBytes(gpa, &h, hx_cm55s);
+    defer cpu1.close(gpa);
+
+    try std.testing.expect(!h.board().desc().hasNpu());
+    try std.testing.expect(cpu1.pair.second.state.held);
+    try std.testing.expectEqual(@as(usize, 0), cpu1.pair.second.state.ran);
+
+    h.session().live.budget = 2_000_000;
+    const park = ra8.session.symbols.addressOf(h.image(), "hx_done_park").?;
+    _ = try h.session().setBreakpoint(.cpu0, .{ .address = park });
+    _ = try h.session().run(.cpu0, .run);
+
+    const view = try h.session().view(.cpu0);
+    var words: [16]u32 = undefined;
+    for (0..16) |idx| words[idx] = try view.readWord(0x3408_0000 + @as(u32, @intCast(idx * 4)));
+
+    try std.testing.expectEqual(@as(u32, 0x4858_4D35), words[0]); // magic "HXM5"
+    try std.testing.expectEqual(@as(u32, 0x410F_D221), words[1]); // CM55M CPUID r0p1
+    try std.testing.expectEqual(@as(u32, 0x410F_D221), words[2]); // CM55S CPUID r0p1
+    try std.testing.expectEqual(@as(u32, 0x0004_0008), words[3]); // DWT=4, FPB=8
+    try std.testing.expectEqual(@as(u32, 2), words[4]); // cm55s_boot_seq
+    try std.testing.expect(words[5] >= 2); // timer0_irqs
+    try std.testing.expect(words[6] >= 1); // cm55m_mbox_irqs
+    try std.testing.expect(words[7] >= 1); // cm55s_mbox_irqs
+    try std.testing.expectEqual(@as(u32, 1), words[8]); // u55_bus_faults
+    try std.testing.expectEqual(@as(u32, 0x5302_0000), words[9]); // u55_bfar
+    try std.testing.expectEqual(@as(u32, 1), words[10]); // pac_usage_faults
+    try std.testing.expectEqual(@as(u32, 110), words[11]); // mve_lob_sum
+    try std.testing.expectEqual(@as(u32, 0b0101), words[12]); // tt_flags (0x1.. S, 0x0.. NS, 0x5.. S, 0x4.. NS)
+    try std.testing.expectEqual(@as(u32, 2), words[13]); // ldrex/strex excl_counter
+    try std.testing.expect(words[14] > 0); // cm55s_loop_ticks active
+    try std.testing.expectEqual(@as(u32, 1), words[15]); // status PASS
+    try std.testing.expectEqual(@as(u32, 2), h.board().serial.line.lines);
+    try std.testing.expectEqualStrings("HX6538 M55 DUAL PASS", h.board().serial.line.slice());
+    try std.testing.expect(cpu1.pair.second.state.ran > 0);
 }

@@ -62,6 +62,24 @@ fn lineCustom(buf: []u8, which: *const machine_mod.Machine) ![]const u8 {
     const sram_kb = if (sram) |s| s.size / kib else 0;
     const sram_base = if (sram) |s| s.base else 0;
     const source = which.source orelse "machine memory map";
+    if (which.core(.cpu1)) |second| {
+        return std.fmt.bufPrint(
+            buf,
+            "PART: {s} {s} {d} KB @0x{X:0>8}, {s} {d} KB @0x{X:0>8}, CPU0 {s}, CPU1 {s} ({s})\n",
+            .{
+                which.label,
+                flash_name,
+                flash_kb,
+                flash_base,
+                sram_name,
+                sram_kb,
+                sram_base,
+                which.primary().name,
+                second.name,
+                source,
+            },
+        );
+    }
     return std.fmt.bufPrint(
         buf,
         "PART: {s} {s} {d} KB @0x{X:0>8}, {s} {d} KB @0x{X:0>8}, CPU0 {s} ({s})\n",
@@ -87,6 +105,6 @@ pub fn print(out: Writer, which: part.Part) !void {
 /// Print the machine line for `which`, when it is not the default machine.
 pub fn printMachine(out: Writer, which: *const machine_mod.Machine) !void {
     if (!shownMachine(which)) return;
-    var buf: [256]u8 = undefined;
+    var buf: [512]u8 = undefined;
     try out.writeAll(try lineMachine(&buf, which));
 }

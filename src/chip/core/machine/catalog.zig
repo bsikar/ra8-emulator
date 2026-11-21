@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const generic = @import("generic.zig");
+const hx6538_machine = @import("../../vendor/himax/hx6538/machine.zig").machine;
 const Machine = @import("machine.zig").Machine;
 const Part = @import("../part/part.zig").Part;
 const renesas = @import("../../vendor/renesas/renesas.zig");
@@ -29,7 +30,10 @@ pub const ra8e1 = renesas.ra8e1.machine;
 /// Renesas RA4T1 (R7FA4T1BB3CFM, sole primary Cortex-M33 r0p4, alias `fpb-ra4t1`).
 pub const ra4t1 = renesas.ra4t1.machine;
 
-pub const all = [_]*const Machine{ &ra8d2, &ra8p1, &ra8e1, &ra4t1, &cortex_m33, &cortex_m55, &cortex_m85 };
+/// Himax HX6538 / Seeed Grove Vision AI V2 dual-Cortex-M55 machine.
+pub const hx6538 = hx6538_machine;
+
+pub const all = [_]*const Machine{ &ra8d2, &ra8p1, &ra8e1, &ra4t1, &hx6538, &cortex_m33, &cortex_m55, &cortex_m85 };
 
 /// The machine called `name` (canonical name or alias) in `machines`, or null
 /// when absent.

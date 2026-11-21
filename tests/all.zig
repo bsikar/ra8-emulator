@@ -113,6 +113,8 @@ test {
     _ = @import("session/board/schedule_test.zig");
     _ = @import("board/wiring_test.zig");
     _ = @import("board/vendor_test.zig");
+    _ = @import("board/vendor/himax/himax_test.zig");
+    _ = @import("board/vendor/himax/grove_vision_ai_v2_test.zig");
     _ = @import("board/vendor/renesas/renesas_test.zig");
     _ = @import("board/vendor/renesas/fpb_ra8e1_test.zig");
     _ = @import("host/all.zig");
@@ -164,6 +166,14 @@ test {
     _ = @import("chip/core/machine/topology_test.zig");
     _ = @import("chip/core/machine/catalog_test.zig");
     _ = @import("chip/core/machine/generic_test.zig");
+    _ = @import("chip/vendor/himax/himax_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/hx6538_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/machine_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/idau_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/mailbox_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/scu_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/timer_test.zig");
+    _ = @import("chip/vendor/himax/hx6538/uart_test.zig");
     _ = @import("chip/core/machine/machine_test.zig");
     _ = @import("chip/core/machine/memory_test.zig");
     _ = @import("chip/vendor_test.zig");

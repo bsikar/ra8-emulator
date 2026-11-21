@@ -35,9 +35,9 @@ pub const text =
     "  --ms N             stop after N milliseconds of modelled time,\n" ++
     "                     counted in the SysTick periods the firmware\n" ++
     "                     itself armed\n" ++
-    "  --part NAME        ra8d2 (default), ra8p1 (NPU), ra8e1 (alias " ++
-    "fpb-ra8e1),\n" ++
-    "                     or ra4t1 (alias fpb-ra4t1)\n" ++
+    "  --part NAME        ra8d2 (default), ra8p1 (NPU), ra8e1 (alias fpb-ra8e1),\n" ++
+    "                     ra4t1 (alias fpb-ra4t1), hx6538 (or grove-vision-ai-v2),\n" ++
+    "                     cortex-m33, cortex-m55, or cortex-m85\n" ++
     "  --sd IMAGE         attach a raw SDHC image (size must be a whole 512 KiB " ++
     "unit)\n" ++
     "  --sd-save IMAGE    the same card, written back over IMAGE when the\n" ++

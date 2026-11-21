@@ -25,6 +25,7 @@ pub const op = @import("cpu/op.zig");
 pub const ops = @import("cpu/ops.zig");
 pub const regs = @import("cpu/regs.zig");
 pub const reset = @import("cpu/reset.zig");
+pub const sau_source = @import("cpu/sau_source.zig");
 pub const scs_route = @import("cpu/scs_route.zig");
 pub const shift = @import("cpu/shift.zig");
 pub const snapshot = @import("cpu/snapshot.zig");
