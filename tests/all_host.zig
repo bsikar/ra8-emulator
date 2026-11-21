@@ -3,6 +3,7 @@
 //! the memory of the whole suite. The rest are listed in all.zig.
 test {
     _ = @import("interfaces/cli/ctl/disasm_test.zig");
+    _ = @import("host/board_profile_test.zig");
     _ = @import("host/targets_test.zig");
     _ = @import("host/target_lease_test.zig");
     _ = @import("host/jlink/all.zig");

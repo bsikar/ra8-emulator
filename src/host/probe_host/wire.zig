@@ -134,6 +134,8 @@ const mapped_errors = [_]ErrorPair{
     .{ .name = "CustodianUnavailable", .err = error.CustodianUnavailable },
     .{ .name = "WrongCore", .err = error.WrongCore },
     .{ .name = "WrongProbe", .err = error.WrongProbe },
+    .{ .name = "WrongPart", .err = error.WrongPart },
+    .{ .name = "NoPartNumber", .err = error.NoPartNumber },
     .{ .name = "Canceled", .err = error.Canceled },
     .{ .name = "ProbeTimeout", .err = error.Timeout },
     .{ .name = "Timeout", .err = error.Timeout },

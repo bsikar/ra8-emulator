@@ -30,4 +30,6 @@ test "signed probe-host frames authenticate sequence and payload and reject tamp
     );
     try std.testing.expectEqual(error.Canceled, wire.mapError("Canceled"));
     try std.testing.expectEqual(error.Timeout, wire.mapError("ProbeTimeout"));
+    try std.testing.expectEqual(error.WrongPart, wire.mapError("WrongPart"));
+    try std.testing.expectEqual(error.NoPartNumber, wire.mapError("NoPartNumber"));
 }
