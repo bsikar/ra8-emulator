@@ -36,6 +36,7 @@ const parts = [_]Part{
     .{ .name = "control" },
     .{ .name = "clears" },
     .{ .name = "caches" },
+    .{ .name = "fcache", .skip = &.{"protection"} },
     .{ .name = "regions" },
     .{ .name = "regions_ns" },
     .{ .name = "guard", .skip = &.{"unit"} },

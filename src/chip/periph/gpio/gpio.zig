@@ -350,6 +350,19 @@ pub const Gpio = struct {
             .writeFn = writeThunk,
         };
     }
+
+    /// RA8E1 implements `PORT0..PORT9` (`10` ports at `0x4040_0000..0x4040_013F`,
+    /// `R01UH1129EJ0110` §19.2).
+    pub fn blockRa8e1(self: *Gpio) periph.Block {
+        return .{
+            .name = "GPIO/PORT",
+            .base = win_base,
+            .size = port_stride * 10,
+            .context = self,
+            .readFn = readThunk,
+            .writeFn = writeThunk,
+        };
+    }
 };
 
 /// The address of one PCNTR register, for tests and for anything that wants to

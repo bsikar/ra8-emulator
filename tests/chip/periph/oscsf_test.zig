@@ -165,3 +165,14 @@ test "opening PRC0 lets the same store through that was just dropped" {
     try std.testing.expect(osc.running(oscsf.flag.pll2sf));
     try std.testing.expectEqual(@as(u32, 1), osc.dropped_locked);
 }
+
+test "RA8E1 reset stops HOCO at 48 MHz via HOCOCR2 and derives HOCO rate" {
+    var guard = unlocked();
+    var osc = oscsf.Oscillators.init(&guard);
+    osc.resetRa8e1();
+    try std.testing.expect(!osc.running(oscsf.flag.hocosf));
+    try std.testing.expectEqual(@as(u32, 0x07), osc.read(base + oscsf.regs.hococr2, 1));
+    try std.testing.expectEqual(@as(?u64, 48_000_000), osc.hocoHz());
+    osc.write(base + oscsf.regs.hococr, 1, 0x00);
+    try std.testing.expect(osc.running(oscsf.flag.hocosf));
+}

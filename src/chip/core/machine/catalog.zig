@@ -20,7 +20,10 @@ pub const cortex_m33 = generic.cortex_m33;
 /// Minimal single-core Cortex-M85 with SCS, flash, and SRAM only.
 pub const cortex_m85 = generic.cortex_m85;
 
-pub const all = [_]*const Machine{ &ra8d2, &ra8p1, &cortex_m33, &cortex_m85 };
+/// Single-core Cortex-M85 RA8E1 MCU machine profile.
+pub const ra8e1 = renesas.ra8e1.machine;
+
+pub const all = [_]*const Machine{ &ra8d2, &ra8p1, &ra8e1, &cortex_m33, &cortex_m85 };
 
 /// The machine called `name` (canonical name or alias) in `machines`, or null
 /// when absent.

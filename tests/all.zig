@@ -108,6 +108,9 @@ test {
     _ = @import("board/gauge_replug_test.zig");
     _ = @import("session/board/schedule_test.zig");
     _ = @import("board/wiring_test.zig");
+    _ = @import("board/vendor_test.zig");
+    _ = @import("board/vendor/renesas/renesas_test.zig");
+    _ = @import("board/vendor/renesas/fpb_ra8e1_test.zig");
     _ = @import("host/all.zig");
     _ = @import("chip/periph/all.zig");
     _ = @import("components/all.zig");
@@ -162,6 +165,8 @@ test {
     _ = @import("chip/vendor_test.zig");
     _ = @import("chip/vendor/renesas/renesas_test.zig");
     _ = @import("chip/vendor/renesas/ra8d2_test.zig");
+    _ = @import("chip/vendor/renesas/ra8e1/fcache_test.zig");
+    _ = @import("chip/vendor/renesas/ra8e1/ra8e1_test.zig");
     _ = @import("chip/vendor/renesas/ra8p1_test.zig");
     _ = @import("chip/core/rate_test.zig");
     _ = @import("board/image/ra8app_test.zig");
@@ -185,6 +190,7 @@ test {
         ra8.chip.periph,
         ra8.chip.vendor,
         ra8.board,
+        ra8.board.vendor,
         ra8.session,
         ra8.rpc,
         ra8.gdb,

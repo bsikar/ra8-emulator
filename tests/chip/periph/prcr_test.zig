@@ -90,3 +90,17 @@ test "the block answers for its own window through the bus" {
     try std.testing.expectEqual(@as(u32, prcr.group.pvd), bus.read(prcr.win_base, 2));
     try std.testing.expect(unit.unlocked(prcr.group.pvd));
 }
+
+test "PRCR_NS preserves Secure PRC5 and blocks Non-secure writes to PRC5" {
+    var bus = ra8.chip.periph.registry.Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    var unit = prcr.Prcr.init();
+    try bus.add(unit.block());
+    try bus.add(unit.nsBlock());
+
+    try std.testing.expect(bus.tryWrite(prcr.win_base, 2, prcr.unlockWord(prcr.group.rst | prcr.group.cgc)));
+    try std.testing.expect(bus.tryWrite(prcr.ns_win_base, 2, prcr.unlockWord(prcr.group.rst | prcr.group.lpm)));
+    try std.testing.expectEqual(@as(?u32, prcr.group.lpm), bus.tryRead(prcr.ns_win_base, 2));
+    try std.testing.expectEqual(@as(?u32, prcr.group.rst | prcr.group.lpm), bus.tryRead(prcr.win_base, 2));
+    try std.testing.expect(unit.unlocked(prcr.group.rst | prcr.group.lpm));
+}
