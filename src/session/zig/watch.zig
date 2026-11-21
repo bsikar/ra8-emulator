@@ -79,6 +79,8 @@ pub const Recorder = struct {
             },
             .lines = self.inner.lines,
             .register_state = self.inner.register_state,
+            .miss = self.inner.miss,
+            .tally = self.inner.tally,
         };
     }
 

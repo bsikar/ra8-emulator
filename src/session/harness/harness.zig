@@ -247,6 +247,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.cpu = .{ .bus = state.quiet.bus(), .source = state.quiet.source(), .quiet = &state.quiet };
     state.cpu.profile = primary.profile;
     state.cpu.mpu = &state.check;
+    state.armRuntime(chosen, options);
     state.pending.banked = &state.cpu.banked;
     state.pending.clear_due = &state.quiet.clear_due;
     state.decoded = .{};

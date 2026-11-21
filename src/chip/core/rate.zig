@@ -19,11 +19,19 @@ const std = @import("std");
 
 const div = @import("../periph/sysclk/div.zig");
 
+pub const Ratio = struct { num: u32, den: u32 };
+
 /// CPU1's turn, in instructions, for one CPU0 round of `round` instructions
 /// under the divider word `sckdivcr2`.
 pub fn turn(round: u32, sckdivcr2: u32) u32 {
     const div0 = div.ratio(div.codeAt(sckdivcr2, div.shift2.cpuclk0)) orelse return round;
     const div1 = div.ratio(div.codeAt(sckdivcr2, div.shift2.cpuclk1)) orelse return round;
-    const share = @as(u64, round) * div0 / div1;
+    return ratioTurn(round, .{ .num = div0, .den = div1 });
+}
+
+/// CPU1's turn for one CPU0 round of `round` instructions scaled by `ratio`.
+pub fn ratioTurn(round: u32, ratio: Ratio) u32 {
+    if (ratio.num == 0 or ratio.den == 0) return round;
+    const share = @as(u64, round) * ratio.num / ratio.den;
     return @intCast(@max(@min(share, @as(u64, std.math.maxInt(u32))), 1));
 }

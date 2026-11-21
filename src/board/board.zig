@@ -12,6 +12,7 @@ const acmphs = @import("ra8_chip").periph.acmphs;
 const adc = @import("ra8_chip").periph.adc;
 const agt = @import("ra8_chip").periph.agt;
 const bkup = @import("ra8_chip").periph.bkup;
+const board_hx6538 = @import("vendor/himax/grove_vision_ai_v2.zig");
 const boundary = @import("boundary.zig");
 const bus_card = @import("ra8_components").sd_card.bus_card;
 const cac = @import("ra8_chip").periph.cac;
@@ -363,6 +364,7 @@ pub const Board = struct {
     /// Explicit machine description; null uses the catalog entry for `part`.
     machine: ?*const machine_mod.Machine = null,
     irq_override: [2]?irq_source.IrqSource = .{ null, null },
+    hx: board_hx6538.State = .{},
 
     pub fn desc(self: *const Board) *const machine_mod.Machine {
         return self.machine orelse machine_mod.catalog.ofPart(self.part);
