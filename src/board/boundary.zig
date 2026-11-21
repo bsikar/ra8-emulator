@@ -14,6 +14,7 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const agt_sched = @import("ra8_chip").periph.agt.sched;
 const Board = @import("board.zig").Board;
 const event_sink = @import("event_sink.zig");
+const fpb_ra4t1 = @import("vendor/renesas/fpb_ra4t1.zig");
 const gpt_sched = @import("ra8_chip").periph.gpt.sched;
 const pin_irq = @import("ra8_chip").periph.icu.pin_irq;
 
@@ -65,6 +66,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
 pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
     const mode = self.desc().memory.resolvedPeripherals();
     if (mode == .none) return tickBare(self, core, instructions, issuer);
+    if (mode == .ra4t1) return fpb_ra4t1.tick(self, core, instructions, issuer);
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
@@ -152,7 +154,7 @@ fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.re
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 
-fn notifyFrameTaps(self: *Board) void {
+pub fn notifyFrameTaps(self: *Board) void {
     if (self.frame_tap) |tap| {
         if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
     }
@@ -162,11 +164,17 @@ fn notifyFrameTaps(self: *Board) void {
 /// Vendor-neutral external interrupt source for `issuer` on this board.
 pub fn irqSource(self: *Board, issuer: chip.periph.registry.Issuer) chip.periph.irq_source.IrqSource {
     const slot: usize = if (issuer == .cpu1) 1 else 0;
-    return self.irq_override[slot] orelse self.events.irqSourceFor(issuer);
+    if (self.irq_override[slot]) |src| return src;
+    if (self.desc().memory.resolvedPeripherals() == .ra4t1) return self.ra4t1.icu.irqSource();
+    return self.events.irqSourceFor(issuer);
 }
 
 pub fn clearIrqLatches(self: *Board) void {
-    self.events.clearLatches();
+    if (self.desc().memory.resolvedPeripherals() == .ra4t1) {
+        self.ra4t1.icu.irqSource().clearLatches();
+    } else {
+        self.events.clearLatches();
+    }
     if (self.irq_override[0]) |src| src.clearLatches();
     if (self.irq_override[1]) |src| src.clearLatches();
 }
@@ -248,7 +256,7 @@ pub fn takeResetRequestsFrom(self: *Board, core: anytype, issuer: chip.periph.re
     }
     if (issuer == .cpu1) return;
     try self.clears.apply(core);
-    try self.caches.poll(core);
+    if (self.desc().memory.resolvedPeripherals() != .ra4t1) try self.caches.poll(core);
     try self.regions.poll(core);
     if (try self.control.poll(core)) resetForFrom(self, .software, issuer);
 }

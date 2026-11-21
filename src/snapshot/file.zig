@@ -99,6 +99,7 @@ pub const Kind = enum(u32) {
     /// The external memory fabric's state alone, written in place of the
     /// memory sections by a save that leaves guest memory out.
     fabric = 36,
+    ra4t1 = 37,
     _,
 };
 

@@ -104,6 +104,7 @@ pub const saved = .{
 
     "guard",
     "partitions",
+    "ra4t1",
     "reboot",
     "part",
 };

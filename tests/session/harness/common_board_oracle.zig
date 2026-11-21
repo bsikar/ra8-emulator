@@ -23,7 +23,7 @@ pub const board_included = .{
     "clock",           "can",         "mailbox",              "npu",            "lowpower",   "interval",         "pwm",
     "pwm_delay",       "ptp",         "monitors",             "watchdog",       "heartbeat",  "link",             "receiver",
     "host",            "causes",      "control",              "clears",         "caches",     "regions",          "regions_ns",
-    "guard",           "partitions",  "reboot",               "part",           "fcache",
+    "guard",           "partitions",  "ra4t1",                "reboot",         "part",       "fcache",
 };
 
 pub const board_excluded = .{
@@ -111,6 +111,13 @@ fn hashClocksAndSecurity(h: *Hasher, board: *const Board) void {
     h.autoExcept(board.causes.masks, .{ "protection", "watchdog_armed", "heartbeat_armed" });
     h.autoExcept(board.guard, .{"unit"});
     h.autoExcept(board.fcache, .{"protection"});
+    h.autoExcept(board.ra4t1, .{
+        "fcache.protection",
+        "pscu.protection",
+        "port.protection",
+        "sci.tx_sink",
+        "sci.irq_sink",
+    });
 }
 
 fn hashDatapathAndMedia(h: *Hasher, board: *const Board) void {
