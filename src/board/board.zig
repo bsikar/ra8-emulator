@@ -76,6 +76,7 @@ const pll = @import("ra8_chip").periph.pll;
 const poeg = @import("ra8_chip").periph.poeg;
 const prcr = @import("ra8_chip").periph.prcr;
 const pscu = @import("ra8_chip").periph.pscu;
+const ra4t1_periph = @import("ra8_chip").vendor.renesas.ra4t1;
 const reboot = @import("ra8_chip").core.reboot;
 const reset = @import("ra8_chip").periph.reset;
 const rtc = @import("ra8_chip").periph.rtc;
@@ -349,6 +350,8 @@ pub const Board = struct {
     guard: mpu_guard.Guard,
     /// The SAU window, third PPB block: TYPE is hardwired like the MPU's.
     partitions: sau.Sau,
+    /// RA4T1 peripheral composition (`SYSC`, `PSCU`, `FCACHE`, `MSTP`, `PORT`, classic `SCI`, `ICU`, timers, `FACI`).
+    ra4t1: ra4t1_periph.State = .{},
     /// Where a reset this board decides on is left for the engine to perform.
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.

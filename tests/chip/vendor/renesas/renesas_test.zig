@@ -21,4 +21,11 @@ test "vendor.renesas machines match catalog re-exports" {
     try std.testing.expectEqualStrings(catalog.ra8p1.label, renesas.ra8p1.machine.label);
     try std.testing.expectEqual(catalog.ra8p1.part, renesas.ra8p1.machine.part);
     try std.testing.expectEqual(catalog.ra8p1.memory, renesas.ra8p1.machine.memory);
+
+    try std.testing.expectEqualStrings(catalog.ra4t1.name, renesas.ra4t1.machine.name);
+    try std.testing.expectEqualStrings(catalog.ra4t1.label, renesas.ra4t1.machine.label);
+    try std.testing.expectEqual(catalog.ra4t1.part, renesas.ra4t1.machine.part);
+    try std.testing.expectEqual(catalog.ra4t1.memory, renesas.ra4t1.machine.memory);
+    try std.testing.expectEqual(@as(usize, 1), renesas.ra4t1.machine.aliases.len);
+    try std.testing.expectEqualStrings("fpb-ra4t1", renesas.ra4t1.machine.aliases[0]);
 }

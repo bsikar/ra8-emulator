@@ -61,7 +61,7 @@ pub const Alias = struct {
 pub const ResolvedMmio = registry.ResolvedMmio;
 pub const MmioWindow = registry.MmioWindow;
 pub const UnknownMmio = registry.UnknownPolicy;
-pub const PeripheralSet = enum { none, ra8_dual, ra8e1 };
+pub const PeripheralSet = enum { none, ra8_dual, ra8e1, ra4t1 };
 
 /// Pluggable vendor IDAU attribution callback.
 pub const IdauCallback = idau.Callback;

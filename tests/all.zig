@@ -89,6 +89,9 @@ test {
     _ = @import("board/plug_test.zig");
     _ = @import("board/usb/usb_test.zig");
     _ = @import("board/usb/plug_test.zig");
+    _ = @import("board/vendor_test.zig");
+    _ = @import("board/vendor/renesas/renesas_test.zig");
+    _ = @import("board/vendor/renesas/fpb_ra4t1_test.zig");
     _ = @import("host/disk_file_test.zig");
     _ = @import("host/folder_test.zig");
     _ = @import("host/tape_dir_test.zig");
@@ -168,6 +171,7 @@ test {
     _ = @import("chip/vendor/renesas/ra8e1/fcache_test.zig");
     _ = @import("chip/vendor/renesas/ra8e1/ra8e1_test.zig");
     _ = @import("chip/vendor/renesas/ra8p1_test.zig");
+    _ = @import("chip/vendor/renesas/ra4t1/all.zig");
     _ = @import("chip/core/rate_test.zig");
     _ = @import("board/image/ra8app_test.zig");
     _ = @import("chip/core/module_place_test.zig");
