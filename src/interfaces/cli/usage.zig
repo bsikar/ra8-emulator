@@ -35,7 +35,8 @@ pub const text =
     "  --ms N             stop after N milliseconds of modelled time,\n" ++
     "                     counted in the SysTick periods the firmware\n" ++
     "                     itself armed\n" ++
-    "  --part NAME        ra8d2 (default) or ra8p1, which carries the NPU\n" ++
+    "  --part NAME        ra8d2 (default), ra8p1 (NPU), or ra8e1 (alias " ++
+    "fpb-ra8e1)\n" ++
     "  --sd IMAGE         attach a raw SDHC image (size must be a whole 512 KiB " ++
     "unit)\n" ++
     "  --sd-save IMAGE    the same card, written back over IMAGE when the\n" ++

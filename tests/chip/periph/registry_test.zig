@@ -219,3 +219,25 @@ test "a registry snapshot is ordered by address and a refused one changes nothin
     try std.testing.expectEqualSlices(u8, saved.written(), loaded.written());
     try std.testing.expectEqual(@as(u32, 2), target.read(base + 0x2000, 4));
 }
+
+fn gateAllStopped(_: *anyopaque, _: u32) bool {
+    return true;
+}
+
+fn gateNoop(_: *anyopaque, _: u32, _: mod.Access) void {}
+
+test "fault unknown policy faults unmapped gated addresses before the module-stop gate" {
+    var dummy: u8 = 0;
+    var bus = Bus.init(std.testing.allocator);
+    defer bus.deinit();
+    bus.unknown = .fault;
+    bus.gate = .{ .context = &dummy, .stoppedFn = gateAllStopped, .noteFn = gateNoop };
+    var block = TestBlock{};
+    try bus.add(block.descriptor(base + 0x1000, 0x100));
+
+    try std.testing.expectEqual(@as(?u32, 0), bus.tryRead(base + 0x1004, 4));
+    try std.testing.expect(bus.tryWrite(base + 0x1004, 4, 1));
+    try std.testing.expectEqual(@as(?u32, null), bus.tryRead(base + 0x2000, 4));
+    try std.testing.expectEqual(@as(?u32, null), bus.peek(base + 0x2000, 4));
+    try std.testing.expect(!bus.tryWrite(base + 0x2000, 4, 1));
+}

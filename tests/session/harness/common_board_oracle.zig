@@ -23,7 +23,7 @@ pub const board_included = .{
     "clock",           "can",         "mailbox",              "npu",            "lowpower",   "interval",         "pwm",
     "pwm_delay",       "ptp",         "monitors",             "watchdog",       "heartbeat",  "link",             "receiver",
     "host",            "causes",      "control",              "clears",         "caches",     "regions",          "regions_ns",
-    "guard",           "partitions",  "reboot",               "part",
+    "guard",           "partitions",  "reboot",               "part",           "fcache",
 };
 
 pub const board_excluded = .{
@@ -103,13 +103,14 @@ fn hashClocksAndSecurity(h: *Hasher, board: *const Board) void {
     h.autoExcept(board.low_power, .{"protection"});
     h.autoExcept(board.gpt_clock, .{"modules"});
     h.autoExcept(board.octa, .{"clocks"});
-    h.autoExcept(board.modules, .{ "attribution", "bus", "octa", "last_gated", "dropped" });
+    h.autoExcept(board.modules, .{ "attribution", "bus", "octa", "last_gated", "dropped", "ra8e1" });
     h.autoExcept(board.transfer_attribution, .{"protection"});
     h.autoExcept(board.chip_attribution, .{"protection"});
     h.autoExcept(board.idau, .{ "custom", "sram", "banks" });
     h.autoExcept(board.causes, .{"masks"});
     h.autoExcept(board.causes.masks, .{ "protection", "watchdog_armed", "heartbeat_armed" });
     h.autoExcept(board.guard, .{"unit"});
+    h.autoExcept(board.fcache, .{"protection"});
 }
 
 fn hashDatapathAndMedia(h: *Hasher, board: *const Board) void {

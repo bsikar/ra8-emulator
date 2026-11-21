@@ -16,6 +16,10 @@ pub fn inputs(self: *const Board) sysclk.rate.Inputs {
         .divcr2 = self.tree.divcr2,
         .pll1 = self.plls.pll1,
         .pll2 = self.plls.pll2,
+        .hoco_hz = if (self.desc().memory.resolvedPeripherals() == .ra8e1)
+            self.oscillators.hocoHz() orelse sysclk.rate.hoco_hz
+        else
+            sysclk.rate.hoco_hz,
     };
 }
 

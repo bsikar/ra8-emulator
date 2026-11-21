@@ -34,6 +34,10 @@ pub const win_span: u32 = stride * channels;
 
 /// The EK-RA8D2 console channel: SCI8, the one carrying UART text.
 pub const console_channel: usize = 8;
+/// The FPB-RA8E1 console channel and event map live in `event.zig`.
+pub const ra8e1_console_channel = event.ra8e1_console_channel;
+pub const ConsoleEvents = event.ConsoleEvents;
+pub const ra8e1_console_events = event.ra8e1_console;
 
 pub const off_rdr: u32 = 0x00;
 pub const off_tdr: u32 = 0x04;
@@ -158,9 +162,17 @@ pub const Sci = struct {
     channels: [channels]Channel = @splat(.{}),
     line: Line = .{},
     tap: ?Tap = null,
+    console_index: usize = console_channel,
+    console_events: ConsoleEvents = .{ .rxi = event.rxi, .txi = event.txi, .tei = event.tei },
 
     pub fn init() Sci {
         return .{};
+    }
+
+    /// Route the line-buffered console and ELC events to `SCI9` for RA8E1.
+    pub fn configureRa8e1(self: *Sci) void {
+        self.console_index = ra8e1_console_channel;
+        self.console_events = ra8e1_console_events;
     }
 
     pub fn quiet(self: *const Sci) bool {
@@ -171,13 +183,18 @@ pub const Sci = struct {
     }
 
     pub fn console(self: *Sci) *Channel {
-        return &self.channels[console_channel];
+        return &self.channels[self.console_index];
     }
 
     /// Queue host bytes for the firmware to read out of RDR.
     pub fn feed(self: *Sci, channel: usize, data: []const u8) void {
         if (channel >= channels) return;
         self.channels[channel].receive(data);
+    }
+
+    /// Queue host bytes onto whichever channel acts as the board console.
+    pub fn feedConsole(self: *Sci, data: []const u8) void {
+        self.feed(self.console_index, data);
     }
 
     /// Put a device on one channel's line.
@@ -194,12 +211,12 @@ pub const Sci = struct {
     /// any knowledge of the interrupt controller.
     pub fn dueEvents(self: *const Sci) Due {
         var due = Due{};
-        const channel = &self.channels[console_channel];
+        const channel = &self.channels[self.console_index];
         if (channel.enabled(ccr0.te)) {
-            if (channel.enabled(ccr0.tie)) due.appendAssumeCapacity(event.txi);
-            if (channel.enabled(ccr0.teie)) due.appendAssumeCapacity(event.tei);
+            if (channel.enabled(ccr0.tie)) due.appendAssumeCapacity(self.console_events.txi);
+            if (channel.enabled(ccr0.teie)) due.appendAssumeCapacity(self.console_events.tei);
         }
-        if (channel.enabled(ccr0.rie) and channel.readable()) due.appendAssumeCapacity(event.rxi);
+        if (channel.enabled(ccr0.rie) and channel.readable()) due.appendAssumeCapacity(self.console_events.rxi);
         return due;
     }
 
@@ -300,7 +317,7 @@ pub const Sci = struct {
             return;
         }
         channel.transmitted += 1;
-        if (index == console_channel) self.line.feed(byte);
+        if (index == self.console_index) self.line.feed(byte);
         if (self.tap) |hook| hook.sent(hook.ctx, index, byte);
         self.deliver(index, byte);
     }
@@ -340,10 +357,22 @@ pub const Sci = struct {
     }
 
     pub fn block(self: *Sci) periph.Block {
+        return self.rangeBlock("SCI_B UART", win_base, win_span);
+    }
+
+    /// RA8E1 implements `SCI0..4` and `SCI9` (`R01UH1129EJ0110` §30.1); `SCI5..8` do not exist.
+    pub fn blocksRa8e1(self: *Sci) [2]periph.Block {
         return .{
-            .name = "SCI_B UART",
-            .base = win_base,
-            .size = win_span,
+            self.rangeBlock("SCI_B UART 0..4", win_base, 5 * stride),
+            self.rangeBlock("SCI_B UART 9", win_base + 9 * stride, stride),
+        };
+    }
+
+    fn rangeBlock(self: *Sci, name: []const u8, base: u32, size: u32) periph.Block {
+        return .{
+            .name = name,
+            .base = base,
+            .size = size,
             .context = self,
             .readFn = readThunk,
             .writeFn = writeThunk,

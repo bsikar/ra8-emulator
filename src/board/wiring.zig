@@ -19,6 +19,7 @@ const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
 
 const Board = @import("board.zig").Board;
 const construct = @import("construct.zig");
+const fpb_ra8e1 = @import("vendor/renesas/fpb_ra8e1.zig");
 const plug = @import("plug.zig");
 const second_wiring = @import("ra8_chip").core.second.wiring;
 
@@ -47,7 +48,7 @@ const vscr = @import("ra8_chip").periph.vscr;
 /// The module-stop shadow, the attribution words that decide which of its
 /// bits a Secure store may move, and the gate the rest of the bus hangs off.
 /// These three go on together because none of them is any use alone.
-fn attachGate(self: *Board) !void {
+pub fn attachGate(self: *Board) !void {
     try self.bus.add(self.modules.block());
     self.modules.attribution = &self.attribution;
     self.modules.bus = &self.bus;
@@ -92,23 +93,46 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
     self.bus.windows = mem_desc.mmio;
     self.bus.unknown = mem_desc.unknown_mmio;
     construct.seed(self, memory);
-    if (mem_desc.attach_ra8_blocks) try attachRa8Blocks(self, memory);
+    switch (mem_desc.resolvedPeripherals()) {
+        .none => {},
+        .ra8_dual => try attachRa8Blocks(self, memory),
+        .ra8e1 => try fpb_ra8e1.attach(self, memory),
+    }
+}
+
+/// Peripherals shared between dual-core RA8D2/RA8P1 and single-core RA8E1.
+pub fn attachSharedPeripherals(self: *Board, memory: Guest) !void {
+    try attachCapture(self, memory);
+    try attachTransfers(self);
+    self.dma = dmac.Dmac.init(&self.dma_module);
+    self.dma.memory = memory.asInitiator(.dmac);
+    inline for (.{
+        self.checksum.block(),        self.dataops.block(),        self.accuracy.block(),
+        self.comparators.block(),     self.analog.block(),         self.shutoff.block(),
+        self.spi.block(),             self.ecc.block(),            self.audio.block(),
+        self.clock.block(),           self.can.block(0),           self.can.block(1),
+        self.lowpower.block(),        self.interval.block(),       self.links.block(),
+        self.dma_module.block(),      self.dma.block(),            self.monitors.statusBlock(),
+        self.monitors.controlBlock(), self.monitors.filterBlock(), self.watchdog.block(),
+        self.heartbeat.block(),       self.causes.statusBlock(),   self.causes.causeBlock(),
+    }) |b| {
+        try self.bus.add(b);
+    }
 }
 
 fn attachRa8Blocks(self: *Board, memory: Guest) !void {
     try attachGate(self);
     try self.bus.add(self.pins.block());
     try self.bus.add(self.pinfunc.block());
-    try self.bus.add(self.checksum.block());
-    try self.bus.add(self.dataops.block());
-    try self.bus.add(self.accuracy.block());
-    try self.bus.add(self.comparators.block());
-    try attachCapture(self, memory);
-    try self.bus.add(self.analog.block());
     try attachAdc(self, memory);
-    try self.bus.add(self.shutoff.block());
     try self.bus.add(self.protection.block());
-    try attachProtected(self);
+    try attachSharedProtected(self, true);
+    try attachDualOnlyBlocks(self, memory);
+    try attachSharedPeripherals(self, memory);
+    try attachEvents(self);
+}
+
+fn attachDualOnlyBlocks(self: *Board, memory: Guest) !void {
     // The panel is scanned out of the same RAM the core paints into.
     try self.display.attach(&self.bus, &self.domains.graphics, memory.asInitiator(.glcdc));
     armPanelClock(self);
@@ -120,7 +144,7 @@ fn attachRa8Blocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.receiver.block());
     try self.bus.add(self.host.block());
     try self.bus.add(self.serial.block());
-    try self.bus.add(self.spi.block());
+    try self.bus.add(self.pwm.block());
     // The card is on Pmod2, which is SCI0 in Simple-SPI mode, not on a
     // SPI_B channel (src/components/sd_card/card/line.zig).
     self.sd_line = sd_card.line.Line.init(&self.sd);
@@ -141,35 +165,13 @@ fn attachRa8Blocks(self: *Board, memory: Guest) !void {
     try self.sdram.attach(&self.bus);
     self.card.card = bus_line.line(&self.host_card);
     try self.bus.add(self.card.block());
-    try self.bus.add(self.ecc.block());
-    try self.bus.add(self.audio.block());
     try self.bus.add(self.microphone.block());
-    try self.bus.add(self.clock.block());
-    try self.bus.add(self.can.block(0));
-    try self.bus.add(self.can.block(1));
     try self.bus.add(self.mailbox.block());
     if (self.desc().hasNpu()) {
         self.npu.memory = memory.asInitiator(.ethos_u55);
         try self.bus.add(self.npu.block());
     }
-    try self.bus.add(self.lowpower.block());
-    try self.bus.add(self.interval.block());
-    try self.bus.add(self.pwm.block());
     try self.bus.add(self.ptp.block());
-    try attachEvents(self);
-    try self.bus.add(self.links.block());
-    try attachTransfers(self);
-    try self.bus.add(self.dma_module.block());
-    self.dma = dmac.Dmac.init(&self.dma_module);
-    self.dma.memory = memory.asInitiator(.dmac);
-    try self.bus.add(self.dma.block());
-    try self.bus.add(self.monitors.statusBlock());
-    try self.bus.add(self.monitors.controlBlock());
-    try self.bus.add(self.monitors.filterBlock());
-    try self.bus.add(self.watchdog.block());
-    try self.bus.add(self.heartbeat.block());
-    try self.bus.add(self.causes.statusBlock());
-    try self.bus.add(self.causes.causeBlock());
 }
 
 /// DTC0 and DTC1 share one window, served by whichever core is on the bus;
@@ -282,21 +284,24 @@ pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
 /// The blocks that ask PRCR before they accept a store. Each needs a pointer
 /// to the protection model this board owns, not a copy of one, so none of
 /// them can be built in the struct literal.
-fn attachProtected(self: *Board) !void {
+/// Shared PRCR-protected system blocks (`dual_only` attaches PDCTR, IPC, and SAMON).
+pub fn attachSharedProtected(self: *Board, dual_only: bool) !void {
     self.backup = bkup.Bkup.init(&self.protection);
     try self.bus.add(self.backup.block());
     self.battery_switch = bkup.pcr1.Pcr1.init(&self.protection);
     try self.bus.add(self.battery_switch.block());
-    try attachProtectedClocks(self);
+    try attachProtectedClocks(self, dual_only);
     // The low-power bytes ask PRCR before a store, so they go on after it.
     self.low_power = lpm.Unit.init(&self.protection);
     for (0..lpm.slots.len) |which| {
         try self.bus.add(self.low_power.block(which));
     }
     try self.bus.add(self.standby_cancel.block());
-    self.domains = pdctr.Domains.init(&self.protection);
-    try self.bus.add(self.domains.graphics.block());
-    try self.bus.add(self.domains.eswm.block());
+    if (dual_only) {
+        self.domains = pdctr.Domains.init(&self.protection);
+        try self.bus.add(self.domains.graphics.block());
+        try self.bus.add(self.domains.eswm.block());
+    }
     // SYRSTMSK0/1/2 is PRC5-protected, and its two watchdog mask bits freeze
     // while their watchdog runs (HUM Ch 6.2.6 p 263), so it reads both
     // watchdogs' armed flags live rather than a copy.
@@ -306,10 +311,12 @@ fn attachProtected(self: *Board) !void {
         &self.heartbeat.armed,
     );
     try self.bus.add(self.causes.maskBlock());
-    // IPCSAR / IPCPAR are PRC4-gated and sit in CPSCU, nowhere near the
-    // mailbox window, so the mailbox offers them as a block of their own.
-    self.mailbox.protect(&self.protection);
-    try self.bus.add(self.mailbox.attributionBlock());
+    if (dual_only) {
+        // IPCSAR / IPCPAR are PRC4-gated and sit in CPSCU, nowhere near the
+        // mailbox window, so the mailbox offers them as a block of their own.
+        self.mailbox.protect(&self.protection);
+        try self.bus.add(self.mailbox.attributionBlock());
+    }
     // The rest of the CPSCU attribution the boot writes in the same scope:
     // the bus initiators, the bus-initiator MPUs and the second CPU, behind PRC4 too.
     self.chip_attribution = cpscu.Unit.init(&self.protection);
@@ -319,10 +326,12 @@ fn attachProtected(self: *Board) !void {
     }
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
     self.idau.custom = self.desc().memory.idau;
-    for (self.memory_monitors.blocks()) |window| {
-        try self.bus.add(window);
+    if (dual_only) {
+        for (self.memory_monitors.blocks()) |window| {
+            try self.bus.add(window);
+        }
+        if (self.memory_monitors.cms) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
     }
-    if (self.memory_monitors.cms) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
 }
 
 fn attachEvents(self: *Board) !void {
@@ -334,7 +343,7 @@ fn attachEvents(self: *Board) !void {
     }
 }
 
-fn attachProtectedClocks(self: *Board) !void {
+fn attachProtectedClocks(self: *Board, dual_only: bool) !void {
     self.oscillators = oscsf.Oscillators.init(&self.protection);
     try self.bus.add(self.oscillators.block());
     self.subclk = subclock.Unit.init(&self.protection);
@@ -355,13 +364,15 @@ fn attachProtectedClocks(self: *Board) !void {
     for (0..ckcr.windows.len) |which| {
         try self.bus.add(self.branches.block(which));
     }
-    // MSTPB16/B17 may only be released once OCTACKCR has handshaken (HUM
-    // Ch 11.2.7 Note 3), so the watch reads the selects live and both the
-    // module-stop window and the command engine it uncovers consult it.
-    self.octa = octaclk.Octa.init(&self.branches);
-    self.modules.octa = &self.octa;
-    self.flash.octa = &self.octa;
-    self.flash.part = self.nor.nor();
+    if (dual_only) {
+        // MSTPB16/B17 may only be released once OCTACKCR has handshaken (HUM
+        // Ch 11.2.7 Note 3), so the watch reads the selects live and both the
+        // module-stop window and the command engine it uncovers consult it.
+        self.octa = octaclk.Octa.init(&self.branches);
+        self.modules.octa = &self.octa;
+        self.flash.octa = &self.octa;
+        self.flash.part = self.nor.nor();
+    }
     // The dividers ask the selects whether the branch is gated, so they go
     // on after the selects they are paired with.
     self.ratios = ckdiv.Ckdiv.init(&self.protection, &self.branches);

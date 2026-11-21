@@ -24,6 +24,8 @@ const periph = @import("registry.zig");
 /// PRCR geometry (HUM Ch 13.2.1 p 522): SYSC base 0x4001_E000 + 0x3FA.
 pub const win_base: u32 = 0x4001_E3FA;
 pub const win_span: u32 = 0x2;
+/// Non-secure alias `PRCR_NS` (`0x5001_E3FE` -> canonical `0x4001_E3FE`).
+pub const ns_win_base: u32 = 0x4001_E3FE;
 
 /// PRKEY[7:0] lives in bits 15:8 and every write has to carry 0xA5.
 pub const key = struct {
@@ -77,7 +79,10 @@ pub const Prcr = struct {
     }
 
     pub fn write(self: *Prcr, address: u32, width: u3, value: u32) void {
-        const offset = address -% win_base;
+        self.writeMask(address -% win_base, width, value, group.all);
+    }
+
+    fn writeMask(self: *Prcr, offset: u32, width: u3, value: u32, writable_mask: u16) void {
         // A byte store to the low half carries no key byte, so it can never
         // satisfy PRKEY and silicon drops it. Counting it as a bad key is the
         // honest answer: the firmware asked for an unlock it did not get.
@@ -91,8 +96,9 @@ pub const Prcr = struct {
             self.bad_key +%= 1;
             return;
         }
-        self.groups = word & group.all;
-        if (self.groups != 0) self.unlocks +%= 1;
+        const next_bits = word & writable_mask;
+        self.groups = (self.groups & ~writable_mask) | next_bits;
+        if (next_bits != 0) self.unlocks +%= 1;
     }
 
     pub fn block(self: *Prcr) periph.Block {
@@ -105,7 +111,33 @@ pub const Prcr = struct {
             .writeFn = writeThunk,
         };
     }
+
+    /// Block covering canonicalized `PRCR_NS` (`0x5001_E3FE` -> `0x4001_E3FE`).
+    pub fn nsBlock(self: *Prcr) periph.Block {
+        return .{
+            .name = "SYSC-PRCR-NS",
+            .base = ns_win_base,
+            .size = win_span,
+            .context = self,
+            .readFn = readNsThunk,
+            .writeFn = writeNsThunk,
+        };
+    }
 };
+
+fn readNsThunk(context: *anyopaque, address: u32, width: u3) u32 {
+    const self: *Prcr = @ptrCast(@alignCast(context));
+    const word: u16 = self.groups & (group.all & ~group.rst);
+    const offset = address -% ns_win_base;
+    if (width >= 2 and offset == 0) return word;
+    const shift: u4 = @intCast((offset & 1) * 8);
+    return (@as(u32, word) >> shift) & 0xFF;
+}
+
+fn writeNsThunk(context: *anyopaque, address: u32, width: u3, value: u32) void {
+    const self: *Prcr = @ptrCast(@alignCast(context));
+    self.writeMask(address -% ns_win_base, width, value, group.all & ~group.rst);
+}
 
 fn readThunk(context: *anyopaque, address: u32, width: u3) u32 {
     const self: *Prcr = @ptrCast(@alignCast(context));

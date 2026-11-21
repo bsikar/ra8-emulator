@@ -35,6 +35,7 @@ const drw = @import("ra8_chip").periph.drw;
 const dtc = @import("ra8_chip").periph.dtc;
 const elc = @import("ra8_chip").periph.elc;
 const fault_clear = @import("ra8_chip").periph.fault.clear;
+const fcache = @import("ra8_chip").vendor.renesas.ra8e1.fcache;
 const glcdc = @import("ra8_chip").periph.glcdc;
 const gpt = @import("ra8_chip").periph.gpt;
 const gptp = @import("ra8_chip").periph.gptp;
@@ -102,6 +103,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
         .adc = adc.Adc.init(),
         .shutoff = poeg.Poeg.init(),
         .protection = prcr.Prcr.init(),
+        .fcache = fcache.Fcache.init(null),
         // Patched in attach(): the backup file has to point at this
         // board's own protection model, not a copy of it.
         .backup = undefined,
@@ -168,6 +170,7 @@ pub fn build(allocator: std.mem.Allocator) Board {
 pub fn seed(self: *Board, memory: Guest) void {
     self.backup = bkup.Bkup.init(&self.protection);
     self.battery_switch = bkup.pcr1.Pcr1.init(&self.protection);
+    self.fcache = fcache.Fcache.init(&self.protection);
     self.oscillators = oscsf.Oscillators.init(&self.protection);
     self.subclk = subclock.Unit.init(&self.protection);
     self.loco = subclock.loco.Unit.init(&self.protection);
@@ -191,4 +194,16 @@ pub fn seed(self: *Board, memory: Guest) void {
     self.trace.memory = memory;
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
     self.idau.custom = self.desc().memory.idau;
+}
+
+/// Releases heap-backed component state owned by `self`.
+pub fn destroy(self: *Board) void {
+    self.capture.source.close();
+    self.c6.deinit();
+    self.sd.deinit();
+    self.host_card.deinit();
+    self.options.deinit();
+    self.nor.deinit();
+    self.bus.deinit();
+    self.panel.deinit();
 }

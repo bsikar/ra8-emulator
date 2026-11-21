@@ -259,14 +259,15 @@ pub const Bus = struct {
         const hit = self.resolve(address) orelse return null;
         self.counters.reads += 1;
         self.nonsecure = hit.nonsecure;
+        const block = self.blockFor(hit.canonical);
+        if (block == null and self.unknown == .fault) return null;
         if (self.gate) |gate| {
             if (gate.drops(hit.canonical, .read)) return 0;
         }
-        if (self.blockFor(hit.canonical)) |block| {
+        if (block) |present| {
             self.counters.modelled += 1;
-            return block.readFn(block.context, hit.canonical, width);
+            return present.readFn(present.context, hit.canonical, width);
         }
-        if (self.unknown == .fault) return null;
         const entry = self.cells.getOrPut(hit.canonical) catch return 0;
         if (!entry.found_existing) entry.value_ptr.* = .{};
         const cell = entry.value_ptr;
@@ -293,12 +294,13 @@ pub const Bus = struct {
 
     pub fn peek(self: *Bus, address: u32, width: u3) ?u32 {
         const hit = self.resolve(address) orelse return null;
+        const block = self.blockFor(hit.canonical);
+        if (block == null and self.unknown == .fault) return null;
         if (self.gate) |gate| if (gate.stoppedFn(gate.context, hit.canonical)) return 0;
-        if (self.blockFor(hit.canonical)) |block| {
-            const look = block.peekFn orelse return null;
-            return look(block.context, hit.canonical, width);
+        if (block) |present| {
+            const look = present.peekFn orelse return null;
+            return look(present.context, hit.canonical, width);
         }
-        if (self.unknown == .fault) return null;
         const cell = self.cells.get(hit.canonical) orelse return null;
         return if (cell.written) mask(cell.value, width) else null;
     }
@@ -307,15 +309,16 @@ pub const Bus = struct {
         const hit = self.resolve(address) orelse return false;
         self.counters.writes += 1;
         self.nonsecure = hit.nonsecure;
+        const block = self.blockFor(hit.canonical);
+        if (block == null and self.unknown == .fault) return false;
         if (self.gate) |gate| {
             if (gate.drops(hit.canonical, .write)) return true;
         }
-        if (self.blockFor(hit.canonical)) |block| {
+        if (block) |present| {
             self.counters.modelled += 1;
-            block.writeFn(block.context, hit.canonical, width, value);
+            present.writeFn(present.context, hit.canonical, width, value);
             return true;
         }
-        if (self.unknown == .fault) return false;
         const entry = self.cells.getOrPut(hit.canonical) catch return true;
         if (!entry.found_existing) entry.value_ptr.* = .{};
         entry.value_ptr.value = mask(value, width);

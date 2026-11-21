@@ -213,7 +213,7 @@ pub fn disarmSession(
 
 fn feedBoardConsole(context: *anyopaque, bytes: []const u8) anyerror!void {
     const board: *board_api.board.Board = @ptrCast(@alignCast(context));
-    board.serial.feed(chip.periph.sci.console_channel, bytes);
+    board.serial.feedConsole(bytes);
 }
 
 fn routeConsoleStdin(context: *anyopaque, bytes: []const u8) void {

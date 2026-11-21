@@ -61,6 +61,7 @@ pub const Alias = struct {
 pub const ResolvedMmio = registry.ResolvedMmio;
 pub const MmioWindow = registry.MmioWindow;
 pub const UnknownMmio = registry.UnknownPolicy;
+pub const PeripheralSet = enum { none, ra8_dual, ra8e1 };
 
 /// Pluggable vendor IDAU attribution callback.
 pub const IdauCallback = idau.Callback;
@@ -75,9 +76,14 @@ pub const MemoryMap = struct {
     mmio: []const MmioWindow = &.{},
     unknown_mmio: UnknownMmio = .shadow_alternating,
     attach_ra8_blocks: bool = false,
+    peripheral_set: ?PeripheralSet = null,
     has_external: bool = false,
     allow_extra_pages: bool = false,
     idau: ?IdauCallback = null,
+
+    pub fn resolvedPeripherals(self: *const MemoryMap) PeripheralSet {
+        return self.peripheral_set orelse if (self.attach_ra8_blocks) .ra8_dual else .none;
+    }
 
     pub fn indexOf(self: *const MemoryMap, base: u32) ?usize {
         for (self.regions, 0..) |entry, index| {
