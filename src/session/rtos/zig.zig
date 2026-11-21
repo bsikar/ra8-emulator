@@ -36,6 +36,8 @@ pub const Listener = struct {
             },
             .lines = self.inner_bus.lines,
             .register_state = self.inner_bus.register_state,
+            .miss = self.inner_bus.miss,
+            .tally = self.inner_bus.tally,
         };
     }
 

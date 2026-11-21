@@ -31,3 +31,8 @@ test "a slow CPU1 is never starved of its turn" {
 test "a CPU1 faster than CPU0 gets more than a round" {
     try std.testing.expectEqual(@as(u32, 8), rate.turn(4, 0x01));
 }
+
+test "fixed core clock ratio scales HX6538 150 MHz CM55S against 400 MHz CM55M" {
+    try std.testing.expectEqual(@as(u32, 384), rate.ratioTurn(1024, .{ .num = 150_000_000, .den = 400_000_000 }));
+    try std.testing.expectEqual(@as(u32, 1), rate.ratioTurn(1, .{ .num = 150_000_000, .den = 400_000_000 }));
+}

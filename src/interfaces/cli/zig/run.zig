@@ -153,7 +153,7 @@ fn openSecond(
         std.debug.print("cannot bring up the second core from {s}: AbsentCore\n", .{named});
         return null;
     }
-    const identity = session.cpu1.image.openIdentified(
+    const identity = session.cpu1.image.openIdentifiedFor(
         pair,
         std.heap.page_allocator,
         io,
@@ -161,6 +161,7 @@ fn openSecond(
         board_wiring.cpu1(board),
         named,
         memory,
+        board.desc().memory,
     ) catch |err| {
         std.debug.print("cannot bring up the second core from {s}: {s}\n", .{ named, @errorName(err) });
         return null;

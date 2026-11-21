@@ -18,6 +18,7 @@ const sau = @import("ra8_chip").periph.sau;
 const tsn_cal = @import("ra8_chip").periph.adc.tsn_cal;
 
 const Board = @import("board.zig").Board;
+const board_hx6538 = @import("vendor/himax/grove_vision_ai_v2.zig");
 const construct = @import("construct.zig");
 const fpb_ra8e1 = @import("vendor/renesas/fpb_ra8e1.zig");
 const plug = @import("plug.zig");
@@ -99,6 +100,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
         .ra8_dual => try attachRa8Blocks(self, memory),
         .ra8e1 => try fpb_ra8e1.attach(self, memory),
         .ra4t1 => try fpb_ra4t1.attachBlocks(self, memory),
+        .hx6538 => try board_hx6538.attachBlocks(&self.hx, &self.bus),
     }
 }
 
@@ -214,17 +216,20 @@ pub const CoreWindows = @import("ra8_chip").core.windows.CoreWindows;
 /// owns bring-up; the board supplies its bus, divider, reboot latch,
 /// release page and event slot, and primes and resets on CPU1's behalf.
 pub fn cpu1(self: *Board) second_wiring.Wiring {
-    return .{
+    const machine = self.desc();
+    var wiring: second_wiring.Wiring = .{
         .bus = &self.bus,
         .dividers = &self.tree.divcr2,
         .reboot = &self.reboot,
         .release = &self.second_core,
         .cpu1 = &self.cpu1,
-        .core = self.desc().core(.cpu1),
+        .core = machine.core(.cpu1),
         .context = self,
         .primeFn = primeThunk,
         .resetFn = resetThunk,
     };
+    if (machine.memory.resolvedPeripherals() == .hx6538) self.hx.wireCpu1(machine, &wiring);
+    return wiring;
 }
 
 fn primeThunk(context: *anyopaque, memory: Guest, windows: CoreWindows) anyerror!void {

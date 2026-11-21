@@ -196,6 +196,8 @@ pub fn seed(self: *Board, memory: Guest) void {
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
     self.idau.custom = self.desc().memory.idau;
     if (self.desc().memory.resolvedPeripherals() == .ra4t1) fpb_ra4t1.bind(self);
+    self.hx.seed(&self.serial.line);
+    if (self.desc().memory.resolvedPeripherals() == .hx6538) self.time.base.setRate(self.desc().cpu0_hz);
 }
 
 /// Releases heap-backed component state owned by `self`.

@@ -154,3 +154,44 @@ test "Z goes to the stop machine when one is attached" {
     try std.testing.expectEqualStrings("OK", try stub.answer("Z0,22000008,2", &out));
     try std.testing.expect(machine.breaks.find(0x2200_0008) != null);
 }
+
+test "HX6538 dual-M55 exposes two GDB threads, per-core PC/registers, and stepping" {
+    const gpa = std.testing.allocator;
+    const m_elf = @embedFile("../../../fixtures/hx6538/cm55m.elf");
+    const s_elf = @embedFile("../../../fixtures/hx6538/cm55s.elf");
+    var h = try ra8.session.harness.open(gpa, std.testing.io, .{
+        .elf_path = "cm55m.elf",
+        .elf_bytes = m_elf,
+        .machine = &ra8.chip.core.machine.catalog.hx6538,
+        .bus_errors = true,
+        .history_frames = 0,
+    });
+    defer h.deinit();
+    var cpu1: ra8.session.cpu1.bringup.Cpu1 = .{};
+    try cpu1.openBytes(gpa, &h, s_elf);
+    defer cpu1.close(gpa);
+
+    h.session().live.budget = 2_000_000;
+    const park = ra8.session.symbols.addressOf(h.image(), "hx_done_park").?;
+    _ = try h.session().setBreakpoint(.cpu0, .{ .address = park });
+    _ = try h.session().run(.cpu0, .run);
+
+    var target: dispatch.zig_run.Target = .{ .session = h.session(), .wall = .{
+        .context = &h,
+        .nowFn = struct {
+            fn now(_: *anyopaque) u64 {
+                return 0;
+            }
+        }.now,
+    } };
+    var out: [256]u8 = undefined;
+    try std.testing.expectEqualStrings("m1,2", try dispatch.zig_run.answer(&target, "qfThreadInfo", &out));
+    try std.testing.expectEqualStrings("OK", try dispatch.zig_run.answer(&target, "Hg1", &out));
+    const m_pc = h.primaryCpu().regs.pc;
+    try std.testing.expectEqual(park & ~@as(u32, 1), m_pc);
+    try std.testing.expectEqualStrings("OK", try dispatch.zig_run.answer(&target, "Hg2", &out));
+    const s_pc_before = cpu1.cpu().regs.pc;
+    try std.testing.expect(s_pc_before >= 0x3400_0000 and s_pc_before < 0x3404_0000);
+    _ = try dispatch.zig_run.answer(&target, "s", &out);
+    try std.testing.expect(cpu1.cpu().regs.pc != s_pc_before or cpu1.pair.second.state.ran > 0);
+}

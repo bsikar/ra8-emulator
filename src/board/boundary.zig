@@ -13,6 +13,7 @@ const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 
 const agt_sched = @import("ra8_chip").periph.agt.sched;
 const Board = @import("board.zig").Board;
+const board_hx6538 = @import("vendor/himax/grove_vision_ai_v2.zig");
 const event_sink = @import("event_sink.zig");
 const fpb_ra4t1 = @import("vendor/renesas/fpb_ra4t1.zig");
 const gpt_sched = @import("ra8_chip").periph.gpt.sched;
@@ -65,7 +66,7 @@ pub fn tick(self: *Board, core: Guest, instructions: u32) !void {
 
 pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
     const mode = self.desc().memory.resolvedPeripherals();
-    if (mode == .none) return tickBare(self, core, instructions, issuer);
+    if (mode == .none or mode == .hx6538) return tickBare(self, core, instructions, issuer);
     if (mode == .ra4t1) return fpb_ra4t1.tick(self, core, instructions, issuer);
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
     const before_ns = self.time.base.now();
@@ -144,7 +145,20 @@ fn drainEvents(self: *Board, core: Guest, mode: chip.core.machine.memory.Periphe
 
 fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.registry.Issuer) !void {
     if (self.event_sink) |sink| sink.observeFn(sink.context, issuer, self.time.base.now(), observation(self));
+    const before_ns = self.time.base.now();
     self.time.base.advance(instructions);
+    if (self.desc().peripheralsKind() == .hx6538) {
+        try board_hx6538.tick(
+            &self.hx,
+            &self.time.base,
+            &self.console_input,
+            core,
+            self.cpu1,
+            self.desc().primary().scs.irq_lines,
+            cpu1IrqLines(self),
+            before_ns,
+        );
+    }
     self.trace.tick();
     notifyFrameTaps(self);
     try takeResetRequestsFrom(self, core, issuer);
@@ -165,8 +179,11 @@ pub fn notifyFrameTaps(self: *Board) void {
 pub fn irqSource(self: *Board, issuer: chip.periph.registry.Issuer) chip.periph.irq_source.IrqSource {
     const slot: usize = if (issuer == .cpu1) 1 else 0;
     if (self.irq_override[slot]) |src| return src;
-    if (self.desc().memory.resolvedPeripherals() == .ra4t1) return self.ra4t1.icu.irqSource();
-    return self.events.irqSourceFor(issuer);
+    return switch (self.desc().memory.resolvedPeripherals()) {
+        .ra4t1 => self.ra4t1.icu.irqSource(),
+        .hx6538 => self.hx.direct_irqs[slot].irqSource(),
+        else => self.events.irqSourceFor(issuer),
+    };
 }
 
 pub fn clearIrqLatches(self: *Board) void {
@@ -177,6 +194,11 @@ pub fn clearIrqLatches(self: *Board) void {
     }
     if (self.irq_override[0]) |src| src.clearLatches();
     if (self.irq_override[1]) |src| src.clearLatches();
+    if (self.desc().peripheralsKind() == .hx6538) {
+        for (&self.hx.direct_irqs) |*lines| {
+            lines.irqSource().clearLatches();
+        }
+    }
 }
 
 fn cpu1IrqLines(self: *const Board) u16 {
@@ -273,6 +295,7 @@ pub fn resetForFrom(self: *Board, source: reset.Source, issuer: chip.periph.regi
     self.causes.request(source);
     clearIrqLatches(self);
     self.second_core.reset();
+    if (self.desc().peripheralsKind() == .hx6538) self.hx.reset();
     if (self.reboot) |pending| pending.requested = true;
 }
 

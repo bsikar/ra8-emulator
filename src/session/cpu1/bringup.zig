@@ -72,7 +72,13 @@ pub const Cpu1 = struct {
         };
         self.bytes = try allocator.dupe(u8, bytes);
         errdefer allocator.free(self.bytes);
-        _ = try cpu1_image.openBytes(&self.pair, board_wiring.cpu1(opened.board()), self.bytes, opened.guest());
+        _ = try cpu1_image.openBytesFor(
+            &self.pair,
+            board_wiring.cpu1(opened.board()),
+            self.bytes,
+            opened.guest(),
+            opened.board().desc().memory,
+        );
         errdefer self.pair.close();
         self.image = try elf.Image.init(self.bytes);
         // Allocate the loaded-image copy before publishing pointers into self.

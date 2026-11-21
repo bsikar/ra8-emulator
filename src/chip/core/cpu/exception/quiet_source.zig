@@ -101,6 +101,8 @@ pub const QuietSource = struct {
             .direct = self.memory.direct,
             .lines = self.memory.lines,
             .register_state = self.memory.register_state,
+            .miss = self.memory.miss,
+            .tally = self.memory.tally,
         };
     }
 

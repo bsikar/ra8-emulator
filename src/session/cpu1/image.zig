@@ -10,6 +10,7 @@ const elf = @import("ra8_board").image.elf;
 const file_ops = @import("../file_ops.zig");
 const Guest = @import("ra8_chip").core.cpu.memory.guest.Guest;
 const loader = @import("ra8_board").image.load;
+const machine_memory = @import("ra8_chip").core.machine.memory;
 const second_core = @import("ra8_chip").core.second.core;
 const Wiring = @import("ra8_chip").core.second.wiring.Wiring;
 
@@ -38,15 +39,38 @@ pub fn openIdentified(
     path: []const u8,
     memory: Guest,
 ) ![16]u8 {
+    return openIdentifiedFor(driver, allocator, io, reader, wiring, path, memory, &machine_memory.ra8);
+}
+
+pub fn openIdentifiedFor(
+    driver: *Driver,
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    reader: file_ops.Reader,
+    wiring: Wiring,
+    path: []const u8,
+    memory: Guest,
+    map: *const machine_memory.MemoryMap,
+) ![16]u8 {
     const bytes = try reader.readAlloc(io, path, allocator, second_core.limits.image_bytes);
     defer allocator.free(bytes);
-    return openBytes(driver, wiring, bytes, memory);
+    return openBytesFor(driver, wiring, bytes, memory, map);
 }
 
 /// Open CPU1 from caller-owned bytes, without host access. The driver
 /// consumes the loaded segments before returning and borrows no ELF bytes.
 pub fn openBytes(driver: *Driver, wiring: Wiring, bytes: []const u8, memory: Guest) ![16]u8 {
-    const loaded = try loader.read(try elf.Image.init(bytes));
+    return openBytesFor(driver, wiring, bytes, memory, &machine_memory.ra8);
+}
+
+pub fn openBytesFor(
+    driver: *Driver,
+    wiring: Wiring,
+    bytes: []const u8,
+    memory: Guest,
+    map: *const machine_memory.MemoryMap,
+) ![16]u8 {
+    const loaded = try loader.readFor(try elf.Image.init(bytes), map);
     try driver.open(wiring, loaded.image(), memory);
     return board.snapshot.run.imageIdentity(bytes);
 }
