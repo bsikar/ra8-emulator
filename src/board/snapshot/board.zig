@@ -5,6 +5,7 @@
 //! them saves them beside this (RA8EMU-660). Preparation decodes every
 //! section into detached guest resources while retaining the target's wiring.
 //! Only a successful preparation can commit those resources to the live board.
+const board_root = @import("../root.zig");
 const chip = @import("ra8_chip");
 const components = @import("ra8_components");
 const rswitch = @import("rswitch.zig");
@@ -18,6 +19,8 @@ const std = @import("std");
 
 const fields = @import("ra8_snapshot").fields;
 const file = @import("ra8_snapshot").file;
+
+const fpb_ra4t1 = board_root.vendor.renesas.fpb_ra4t1;
 pub const inputs = @import("inputs.zig");
 pub const inventory = @import("inventory.zig");
 const Part = @import("ra8_chip").core.part.Part;
@@ -51,6 +54,7 @@ const sections = .{
     rswitch,
     chip.periph.npu.snapshot,
     components.esp_hosted.snapshot,
+    chip.vendor.renesas.ra4t1.snapshot,
 };
 
 pub fn save(board: anytype, writer: anytype) !void {
@@ -128,6 +132,9 @@ pub fn Prepared(comptime B: type) type {
             }
             resourcesFree(live);
             live.* = self.next.*;
+            if (live.desc().memory.resolvedPeripherals() == .ra4t1) {
+                fpb_ra4t1.bind(live);
+            }
             if (self.reboot) |saved| live.reboot.?.* = saved;
             // Ownership was transferred; deinit only releases empty resources.
             resourcesDetach(self.next);

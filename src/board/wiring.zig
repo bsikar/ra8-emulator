@@ -32,6 +32,7 @@ const dmac = @import("ra8_chip").periph.dmac;
 const drw = @import("ra8_chip").periph.drw;
 const dtc = @import("ra8_chip").periph.dtc;
 const eink = @import("ra8_components").eink;
+const fpb_ra4t1 = @import("vendor/renesas/fpb_ra4t1.zig");
 const gtclkcr = @import("ra8_chip").periph.gtclkcr;
 const lpm = @import("ra8_chip").periph.lpm;
 const modem = @import("ra8_components").modem_at;
@@ -97,6 +98,7 @@ pub fn attachBlocks(self: *Board, memory: Guest) !void {
         .none => {},
         .ra8_dual => try attachRa8Blocks(self, memory),
         .ra8e1 => try fpb_ra8e1.attach(self, memory),
+        .ra4t1 => try fpb_ra4t1.attachBlocks(self, memory),
     }
 }
 
@@ -266,7 +268,7 @@ pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     try memory.writeWord(dwt.base, dwt.ctrlValue(numcomp));
     try memory.writeWord(fpb.base, fpb.ctrlReset(windows.scs.fpb_code));
     try windows.control.prime(memory);
-    try self.caches.prime(memory);
+    if (self.desc().memory.resolvedPeripherals() != .ra4t1) try self.caches.prime(memory);
     try windows.regions.prime(memory);
     if (windows.scs.init_vtor) |vtor| try memory.writeWord(memmap.scb.vtor, vtor);
     if (windows.systicks >= 1 and windows.scs.syst_calib != 0) {

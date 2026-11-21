@@ -36,6 +36,7 @@ const dtc = @import("ra8_chip").periph.dtc;
 const elc = @import("ra8_chip").periph.elc;
 const fault_clear = @import("ra8_chip").periph.fault.clear;
 const fcache = @import("ra8_chip").vendor.renesas.ra8e1.fcache;
+const fpb_ra4t1 = @import("vendor/renesas/fpb_ra4t1.zig");
 const glcdc = @import("ra8_chip").periph.glcdc;
 const gpt = @import("ra8_chip").periph.gpt;
 const gptp = @import("ra8_chip").periph.gptp;
@@ -194,6 +195,7 @@ pub fn seed(self: *Board, memory: Guest) void {
     self.trace.memory = memory;
     self.idau = sau.idau.Map.forPart(&self.sram_attribution, self.desc().part == .ra8p1);
     self.idau.custom = self.desc().memory.idau;
+    if (self.desc().memory.resolvedPeripherals() == .ra4t1) fpb_ra4t1.bind(self);
 }
 
 /// Releases heap-backed component state owned by `self`.
