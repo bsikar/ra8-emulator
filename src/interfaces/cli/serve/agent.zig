@@ -144,7 +144,7 @@ pub const Target = struct {
         var offset: usize = 0;
         var hex_buf: [wire.raw_chunk_bytes * 2]u8 = undefined;
         while (offset < elf.len) {
-            const take = @min(wire.raw_chunk_bytes, elf.len - offset);
+            const take: usize = @min(wire.raw_chunk_bytes, elf.len - offset);
             encodeHex(elf[offset..][0..take], hex_buf[0 .. take * 2]);
             const ack = try self.peer.request(std.heap.page_allocator, .{
                 .op = .flash_chunk,
