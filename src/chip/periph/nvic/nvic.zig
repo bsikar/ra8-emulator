@@ -1,20 +1,9 @@
 //! The Nested Vectored Interrupt Controller: what is pending, and what taking
-//! it does to the core.
+//! it does to the core (DDI0553 B3.19).
 //!
-//! A CPU model only takes exceptions it raised itself. Nothing
-//! here raises one: the PPB is plain RAM, so `NVIC->ISER[0] = 1 << n` and
-//! `SysTick`'s pend in ICSR are words sitting in memory that the core will
-//! never look at. Until this file existed, a firmware that armed SysTick with
-//! TICKINT and then waited on a handler-updated flag spun out its whole
-//! budget: the previous slice pended the exception, and nobody took it.
-//!
-//! So the controller is modelled host-side and runs at the chunk boundary,
-//! the same seam the clocks are charged on. Taking an exception is done the
-//! way the silicon does it (DDI0553 B3.19): stack the caller-saved frame,
-//! load LR with an EXC_RETURN, and enter the handler from the vector table at
-//! VTOR. Returning is the mirror: the handler branches to EXC_RETURN, which is
-//! an unmapped fetch to such a model, and the run loop unwinds
-//! the frame instead of reporting a fault.
+//! Modelled host-side at the chunk boundary: stacks the caller-saved frame,
+//! loads LR with EXC_RETURN, enters the handler from VTOR, and unwinds on
+//! return.
 
 pub const banked = @import("banked.zig");
 const candidates = @import("../candidate.zig");
@@ -26,21 +15,23 @@ const exc_return = @import("../exc_return.zig");
 const held_reasons = @import("../held.zig");
 const memmap = @import("../../core/memmap.zig");
 const passed_pends = @import("../passed.zig");
+const scs_mod = @import("../../core/machine/scs.zig");
 const standing_pends = @import("../standing.zig");
 
 /// Exception numbers (DDI0553 B3.6). Only the two system exceptions the
 /// firmware actually pends are named; everything at or above `first_irq` is
-/// an ICU line.
+/// an external interrupt line.
 pub const pendsv: u16 = 14;
 pub const systick: u16 = 15;
 pub const first_irq: u16 = 16;
 /// Which security state each line targets. src/chip/periph/itns.zig.
 pub const itns = @import("../itns.zig");
 
-/// The RA8 ICU drives 96 NVIC lines (IELSR0..IELSR95), so three ISER/ICER
-/// words. Widening the model to a bigger part is this one constant.
+/// Default external IRQ count (96 on RA8D2/RA8P1) and architectural ceiling (480).
 pub const irq_lines: u16 = 96;
 pub const irq_words: u16 = irq_lines / 32;
+pub const max_irq_lines: u16 = scs_mod.max_irq_lines;
+pub const max_irq_words: u16 = scs_mod.max_irq_words;
 
 /// ICSR's pend and unpend bits for the two system exceptions.
 pub const icsr_pendstclr: u32 = 1 << 25;
@@ -127,16 +118,24 @@ pub const Nvic = struct {
     /// Returns that landed a thread back on the Process stack. Nonzero means
     /// a scheduler is switching threads under this run.
     thread_returns: u64 = 0,
-    /// Which stack Thread mode is on. CONTROL.SPSEL is the architectural home
-    /// for this and the emulator underneath does not keep a write to it, so
-    /// the bit is held here instead and moved only by an exception return,
-    /// which is the only thing that moves it in any of the images this runs.
-    /// A firmware that selects the Process stack by storing CONTROL itself is
-    /// NOT MODELLED, AND NOT GUESSED: none of the EIL images does it.
+    /// Which stack Thread mode is on, moved by exception return.
     on_process: bool = false,
     /// The Main stack as it was when the last return left it for a thread.
-    /// Entry from a thread on the Process stack puts the handler back on it.
     main_sp: u32 = 0,
+    /// Implemented external IRQ count (0..480).
+    irq_lines: u16 = irq_lines,
+    /// Implemented priority bits per byte (0..8).
+    prio_bits: u4 = 4,
+    /// Implemented SysTick timers (0..2).
+    systicks: u2 = 2,
+
+    pub fn irqWords(self: *const Nvic) u16 {
+        return scs_mod.irqWordsOf(self.irq_lines);
+    }
+
+    pub fn prioMask(self: *const Nvic) u8 {
+        return scs_mod.prioMaskOf(self.prio_bits);
+    }
 
     /// The priority of the innermost active handler, or null in Thread mode.
     /// A fault no more urgent than this cannot preempt it and escalates.
@@ -148,7 +147,7 @@ pub const Nvic = struct {
     /// is allowed to preempt whatever is running. Returns the exception it
     /// entered. Call it at the chunk boundary, after the clocks are charged.
     pub fn dispatch(self: *Nvic, core: anytype) !?u16 {
-        try clear.registers(core, irq_words, clear_bits);
+        try clear.registersFor(core, self.irq_lines, clear_bits);
         self.standing.boundary((try core.readWord(memmap.scb.icsr)) & icsr_pendsvset != 0);
         const candidate = (try self.pick(core, &self.passed)) orelse return null;
         if (try masked(core)) {
@@ -237,12 +236,6 @@ pub const Nvic = struct {
 
     /// Return from the innermost handler: restore the frame at the stack the
     /// EXC_RETURN names and resume where that frame says.
-    ///
-    /// `value` is the EXC_RETURN the handler branched to, which is not always
-    /// the one entry handed it. A scheduler's PendSV rebuilds a thread's
-    /// context, puts that thread's stack pointer in PSP, and returns with
-    /// 0xFFFF_FFFD to land on it; unstacking from MSP there resumes whatever
-    /// was left on the main stack instead of the thread.
     pub fn exit(self: *Nvic, core: anytype, value: u32) !void {
         if (self.depth == 0) return Error.NotInHandler;
         const finished = self.active[self.depth - 1];
@@ -307,21 +300,39 @@ pub const Nvic = struct {
     /// `tally` is null for a pick that only asks whether anything is pending:
     /// a masked boundary picks twice and the losses are counted once.
     pub fn pick(self: *Nvic, core: anytype, tally: ?*passed_pends.Passed) !?Candidate {
-        _ = self;
         var best: ?Candidate = null;
-        const pends = try banked.read(core);
+        const pends = try banked.readFor(core, self.systicks);
         const quiet = dcb.masksInterrupts(try core.readWord(dcb.base));
-        // SysTick and PendSV have no enable of their own: pending is enough.
+        const prio_mask = self.prioMask();
         if (!quiet) for (pends.slice()) |pend| {
-            best = consider(tally, best, banked.candidate(pend));
+            var offered = banked.candidate(pend);
+            offered.priority &= prio_mask;
+            best = consider(tally, best, offered);
         };
-        if (try debug_monitor.pending(core)) |monitor| best = consider(tally, best, monitor);
+        if (try debug_monitor.pending(core)) |monitor| {
+            var offered = monitor;
+            offered.priority &= prio_mask;
+            best = consider(tally, best, offered);
+        }
+        if (!quiet) best = try self.pickIrqs(core, tally, best, prio_mask);
+        if (tally) |keep| keep.boundary();
+        return best;
+    }
+
+    fn pickIrqs(
+        self: *const Nvic,
+        core: anytype,
+        tally: ?*passed_pends.Passed,
+        initial: ?Candidate,
+        prio_mask: u8,
+    ) !?Candidate {
+        var best = initial;
+        const words = self.irqWords();
         var word: u16 = 0;
-        while (!quiet and word < irq_words) : (word += 1) {
+        while (word < words) : (word += 1) {
+            const mask = scs_mod.wordIrqMaskOf(self.irq_lines, word);
             const offset = 4 * @as(u32, word);
-            // A word with no line enabled is the common case: skip its pends
-            // (RA8EMU-1120, each read crosses the whole bus).
-            const enabled = try core.readWord(memmap.nvic.iser + offset);
+            const enabled = (try core.readWord(memmap.nvic.iser + offset)) & mask;
             if (enabled == 0) continue;
             const ready = enabled & (try core.readWord(memmap.nvic.ispr + offset));
             if (ready == 0) continue;
@@ -331,13 +342,12 @@ pub const Nvic = struct {
                     const line = word * 32 + bit;
                     best = consider(tally, best, .{
                         .number = first_irq + line,
-                        .priority = try irqPriority(core, line),
+                        .priority = (try irqPriority(core, line)) & prio_mask,
                     });
                 }
                 if (bit == 31) break;
             }
         }
-        if (tally) |keep| keep.boundary();
         return best;
     }
 };

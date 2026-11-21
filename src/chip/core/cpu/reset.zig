@@ -31,7 +31,11 @@ pub fn cpu(core: *Cpu, vtor: u32) bus.Error!void {
     try fromVectorTable(&fresh, core.bus, vtor);
     core.trip.drop(core);
     core.banked = .{};
-    if (core.booted) try scs.clear(core.bus);
+    if (core.booted) {
+        try scs.clearFor(core.bus, core.profile.irq_lines, core.profile.init_vtor);
+    } else if (core.profile.init_vtor) |seed| {
+        try scs.seedVtor(core.bus, seed);
+    }
     core.booted = true;
     core.regs = fresh;
     core.fp = .{};

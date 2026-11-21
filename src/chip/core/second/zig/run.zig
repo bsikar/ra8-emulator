@@ -77,14 +77,22 @@ pub const Driver = struct {
             .control = &units.control,
             .clears = &units.clears,
         }, image);
+        const desc = wiring.core.?;
+        self.ns_timebase.words.present = desc.systicks >= 2;
         units.state = .{
             .written = seeded.written,
             .vector_base = seeded.vector_base,
-            .interrupts = .{ .vector_base = seeded.vector_base },
+            .interrupts = .{
+                .vector_base = seeded.vector_base,
+                .irq_lines = desc.scs.irq_lines,
+                .prio_bits = desc.scs.prio_bits,
+                .systicks = desc.systicks,
+            },
             .dividers = wiring.dividers,
             .wiring = wiring,
             .pc = self.core.cpu.regs.pc,
         };
+        units.state.timebase.words.present = desc.systicks >= 1;
         if (wiring.reboot.*) |pending| units.state.resets_seen = pending.performed;
         self.handTo(wiring);
     }

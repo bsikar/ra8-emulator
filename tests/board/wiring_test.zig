@@ -75,3 +75,40 @@ test "a board with no panel_vsync config leaves the clock unarmed" {
     try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
     try std.testing.expect(board.display.output.vsync == null);
 }
+
+test "primeWindows seeds custom MPU, SAU, DWT, FPB, VTOR and SYST_CALIB capabilities" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    const memory: ra8.chip.core.cpu.memory.guest.Guest = .{ .store = &store };
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.primeWindows(&board, memory, .{
+        .partitions = &board.partitions,
+        .regions = &board.regions,
+        .regions_ns = &board.regions_ns,
+        .guard = &board.guard,
+        .identity = ra8.chip.periph.cpuid.cpu1,
+        .security = true,
+        .systicks = 2,
+        .scs = .{
+            .sau_regions = 0,
+            .mpu_regions_s = 12,
+            .mpu_regions_ns = 4,
+            .dwt_comparators = 2,
+            .fpb_code = 6,
+            .init_vtor = 0x0800_0000,
+            .syst_calib = 0x4001_869F,
+        },
+        .control = &board.control,
+        .clears = &board.clears,
+    });
+    const memmap = ra8.chip.core.memmap;
+    try std.testing.expectEqual(@as(u32, 12 << 8), try memory.readWord(memmap.mpu.type_));
+    try std.testing.expectEqual(@as(u32, 4 << 8), try memory.readWord(memmap.mpu.type_ + 0x20000));
+    try std.testing.expectEqual(@as(u32, 0), try memory.readWord(memmap.sau.type_));
+    try std.testing.expectEqual(@as(u32, 2 << 28), try memory.readWord(ra8.chip.periph.dwt.base));
+    try std.testing.expectEqual(ra8.chip.periph.fpb.ctrlReset(6), try memory.readWord(ra8.chip.periph.fpb.base));
+    try std.testing.expectEqual(@as(u32, 0x0800_0000), try memory.readWord(memmap.scb.vtor));
+    try std.testing.expectEqual(@as(u32, 0x4001_869F), try memory.readWord(memmap.syst.calib));
+    try std.testing.expectEqual(@as(u32, 0x4001_869F), try memory.readWord(memmap.syst.calib + 0x20000));
+}

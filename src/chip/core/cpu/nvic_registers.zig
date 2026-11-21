@@ -7,6 +7,7 @@ const alias = @import("../../periph/scs_alias.zig");
 const bus = @import("bus.zig");
 const memmap = @import("../memmap.zig");
 const nvic = @import("../../periph/nvic/nvic.zig");
+const scs_mod = @import("../machine/scs.zig");
 
 const span: u32 = 0x40;
 const Command = struct { state: u32, word: u32, clear: bool };
@@ -46,10 +47,11 @@ fn view(address: u32, secure: bool) ?alias.Target {
     };
 }
 
-fn mask(memory: bus.Bus, target: alias.Target, word: u32) bus.Error!u32 {
-    if (word >= nvic.irq_words) return 0;
-    if (target.view == .secure) return std.math.maxInt(u32);
-    return memory.readWord(nvic.itns.base + word * 4);
+fn mask(memory: bus.Bus, target: alias.Target, word: u32, irq_lines: u16) bus.Error!u32 {
+    const implemented = scs_mod.wordIrqMaskOf(irq_lines, word);
+    if (implemented == 0) return 0;
+    if (target.view == .secure) return implemented;
+    return (try memory.readWord(nvic.itns.base + word * 4)) & implemented;
 }
 
 /// Narrow and unaligned command accesses are UNPREDICTABLE in the ARM;
@@ -59,19 +61,27 @@ fn width(address: u32, len: usize) bus.Error!void {
 }
 
 pub fn read(memory: bus.Bus, address: u32, secure: bool, into: []u8) bus.Error!void {
+    return readFor(memory, address, secure, nvic.irq_lines, into);
+}
+
+pub fn readFor(memory: bus.Bus, address: u32, secure: bool, irq_lines: u16, into: []u8) bus.Error!void {
     const target = view(address, secure) orelse return @memset(into, 0);
     try width(address, into.len);
     const cmd = command(target.address) orelse return error.Unmapped;
-    const allowed = try mask(memory, target, cmd.word);
+    const allowed = try mask(memory, target, cmd.word, irq_lines);
     const value = if (allowed == 0) 0 else (try memory.readWord(cmd.state)) & allowed;
     std.mem.writeInt(u32, into[0..4], value, .little);
 }
 
 pub fn write(memory: bus.Bus, address: u32, secure: bool, bytes: []const u8) bus.Error!void {
+    return writeFor(memory, address, secure, nvic.irq_lines, bytes);
+}
+
+pub fn writeFor(memory: bus.Bus, address: u32, secure: bool, irq_lines: u16, bytes: []const u8) bus.Error!void {
     const target = view(address, secure) orelse return;
     try width(address, bytes.len);
     const cmd = command(target.address) orelse return error.Unmapped;
-    const bits = std.mem.readInt(u32, bytes[0..4], .little) & (try mask(memory, target, cmd.word));
+    const bits = std.mem.readInt(u32, bytes[0..4], .little) & (try mask(memory, target, cmd.word, irq_lines));
     if (bits == 0) return;
     const old = try memory.readWord(cmd.state);
     try memory.writeWord(cmd.state, if (cmd.clear) old & ~bits else old | bits);

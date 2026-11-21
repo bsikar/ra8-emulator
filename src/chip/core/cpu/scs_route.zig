@@ -27,27 +27,38 @@ pub const Landing = union(enum) {
     res0,
 };
 
-/// Where an access to `address` lands. A core with no state given is taken
-/// as Secure, which is how every core runs until it changes state.
+/// Where an access to `address` lands, assuming two SysTick timers and
+/// the Security Extension.
 pub fn land(state: ?*const banked.Banked, address: u32) Landing {
-    const secure = if (state) |s| s.current == .secure else true;
+    return landWith(state, address, 2, true);
+}
+
+/// Where an access to `address` lands on a core with `systicks` timers (0..2)
+/// and `has_security`.
+pub fn landWith(state: ?*const banked.Banked, address: u32, systicks: u2, has_security: bool) Landing {
+    if (!has_security and alias.scs_ns.covers(address)) return .res0;
+    const secure = if (!has_security) true else if (state) |s| s.current == .secure else true;
     return switch (alias.route(address, secure)) {
         .outside => .{ .at = address },
         .res0 => .res0,
-        .register => |target| .{ .at = copy(target, address) },
+        .register => |target| copyWith(target, address, systicks),
     };
 }
 
-fn copy(target: alias.Target, address: u32) u32 {
-    // Each core has a Non-secure SysTick of its own at the alias (RA8EMU-154).
-    if (target.view == .non_secure and systick_bank.window.normal.covers(target.address)) {
-        return target.address + alias.offset;
+fn copyWith(target: alias.Target, address: u32, systicks: u2) Landing {
+    if (systick_bank.window.normal.covers(target.address)) {
+        if (systicks == 0) return .res0;
+        if (target.view == .non_secure) {
+            if (systicks < 2) return .res0;
+            return .{ .at = target.address + alias.offset };
+        }
+        return .{ .at = target.address };
     }
     const word = target.address & ~@as(u32, 3);
     const within = target.address - word;
     return switch (scb_bank.backing(.{ .address = word, .view = target.view })) {
-        .word => |at| at + within,
-        .bit_by_bit, .unknown => address,
+        .word => |at| .{ .at = at + within },
+        .bit_by_bit, .unknown => .{ .at = address },
     };
 }
 
@@ -115,14 +126,15 @@ const shpr3: u32 = 0xE000_ED20;
 const shcsr: u32 = 0xE000_ED24;
 const cfsr: u32 = 0xE000_ED28;
 
-/// Both RA8 cores implement a SysTick per Security state, and the Zig core
-/// runs both (RA8EMU-154), so ICSR, SHPR3 and SHCSR bank SysTick's bits too.
-const two_systicks: scb_bank.SysTicks = .two;
-
 /// The split an access by a core in `state` to `address` goes through, or
 /// null when it takes the plain path: Secure code on the normal window, a
 /// register not wired yet, or anything outside the SCB.
 pub fn wired(state: ?*const banked.Banked, address: u32) ?Split {
+    return wiredWith(state, address, 2, true);
+}
+
+pub fn wiredWith(state: ?*const banked.Banked, address: u32, systicks: u2, has_security: bool) ?Split {
+    if (!has_security) return null;
     const secure = if (state) |s| s.current == .secure else true;
     const target = switch (alias.route(address, secure)) {
         .register => |t| t,
@@ -132,7 +144,7 @@ pub fn wired(state: ?*const banked.Banked, address: u32) ?Split {
     const word = target.address & ~@as(u32, 3);
     for (wired_words) |candidate| {
         if (candidate != word) continue;
-        var halves = split(target, two_systicks) orelse return null;
+        var halves = split(target, scb_bank.SysTicks.of(systicks)) orelse return null;
         halves.clears = word == cfsr;
         return halves;
     }

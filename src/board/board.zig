@@ -346,7 +346,6 @@ pub const Board = struct {
     /// The SAU window, third PPB block: TYPE is hardwired like the MPU's.
     partitions: sau.Sau,
     /// Where a reset this board decides on is left for the engine to perform.
-    /// main.zig points it at the run's seam; a test's board leaves it null.
     reboot: ?*reboot.Reboot = null,
     /// Optional session event sink; excluded from board snapshots as wiring.
     event_sink: ?event_sink_api.EventSink = null,
@@ -387,6 +386,7 @@ pub const Board = struct {
     pub const tick = boundary.tick;
     pub const tickFrom = boundary.tickFrom;
     pub const raise = boundary.raise;
+    pub const irqSource = boundary.irqSource;
     pub const takeResetRequests = boundary.takeResetRequests;
     pub const requestReset = boundary.resetFor;
     pub const requestResetFrom = boundary.resetForFrom;

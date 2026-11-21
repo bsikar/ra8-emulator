@@ -118,10 +118,10 @@ pub fn tickFrom(self: *Board, core: Guest, instructions: u32, issuer: chip.perip
     try drain(self, core, self.dma.dueEvents());
     try drain(self, core, self.usb.dueEvents());
     try drain(self, core, self.links.takeEvents());
-    try self.events.repend(core);
-    if (self.cpu1) |second| try self.events.rependOn(.cpu1, second);
+    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
+    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
     // Drains after the reset request may have latched a line again.
-    if (self.reboot) |pending| if (pending.requested) self.events.clearLatches();
+    if (self.reboot) |pending| if (pending.requested) irqSource(self, .cpu0).clearLatches();
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 
@@ -131,6 +131,9 @@ fn tickBare(self: *Board, core: Guest, instructions: u32, issuer: chip.periph.re
     self.trace.tick();
     notifyFrameTaps(self);
     try takeResetRequestsFrom(self, core, issuer);
+    try irqSource(self, .cpu0).repend(&core, self.desc().primary().scs.irq_lines);
+    if (self.cpu1) |second| try irqSource(self, .cpu1).repend(&second, cpu1IrqLines(self));
+    if (self.reboot) |pending| if (pending.requested) irqSource(self, .cpu0).clearLatches();
     if (self.run_hook) |hook| hook.boundaryFn(hook.context, self.time.base.now());
 }
 
@@ -139,6 +142,15 @@ fn notifyFrameTaps(self: *Board) void {
         if (!self.frame_taps.contains(tap)) tap.afterBoundary(self.time.base.now());
     }
     self.frame_taps.afterBoundary(self.time.base.now());
+}
+
+/// Vendor-neutral external interrupt source for `issuer` on this board.
+pub fn irqSource(self: *Board, issuer: chip.periph.registry.Issuer) chip.periph.irq_source.IrqSource {
+    return self.events.irqSourceFor(issuer);
+}
+
+fn cpu1IrqLines(self: *const Board) u16 {
+    return if (self.desc().core(.cpu1)) |c| c.scs.irq_lines else 0;
 }
 
 /// Host switch edges reach the event path only through a pin whose PFS ISEL
@@ -170,13 +182,13 @@ pub fn raise(self: *Board, core: Guest, event: u16) !void {
             if (self.transfers1.activate(second.asInitiator(.dtc1), &self.events, event)) |moved| {
                 if (!moved.interrupt) return;
             }
-            return self.events.raiseOn(.cpu1, second, event);
+            return irqSource(self, .cpu1).raise(&second, cpu1IrqLines(self), event);
         }
     }
     if (self.transfers.activate(core.asInitiator(.dtc0), &self.events, event)) |moved| {
         if (!moved.interrupt) return;
     }
-    try self.events.raise(core, event);
+    try irqSource(self, .cpu0).raise(&core, self.desc().primary().scs.irq_lines, event);
 }
 
 /// Whoever asked for a reset this boundary hands the request to the reset

@@ -80,7 +80,8 @@ pub fn fromSau(unit: *const sau.Sau, address: u32) Attribution {
         return .{ .state = if (unit.outsideIsNonSecure()) .non_secure else .secure };
     }
     var hit: ?u8 = null;
-    for (unit.table, 0..) |region, index| {
+    const active = @min(unit.region_count, @as(u8, sau.geometry.max_regions));
+    for (unit.table[0..active], 0..) |region, index| {
         if (!region.covers(address)) continue;
         if (hit != null) return .{ .state = .secure };
         hit = @intCast(index);
