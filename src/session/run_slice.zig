@@ -55,30 +55,7 @@ fn drive(self: *Session, core: Core, command: ?api.Run) anyerror!api.Ended {
         if (self.replay_feeder) |*feeder| feeder.checkMissed(self);
     }
     const stopped: Core = @fromBackingInt(@intCast(self.live.ended_index));
-    self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
-    if (self.history) |h| if ((command != null and
-        command != .cont) or
-        !endedOnBudget(ended)) try recordStop(self, h, core, stopped, ended);
-    if (ended == .core) {
-        const address: ?u32 = switch (ended.core) {
-            .count => null,
-            .unknown => |instruction| instruction.address,
-            inline else => |at| at,
-        };
-        self.publish(
-            .{
-                .core = stopped,
-                .kind = .fault,
-                .address = address,
-                .payload = .{
-                    .fault = .{
-                        .cause = @backingInt(std.meta.activeTag(ended.core)),
-                        .address = address,
-                    },
-                },
-            },
-        );
-    }
+    try publishDriveEnd(self, core, stopped, command, ended);
     // Queued host traffic reaches the machine once the run is back at the
     // recorded end; the stop above is already published and captured, so
     // a delivery that fails reports on a run whose state is settled.
@@ -90,6 +67,39 @@ fn drive(self: *Session, core: Core, command: ?api.Run) anyerror!api.Ended {
         return .{ .stop = .{ .replay_failed = failure } };
     }
     return ended;
+}
+
+fn publishDriveEnd(
+    self: *Session,
+    asked: Core,
+    stopped: Core,
+    command: ?api.Run,
+    ended: api.Ended,
+) anyerror!void {
+    const budget_end = endedOnBudget(ended);
+    if ((!self.streaming_slice and !self.advancing) or !budget_end) {
+        self.publish(.{ .core = stopped, .kind = .stopped, .ended = ended });
+    }
+    if (self.history) |h| if ((command != null and command != .cont) or !budget_end) {
+        try recordStop(self, h, asked, stopped, ended);
+    };
+    if (ended != .core) return;
+    const address: ?u32 = switch (ended.core) {
+        .count => null,
+        .unknown => |instruction| instruction.address,
+        inline else => |at| at,
+    };
+    self.publish(.{
+        .core = stopped,
+        .kind = .fault,
+        .address = address,
+        .payload = .{
+            .fault = .{
+                .cause = @backingInt(std.meta.activeTag(ended.core)),
+                .address = address,
+            },
+        },
+    });
 }
 
 /// Advances one replay slot on whichever core owns the current round phase,

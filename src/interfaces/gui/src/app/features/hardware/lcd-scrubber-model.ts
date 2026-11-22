@@ -73,6 +73,13 @@ export function selectAdaptiveModeForSpeed(speedMilli: number): AdaptiveLcdMode 
   return 'rate_1x';
 }
 
+export function speedMilliForAdaptiveMode(mode: AdaptiveLcdMode): number {
+  if (mode === 'slow_0_1x') return 100;
+  if (mode === 'rate_100x') return 100_000;
+  if (mode === 'rate_max') return 0;
+  return 1000;
+}
+
 export function createLcdScrubberState(width = 480, height = 272): LcdScrubberState {
   const safeW = Math.max(1, Math.round(width));
   const safeH = Math.max(1, Math.round(height));
