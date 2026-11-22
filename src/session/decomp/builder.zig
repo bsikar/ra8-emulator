@@ -173,13 +173,16 @@ pub fn build(allocator: std.mem.Allocator, opts: Options) std.mem.Allocator.Erro
         blk.preds = try aa.dupe(cfg_mod.BlockId, pred_lists[idx].items);
     }
 
+    const out_name = try dupeOpt(aa, if (fn_extent) |e| e.name else null);
+    const out_unresolved = try unresolved.toOwnedSlice(aa);
+
     return .{
         .arena = arena,
         .entry = norm_entry,
         .extent_size = if (fn_extent) |e| e.size else 0,
-        .name = try dupeOpt(aa, if (fn_extent) |e| e.name else null),
+        .name = out_name,
         .blocks = blocks,
-        .unresolved = try unresolved.toOwnedSlice(aa),
+        .unresolved = out_unresolved,
         .truncated = discovery.truncated,
     };
 }
