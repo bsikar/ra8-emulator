@@ -79,8 +79,10 @@ pub const jlink = struct {
     pub const run = @import("jlink/run.zig");
     pub const serial = @import("jlink/serial.zig");
     pub const serial_linux = @import("jlink/serial/linux.zig");
+    pub const serial_macos = @import("jlink/serial/macos.zig");
     pub const serial_windows = @import("jlink/serial/windows.zig");
     pub const uart = @import("jlink/uart.zig");
     pub const uart_linux = @import("jlink/uart/linux.zig");
+    pub const uart_macos = @import("jlink/uart/macos.zig");
     pub const uart_windows = @import("jlink/uart/windows.zig");
 };

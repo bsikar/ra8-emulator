@@ -5,14 +5,16 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const linux = @import("uart/linux.zig");
+const macos = @import("uart/macos.zig");
 const windows = @import("uart/windows.zig");
 
-/// The port for `serial` (`COM13`, `/dev/serial/by-id/...`), or null when the
-/// probe exposes none. `error.Unsupported` where no lookup exists for this host.
+/// The port for `serial` (`COM13`, `/dev/serial/by-id/...`, `/dev/cu.usbmodem...`), or null
+/// when the probe exposes none. `error.Unsupported` where no lookup exists for this host.
 pub fn find(io: std.Io, serial: u64, out: []u8) !?[]const u8 {
     return switch (builtin.os.tag) {
         .windows => windows.find(serial, out),
         .linux => linux.find(io, serial, out),
+        .macos => macos.find(io, serial, out),
         else => error.Unsupported,
     };
 }

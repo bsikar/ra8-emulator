@@ -2,6 +2,7 @@
 //! core and optional factory part-number identity, and run verified core debug,
 //! flash/verify, and reset actions. Every call names the probe by USB serial,
 //! never by list position, and runs within a bounded deadline with cancellation.
+const builtin = @import("builtin");
 const std = @import("std");
 
 const elf_image = @import("elf_image.zig");
@@ -273,10 +274,46 @@ fn script(
     const tail = head.len + extra.len;
     argv[tail] = "-CommandFile";
     argv[tail + 1] = path;
-    const outcome = run_tool.runWithCancel(io, argv[0 .. tail + 2], text, tool.timeout_ms, tool.cancel);
+    const outcome = runBoundedScript(io, tool, argv[0 .. tail + 2], text);
     dir.deleteFile(io, name) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     };
     return outcome;
+}
+
+fn runBoundedScript(
+    io: std.Io,
+    tool: Tool,
+    argv: []const []const u8,
+    text: []u8,
+) !run_tool.Result {
+    if (builtin.os.tag != .macos) {
+        return run_tool.runWithCancel(io, argv, text, tool.timeout_ms, tool.cancel);
+    }
+    var attempt: u8 = 0;
+    while (true) : (attempt += 1) {
+        if (tool.cancel) |flag| {
+            if (flag.load(.acquire)) return error.Canceled;
+        }
+        // macOS J-Link V9.70 background threads can fault or stall before SWD
+        // connect when invocations run back-to-back; space and retry pre-SWD fails.
+        const delay_ms: u32 = if (attempt == 0) 50 else 200;
+        try std.Io.sleep(io, .fromMilliseconds(delay_ms), .awake);
+        @memset(text, 0);
+        const outcome = run_tool.runWithCancel(io, argv, text, tool.timeout_ms, tool.cancel);
+        if (attempt >= 2 or !preSwdFailure(outcome, text)) return outcome;
+    }
+}
+
+fn preSwdFailure(outcome: anyerror!run_tool.Result, text: []const u8) bool {
+    if (outcome) |res| {
+        return res.code < 0 and std.mem.indexOf(u8, res.output, "Connecting to target") == null;
+    } else |err| switch (err) {
+        error.ProbeTimeout => {
+            const len = std.mem.indexOfScalar(u8, text, 0) orelse text.len;
+            return std.mem.indexOf(u8, text[0..len], "Connecting to target") == null;
+        },
+        else => return false,
+    }
 }

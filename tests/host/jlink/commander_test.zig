@@ -150,3 +150,32 @@ test "commander flashAndVerify programs verifies cleans scratch files and refuse
         commander.flashAndVerify(io, tool, 1083322193, "R7FA8E1AF", 0x410FD232, 0x0200_0000, 0x0010_0000, elf, &text),
     );
 }
+
+test "commander retries once on macOS pre-SWD signal termination" {
+    if (builtin.os.tag != .macos) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const alloc = std.testing.allocator;
+    const io = std.testing.io;
+    const script =
+        "#!/bin/sh\n" ++
+        "dir=$(dirname \"$0\")\n" ++
+        "if [ ! -f \"$dir/crashed_once\" ]; then\n" ++
+        "  touch \"$dir/crashed_once\"\n" ++
+        "  printf 'S/N: 1083322193\\n'\n" ++
+        "  kill -TERM $$\n" ++
+        "fi\n" ++
+        "printf 'S/N: 1083322193\\nE000ED00 = 410FD232 \\n'\n";
+    const file = try tmp.dir.createFile(io, "flaky_jlink.sh", .{ .permissions = .fromMode(0o755) });
+    defer file.close(io);
+    try file.writeStreamingAll(io, script);
+    const program = try tmp.dir.realPathFileAlloc(io, "flaky_jlink.sh", alloc);
+    defer alloc.free(program);
+    const scratch = try tmp.dir.realPathFileAlloc(io, ".", alloc);
+    defer alloc.free(scratch);
+    const tool: commander.Tool = .{ .program = program, .scratch = scratch, .timeout_ms = 5_000 };
+    var text: [4096]u8 = undefined;
+    const found = try commander.identify(io, tool, 1083322193, "R7FA8E1AF", &text);
+    try std.testing.expectEqual(@as(u64, 1083322193), found.serial);
+    try std.testing.expectEqual(@as(u32, 0x410FD232), found.cpuid);
+}
