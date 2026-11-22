@@ -6,6 +6,7 @@
 const block_end = @import("end.zig");
 const bus = @import("../bus.zig");
 const decode = @import("../decode/decode.zig");
+pub const flow = @import("flow.zig");
 const Instr = @import("../instr.zig").Instr;
 
 /// The most instructions one block holds.

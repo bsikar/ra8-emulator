@@ -23,6 +23,7 @@ pub const call_decode = @import("call_decode.zig");
 pub const commands = @import("commands.zig");
 pub const core_view = @import("core_view.zig");
 pub const cpu1 = @import("cpu1/cpu1.zig");
+pub const decomp = @import("decomp/decomp.zig");
 pub const device_metrics = @import("device_metrics.zig");
 pub const disasm = @import("disasm.zig");
 pub const display = @import("display.zig");

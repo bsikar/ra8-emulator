@@ -19,6 +19,7 @@ test {
     _ = @import("watch/table_test.zig");
     _ = @import("call_decode_test.zig");
     _ = @import("cycle_count_test.zig");
+    _ = @import("decomp/all.zig");
     _ = @import("zig/core_test.zig");
     _ = @import("zig/drive_test.zig");
     _ = @import("zig/hitset_battery_test.zig");
