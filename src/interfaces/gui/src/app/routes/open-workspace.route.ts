@@ -1,49 +1,27 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
-import {
-  type BoardPreset,
-  type BoardProfile,
-  Core,
-  OFFICIAL_BOARD_PRESETS,
-  type WorkspaceEntry,
-  inspectElf,
-  parseBoardProfile,
-  parseElfSymbols,
-} from 'ra8-rpc-client';
+import { type BoardPreset, Core, OFFICIAL_BOARD_PRESETS, type WorkspaceEntry } from 'ra8-rpc-client';
 import { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import { BoardStore } from '../core/stores/board.store';
 import { ExecutionStore } from '../core/stores/execution.store';
+import type { RecentElfEntry } from '../core/stores/recent-elf-db';
+import { RecentElfStore, readWorkspaceFileFully } from '../core/stores/recent-elf.store';
 import { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import { type RecentWorkspaceEntry, WorkspaceStore } from '../core/stores/workspace.store';
 import { formatByteSize } from '../features/bundles/bundle-summary';
+import {
+  type StagedBoardArtifact,
+  type StagedElfArtifact,
+  parseArtifactForStaging,
+} from '../features/launch/launch-artifact';
 import { formatPresetArchSummary, formatRelativeTime } from '../features/launch/launch-commands';
 import { LaunchIconComponent } from '../features/launch/launch-icons.component';
 import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
 import { StatusDotComponent } from '../shared/ui/status-dot.component';
-import { pickBrowserFile } from '../shared/utils/file-picker';
-import { formatHex32 } from '../shared/utils/hex';
+import { type BrowserFileHandleLike, pickBrowserFileWithHandle, readBlobBytes } from '../shared/utils/file-picker';
 
+export type { StagedBoardArtifact, StagedElfArtifact };
 export type OpenBrowserFilter = 'all' | 'folders' | 'elf' | 'board';
-
-export interface StagedElfArtifact {
-  name: string;
-  sourcePath: string;
-  bytes: Uint8Array;
-  entryHex: string;
-  hasDebugInfo: boolean;
-  symbolCount: number;
-  chunkedTransfer: boolean;
-}
-
-export interface StagedBoardArtifact {
-  name: string;
-  sourcePath: string;
-  rawText: string;
-  profile: BoardProfile;
-}
-
-const CHUNKED_LOAD_THRESHOLD = 65_536;
-const WORKSPACE_READ_CHUNK = 131_072;
 
 @Component({
   selector: 'app-open-workspace-route',
@@ -59,6 +37,10 @@ export class OpenWorkspaceRouteComponent implements OnInit {
   protected readonly execution = inject(ExecutionStore);
   protected readonly remoteHosts = inject(RemoteHostsStore);
   protected readonly workspace = inject(WorkspaceStore);
+  protected readonly recentElf = inject(RecentElfStore);
+
+  private stagedHandle: BrowserFileHandleLike | null = null;
+  private stagedWorkspacePath: string | null = null;
 
   protected readonly currentDir = signal<string>('.');
   protected readonly pathQuery = signal<string>('');
@@ -90,11 +72,15 @@ export class OpenWorkspaceRouteComponent implements OnInit {
     return items.filter((entry) => {
       if (query && !entry.name.toLowerCase().includes(query)) return false;
       if (filter === 'folders') return entry.kind === 'directory';
-      if (filter === 'elf') return entry.kind === 'directory' || /\.(elf|axf)$/i.test(entry.name);
+      if (filter === 'elf') return entry.kind === 'directory' || /\.(elf|axf|ra8app)$/i.test(entry.name);
       if (filter === 'board') return entry.kind === 'directory' || /\.board$/i.test(entry.name);
       return true;
     });
   });
+
+  protected readonly recentElfRows = computed<RecentElfEntry[]>(() =>
+    this.recentElf.entries().slice(0, 6)
+  );
 
   protected readonly recentArtifactRows = computed<RecentWorkspaceEntry[]>(() =>
     this.workspace.recentWorkspaces().slice(0, 6)
@@ -126,37 +112,14 @@ export class OpenWorkspaceRouteComponent implements OnInit {
     }
   }
 
-  protected goBack(): void {
-    void this.router.navigateByUrl('/launch');
-  }
-
-  protected onPathInput(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.pathQuery.set(event.target.value);
-  }
-
-  protected onWsUrlInput(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.wsUrl.set(event.target.value);
-  }
-
-  protected onHostPresetSelect(event: Event): void {
-    if (event.target instanceof HTMLSelectElement && event.target.value) this.wsUrl.set(event.target.value);
-  }
-
-  protected onBoardSelect(event: Event): void {
-    if (event.target instanceof HTMLSelectElement) this.selectedBoardId.set(event.target.value);
-  }
-
-  protected onBreakToggle(event: Event): void {
-    if (event.target instanceof HTMLInputElement) this.breakAtMain.set(event.target.checked);
-  }
-
-  protected formatBytes(bytes: number): string {
-    return formatByteSize(bytes);
-  }
-
-  protected formatAge(iso: string): string {
-    return formatRelativeTime(iso);
-  }
+  protected goBack(): void { void this.router.navigateByUrl('/launch'); }
+  protected onPathInput(e: Event): void { if (e.target instanceof HTMLInputElement) this.pathQuery.set(e.target.value); }
+  protected onWsUrlInput(e: Event): void { if (e.target instanceof HTMLInputElement) this.wsUrl.set(e.target.value); }
+  protected onHostPresetSelect(e: Event): void { if (e.target instanceof HTMLSelectElement && e.target.value) this.wsUrl.set(e.target.value); }
+  protected onBoardSelect(e: Event): void { if (e.target instanceof HTMLSelectElement) this.selectedBoardId.set(e.target.value); }
+  protected onBreakToggle(e: Event): void { if (e.target instanceof HTMLInputElement) this.breakAtMain.set(e.target.checked); }
+  protected formatBytes(bytes: number): string { return formatByteSize(bytes); }
+  protected formatAge(iso: string): string { return formatRelativeTime(iso); }
 
   protected isRootDir(): boolean {
     const d = this.currentDir().trim();
@@ -195,21 +158,31 @@ export class OpenWorkspaceRouteComponent implements OnInit {
       this.currentDir.set(nextPath);
       return;
     }
-    const bytes = await this.readRemoteFileFully(nextPath);
-    if (bytes) {
-      this.stageArtifactBytes(entry.name, nextPath, bytes);
+    const bytes = await readWorkspaceFileFully(this.workspace, nextPath);
+    if (!bytes) {
+      this.validationError.set(this.rpc.errorMessage() ?? `Failed to read ${nextPath}`);
+      return;
     }
+    this.stagedHandle = null;
+    this.stagedWorkspacePath = nextPath;
+    this.stageArtifactBytes(entry.name, nextPath, bytes);
+  }
+
+  protected openRecentElf(entry: RecentElfEntry): void {
+    void this.recentElf.openRecent(entry);
   }
 
   protected async browseLocalFile(): Promise<void> {
-    const file = await pickBrowserFile({
-      accept: '.elf,.axf,.board',
-      description: 'ARM Firmware (.elf / .axf) or Board Profile (.board)',
-      extensions: ['.elf', '.axf', '.board'],
+    const picked = await pickBrowserFileWithHandle({
+      accept: '.elf,.axf,.ra8app,.board',
+      description: 'ARM Firmware (.elf / .axf / .ra8app) or Board Profile (.board)',
+      extensions: ['.elf', '.axf', '.ra8app', '.board'],
     });
-    if (!file) return;
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    this.stageArtifactBytes(file.name, file.name, bytes);
+    if (!picked) return;
+    this.stagedHandle = picked.handle;
+    this.stagedWorkspacePath = null;
+    const bytes = await readBlobBytes(picked.file);
+    this.stageArtifactBytes(picked.file.name, picked.file.name, bytes);
   }
 
   protected async onFallbackFileSelected(event: Event): Promise<void> {
@@ -218,45 +191,28 @@ export class OpenWorkspaceRouteComponent implements OnInit {
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    this.stagedHandle = null;
+    this.stagedWorkspacePath = null;
+    const bytes = await readBlobBytes(file);
     this.stageArtifactBytes(file.name, file.name, bytes);
   }
 
   protected stageArtifactBytes(fileName: string, sourcePath: string, bytes: Uint8Array): void {
-    if (/\.board$/i.test(fileName)) {
-      const rawText = new TextDecoder().decode(bytes);
-      try {
-        const profile = parseBoardProfile(rawText);
-        this.stagedElf.set(null);
-        this.validationError.set(null);
-        this.stagedBoard.set({ name: fileName, sourcePath, rawText, profile });
-      } catch (err) {
-        this.stagedBoard.set(null);
-        this.stagedElf.set(null);
-        this.validationError.set(err instanceof Error ? err.message : `Invalid board profile: ${fileName}`);
-      }
-      return;
-    }
-
-    const header = inspectElf(bytes);
-    if (!header.valid) {
+    const res = parseArtifactForStaging(fileName, sourcePath, bytes);
+    if (res.kind === 'error') {
       this.stagedElf.set(null);
       this.stagedBoard.set(null);
-      this.validationError.set(header.reason ?? `Invalid ARM32 ELF image (${fileName})`);
+      this.validationError.set(res.error);
       return;
     }
-    const syms = parseElfSymbols(bytes);
-    this.stagedBoard.set(null);
     this.validationError.set(null);
-    this.stagedElf.set({
-      name: fileName,
-      sourcePath,
-      bytes,
-      entryHex: formatHex32(header.entry >>> 0),
-      hasDebugInfo: header.hasDebugInfo,
-      symbolCount: syms.length,
-      chunkedTransfer: bytes.length > CHUNKED_LOAD_THRESHOLD,
-    });
+    if (res.kind === 'board') {
+      this.stagedElf.set(null);
+      this.stagedBoard.set(res.board);
+    } else {
+      this.stagedBoard.set(null);
+      this.stagedElf.set(res.elf);
+    }
   }
 
   protected async openStagedArtifact(): Promise<void> {
@@ -273,76 +229,69 @@ export class OpenWorkspaceRouteComponent implements OnInit {
         this.validationError.set(this.rpc.errorMessage() ?? `Unable to connect to ${targetUrl}`);
         return;
       }
-
       const preset =
         this.board.selectBoardPreset(this.selectedBoardId()) ??
         this.allBoards().find((p) => p.id === this.selectedBoardId()) ??
         OFFICIAL_BOARD_PRESETS[0]!;
-
       if (brd) {
-        if (!this.board.importBoardProfileText(brd.name, brd.rawText)) return;
-        this.workspace.recordRecentWorkspace({
-          id: `brd:${brd.name}`,
-          name: brd.name.replace(/\.board$/i, ''),
-          path: brd.sourcePath,
-          wsUrl: targetUrl,
-          pinned: false,
-          targetModel: preset.targetId.toUpperCase(),
-          archSummary: formatPresetArchSummary(preset),
-          modeLabel: 'Board Profile',
-          artifactSummary: brd.name,
-        });
-        await this.router.navigateByUrl('/hardware');
+        await this.submitStagedBoard(brd, preset, targetUrl);
         return;
       }
-
       if (elf) {
-        const ok = await this.board.loadElfFile(elf.name, elf.bytes, this.selectedCore(), {
-          breakAtMain: this.breakAtMain(),
-        });
-        if (!ok) {
-          this.validationError.set(this.rpc.errorMessage() ?? `Failed to load ${elf.name}`);
-          return;
-        }
-        if (typeof document !== 'undefined') {
-          document.title = `${elf.name} — RA8 Emulator`;
-        }
-        this.workspace.recordRecentWorkspace({
-          id: `elf:${elf.name}`,
-          name: elf.name.replace(/\.(elf|axf)$/i, ''),
-          path: elf.sourcePath,
-          wsUrl: targetUrl,
-          pinned: false,
-          targetModel: preset.targetId.toUpperCase(),
-          archSummary: formatPresetArchSummary(preset),
-          modeLabel: 'Prebuilt .elf',
-          artifactSummary: formatByteSize(elf.bytes.length),
-          entryAddress: elf.entryHex,
-        });
-        await this.router.navigateByUrl('/debug');
+        await this.submitStagedElf(elf, preset, targetUrl);
       }
     } finally {
       this.opening.set(false);
     }
   }
 
-  private async readRemoteFileFully(remotePath: string): Promise<Uint8Array | null> {
-    const chunks: Uint8Array[] = [];
-    for (let offset = 0n, total = 0; ; ) {
-      const part = await this.workspace.readWorkspaceFile(remotePath, offset, WORKSPACE_READ_CHUNK);
-      if (!part) {
-        this.validationError.set(this.rpc.errorMessage() ?? `Failed to read ${remotePath}`);
-        return null;
-      }
-      if (part.bytes.length > 0) {
-        chunks.push(part.bytes);
-        total += part.bytes.length;
-        offset += BigInt(part.bytes.length);
-      }
-      if (!part.eof && part.bytes.length > 0) continue;
-      const merged = new Uint8Array(total);
-      for (let i = 0, pos = 0; i < chunks.length; pos += chunks[i]!.length, i++) merged.set(chunks[i]!, pos);
-      return merged;
+  private async submitStagedBoard(brd: StagedBoardArtifact, preset: BoardPreset, targetUrl: string): Promise<void> {
+    if (!this.board.importBoardProfileText(brd.name, brd.rawText)) return;
+    this.workspace.recordRecentWorkspace({
+      id: `brd:${brd.name}`,
+      name: brd.name.replace(/\.board$/i, ''),
+      path: brd.sourcePath,
+      wsUrl: targetUrl,
+      pinned: false,
+      targetModel: preset.targetId.toUpperCase(),
+      archSummary: formatPresetArchSummary(preset),
+      modeLabel: 'Board Profile',
+      artifactSummary: brd.name,
+    });
+    await this.router.navigateByUrl('/hardware');
+  }
+
+  private async submitStagedElf(elf: StagedElfArtifact, preset: BoardPreset, targetUrl: string): Promise<void> {
+    const ok = await this.board.loadElfFile(elf.name, elf.bytes, this.selectedCore(), {
+      breakAtMain: this.breakAtMain(),
+    });
+    if (!ok) {
+      this.validationError.set(this.rpc.errorMessage() ?? `Failed to load ${elf.name}`);
+      return;
     }
+    if (typeof document !== 'undefined') {
+      document.title = `${elf.name} — RA8 Emulator`;
+    }
+    await this.recentElf.recordLoadedElf({
+      fileName: elf.name,
+      core: this.selectedCore(),
+      wsUrl: targetUrl,
+      handle: this.stagedHandle,
+      workspacePath: this.stagedWorkspacePath,
+      bytes: elf.bytes,
+    });
+    this.workspace.recordRecentWorkspace({
+      id: `elf:${elf.name}`,
+      name: elf.name.replace(/\.(elf|axf|ra8app)$/i, ''),
+      path: elf.sourcePath,
+      wsUrl: targetUrl,
+      pinned: false,
+      targetModel: preset.targetId.toUpperCase(),
+      archSummary: formatPresetArchSummary(preset),
+      modeLabel: 'Prebuilt .elf',
+      artifactSummary: formatByteSize(elf.bytes.length),
+      entryAddress: elf.entryHex,
+    });
+    await this.router.navigateByUrl('/debug');
   }
 }

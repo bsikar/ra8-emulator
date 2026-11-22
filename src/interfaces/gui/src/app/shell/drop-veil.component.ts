@@ -11,7 +11,7 @@ import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
         <div class="drop-sheet">
           <app-section-kicker label="ARTIFACT DROP" />
           <p class="drop-title">Drop firmware image, board profile, or session archive</p>
-          <p class="drop-meta mono">.elf · .board · .tar.gz</p>
+          <p class="drop-meta mono">.elf · .ra8app · .board · .tar.gz</p>
         </div>
       </div>
     }
