@@ -4,6 +4,7 @@ const std = @import("std");
 const builder = @import("builder.zig");
 const cfg_mod = @import("cfg.zig");
 const core_view = @import("../core_view.zig");
+const dataflow_mod = @import("dataflow.zig");
 const decode = @import("ra8_chip").core.cpu.decode;
 const elf = @import("ra8_board").image.elf;
 const extents_mod = @import("extents.zig");
@@ -26,6 +27,7 @@ pub const CfgCache = struct {
     extents: []const extents_mod.FunctionExtent,
     decode_cache: *decode.cache.DecodeCache,
     entries: std.AutoHashMapUnmanaged(u32, cfg_mod.Cfg) = .empty,
+    dataflows: std.AutoHashMapUnmanaged(u32, dataflow_mod.Dataflow) = .empty,
     hits: u64 = 0,
     misses: u64 = 0,
 
@@ -54,6 +56,7 @@ pub const CfgCache = struct {
     pub fn deinit(self: *CfgCache) void {
         self.invalidate();
         self.entries.deinit(self.allocator);
+        self.dataflows.deinit(self.allocator);
         self.allocator.free(self.extents);
         self.allocator.destroy(self.decode_cache);
     }
@@ -87,6 +90,16 @@ pub const CfgCache = struct {
         return self.entries.getPtr(key).?;
     }
 
+    /// Return cached or freshly analyzed def-use dataflow for the function covering `address`.
+    pub fn getDataflow(self: *CfgCache, address: u32) !*const dataflow_mod.Dataflow {
+        const cfg_ptr = try self.get(address);
+        if (self.dataflows.getPtr(cfg_ptr.entry)) |existing| return existing;
+        var built = try dataflow_mod.analyze(self.allocator, cfg_ptr, .{ .bus = self.bus_state.view() });
+        errdefer built.deinit();
+        try self.dataflows.put(self.allocator, cfg_ptr.entry, built);
+        return self.dataflows.getPtr(cfg_ptr.entry).?;
+    }
+
     /// Build and cache CFGs for every seeded function extent; returns cached entry count.
     pub fn prewarmAll(self: *CfgCache) std.mem.Allocator.Error!usize {
         for (self.extents) |ext| {
@@ -95,8 +108,14 @@ pub const CfgCache = struct {
         return self.entries.count();
     }
 
-    /// Release all cached function CFGs while keeping symbol extents loaded.
+    /// Release all cached function CFGs and dataflows while keeping symbol extents loaded.
     pub fn invalidate(self: *CfgCache) void {
+        var df_iter = self.dataflows.valueIterator();
+        while (df_iter.next()) |df| {
+            df.deinit();
+        }
+        self.dataflows.clearRetainingCapacity();
+
         var iter = self.entries.valueIterator();
         while (iter.next()) |entry| {
             entry.deinit();
