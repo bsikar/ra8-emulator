@@ -140,6 +140,8 @@ pub const Session = struct {
     replaying: bool = false,
     /// Set while a virtual-time advance drives continuous slices.
     advancing: bool = false,
+    /// Set while forward play/continue drives budget-sliced transport steps.
+    streaming_slice: bool = false,
     /// The first replay determinism error, until a run slice reports it.
     replay_failure: ?stop_machine.ReplayFailure = null,
     prefetch_pool: ?*prefetch_api.Prefetch = null,

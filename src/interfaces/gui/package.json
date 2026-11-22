@@ -13,6 +13,10 @@
     "test:e2e": "playwright test",
     "prebench:soak": "npm --prefix client run build",
     "bench:soak": "node tools/bench-soak.mjs",
+    "prebench:lcd": "npm --prefix client run build",
+    "bench:lcd": "node tools/bench-lcd.mjs",
+    "prebench:sustained": "npm --prefix client run build",
+    "bench:sustained": "node tools/bench-sustained.mjs",
     "gate": "node tools/gate.mjs"
   },
   "private": true,

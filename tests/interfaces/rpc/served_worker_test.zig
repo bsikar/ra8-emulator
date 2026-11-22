@@ -26,6 +26,7 @@ const Wire = struct {
     last_stop: ?proto.Stopped = null,
     stop_count: usize = 0,
     live_transport_count: usize = 0,
+    session_stop_count: usize = 0,
     finished_transport: ?proto.TransportEvent = null,
     last_reached_ns: u64 = 0,
 
@@ -100,6 +101,10 @@ const Wire = struct {
                 self.last_stop = try proto.decode(proto.Stopped, payload);
                 self.stop_count += 1;
             },
+            .session => {
+                const evt = try proto.decode(proto.SessionEvent, payload);
+                if (evt.kind == .stopped) self.session_stop_count += 1;
+            },
             .transport => {
                 const evt = try proto.decode(proto.TransportEvent, payload);
                 if (evt.reached_ns > self.last_reached_ns) self.last_reached_ns = evt.reached_ns;
@@ -145,6 +150,7 @@ test "worker pumps continuous forward play without Host.poll and brackets pauses
     try wire.open(&s.context);
 
     _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .stop });
+    _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .session });
     _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .transport });
     const ack = try wire.call(proto.PlayArgs, proto.Ack, .play, .{ .dir = .fwd, .speed_milli = 0 });
     try std.testing.expectEqual(@as(u8, 1), ack.accepted);
@@ -162,6 +168,7 @@ test "worker pumps continuous forward play without Host.poll and brackets pauses
     const now_ns = try wire.call(proto.Now, proto.U64, .now, .{ .core = .cpu0 });
     try std.testing.expect(now_ns.value > 0);
     try std.testing.expect(wire.last_reached_ns > 0);
+    try std.testing.expectEqual(@as(usize, 0), wire.session_stop_count);
 
     _ = try wire.call(proto.CoreOnly, proto.Ack, .pause, .{ .core = .cpu0 });
     try std.testing.expect(!worker.isActive());
@@ -191,6 +198,7 @@ test "worker halts on breakpoint during play and emits stop and transport events
     try wire.open(&s.context);
 
     _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .stop });
+    _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .session });
     _ = try wire.call(proto.Subscription, proto.Ack, .subscribe, .{ .core = .cpu0, .topic = .transport });
     _ = try wire.call(proto.Point, proto.U32, .set_breakpoint, .{ .core = .cpu0, .address = loop_pc });
 
@@ -212,5 +220,6 @@ test "worker halts on breakpoint during play and emits stop and transport events
     const stop = wire.last_stop orelse return error.MissingStopEvent;
     try std.testing.expectEqual(proto.StopReason.breakpoint, stop.reason);
     try std.testing.expectEqual(loop_pc, stop.address);
+    try std.testing.expect(wire.session_stop_count >= 1);
     try std.testing.expect(!s.worker.?.isActive());
 }

@@ -33,6 +33,8 @@ import {
   computeAdaptiveLcdPolicy,
   createLcdScrubberState,
   pushDirtyRectAdaptive,
+  selectAdaptiveModeForSpeed,
+  speedMilliForAdaptiveMode,
 } from './lcd-scrubber-model';
 
 type TouchGestureMode = 'tap' | 'swipe' | 'long_press';
@@ -76,6 +78,9 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
   private readonly subs = new Subscription();
   private stopObserver: (() => void) | null = null;
   private dragStart: { x: number; y: number; tsMs: number } | null = null;
+  private lastSyncedSpeedMilli = this.execution.speedMilli();
+  private rafId: number | null = null;
+  private paintCounter = 0;
 
   protected readonly scrubState = signal(createLcdScrubberState(480, 272));
   protected readonly liveMode = signal<boolean>(true);
@@ -127,8 +132,9 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
     this.subs.add(
       this.rpc.lcdDirty$.subscribe((rect) => {
         const policy = computeAdaptiveLcdPolicy(this.adaptiveMode());
+        const frameNs = rect.virtualNs > 0n ? rect.virtualNs : this.execution.virtualTimeNs();
         this.scrubState.update((st) =>
-          pushDirtyRectAdaptive(st, rect, this.execution.virtualTimeNs(), policy, Date.now())
+          pushDirtyRectAdaptive(st, rect, frameNs, policy, Date.now())
         );
       })
     );
@@ -137,7 +143,15 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
       this.liveMode();
       this.selectedIndex();
       this.crosshair();
-      this.repaintCanvas();
+      this.scheduleRepaint();
+    });
+    effect(() => {
+      const cur = this.execution.speedMilli();
+      if (cur === this.lastSyncedSpeedMilli) return;
+      this.lastSyncedSpeedMilli = cur;
+      const next = selectAdaptiveModeForSpeed(cur);
+      this.adaptiveMode.set(next);
+      void this.applySubscribeRate(next);
     });
   }
 
@@ -150,6 +164,10 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
   }
 
   public ngOnDestroy(): void {
+    if (this.rafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
     this.stopObserver?.();
     this.stopObserver = null;
     this.subs.unsubscribe();
@@ -173,8 +191,13 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
   protected onRateChange(event: Event): void {
     const val = (event.target as HTMLSelectElement).value as AdaptiveLcdMode;
     if (val === 'slow_0_1x' || val === 'rate_1x' || val === 'rate_100x' || val === 'rate_max') {
+      const targetMilli = speedMilliForAdaptiveMode(val);
+      this.lastSyncedSpeedMilli = targetMilli;
       this.adaptiveMode.set(val);
       void this.applySubscribeRate(val);
+      if (typeof this.rpc.activeClient?.setSpeed === 'function') {
+        void this.execution.setSpeed(targetMilli);
+      }
     }
   }
 
@@ -277,11 +300,25 @@ export class HardwarePanelIoComponent implements AfterViewInit, OnDestroy {
     return { rgba: st.backingRgba, width: st.width, height: st.height };
   }
 
+  private scheduleRepaint(): void {
+    const isJsdom = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent);
+    if (typeof requestAnimationFrame !== 'function' || isJsdom) {
+      this.repaintCanvas();
+      return;
+    }
+    if (this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.repaintCanvas();
+    });
+  }
+
   private repaintCanvas(): void {
     const canvas = this.lcdCanvas()?.nativeElement;
     if (!canvas) return;
     const frame = this.activeFrameRgba();
     paintHiDpiPanelCanvas(canvas, frame.rgba, frame.width, frame.height, this.crosshair());
+    canvas.dataset['paintCount'] = String(++this.paintCounter);
   }
 
   private mapPointer(event: PointerEvent): PanelCrosshair | null {
