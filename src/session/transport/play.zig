@@ -62,55 +62,72 @@ pub fn checkWatchHit(watches: *watch_table.Table, records: []const window_trail.
     return null;
 }
 
+const RedoOutcome = union(enum) { fallthrough, more, ended: api.Ended };
+const SlotOutcome = union(enum) { next, abort, ended: api.Ended };
+
 /// Drive one play or continue slice at the session's run budget. Inside
 /// the recorded past the run replays (run_slice.zig) and re-applies the
 /// line's interventions, which load once, due after the position the
 /// machine already stands at.
 pub fn slice(self: *Transport, job: *Job) !?api.Ended {
-    if (job.dir == .back) {
-        if (self.session.smooth_rewind) |rewind| {
-            // The reverse clock runs on the wall time between slices; the
-            // first slice of a job has none yet and takes one display frame.
-            const dt: u64 = if (job.last_ns == 0) 16_666_666 else self.wall_ns -| job.last_ns;
-            job.last_ns = self.wall_ns;
-            const res = try rewind.tick(dt);
-            if (res.status == .history_start) {
-                return api.Ended{ .stop = .history_start };
-            }
-            return null;
-        }
-        return Error.NotReady;
-    }
-    if (self.session.window) |w| {
-        if (w.cursor() < w.count()) {
-            const count = @min(w.count() - w.cursor(), if (job.budget > 0) job.budget else 1000);
-            var i: usize = 0;
-            while (i < count) : (i += 1) {
-                const cur = w.cursor();
-                if (!try w.redo()) break;
-                const m = self.session.machine(job.core) catch break;
-                if (m.watches.len > 0) {
-                    const payload = w.trail.slotAt(cur);
-                    if (checkWatchHit(&m.watches, payload.byte_records)) |hit| {
-                        return api.Ended{ .stop = .{ .watchpoint = hit } };
-                    }
-                }
-                const pc = self.session.register(job.core, .pc) catch break;
-                if (m.breaks.hit(pc)) |hit| {
-                    return api.Ended{ .stop = .{ .breakpoint = hit } };
-                }
-            }
-            if (w.cursor() < w.count()) return null;
-        }
+    if (job.dir == .back) return reverseSlice(self, job);
+    switch (try redoWindow(self, job)) {
+        .fallthrough => {},
+        .more => return null,
+        .ended => |ended| return ended,
     }
     if (self.session.replay_feeder == null and line.inPast(self.session)) {
         if (self.history) |br| if (br.logBytes) |read| {
             try replay_feeder.loadSessionInterventions(self.session, try read(br.context), .after);
         };
     }
+    self.session.streaming_slice = true;
+    defer self.session.streaming_slice = false;
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) return null;
     return ended;
+}
+
+fn reverseSlice(self: *Transport, job: *Job) !?api.Ended {
+    const rewind = self.session.smooth_rewind orelse return Error.NotReady;
+    // The reverse clock runs on the wall time between slices; the
+    // first slice of a job has none yet and takes one display frame.
+    const dt: u64 = if (job.last_ns == 0) 16_666_666 else self.wall_ns -| job.last_ns;
+    job.last_ns = self.wall_ns;
+    const res = try rewind.tick(dt);
+    if (res.status == .history_start) return api.Ended{ .stop = .history_start };
+    return null;
+}
+
+fn redoWindow(self: *Transport, job: *const Job) !RedoOutcome {
+    const w = self.session.window orelse return .fallthrough;
+    if (w.cursor() >= w.count()) return .fallthrough;
+    const budget = if (job.budget > 0) job.budget else 1000;
+    const count = @min(w.count() - w.cursor(), budget);
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        const cur = w.cursor();
+        if (!try w.redo()) break;
+        switch (redoSlotHit(self, job.core, w, cur)) {
+            .next => {},
+            .abort => break,
+            .ended => |ended| return .{ .ended = ended },
+        }
+    }
+    return if (w.cursor() < w.count()) .more else .fallthrough;
+}
+
+fn redoSlotHit(self: *Transport, core: api.Core, w: anytype, cur: usize) SlotOutcome {
+    const m = self.session.machine(core) catch return .abort;
+    if (m.watches.len > 0) {
+        const payload = w.trail.slotAt(cur);
+        if (checkWatchHit(&m.watches, payload.byte_records)) |hit| {
+            return .{ .ended = .{ .stop = .{ .watchpoint = hit } } };
+        }
+    }
+    const pc = self.session.register(core, .pc) catch return .abort;
+    if (m.breaks.hit(pc)) |hit| return .{ .ended = .{ .stop = .{ .breakpoint = hit } } };
+    return .next;
 }
 
 pub fn clearForwardSpeed(self: *Transport, job: *const Job) void {
