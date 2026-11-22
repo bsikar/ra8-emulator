@@ -99,6 +99,8 @@ function buildDisasmLines(
         hasBreakpoint: false,
       });
     }
+    const pseudo = row.pseudo?.trim() ?? '';
+    const displayText = pseudo ? `${row.text}  // ${pseudo}` : row.text;
     lines.push({
       key: `asm_${addr}_${lineNo}`,
       kind: 'disasm',
@@ -106,8 +108,8 @@ function buildDisasmLines(
       address: addr,
       symbol: sym,
       rawHex: formatRawBytes(row.raw),
-      text: row.text,
-      tokens: tokenizeDebugCodeLine(row.text),
+      text: displayText,
+      tokens: tokenizeDebugCodeLine(displayText),
       isActive: addr === (pc >>> 0),
       hasBreakpoint: breakpoints.has((addr & ~1) >>> 0),
     });

@@ -14,6 +14,7 @@ export interface DisasmRowInput {
   raw?: Uint8Array;
   text: string;
   symbol?: string;
+  pseudo?: string;
 }
 
 export interface DecompiledLine {
@@ -115,6 +116,14 @@ function liftInstruction(
   return `  /* ${mnemonic} ${argsStr} */`;
 }
 
+function formatStructuredPseudo(pseudo: string): string {
+  const clean = pseudo.trim();
+  if (clean.startsWith('/*') || clean.endsWith(';') || clean.startsWith('//')) {
+    return `  ${clean}`;
+  }
+  return `  ${clean};`;
+}
+
 export function decompileThumbRows(
   rows: readonly DisasmRowInput[],
   activePc: number,
@@ -134,11 +143,17 @@ export function decompileThumbRows(
   for (const row of rows) {
     const addr = row.address >>> 0;
     const rawText = row.text.trim();
-    const parts = rawText.split(/\s+/);
-    const mnemonic = (parts[0] ?? '').toLowerCase().replace(/\.w$|\.n$/, '');
-    const argsStr = rawText.slice(parts[0]?.length ?? 0).trim();
-    const ops = argsStr.split(',').map((s) => s.trim()).filter(Boolean);
-    const code = liftInstruction(mnemonic, argsStr, ops, cmpState);
+    const structured = row.pseudo?.trim() ?? '';
+    let code: string;
+    if (structured) {
+      code = formatStructuredPseudo(structured);
+    } else {
+      const parts = rawText.split(/\s+/);
+      const mnemonic = (parts[0] ?? '').toLowerCase().replace(/\.w$|\.n$/, '');
+      const argsStr = rawText.slice(parts[0]?.length ?? 0).trim();
+      const ops = argsStr.split(',').map((s) => s.trim()).filter(Boolean);
+      code = liftInstruction(mnemonic, argsStr, ops, cmpState);
+    }
     lines.push({
       lineNumber: lineNum++,
       address: addr,

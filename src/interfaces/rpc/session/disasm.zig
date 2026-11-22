@@ -2,6 +2,8 @@
 const std = @import("std");
 
 const api = @import("ra8_session").api;
+const core_view = @import("ra8_session").core_view;
+const decomp = @import("ra8_session").decomp;
 const handlers = @import("handlers.zig");
 const proto = @import("rpc.zig");
 const rpc = @import("ra8_rpc_wire");
@@ -50,19 +52,31 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     const count = @min(requested, wire.disasm_max_rows);
     var address: u32 = if (args.use_pc != 0) pc else (args.address & ~@as(u32, 1));
     const image = handlers.imageOf(context, which);
+    const core_v: ?core_view.View = context.session.view(which) catch null;
+    const alloc = context.gpa orelse std.heap.page_allocator;
+    var decomp_cache: ?decomp.cache.CfgCache = decomp.cache.CfgCache.init(
+        alloc,
+        image,
+        .{ .live = core_v },
+    ) catch null;
+    defer if (decomp_cache) |*c| c.deinit();
 
+    var last_emit: ?*const decomp.emit.FunctionEmit = null;
     var at: usize = 0;
     var emitted: u8 = 0;
     for (0..count) |_| {
         var text_buf: [wire.disasm_text_cap]u8 = undefined;
-        const row = decodeOne(
+        var pseudo_buf: [wire.disasm_pseudo_cap]u8 = undefined;
+        var row = decodeOne(
             context.session,
             which,
+            core_v,
             address,
             image,
             context.modules,
             &text_buf,
         ) catch |err| return refuse(err);
+        row.pseudo = maybeLookupPseudo(&decomp_cache, &last_emit, &row, address, &pseudo_buf);
         wire.put(context.scratch[0..wire.disasm_bytes], &at, row) catch |err| return refuse(err);
         emitted += 1;
         address +%= if (row.size == 0) session_view.encoding.narrow else row.size;
@@ -76,9 +90,43 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     } };
 }
 
+fn maybeLookupPseudo(
+    decomp_cache: *?decomp.cache.CfgCache,
+    last_emit: *?*const decomp.emit.FunctionEmit,
+    row: *const wire.DisasmRow,
+    address: u32,
+    pseudo_buf: *[wire.disasm_pseudo_cap]u8,
+) []const u8 {
+    if (row.decoded == 0) return "";
+    const cache = if (decomp_cache.*) |*c| c else return "";
+    return lookupPseudo(cache, last_emit, address, pseudo_buf);
+}
+
+fn lookupPseudo(
+    cache: *decomp.cache.CfgCache,
+    last_emit: *?*const decomp.emit.FunctionEmit,
+    address: u32,
+    pseudo_buf: *[wire.disasm_pseudo_cap]u8,
+) []const u8 {
+    const ext_entry = cache.extentEntry(address);
+    const reuse = if (last_emit.*) |le|
+        if (ext_entry) |ee| le.entry == ee else le.pseudoAt(address) != null
+    else
+        false;
+    if (!reuse) {
+        last_emit.* = cache.getEmit(address) catch null;
+    }
+    const em = last_emit.* orelse return "";
+    const pseudo = em.pseudoAt(address) orelse return "";
+    const len = @min(pseudo.len, pseudo_buf.len);
+    @memcpy(pseudo_buf[0..len], pseudo[0..len]);
+    return pseudo_buf[0..len];
+}
+
 fn decodeOne(
     session: *api.Session,
     core: api.Core,
+    core_v: ?core_view.View,
     address: u32,
     image: ?symbols.Image,
     modules: ?*const txm_debug.Table,
@@ -103,7 +151,8 @@ fn decodeOne(
         };
     }
     row.size = if (wide) 4 else 2;
-    const formatted = session_disasm.one(address, row.raw[0..row.size]) catch return row;
+    var formatted = session_disasm.one(address, row.raw[0..row.size]) catch return row;
+    session_disasm.annotateLine(core_v, image, address, row.raw[0..row.size], &formatted);
     const slice = formatted.slice();
     const len = @min(slice.len, text_buf.len);
     @memcpy(text_buf[0..len], slice[0..len]);

@@ -8,18 +8,23 @@ const operands = @import("annotation_operands.zig");
 const text = @import("ra8_chip").core.cpu.text.text;
 
 pub fn append(image: elf.Image, pc: u32, into: *text.Text) void {
+    const name = nameAt(image, pc, into.slice()) orelse return;
+    // One unambiguous name keeps a crowded alias set from overflowing text.
+    into.put(" ; local {s}", .{name});
+}
+
+/// Return the active-scope DWARF local variable name matching `line` at `pc`, if any.
+pub fn nameAt(image: elf.Image, pc: u32, line: []const u8) ?[]const u8 {
     const sections = dwarf.locals.ofImage(image);
     var rows: [64]dwarf.locals.Local = undefined;
-    const count = dwarf.locals.inFunction(sections, pc, &rows) catch return;
-    const original = into.slice();
+    const count = dwarf.locals.inFunction(sections, pc, &rows) catch return null;
     for (rows[0..count]) |row| {
         if (row.name.len == 0) continue;
         const local = (dwarf.vars.findLocal(sections, pc, row.name) catch null) orelse continue;
-        if (!touches(image, pc, local, original)) continue;
-        into.put(" ; local {s}", .{local.name});
-        // One unambiguous name keeps a crowded alias set from overflowing text.
-        return;
+        if (!touches(image, pc, local, line)) continue;
+        return local.name;
     }
+    return null;
 }
 
 fn touches(image: elf.Image, pc: u32, local: dwarf.vars.Variable, line: []const u8) bool {

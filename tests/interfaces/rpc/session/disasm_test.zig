@@ -97,6 +97,7 @@ test "disasm decodes instructions forward from PC with symbol entry label" {
     var context: served.Context = .{
         .session = session,
         .scratch = &scratch,
+        .gpa = std.testing.allocator,
         .mapping = .{ .context = &opened, .mapFn = noMap, .imageFn = harnessImageOf },
     };
 
@@ -115,6 +116,17 @@ test "disasm decodes instructions forward from PC with symbol entry label" {
     try std.testing.expectEqual(@as(u8, 1), first.decoded);
     try std.testing.expect(first.text.len > 0);
     try std.testing.expectEqualStrings("ra8_sci_init", first.symbol);
+    try std.testing.expectEqualStrings("save({r7, lr})", first.pseudo);
+
+    // Null `gpa` fallback works identically without leaks or refusal.
+    context.gpa = null;
+    const fallback_reply = switch (handler.disasm(&context, .{ .core = .cpu0, .count = 2, .use_pc = 1 })) {
+        .ok => |r| r,
+        .err => return error.Refused,
+    };
+    var fallback_reader: disasm_wire.Reader = .{ .rest = fallback_reply.rows };
+    const fallback_first = (try fallback_reader.next()).?;
+    try std.testing.expect(fallback_first.pseudo.len > 0);
 }
 
 test "disasm refuses unattached CPU1 with no_core" {

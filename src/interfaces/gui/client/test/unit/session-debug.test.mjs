@@ -136,14 +136,21 @@ function registerDebugCodecTests(suite) {
     assert.equal(disAsk.length, 7);
     const tBytes = new TextEncoder().encode("nop");
     const sBytes = new TextEncoder().encode("fn");
-    const rowLen = 4 + 1 + 1 + 4 + 1 + tBytes.length + 1 + sBytes.length;
+    const pBytes = new TextEncoder().encode("nop()");
+    const symOffset = 11 + tBytes.length;
+    const pseudoOffset = symOffset + 1 + sBytes.length;
+    const rowLen = 4 + 1 + 1 + 4 + 1 + tBytes.length + 1 + sBytes.length + 1 + pBytes.length;
     const dReply = new Uint8Array(10 + rowLen);
     const dv = new DataView(dReply.buffer);
     dv.setUint32(1, 0x0200_0100, true); dv.setUint8(5, 1); dv.setUint32(6, rowLen, true);
     dv.setUint32(10, 0x0200_0100, true); dv.setUint8(14, 2); dv.setUint8(15, 1);
     dv.setUint8(20, tBytes.length); dReply.set(tBytes, 21);
-    dv.setUint8(21 + tBytes.length, sBytes.length); dReply.set(sBytes, 22 + tBytes.length);
-    assert.equal(decodeDisasmReply(dReply).rows[0]?.text, "nop");
+    dv.setUint8(10 + symOffset, sBytes.length); dReply.set(sBytes, 10 + symOffset + 1);
+    dv.setUint8(10 + pseudoOffset, pBytes.length); dReply.set(pBytes, 10 + pseudoOffset + 1);
+    const decodedDisasm = decodeDisasmReply(dReply);
+    assert.equal(decodedDisasm.rows[0]?.text, "nop");
+    assert.equal(decodedDisasm.rows[0]?.symbol, "fn");
+    assert.equal(decodedDisasm.rows[0]?.pseudo, "nop()");
 
     const np = new Uint8Array(9);
     new DataView(np.buffer).setUint32(0, 5, true);

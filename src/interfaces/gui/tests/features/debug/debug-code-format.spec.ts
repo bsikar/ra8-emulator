@@ -26,6 +26,28 @@ describe('debug-code-format', () => {
     });
     expect(decomp.some((l) => l.text.includes('0x02000100: movs r0, #1'))).toBe(true);
 
+    const annotatedRows = [
+      {
+        address: 0x0200_0100,
+        size: 2,
+        decoded: true,
+        raw: new Uint8Array([0x01, 0x20]),
+        text: 'movs r0, #1',
+        symbol: 'main',
+        pseudo: 'r0 = 1',
+      },
+    ];
+    const asmWithPseudo = buildCodeBufferLines({
+      mode: 'disasm',
+      disasmRows: annotatedRows,
+      sourceLines: [],
+      sourceLine: null,
+      pc: 0x0200_0100,
+      breakpoints: new Map<number, number>(),
+    });
+    expect(asmWithPseudo[0]?.text).toBe('movs r0, #1  // r0 = 1');
+    expect(asmWithPseudo[0]?.tokens.some((t) => t.kind === 'cmt' && t.text === '// r0 = 1')).toBe(true);
+
     const mixed = buildCodeBufferLines({
       mode: 'mixed',
       disasmRows,

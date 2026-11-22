@@ -59,6 +59,14 @@ pub fn capture(core: core_view.View, image: ?symbols.Image, start: u32, into: []
     return address;
 }
 
+/// Append symbol, DWARF local, and literal annotations to an already-decoded disassembly `into` buffer.
+pub fn annotateLine(core: ?core_view.View, image: ?symbols.Image, address: u32, bytes: []const u8, into: *Text) void {
+    annotate.at(image, address, into);
+    const live_core = core orelse return;
+    const instr = fromBytes(address, bytes) orelse return;
+    annotation_literal.append(live_core, instr, into);
+}
+
 pub fn read(core: core_view.View, image: ?symbols.Image, address: u32) Row {
     var row: Row = .{ .address = address };
     function(image, &row);
@@ -78,8 +86,7 @@ pub fn read(core: core_view.View, image: ?symbols.Image, address: u32) Row {
         row.text.put("<undecoded 0x{X:0>4}>", .{first});
         return row;
     };
-    annotate.at(image, address, &row.text);
-    annotation_literal.append(core, fromBytes(address, row.bytes[0..row.size]).?, &row.text);
+    annotateLine(core, image, address, row.bytes[0..row.size], &row.text);
     return row;
 }
 

@@ -27,6 +27,7 @@ test "DisasmRow packing and Reader round-trip" {
         .raw = .{ 0x10, 0xb5, 0x00, 0x00 },
         .text = "push {r4, lr}",
         .symbol = "Reset_Handler",
+        .pseudo = "save({r4, lr})",
     };
     const r2: proto.DisasmRow = .{
         .address = 0x0200_000a,
@@ -35,6 +36,7 @@ test "DisasmRow packing and Reader round-trip" {
         .raw = .{ 0x00, 0xf0, 0x20, 0xf8 },
         .text = "bl #0x200004e",
         .symbol = "",
+        .pseudo = "r0 = main()",
     };
 
     try disasm_wire.put(&buf, &at, r1);
@@ -48,13 +50,19 @@ test "DisasmRow packing and Reader round-trip" {
     try std.testing.expectEqualSlices(u8, &r1.raw, &d1.raw);
     try std.testing.expectEqualStrings(r1.text, d1.text);
     try std.testing.expectEqualStrings(r1.symbol, d1.symbol);
+    try std.testing.expectEqualStrings(r1.pseudo, d1.pseudo);
 
     const d2 = (try reader.next()).?;
     try std.testing.expectEqual(r2.address, d2.address);
     try std.testing.expectEqual(r2.size, d2.size);
     try std.testing.expectEqualStrings(r2.text, d2.text);
     try std.testing.expectEqualStrings("", d2.symbol);
+    try std.testing.expectEqualStrings(r2.pseudo, d2.pseudo);
     try std.testing.expectEqual(@as(?proto.DisasmRow, null), try reader.next());
+
+    var trunc_reader: disasm_wire.Reader = .{ .rest = buf[0 .. at - 2] };
+    _ = (try trunc_reader.next()).?;
+    try std.testing.expectError(error.Truncated, trunc_reader.next());
 }
 
 test "Disasmwire rejects truncated buffers" {
