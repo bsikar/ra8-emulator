@@ -17,6 +17,8 @@ const Job = transport_mod.Job;
 const Error = command_mod.Error;
 const Ticket = command_mod.Ticket;
 
+pub const max_slice_budget: u64 = 25_000;
+
 /// Validate, pace and queue a play or continue job.
 pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind, dir: command_mod.Direction) !Ticket {
     if (dir == .back and self.session.smooth_rewind == null) return Error.NotReady;
@@ -25,9 +27,12 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind, dir: command_mod.Dir
     const prior = transport_mod.budgetOf(self.session, core);
     self.cancel();
     self.epoch += 1;
-    try self.session.setRunBudget(core, change.budget);
+    const slice_budget = @min(change.budget, max_slice_budget);
+    try self.session.setRunBudget(core, slice_budget);
     if (dir == .back) {
         try self.session.smooth_rewind.?.start(speed orelse 1.0);
+    } else if (self.session.speed) |hook| {
+        try hook.setFn(hook.context, change.milli);
     }
     const ticket = self.issue();
     self.job = .{
@@ -36,7 +41,7 @@ pub fn queue(self: *Transport, speed: ?f64, kind: Job.Kind, dir: command_mod.Dir
         .core = core,
         .kind = kind,
         .prior_budget = prior,
-        .budget = change.budget,
+        .budget = slice_budget,
         .dir = dir,
         .speed = speed,
     };
@@ -106,4 +111,12 @@ pub fn slice(self: *Transport, job: *Job) !?api.Ended {
     const ended = try self.session.run(job.core, .cont);
     if (ended == .count) return null;
     return ended;
+}
+
+pub fn clearForwardSpeed(self: *Transport, job: *const Job) void {
+    if (job.kind != .play or job.dir != .fwd) return;
+    const hook = self.session.speed orelse return;
+    hook.setFn(hook.context, null) catch |err| {
+        std.log.debug("transport: clear forward speed failed: {s}", .{@errorName(err)});
+    };
 }

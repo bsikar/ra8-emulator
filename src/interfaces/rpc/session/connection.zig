@@ -17,6 +17,7 @@ pub fn forget(context: *Context) void {
     context.advance_from_ns = 0;
     context.advance_target_ns = 0;
     context.transport_epoch = 0;
+    context.transport_last_emit_ns = 0;
     context.lcd_rate = .{ 0, 0 };
     context.lcd_pending = .{ null, null };
     context.lcd_holds = 0;

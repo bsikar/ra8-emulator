@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import {
   CAP_TRANSPORT,
   Core,
+  Direction,
   EventKind,
   type RA8RpcClient,
   RunMode,
@@ -153,10 +154,14 @@ export class ExecutionStore implements OnDestroy {
   }
 
   public async resetImage(): Promise<void> {
+    const wasRunning = this.isRunning();
     this.continuousWanted = false;
     const client = this.writableClient('Reset Image');
     if (!client) return;
     try {
+      if (wasRunning && typeof client.pause === 'function') {
+        await client.pause(Core.Cpu0);
+      }
       await client.resetImage(Core.Cpu0);
       this.lastStop.set(null);
       this.executionStatus.set('halted');
@@ -227,7 +232,12 @@ export class ExecutionStore implements OnDestroy {
     this.sliceInFlight = true;
     try {
       if (this.rpc.hasCapability(CAP_TRANSPORT)) {
-        await client.advanceAsync(Core.Cpu0, ASYNC_SLICE_NS);
+        if (typeof client.play === 'function') {
+          const speedMilli = BigInt(Math.max(0, Math.round(this.speedMilli())));
+          await client.play(Direction.Fwd, speedMilli);
+        } else {
+          await client.advanceAsync(Core.Cpu0, ASYNC_SLICE_NS);
+        }
       } else {
         await client.run(Core.Cpu0, RunMode.Cont, SLICE_BUDGET_INSTR);
       }
@@ -272,6 +282,17 @@ export class ExecutionStore implements OnDestroy {
     if (evt.reason === StopReason.Count && this.continuousWanted) {
       void this.pumpNextSlice();
       return;
+    }
+    if (
+      this.lastStop() === null &&
+      (evt.reason === StopReason.Breakpoint ||
+        evt.reason === StopReason.Watchpoint ||
+        evt.reason === StopReason.UnitBreak ||
+        evt.reason === StopReason.UnitWatch ||
+        evt.reason === StopReason.CoreFault ||
+        evt.reason === StopReason.ReplayFailed)
+    ) {
+      this.lastStop.set({ core: evt.core, reason: evt.reason, address: evt.address, detail: 0 });
     }
     this.continuousWanted = false;
     this.executionStatus.set('halted');

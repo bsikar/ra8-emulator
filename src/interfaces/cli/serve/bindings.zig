@@ -13,6 +13,7 @@ pub const Bindings = struct {
         const self: *Bindings = @ptrCast(@alignCast(context orelse return error.NoBindings));
         self.workbench.bind(&candidate.context);
         debugger(candidate);
+        try candidate.startWorker();
         if (self.folded) try candidate.sampleStacks(1000);
         if (!self.allow_state) candidate.context.state = null;
     }
