@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import hashlib, importlib.util, json, os, platform, secrets, sys, time
 from pathlib import Path
 
-import fake_jlink, gdb_debug, sim_agent, workspace_setup
+import fake_jlink, gdb_debug, parity, sim_agent, workspace_setup
 from rpc_client import IdeClient
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -327,5 +327,10 @@ def case_topology_remote_sim_agent(h):
     h.results["topology_remote_sim_agent"] = "PASS"
 
 
+def case_emulate_then_flash_sim(h):
+    parity.run_sim_parity(h, _write_targets, SIM_BOARDS, _served_client, _find, _sel)
+
+
 CASES = (case_toolchain_and_offline_builds, case_project_debug_and_failures, case_competing_and_unplug,
-         case_topology_local_fake_jlink, case_topology_loopback_probe_agent, case_topology_remote_sim_agent)
+         case_topology_local_fake_jlink, case_topology_loopback_probe_agent, case_topology_remote_sim_agent,
+         case_emulate_then_flash_sim)
