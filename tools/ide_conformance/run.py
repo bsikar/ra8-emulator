@@ -22,6 +22,7 @@ import rpc_client  # noqa: E402
 sys.path.insert(0, str(HERE))
 import hil  # noqa: E402
 import scenarios  # noqa: E402
+import server_hil  # noqa: E402
 
 
 class Harness:
@@ -116,25 +117,44 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=float, default=480.0)
     p.add_argument("--gdb", type=str, default=None)
     p.add_argument("--hil", action="store_true")
+    p.add_argument("--hil-topology", choices=("server-attached", "workstation"), default="server-attached")
     p.add_argument("--jlink", type=Path, default=Path(r"C:\Program Files\SEGGER\JLink_V818\JLink.exe"))
     p.add_argument("--jlink-gdb-server", type=Path, default=Path(r"C:\Program Files\SEGGER\JLink_V818\JLinkGDBServerCL.exe"))
     p.add_argument("--ssh-host", type=str, default="dev")
     p.add_argument("--remote-zig", type=str, default="/home/bsikar/opt/zig-0.17.0/zig")
     p.add_argument("--remote-emulator", type=str, default=None)
+    p.add_argument("--probe-ssh-host", type=str, default="neo")
+    p.add_argument("--probe-remote-zig", type=str, default="/opt/homebrew/bin/zig")
+    p.add_argument("--probe-remote-emulator", type=str, default=None)
+    p.add_argument("--probe-remote-jlink", type=str, default="/Applications/SEGGER/JLink_V970/JLinkExe")
+    p.add_argument("--probe-remote-jlink-gdb-server", type=str, default="/Applications/SEGGER/JLink_V970/JLinkGDBServerCLExe")
+    p.add_argument("--probe-remote-gdb", type=str, default="/Users/bsikar/opt/arm-gnu-toolchain/bin/arm-none-eabi-gdb")
     return p
 
 
 def initial_summary(h: Harness, args) -> dict:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, timeout=10).strip()
     git_status = subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True, timeout=10).splitlines()
-    if args.hil:
+    if args.hil and args.hil_topology == "server-attached":
+        gates = {
+            "local_windows_bench_fpb_ra8e1": "NOTRUN_BENCH_MOVED",
+            "local_windows_bench_fpb_ra4t1": "NOTRUN_BENCH_MOVED",
+            "local_windows_hardware_jlink_gdb_ra8e1": "NOTRUN_BENCH_MOVED",
+            "local_windows_hardware_jlink_gdb_ra4t1": "NOTRUN_BENCH_MOVED",
+            "remote_linux_backend_laptop_windows_probe": "NOTRUN_BENCH_MOVED",
+            "server_attached_probe": "NOTRUN",
+            "ra8d2": "PENDING_HARDWARE",
+            "grove-vision-ai-v2": "PENDING_HARDWARE",
+            "ra8p1": "UNPURCHASED_UNAVAILABLE",
+        }
+    elif args.hil:
         gates = {
             "local_windows_bench_fpb_ra8e1": "NOTRUN",
             "local_windows_bench_fpb_ra4t1": "NOTRUN",
             "local_windows_hardware_jlink_gdb_ra8e1": "NOTRUN",
             "local_windows_hardware_jlink_gdb_ra4t1": "NOTRUN",
             "remote_linux_backend_laptop_windows_probe": "NOTRUN",
-            "server_attached_probe": "PENDING_RA8EMU-1351",
+            "server_attached_probe": "NOTRUN_WORKSTATION_BENCH",
             "ra8d2": "PENDING_HARDWARE",
             "grove-vision-ai-v2": "PENDING_HARDWARE",
             "ra8p1": "UNPURCHASED_UNAVAILABLE",
@@ -146,12 +166,12 @@ def initial_summary(h: Harness, args) -> dict:
             "local_windows_hardware_jlink_gdb_ra8e1": "NOTRUN_CI",
             "local_windows_hardware_jlink_gdb_ra4t1": "NOTRUN_CI",
             "remote_linux_backend_laptop_windows_probe": "NOTRUN_CI",
-            "server_attached_probe": "PENDING_RA8EMU-1351",
+            "server_attached_probe": "NOTRUN_CI",
             "ra8d2": "PENDING_HARDWARE",
             "grove-vision-ai-v2": "PENDING_HARDWARE",
             "ra8p1": "UNPURCHASED_UNAVAILABLE",
         }
-    return dict(
+    summary = dict(
         status="FAIL",
         mode="hil" if args.hil else "portable_ci",
         host=host_triplet(),
@@ -164,6 +184,9 @@ def initial_summary(h: Harness, args) -> dict:
         physical_gates=gates,
         cases=[],
     )
+    if args.hil:
+        summary["hil_topology"] = args.hil_topology
+    return summary
 
 
 def main() -> int:
@@ -176,15 +199,15 @@ def main() -> int:
     if zig is None or not zig.is_absolute():
         parser.error("explicit absolute --zig required")
     gdb = resolve_tool(args.gdb)
-    if args.hil and gdb is None:
-        parser.error("--hil requires --gdb (e.g. arm-none-eabi-gdb)")
+    if args.hil and args.hil_topology == "workstation" and gdb is None:
+        parser.error("--hil --hil-topology workstation requires --gdb (e.g. arm-none-eabi-gdb)")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     h = Harness(args, output, zig, gdb)
     summary = initial_summary(h, args)
     h.physical_gates = dict(summary["physical_gates"])
     started = time.monotonic()
-    cases = hil.CASES if args.hil else scenarios.CASES
+    cases = scenarios.CASES if not args.hil else (server_hil.CASES if args.hil_topology == "server-attached" else hil.CASES)
     try:
         zig_ver = subprocess.check_output([str(h.zig), "version"], text=True, timeout=10).strip()
         h.check("explicit Zig 0.17.0", zig_ver, "0.17.0")

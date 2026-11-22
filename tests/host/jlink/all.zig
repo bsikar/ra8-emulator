@@ -6,8 +6,10 @@ test {
     _ = @import("commander_test.zig");
     _ = @import("uart_test.zig");
     _ = @import("uart/linux_test.zig");
+    _ = @import("uart/macos_test.zig");
     _ = @import("uart/windows_test.zig");
     _ = @import("serial_test.zig");
     _ = @import("serial/linux_test.zig");
+    _ = @import("serial/macos_test.zig");
     _ = @import("serial/windows_test.zig");
 }

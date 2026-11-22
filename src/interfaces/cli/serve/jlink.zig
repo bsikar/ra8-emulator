@@ -235,7 +235,7 @@ fn owned(probes: []Probe, context: *anyopaque) ?*Probe {
 }
 
 pub fn hostSupportsUart() bool {
-    return builtin.os.tag == .windows or builtin.os.tag == .linux;
+    return builtin.os.tag == .windows or builtin.os.tag == .linux or builtin.os.tag == .macos;
 }
 
 pub fn operationsFor(has_flash: bool, has_uart: bool) []const model.Action {

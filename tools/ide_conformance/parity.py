@@ -179,7 +179,7 @@ def emulate_remote(h, ssh_base: list[str], remote_emu: str, remote_elf: str, elf
                       f"{tag}_{part}.serve.log", port_from_ready=True)
         remote_pid = next(int(ln.split(":", 1)[1]) for ln in srv.lines if ln.startswith("PID:"))
         local_port = free_port_fn()
-        tun = ssh_tunnel_cls(h, h.args.ssh_host, ["-L", f"127.0.0.1:{local_port}:127.0.0.1:{srv.port}"],
+        tun = ssh_tunnel_cls(h, ssh_base[-1], ["-L", f"127.0.0.1:{local_port}:127.0.0.1:{srv.port}"],
                              f"Local forwarding listening on 127.0.0.1 port {local_port}.", f"{tag}_{part}_tun")
         client = IdeClient(local_port, h.trace, h.deadline, frame_timeout=45.0)
         try:
@@ -188,7 +188,10 @@ def emulate_remote(h, ssh_base: list[str], remote_emu: str, remote_elf: str, elf
             client.close()
             tun.close()
             if srv.proc.poll() is None:
-                subprocess.run(ssh_base + [f"kill -TERM {remote_pid}"], timeout=10)
+                try:
+                    subprocess.run(ssh_base + [f"kill -TERM {remote_pid}"], stdin=subprocess.DEVNULL, timeout=25)
+                except subprocess.TimeoutExpired:
+                    pass
             srv.close()
     return _verify_pair(h, tag, board_id, elf_sha256, caps[0], caps[1])
 

@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 
 const linux = @import("serial/linux.zig");
+const macos = @import("serial/macos.zig");
 const uart = @import("uart.zig");
 const windows = @import("serial/windows.zig");
 
@@ -12,6 +13,7 @@ pub const Port = struct {
     inner: switch (builtin.os.tag) {
         .windows => windows.Port,
         .linux => linux.Port,
+        .macos => macos.Port,
         else => void,
     },
     name_buf: [64]u8 = undefined,
@@ -28,6 +30,7 @@ pub const Port = struct {
         switch (builtin.os.tag) {
             .windows => out.inner = try windows.Port.open(found),
             .linux => out.inner = try linux.Port.open(found),
+            .macos => out.inner = try macos.Port.open(found),
             else => return error.Unsupported,
         }
         return out;
@@ -44,6 +47,7 @@ pub const Port = struct {
         return switch (builtin.os.tag) {
             .windows => self.inner.readBounded(io, out, timeout_ms, idle_ms, cancel),
             .linux => self.inner.readBounded(io, out, timeout_ms, idle_ms, cancel),
+            .macos => self.inner.readBounded(io, out, timeout_ms, idle_ms, cancel),
             else => error.Unsupported,
         };
     }
@@ -52,6 +56,7 @@ pub const Port = struct {
         switch (builtin.os.tag) {
             .windows => self.inner.close(),
             .linux => self.inner.close(),
+            .macos => self.inner.close(),
             else => {},
         }
     }
