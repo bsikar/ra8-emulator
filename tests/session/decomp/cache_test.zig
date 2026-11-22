@@ -28,4 +28,11 @@ test "CfgCache resolves addresses inside functions, tracks hits/misses, and prew
     cache.invalidate();
     const after_inv = try cache.get(main_sym.value);
     try std.testing.expectEqual(main_sym.value & ~@as(u32, 1), after_inv.entry);
+
+    // Dataflow converges across every seeded function in uart_irq_echo.elf with zero leaks
+    for (cache.extents) |ext| {
+        const df = try cache.getDataflow(ext.entry);
+        try std.testing.expect(df.converged);
+    }
+    try std.testing.expectEqual(after_inv.entry, (try cache.getDataflow(main_sym.value)).defs[0].address);
 }
