@@ -16,8 +16,10 @@ pub const Reply = struct {
 pub const disasm_max_rows: usize = 64;
 pub const disasm_text_cap: usize = 96;
 pub const disasm_sym_cap: usize = 48;
-/// Widest row encoding: 4 (addr) + 1 (size) + 1 (decoded) + 4 (raw) + 1 + text + 1 + sym.
-pub const disasm_row_bytes: usize = 4 + 1 + 1 + 4 + 1 + disasm_text_cap + 1 + disasm_sym_cap;
+pub const disasm_pseudo_cap: usize = 128;
+/// Widest row: 4 (addr) + 1 (size) + 1 (decoded) + 4 (raw) + 1 + text + 1 + sym + 1 + pseudo.
+pub const disasm_row_bytes: usize =
+    4 + 1 + 1 + 4 + 1 + disasm_text_cap + 1 + disasm_sym_cap + 1 + disasm_pseudo_cap;
 pub const disasm_bytes: usize = disasm_max_rows * disasm_row_bytes;
 
 pub const DisasmAsk = struct {
@@ -43,6 +45,7 @@ pub const DisasmRow = struct {
     raw: [4]u8 = .{ 0, 0, 0, 0 },
     text: []const u8 = "",
     symbol: []const u8 = "",
+    pseudo: []const u8 = "",
 };
 
 pub const Error = error{ Oversize, Truncated };
@@ -50,7 +53,8 @@ pub const Error = error{ Oversize, Truncated };
 pub fn put(out: []u8, at: *usize, row: DisasmRow) Error!void {
     const tlen = @min(row.text.len, disasm_text_cap);
     const slen = @min(row.symbol.len, disasm_sym_cap);
-    const needed = 4 + 1 + 1 + 4 + 1 + tlen + 1 + slen;
+    const plen = @min(row.pseudo.len, disasm_pseudo_cap);
+    const needed = 4 + 1 + 1 + 4 + 1 + tlen + 1 + slen + 1 + plen;
     if (at.* + needed > out.len) return Error.Oversize;
     std.mem.writeInt(u32, out[at.*..][0..4], row.address, .little);
     out[at.* + 4] = row.size;
@@ -61,7 +65,10 @@ pub fn put(out: []u8, at: *usize, row: DisasmRow) Error!void {
     const sym_at = at.* + 11 + tlen;
     out[sym_at] = @intCast(slen);
     @memcpy(out[sym_at + 1 ..][0..slen], row.symbol[0..slen]);
-    at.* = sym_at + 1 + slen;
+    const pseudo_at = sym_at + 1 + slen;
+    out[pseudo_at] = @intCast(plen);
+    @memcpy(out[pseudo_at + 1 ..][0..plen], row.pseudo[0..plen]);
+    at.* = pseudo_at + 1 + plen;
 }
 
 pub const Reader = struct {
@@ -69,7 +76,7 @@ pub const Reader = struct {
 
     pub fn next(self: *Reader) Error!?DisasmRow {
         if (self.rest.len == 0) return null;
-        if (self.rest.len < 12) return Error.Truncated;
+        if (self.rest.len < 13) return Error.Truncated;
         const address = std.mem.readInt(u32, self.rest[0..4], .little);
         const size = self.rest[4];
         const decoded = self.rest[5];
@@ -79,9 +86,13 @@ pub const Reader = struct {
         if (11 + tlen + 1 > self.rest.len) return Error.Truncated;
         const text = self.rest[11 .. 11 + tlen];
         const slen: usize = self.rest[11 + tlen];
-        const total = 11 + tlen + 1 + slen;
+        const sym_end = 12 + tlen + slen;
+        if (sym_end + 1 > self.rest.len) return Error.Truncated;
+        const symbol = self.rest[12 + tlen .. sym_end];
+        const plen: usize = self.rest[sym_end];
+        const total = sym_end + 1 + plen;
         if (total > self.rest.len) return Error.Truncated;
-        const symbol = self.rest[12 + tlen .. total];
+        const pseudo = self.rest[sym_end + 1 .. total];
         self.rest = self.rest[total..];
         return .{
             .address = address,
@@ -90,6 +101,7 @@ pub const Reader = struct {
             .raw = raw,
             .text = text,
             .symbol = symbol,
+            .pseudo = pseudo,
         };
     }
 };

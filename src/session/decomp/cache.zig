@@ -7,6 +7,7 @@ const core_view = @import("../core_view.zig");
 const dataflow_mod = @import("dataflow.zig");
 const decode = @import("ra8_chip").core.cpu.decode;
 const elf = @import("ra8_board").image.elf;
+const emit_mod = @import("emit.zig");
 const extents_mod = @import("extents.zig");
 const image_bus = @import("image_bus.zig");
 
@@ -28,6 +29,7 @@ pub const CfgCache = struct {
     decode_cache: *decode.cache.DecodeCache,
     entries: std.AutoHashMapUnmanaged(u32, cfg_mod.Cfg) = .empty,
     dataflows: std.AutoHashMapUnmanaged(u32, dataflow_mod.Dataflow) = .empty,
+    emits: std.AutoHashMapUnmanaged(u32, emit_mod.FunctionEmit) = .empty,
     hits: u64 = 0,
     misses: u64 = 0,
 
@@ -55,10 +57,18 @@ pub const CfgCache = struct {
 
     pub fn deinit(self: *CfgCache) void {
         self.invalidate();
+        self.emits.deinit(self.allocator);
         self.entries.deinit(self.allocator);
         self.dataflows.deinit(self.allocator);
         self.allocator.free(self.extents);
         self.allocator.destroy(self.decode_cache);
+    }
+
+    /// Return the seeded function entry address enclosing `address`, if known.
+    pub fn extentEntry(self: *const CfgCache, address: u32) ?u32 {
+        const norm = address & ~@as(u32, 1);
+        const ext = extents_mod.findContaining(self.extents, norm) orelse return null;
+        return ext.entry;
     }
 
     /// Return the cached or freshly built CFG covering `address`.
@@ -100,6 +110,17 @@ pub const CfgCache = struct {
         return self.dataflows.getPtr(cfg_ptr.entry).?;
     }
 
+    /// Return cached or freshly emitted pseudocode-lite for the function covering `address`.
+    pub fn getEmit(self: *CfgCache, address: u32) !*const emit_mod.FunctionEmit {
+        const cfg_ptr = try self.get(address);
+        if (self.emits.getPtr(cfg_ptr.entry)) |existing| return existing;
+        const df_ptr = try self.getDataflow(address);
+        var built = try emit_mod.emitFunction(self.allocator, cfg_ptr, df_ptr, .{ .image = self.image });
+        errdefer built.deinit();
+        try self.emits.put(self.allocator, cfg_ptr.entry, built);
+        return self.emits.getPtr(cfg_ptr.entry).?;
+    }
+
     /// Build and cache CFGs for every seeded function extent; returns cached entry count.
     pub fn prewarmAll(self: *CfgCache) std.mem.Allocator.Error!usize {
         for (self.extents) |ext| {
@@ -108,8 +129,14 @@ pub const CfgCache = struct {
         return self.entries.count();
     }
 
-    /// Release all cached function CFGs and dataflows while keeping symbol extents loaded.
+    /// Release all cached function CFGs, dataflows, and emitted lines while keeping symbol extents loaded.
     pub fn invalidate(self: *CfgCache) void {
+        var em_iter = self.emits.valueIterator();
+        while (em_iter.next()) |em| {
+            em.deinit();
+        }
+        self.emits.clearRetainingCapacity();
+
         var df_iter = self.dataflows.valueIterator();
         while (df_iter.next()) |df| {
             df.deinit();

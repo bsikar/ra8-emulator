@@ -100,6 +100,9 @@ test.describe('Workbench Debug (/debug) with Live Emulator RPC', () => {
 
     await expect(page.getByTestId('debug-frame-0')).toBeVisible({ timeout: 10_000 });
     await page.getByTestId('debug-frame-0').click();
+    await expect(page.getByTestId('debug-disasm')).toContainText('//', { timeout: 10_000 });
+    await page.getByTestId('debug-mode-decomp').click();
+    await expect(page.getByTestId('debug-disasm')).toContainText(';', { timeout: 10_000 });
     await page.getByTestId('debug-mode-source').click();
     await expect(page.getByTestId('debug-disasm')).toBeVisible();
     await page.getByTestId('debug-mode-disasm').click();
