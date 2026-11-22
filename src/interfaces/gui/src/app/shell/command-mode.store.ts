@@ -12,6 +12,7 @@ export interface ShortcutChord {
 export interface CommandContext {
   connected: boolean;
   running: boolean;
+  canReload: boolean;
   historySupported: boolean;
   workspaceSupported: boolean;
   artifactsSupported: boolean;
@@ -66,6 +67,7 @@ export function isEditableEventTarget(target: EventTarget | null): boolean {
 const DEFAULT_CTX: CommandContext = {
   connected: false,
   running: false,
+  canReload: false,
   historySupported: false,
   workspaceSupported: false,
   artifactsSupported: false,

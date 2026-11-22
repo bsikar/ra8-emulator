@@ -156,19 +156,32 @@
           </div>
         }
 
-        @if (recentArtifactRows().length > 0) {
+        @if (recentElfRows().length > 0 || recentArtifactRows().length > 0) {
           <div class="section-head is-sub">
             <app-section-kicker label="RECENT WORKSPACES &amp; ELFS" />
           </div>
           <div class="entry-list">
-            @for (item of recentArtifactRows(); track item.id) {
-              <div class="recent-entry-row">
-                <div class="recent-entry-main">
-                  <span class="entry-name">{{ item.name }}</span>
-                  <span class="es-subline mono">{{ item.path }}</span>
+            @for (item of recentElfRows(); track item.id; let idx = $index) {
+              <button
+                type="button"
+                class="entry-row"
+                [attr.data-testid]="'open-recent-elf-' + idx"
+                [disabled]="rpc.observeOnly()"
+                (click)="openRecentElf(item)"
+              >
+                <span class="entry-name mono">{{ item.fileName }}</span>
+                <span class="es-meta">{{ formatAge(item.openedAtIso) }}</span>
+              </button>
+            } @empty {
+              @for (item of recentArtifactRows(); track item.id) {
+                <div class="recent-entry-row">
+                  <div class="recent-entry-main">
+                    <span class="entry-name">{{ item.name }}</span>
+                    <span class="es-subline mono">{{ item.path }}</span>
+                  </div>
+                  <span class="es-meta">{{ formatAge(item.lastOpenedIso) }}</span>
                 </div>
-                <span class="es-meta">{{ formatAge(item.lastOpenedIso) }}</span>
-              </div>
+              }
             }
           </div>
         }
@@ -315,7 +328,7 @@
     type="file"
     class="hidden-file-input"
     data-testid="open-file-input"
-    accept=".elf,.axf,.board,.bin"
+    accept=".elf,.axf,.ra8app,.board,.bin"
     (change)="onFallbackFileSelected($event)"
   />
 </div>

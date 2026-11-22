@@ -20,6 +20,8 @@ import { BoardStore } from '../core/stores/board.store';
 import { DebugStore } from '../core/stores/debug.store';
 import { ExecutionStore } from '../core/stores/execution.store';
 import { PreferencesStore } from '../core/stores/preferences.store';
+import type { RecentElfEntry } from '../core/stores/recent-elf-db';
+import { RecentElfStore } from '../core/stores/recent-elf.store';
 import { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import { RewindStore } from '../core/stores/rewind.store';
 import { WorkspaceStore } from '../core/stores/workspace.store';
@@ -27,9 +29,9 @@ import { VimStore } from '../core/vim/vim.store';
 import { SectionKickerComponent } from '../shared/ui/section-kicker.component';
 import { StatusDotComponent } from '../shared/ui/status-dot.component';
 import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
+import { extractDroppedFileWithHandle, readBlobBytes } from '../shared/utils/file-picker';
 import { toggleDocumentFullscreen } from '../shared/utils/fullscreen';
 import {
-  type CommandAction,
   CommandModeStore,
   formatShortcut,
   isEditableEventTarget,
@@ -40,6 +42,7 @@ import { DropVeilComponent } from './drop-veil.component';
 import { ExtensionsSheetComponent } from './extensions-sheet.component';
 import { SearchEverywhereComponent } from './search-everywhere.component';
 import { SettingsModalComponent } from './settings-modal.component';
+import { buildShellCommandActions } from './shell-commands';
 import { registerShellExHandlers, registerShellSearchProviders } from './shell-ide-bridge';
 import { ToastRegionComponent } from './toast-region.component';
 
@@ -81,6 +84,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   protected readonly debug = inject(DebugStore);
   protected readonly rewind = inject(RewindStore);
   protected readonly workspace = inject(WorkspaceStore);
+  protected readonly recentElf = inject(RecentElfStore);
   protected readonly remoteHosts = inject(RemoteHostsStore);
   protected readonly prefs = inject(PreferencesStore);
   protected readonly cmdMode = inject(CommandModeStore);
@@ -95,6 +99,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   protected readonly dragActive = signal<boolean>(false);
   protected readonly connectionPopoverOpen = signal<boolean>(false);
   protected readonly commandChordLabel = formatShortcut({ mod: true, key: 'k' });
+  protected readonly reloadChordLabel = formatShortcut({ mod: true, key: 'r' });
   protected readonly extensionsChordLabel = formatShortcut({ mod: true, shift: true, key: 'x' });
   protected readonly viewLinks: readonly NavRouteItem[] = [
     { path: '/launch', label: 'Launch' },
@@ -120,6 +125,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       this.cmdMode.updateContext({
         connected: this.rpc.isConnected(),
         running: this.execution.isRunning(),
+        canReload: this.recentElf.canReload(),
         historySupported: this.rewind.historySupported(),
         workspaceSupported: this.workspace.hasWorkspaceCap(),
         artifactsSupported: this.rpc.hasCapability(CAP_ARTIFACTS),
@@ -127,8 +133,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     });
 
     effect(() => {
-      const extCmds = this.extStore.contributedCommands();
-      this.syncCommands(extCmds);
+      this.syncCommands(this.recentElf.entries(), this.extStore.contributedCommands());
     });
 
     effect(() => {
@@ -149,6 +154,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       board: this.board,
       debug: this.debug,
       workspace: this.workspace,
+      recentElf: this.recentElf,
       remoteHosts: this.remoteHosts,
       cmdMode: this.cmdMode,
       searchEverywhere: this.searchEverywhere,
@@ -160,7 +166,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       if (match) return Promise.resolve(this.cmdMode.execute(match));
       return Promise.resolve(false);
     });
-    this.syncCommands(this.extStore.contributedCommands());
+    this.syncCommands(this.recentElf.entries(), this.extStore.contributedCommands());
   }
 
   public ngOnDestroy(): void {
@@ -239,23 +245,49 @@ export class AppShellComponent implements OnInit, OnDestroy {
   protected async onDrop(event: DragEvent): Promise<void> {
     event.preventDefault();
     this.dragActive.set(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) return;
+    const picked = await extractDroppedFileWithHandle(event.dataTransfer);
+    if (!picked) return;
+    const { file, handle } = picked;
     const lower = file.name.toLowerCase();
     if (lower.endsWith('.board')) {
-      this.board.importBoardProfileText(file.name, await file.text());
+      const rawText = new TextDecoder().decode(await readBlobBytes(file));
+      this.board.importBoardProfileText(file.name, rawText);
       return;
     }
     if (lower.endsWith('.tar') || lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
-      const preview = await this.rewind.previewStagedArchive(new Uint8Array(await file.arrayBuffer()), file.name);
+      const preview = await this.rewind.previewStagedArchive(await readBlobBytes(file), file.name);
       if (preview) {
         this.rpc.pushToast(`Staged archive ${file.name} (${preview.entries.length} entries)`);
       }
       await this.router.navigateByUrl('/import');
       return;
     }
-    const ok = await this.board.loadElfFile(file.name, new Uint8Array(await file.arrayBuffer()), Core.Cpu0);
-    if (ok) await this.router.navigateByUrl('/debug');
+    const bytes = await readBlobBytes(file);
+    const ok = await this.board.loadElfFile(file.name, bytes, Core.Cpu0, { breakAtMain: false });
+    if (ok) {
+      await this.recentElf.recordLoadedElf({
+        fileName: file.name,
+        core: Core.Cpu0,
+        wsUrl: this.rpc.serverUrl(),
+        handle,
+        bytes,
+      });
+      this.workspace.recordRecentWorkspace({
+        id: `elf:${file.name}`,
+        name: file.name.replace(/\.(elf|axf|ra8app)$/i, ''),
+        path: file.name,
+        wsUrl: this.rpc.serverUrl(),
+        pinned: false,
+        modeLabel: 'Dropped ELF',
+        artifactSummary: file.name,
+      });
+      await this.router.navigateByUrl('/debug');
+    }
+  }
+
+  protected openRecentFromMenu(entry: RecentElfEntry): void {
+    this.cmdMode.activeMenu.set(null);
+    void this.recentElf.openRecent(entry);
   }
 
   protected openConnectRoute(): void {
@@ -275,35 +307,30 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (res.error) this.rpc.pushToast(`Full Screen: ${res.error}`, 'neutral');
   }
 
-  private syncCommands(extCmds: ReturnType<ExtensionStore['contributedCommands']>): void {
-    const base: CommandAction[] = [
-      { id: 'nav-launch', label: 'Go to Launch', category: 'navigation', menu: 'view', shortcut: { key: '1' }, run: () => this.router.navigateByUrl('/launch') },
-      { id: 'nav-new-ws', label: 'New Workspace...', category: 'session', menu: 'file', shortcut: { mod: true, shift: true, key: 'n' }, run: () => this.router.navigateByUrl('/workspace/new') },
-      { id: 'nav-open', label: 'Open ELF or Workspace...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'o' }, run: () => this.router.navigateByUrl('/open') },
-      { id: 'nav-import', label: 'Import Session Bundle (.tar)...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'i' }, run: () => this.router.navigateByUrl('/import') },
-      { id: 'nav-connect', label: 'Connect Remote Host...', category: 'session', menu: 'file', shortcut: { mod: true, key: 'r' }, run: () => this.router.navigateByUrl('/connect') },
-      { id: 'nav-debug', label: 'Go to Debug', category: 'navigation', menu: 'view', shortcut: { key: '2' }, run: () => this.router.navigateByUrl('/debug') },
-      { id: 'nav-hw', label: 'Go to Hardware', category: 'navigation', menu: 'view', shortcut: { key: '3' }, run: () => this.router.navigateByUrl('/hardware') },
-      { id: 'nav-rewind', label: 'Go to Rewind', category: 'navigation', menu: 'view', shortcut: { key: '4' }, run: () => this.router.navigateByUrl('/rewind') },
-      { id: 'nav-profile', label: 'Go to Profile', category: 'navigation', menu: 'view', shortcut: { key: '5' }, run: () => this.router.navigateByUrl('/profile') },
-      { id: 'nav-console', label: 'Go to Console', category: 'navigation', menu: 'terminal', shortcut: { key: '6' }, run: () => this.router.navigateByUrl('/console') },
-      { id: 'nav-fullscreen', label: 'Full Screen', category: 'navigation', menu: 'view', shortcut: { key: 'F11' }, run: () => this.toggleFullScreen() },
-      { id: 'open-search', label: 'Search Everywhere', category: 'navigation', menu: 'view', run: () => this.searchEverywhere.openSearch() },
-      { id: 'open-extensions', label: 'Extensions', category: 'extensions', menu: 'view', shortcut: { mod: true, shift: true, key: 'x' }, run: () => this.cmdMode.extensionsOpen.set(true) },
-      { id: 'toggle-vim', label: 'Toggle Vim Keybindings', category: 'session', menu: 'edit', run: () => this.vim.toggleEnabled() },
-      { id: 'exec-run', label: 'Continue / Pause', category: 'execution', menu: 'file', shortcut: { key: 'F5' }, isEnabled: (c) => c.connected, run: () => this.toggleRunPause() },
-      { id: 'exec-over', label: 'Step Over', category: 'execution', menu: 'edit', shortcut: { key: 'F10' }, isEnabled: (c) => c.connected && !c.running, run: () => this.execution.stepOver() },
-      { id: 'exec-into', label: 'Step Into', category: 'execution', menu: 'edit', shortcut: { shift: true, key: 'F11' }, isEnabled: (c) => c.connected && !c.running, run: () => this.execution.step() },
-      { id: 'open-settings', label: 'Session Settings', category: 'session', menu: 'file', shortcut: { mod: true, key: ',' }, run: () => this.cmdMode.settingsOpen.set(true) },
-      { id: 'open-help', label: 'Keyboard & Transport Help', category: 'help', menu: 'help', run: () => this.cmdMode.helpOpen.set(true) },
-      { id: 'disconnect', label: 'Disconnect Session', category: 'session', menu: 'file', isEnabled: (c) => c.connected, run: () => this.rpc.disconnect(true) },
-    ];
-    const dynamic: CommandAction[] = extCmds.map((c) => ({
-      id: `ext:${c.extensionId}:${c.command}`,
-      label: `${c.extensionName}: ${c.title}`,
-      category: 'extensions',
-      run: () => this.extStore.executeContributedCommand(c.command),
-    }));
-    this.cmdMode.registerActions([...base, ...dynamic]);
+  private syncCommands(
+    recentElfs: readonly RecentElfEntry[],
+    extCmds: ReturnType<ExtensionStore['contributedCommands']>
+  ): void {
+    const actions = buildShellCommandActions(
+      {
+        navigateByUrl: (url) => this.router.navigateByUrl(url),
+        reloadActiveElf: () => this.recentElf.reloadActiveElf(),
+        openRecentElf: (entry) => this.recentElf.openRecent(entry),
+        toggleFullScreen: () => this.toggleFullScreen(),
+        openSearchEverywhere: () => this.searchEverywhere.openSearch(),
+        openExtensions: () => this.cmdMode.extensionsOpen.set(true),
+        toggleVim: () => this.vim.toggleEnabled(),
+        toggleRunPause: () => this.toggleRunPause(),
+        stepOver: () => this.execution.stepOver(),
+        stepInto: () => this.execution.step(),
+        openSettings: () => this.cmdMode.settingsOpen.set(true),
+        openHelp: () => this.cmdMode.helpOpen.set(true),
+        disconnectSession: () => this.rpc.disconnect(true),
+        executeExtensionCommand: (command) => this.extStore.executeContributedCommand(command),
+      },
+      recentElfs,
+      extCmds
+    );
+    this.cmdMode.registerActions(actions);
   }
 }

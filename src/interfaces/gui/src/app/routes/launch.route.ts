@@ -16,6 +16,7 @@ import { RpcConnectionStore, resolveWsUrlFromSearch } from '../core/rpc/rpc-conn
 import { SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import { BoardStore } from '../core/stores/board.store';
 import { ExecutionStore } from '../core/stores/execution.store';
+import { RecentElfStore } from '../core/stores/recent-elf.store';
 import { type RecentWorkspaceEntry, WorkspaceStore } from '../core/stores/workspace.store';
 import { VimStore } from '../core/vim/vim.store';
 import {
@@ -57,6 +58,7 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
   protected readonly execution = inject(ExecutionStore);
   protected readonly workspace = inject(WorkspaceStore);
   protected readonly board = inject(BoardStore);
+  protected readonly recentElf = inject(RecentElfStore);
   protected readonly cmdMode = inject(CommandModeStore);
   protected readonly searchEverywhere = inject(SearchEverywhereStore);
   protected readonly vim = inject(VimStore);
@@ -227,16 +229,31 @@ export class LaunchRouteComponent implements OnInit, OnDestroy {
     this.selectedIndex.set(0);
     this.rpc.pushToast(`Created workspace ${payload.name}`);
     if (payload.cpu0ElfFile && this.rpc.isConnected()) {
+      const { name, bytes } = payload.cpu0ElfFile;
       void this.board
-        .loadElfFile(payload.cpu0ElfFile.name, payload.cpu0ElfFile.bytes, Core.Cpu0)
-        .then((ok) => {
-          if (ok) void this.router.navigateByUrl('/debug');
+        .loadElfFile(name, bytes, Core.Cpu0, { breakAtMain: false })
+        .then(async (ok) => {
+          if (!ok) return;
+          await this.recentElf.recordLoadedElf({
+            fileName: name,
+            core: Core.Cpu0,
+            wsUrl: payload.wsUrl,
+            bytes,
+          });
+          await this.router.navigateByUrl('/debug');
         });
     }
   }
 
   protected async openRecentWorkspace(entry: RecentWorkspaceEntry): Promise<void> {
     this.wsInput.set(entry.wsUrl);
+    if (entry.id.startsWith('elf:')) {
+      const recent = this.recentElf.findMatchingEntry(entry.artifactSummary ?? entry.name, entry.path);
+      if (recent && (await this.recentElf.openRecent(recent))) {
+        this.workspace.recordRecentWorkspace({ ...entry });
+        return;
+      }
+    }
     this.workspace.recordRecentWorkspace({ ...entry });
     const ok = await this.connectAndRecord(entry.wsUrl);
     if (ok) {

@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { Core } from 'ra8-rpc-client';
 import { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import { BoardStore } from '../core/stores/board.store';
+import { RecentElfStore } from '../core/stores/recent-elf.store';
 import { WorkspaceStore } from '../core/stores/workspace.store';
 import { formatPresetArchSummary } from '../features/launch/launch-commands';
 import {
@@ -29,6 +30,7 @@ export class NewWorkspaceRouteComponent {
   protected readonly rpc = inject(RpcConnectionStore);
   private readonly board = inject(BoardStore);
   private readonly workspace = inject(WorkspaceStore);
+  private readonly recentElf = inject(RecentElfStore);
 
   protected goBack(): void {
     void this.router.navigateByUrl('/launch');
@@ -48,8 +50,18 @@ export class NewWorkspaceRouteComponent {
       artifactSummary: payload.cpu0ElfFile?.name ?? `${payload.preset.targetId.replace('-', '_')}.board`,
     });
     if (payload.cpu0ElfFile && this.rpc.isConnected()) {
-      await this.board.loadElfFile(payload.cpu0ElfFile.name, payload.cpu0ElfFile.bytes, Core.Cpu0);
-      await this.router.navigateByUrl('/debug');
+      const ok = await this.board.loadElfFile(payload.cpu0ElfFile.name, payload.cpu0ElfFile.bytes, Core.Cpu0, {
+        breakAtMain: false,
+      });
+      if (ok) {
+        await this.recentElf.recordLoadedElf({
+          fileName: payload.cpu0ElfFile.name,
+          core: Core.Cpu0,
+          wsUrl: payload.wsUrl,
+          bytes: payload.cpu0ElfFile.bytes,
+        });
+        await this.router.navigateByUrl('/debug');
+      }
       return;
     }
     this.rpc.pushToast(`Created workspace ${payload.name}`, 'neutral');

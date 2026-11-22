@@ -4,6 +4,7 @@ import type { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import type { SearchCandidate, SearchEverywhereStore } from '../core/search/search-everywhere.store';
 import type { BoardStore } from '../core/stores/board.store';
 import type { DebugStore } from '../core/stores/debug.store';
+import type { RecentElfStore } from '../core/stores/recent-elf.store';
 import type { RemoteHostsStore } from '../core/stores/remote-hosts.store';
 import type { WorkspaceStore } from '../core/stores/workspace.store';
 import type { VimStore } from '../core/vim/vim.store';
@@ -15,6 +16,7 @@ export interface ShellBridgeDeps {
   board: BoardStore;
   debug: DebugStore;
   workspace: WorkspaceStore;
+  recentElf?: RecentElfStore;
   remoteHosts?: RemoteHostsStore;
   cmdMode: CommandModeStore;
   searchEverywhere: SearchEverywhereStore;
@@ -101,6 +103,17 @@ export function registerShellSearchProviders(deps: ShellBridgeDeps): () => void 
       },
     }))
   );
+  const unsubRecentElfs = deps.searchEverywhere.registerProvider('shell-recent-elfs', () =>
+    (deps.recentElf?.entries() ?? []).map((entry) => ({
+      id: `recent-elf:${entry.id}`,
+      category: 'files' as const,
+      title: entry.fileName,
+      subtitle: `${entry.workspacePath ?? entry.sourceKind} · ${entry.wsUrl}`,
+      onSelect: () => {
+        void deps.recentElf?.openRecent(entry);
+      },
+    }))
+  );
 
   deps.searchEverywhere.registerJumpHandlers({
     onAddress: async (address) => {
@@ -132,6 +145,7 @@ export function registerShellSearchProviders(deps: ShellBridgeDeps): () => void 
     unsubSymbols();
     unsubText();
     unsubHosts();
+    unsubRecentElfs();
   };
 }
 

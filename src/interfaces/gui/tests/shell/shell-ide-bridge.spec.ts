@@ -5,6 +5,8 @@ import { RpcConnectionStore } from '../../src/app/core/rpc/rpc-connection.store'
 import { SearchEverywhereStore } from '../../src/app/core/search/search-everywhere.store';
 import { BoardStore } from '../../src/app/core/stores/board.store';
 import { DebugStore } from '../../src/app/core/stores/debug.store';
+import { RecentElfRepository } from '../../src/app/core/stores/recent-elf-db';
+import { RECENT_ELF_REPOSITORY, RecentElfStore } from '../../src/app/core/stores/recent-elf.store';
 import { RemoteHostsStore } from '../../src/app/core/stores/remote-hosts.store';
 import { WorkspaceStore } from '../../src/app/core/stores/workspace.store';
 import { VimStore } from '../../src/app/core/vim/vim.store';
@@ -13,13 +15,19 @@ import { registerShellExHandlers, registerShellSearchProviders } from '../../src
 
 describe('shell-ide-bridge', () => {
   it('registers Search Everywhere providers, quick jumps, and Vim :ex handlers cleanly', async () => {
-    TestBed.configureTestingModule({ providers: [provideRouter(appRoutes)] });
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(appRoutes),
+        { provide: RECENT_ELF_REPOSITORY, useValue: new RecentElfRepository(null) },
+      ],
+    });
     const deps = {
       router: TestBed.inject(Router),
       rpc: TestBed.inject(RpcConnectionStore),
       board: TestBed.inject(BoardStore),
       debug: TestBed.inject(DebugStore),
       workspace: TestBed.inject(WorkspaceStore),
+      recentElf: TestBed.inject(RecentElfStore),
       remoteHosts: TestBed.inject(RemoteHostsStore),
       cmdMode: TestBed.inject(CommandModeStore),
       searchEverywhere: TestBed.inject(SearchEverywhereStore),
