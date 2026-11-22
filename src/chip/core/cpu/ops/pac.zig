@@ -63,7 +63,7 @@ fn source(n: u4) bool {
 }
 
 fn enabled(cpu: *const Cpu) bool {
-    if (!cpu.profile.v8_1m) return false;
+    if (!cpu.profile.pacbti) return false;
     const bit = if (sysreg.privileged(&cpu.regs)) regs.control_bits.pac_en else regs.control_bits.upac_en;
     return cpu.regs.control & bit != 0;
 }
@@ -87,8 +87,8 @@ fn pac(cpu: *Cpu, instr: Instr) op.Error!void {
 
 fn pacbti(cpu: *Cpu, instr: Instr) op.Error!void {
     sign(cpu, 12, cpu.regs.lr, cpu.regs.sp());
-    // PACBTI is a BTI landing pad; it consumes a pending BTI check.
-    cpu.regs.xpsr &= ~(@as(u32, 1) << 21);
+    // PACBTI is a BTI landing pad when PACBTI is present; otherwise a NOP.
+    if (cpu.profile.pacbti) cpu.regs.xpsr &= ~regs.xpsr_bits.bti;
     _ = instr;
 }
 
@@ -98,6 +98,7 @@ fn aut(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn pacg(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (!cpu.profile.pacbti) return error.Undefined;
     const rd: u4 = @truncate(instr.hw2 >> 8);
     const rn: u4 = @truncate(instr.hw1);
     const rm: u4 = @truncate(instr.hw2);
@@ -105,6 +106,7 @@ fn pacg(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn autg(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (!cpu.profile.pacbti) return error.Undefined;
     const ra: u4 = @truncate(instr.hw2 >> 12);
     const rn: u4 = @truncate(instr.hw1);
     const rm: u4 = @truncate(instr.hw2);
@@ -114,6 +116,7 @@ fn autg(cpu: *Cpu, instr: Instr) op.Error!void {
 /// BXAUT is AUT then BX: with PAC disabled the authentication passes and
 /// the branch still happens, as Arm's AUT + BX substitution implies.
 fn bxaut(cpu: *Cpu, instr: Instr) op.Error!void {
+    if (!cpu.profile.pacbti) return error.Undefined;
     const ra: u4 = @truncate(instr.hw2 >> 12);
     const rn: u4 = @truncate(instr.hw1);
     const rm: u4 = @truncate(instr.hw2);

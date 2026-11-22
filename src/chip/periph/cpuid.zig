@@ -42,6 +42,7 @@ pub const architecture: u32 = 0xF;
 
 pub const partno = struct {
     pub const cortex_m85: u12 = 0xD23;
+    pub const cortex_m55: u12 = 0xD22;
     pub const cortex_m33: u12 = 0xD21;
 };
 

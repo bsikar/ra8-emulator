@@ -92,6 +92,7 @@ pub const SecondZig = struct {
                 .has_security = units.security,
                 .dwt_numcomp = units.dwt_numcomp,
                 .fpb_wired = true,
+                .id = units.profile.idBank(units.security, units.scs.fpb_code),
             },
         };
         self.pending = .{ .model = .{
@@ -218,7 +219,7 @@ pub fn bringUp(
         .security = desc.security,
         .systicks = desc.systicks,
         .scs = desc.scs,
-        .dwt_numcomp = desc.scs.effectiveDwt(desc.profile.v8_1m),
+        .dwt_numcomp = desc.dwtComparators(),
     };
     try core.openOn(memory, units, wiring.bus);
     return seeded;

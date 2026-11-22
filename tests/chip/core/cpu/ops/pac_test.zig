@@ -366,3 +366,20 @@ test "BXAUT is not BTI-setting and honors pending EPSR.B" {
     try std.testing.expectEqual(@as(u32, 1 << 17), bti_mem.cfsr);
     try std.testing.expectEqual(@as(u32, 0x100), bti_cpu.regs.pc);
 }
+
+test "M55 without PACBTI treats PAC/PACBTI/AUT as NOP and refuses PACG/AUTG/BXAUT" {
+    var cpu: Cpu = .{ .bus = undefined, .profile = ra8.chip.core.cpu.decode.profile.Profile.m55 };
+    cpu.regs.control = regs.control_bits.pac_en | regs.control_bits.upac_en;
+    cpu.regs.lr = 0x0800_1235;
+    cpu.regs.set(13, 0x2000_2000);
+    cpu.regs.set(12, 0xAAAA_BBBB);
+    cpu.regs.xpsr = regs.xpsr_bits.thumb | regs.xpsr_bits.bti;
+    try execute(&cpu, 0xF3AF, 0x801D); // PAC -> NOP
+    try execute(&cpu, 0xF3AF, 0x800D); // PACBTI -> NOP
+    try execute(&cpu, 0xF3AF, 0x802D); // AUT -> NOP (no fault even with mismatched r12)
+    try std.testing.expectEqual(@as(u32, 0xAAAA_BBBB), cpu.regs.get(12));
+    try std.testing.expect(cpu.regs.xpsr & regs.xpsr_bits.bti != 0);
+    try std.testing.expectError(error.Undefined, execute(&cpu, 0xFB61, 0xF203));
+    try std.testing.expectError(error.Undefined, execute(&cpu, 0xFB51, 0x2F03));
+    try std.testing.expectError(error.Undefined, execute(&cpu, 0xFB5C, 0xCF1D));
+}

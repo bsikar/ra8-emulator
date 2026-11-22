@@ -254,7 +254,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
     state.formed = try block_cache.form(state.cpu0.own().store.fanMut());
     errdefer block_cache.drop(state.formed, state.cpu0.own().store.fanMut());
     state.cpu.blocks = state.formed;
-    state.memory.scs.attachFp(&state.cpu.fp, primary.hasFpu() or primary.mve);
+    state.memory.scs.attachFp(&state.cpu.fp, primary.hasFpu() or primary.profile.mve);
     try state.cpu.reset(vector);
     state.loading = .{ .allocator = allocator };
     errdefer state.loading.deinit();
@@ -266,7 +266,7 @@ pub fn open(allocator: std.mem.Allocator, io: std.Io, options: Options) !Harness
 }
 
 fn wirePrimaryScs(state: *State, primary: anytype) void {
-    const numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m);
+    const numcomp = primary.dwtComparators();
     state.memory = .{
         .memory = .{ .store = .{ .store = &state.cpu0.store.?, .initiator = .cpu0 } },
         .periph = &state.board.bus,
@@ -279,6 +279,7 @@ fn wirePrimaryScs(state: *State, primary: anytype) void {
             .systicks = primary.systicks,
             .has_security = primary.security,
             .dwt_numcomp = numcomp,
+            .id = primary.idBank(),
         },
     };
     state.check = .{
