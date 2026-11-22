@@ -55,7 +55,7 @@ pub const Peer = struct {
     /// Greet, load the fixture over the wire, run, pause and read pc and sp.
     pub fn drive(self: *Peer) !void {
         try self.client.greet(self.tx);
-        try std.testing.expectEqual(proto.capabilities, (try self.next()).ready);
+        try std.testing.expectEqual(proto.capabilities | proto.transport_cap, (try self.next()).ready);
         const image = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, image_path, self.gpa, .limited(1 << 20));
         defer self.gpa.free(image);
         _ = try self.call(proto.Ack, proto.Load, .load, .{ .core = .cpu0, .image = image });

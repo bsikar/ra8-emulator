@@ -73,11 +73,22 @@ pub fn serveManaged(io: std.Io, spec: Spec, service: *Service) !void {
     return serveWith(io, spec, null, .{ .rx = &.{}, .tx = &.{} }, service);
 }
 
-fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Buffers, service: ?*Service) !void {
-    var server: Server = switch (spec) {
+fn bindServer(io: std.Io, spec: Spec) !Server {
+    return switch (spec) {
         .unix => |path| .{ .unix = try sock_unix.Listener.bind(io, path) },
         .tcp => |*tcp| .{ .tcp = try tcp.listen(io, .{ .reuse_address = true }) },
     };
+}
+
+fn commitRecorder(active: *served.Context) !void {
+    const rec = active.session.persistent_recorder orelse return;
+    if (active.worker) |w| w.acquire();
+    defer if (active.worker) |w| w.release();
+    try rec.maybeCommit(rec.now());
+}
+
+fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Buffers, service: ?*Service) !void {
+    var server = try bindServer(io, spec);
     defer server.deinit(io);
     catchStops();
     switch (spec) {
@@ -87,7 +98,7 @@ fn serveWith(io: std.Io, spec: Spec, context: ?*served.Context, buffers: loop.Bu
     while (!loop.stopping.load(.acquire)) {
         const active = if (service) |owner| &owner.active.context else context.?;
         try buffers.pump(active);
-        if (active.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
+        try commitRecorder(active);
         if (!try server.ready(io)) continue;
         const client = server.accept(io) catch |err| switch (err) {
             error.WouldBlock => continue,

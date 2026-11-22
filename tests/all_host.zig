@@ -226,6 +226,7 @@ test {
     _ = @import("interfaces/rpc/served_markers_test.zig");
     _ = @import("interfaces/rpc/served_nav_feed_test.zig");
     _ = @import("interfaces/rpc/served_rewind_test.zig");
+    _ = @import("interfaces/rpc/served_worker_test.zig");
     _ = @import("interfaces/rpc/history_metrics_test.zig");
     _ = @import("tools/memory_writer_guard_test.zig");
     _ = @import("interfaces/rpc/ws_all_test.zig");

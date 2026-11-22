@@ -16,6 +16,7 @@ const served_camera = @import("served_camera.zig");
 const served_initial = @import("served_initial.zig");
 const served_owner = @import("served_owner.zig");
 const served_usbip = @import("served_usbip.zig");
+const served_worker = @import("served_worker.zig");
 const symbols = @import("ra8_session").symbols;
 
 const frame_cache = @import("ra8_session").history_frame_cache;
@@ -95,6 +96,8 @@ pub const Served = struct {
     rewind: ?*session.smooth_rewind.SmoothRewindEngine = null,
     /// The prefetch pool and its transport hook, once a disk history opened one.
     prefetch: ?*served_prefetch.Wired = null,
+    /// Dedicated single-producer execution worker thread (`RA8EMU-1238`).
+    worker: ?*served_worker.Worker = null,
 
     /// Open `elf_path` and fill the context. The context points into
     /// `self`, so `self` stays put until `deinit`.
@@ -151,7 +154,7 @@ pub const Served = struct {
         if (history_opts) |opts| if (bind == null) {
             if (opts.root) |root| {
                 const expected_part = (startup.machine orelse &catalog.ra8p1).name;
-                bind = try openHistory(allocator, io, root, board_profile, opts, &initial, expected_part);
+                bind = try served_owner.openHistory(allocator, io, root, board_profile, opts, &initial, expected_part);
             } else {
                 ram = try history_ram.RamHistory.open(allocator, try history_resources.ramBudget(opts.ram_budget));
             }
@@ -332,11 +335,13 @@ pub const Served = struct {
         self.owner.session().history.?.edits.loaded();
     }
 
+    pub const startWorker = served_worker.attach;
     pub fn frameCache(self: *Served) ?*frame_cache.FrameCache {
         return if (self.frames) |f| &f.cache else null;
     }
     pub const flushHistory = served_history.flush;
     pub fn deinit(self: *Served) void {
+        served_worker.detach(self);
         served_prefetch.detach(self);
         served_history.deinitNav(self);
         if (self.frames) |p| {
@@ -375,23 +380,3 @@ pub const Served = struct {
         if (self.ram_history) |ram| ram.deinit();
     }
 };
-
-fn openHistory(
-    allocator: std.mem.Allocator,
-    io: std.Io,
-    root: []const u8,
-    board_profile: ?[]const u8,
-    opts: HistoryOpts,
-    initial: *served_initial.Images,
-    expected_part: []const u8,
-) !*history_bind.Bind {
-    const id = if (opts.reopen) |text| try history.name.id(text) else null;
-    return history_bind.Bind.open(allocator, io, root, .{
-        .cap = opts.budget,
-        .kept = false,
-        .reopen = id,
-        .board_profile = board_profile,
-        .images = initial,
-        .expected_part = expected_part,
-    });
-}

@@ -45,3 +45,23 @@ pub fn windowBytes(opts: setup.HistoryOpts) !usize {
     };
     return @intCast((try history_budget.partition(ram)).window);
 }
+
+pub fn openHistory(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    root: []const u8,
+    board_profile: ?[]const u8,
+    opts: setup.HistoryOpts,
+    initial: *served_initial.Images,
+    expected_part: []const u8,
+) !*history_bind.Bind {
+    const id = if (opts.reopen) |text| try host.history.name.id(text) else null;
+    return history_bind.Bind.open(allocator, io, root, .{
+        .cap = opts.budget,
+        .kept = false,
+        .reopen = id,
+        .board_profile = board_profile,
+        .images = initial,
+        .expected_part = expected_part,
+    });
+}

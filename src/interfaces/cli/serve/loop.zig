@@ -9,9 +9,11 @@ const sock_ready = @import("ra8_host").sock.ready;
 const sock_unix = @import("ra8_host").sock.unix;
 const Stdio = @import("ra8_rpc").stdio_transport.Stdio;
 const win32 = @import("ra8_host").win32;
+const Worker = @import("ra8_rpc").served_worker.Worker;
 
 /// How long an idle server waits on its peer before checking again.
 const idle_wait_ms = 20;
+const active_wait_ms = 12;
 
 pub const Buffers = struct {
     rx: []u8,
@@ -20,7 +22,11 @@ pub const Buffers = struct {
 
     pub fn pump(self: Buffers, context: *served.Context) !void {
         if (self.listener) |listener| {
-            listener.pumpGdb();
+            if (listener.gdb.items.len > 0) {
+                if (context.worker) |w| w.acquire();
+                defer if (context.worker) |w| w.release();
+                listener.pumpGdb();
+            }
             try listener.answer(context, self.tx);
         }
     }
@@ -56,8 +62,22 @@ pub fn answer(
             return err;
         };
         if (polled != .idle) continue;
-        if (stopping.load(.acquire) or try closed(io, fd, link)) return;
+        if (try shouldStop(io, fd, link, context.worker)) return;
     }
+}
+
+fn idleWaitMs(worker_opt: ?*const Worker) i32 {
+    const w = worker_opt orelse return idle_wait_ms;
+    return if (w.isActive()) active_wait_ms else idle_wait_ms;
+}
+
+fn shouldStop(io: std.Io, fd: std.posix.fd_t, link: Link, worker_opt: ?*const Worker) !bool {
+    if (stopping.load(.acquire)) return true;
+    return closedWait(io, fd, link, idleWaitMs(worker_opt));
+}
+
+pub fn closed(io: std.Io, fd: std.posix.fd_t, link: Link) !bool {
+    return closedWait(io, fd, link, idle_wait_ms);
 }
 
 /// Wait briefly on `fd`; true once the peer hung up with nothing left to read.
@@ -65,12 +85,12 @@ pub fn answer(
 /// is peeked. A pipe reports HUP: alone on Linux once it is drained, but with
 /// readable beside it on Darwin whether or not bytes are left, so a pipe that
 /// reads as both is asked what it still holds.
-pub fn closed(io: std.Io, fd: std.posix.fd_t, link: Link) !bool {
-    if (on_windows and link == .pipe) return pipeClosed(fd);
+fn closedWait(io: std.Io, fd: std.posix.fd_t, link: Link, wait_ms: i32) !bool {
+    if (on_windows and link == .pipe) return pipeClosed(fd, @intCast(wait_ms));
     const ready = if (link == .unix_socket)
-        try sock_unix.wait(io, fd, idle_wait_ms)
+        try sock_unix.wait(io, fd, wait_ms)
     else
-        try sock_ready.wait(io, fd, idle_wait_ms);
+        try sock_ready.wait(io, fd, wait_ms);
     if (!ready.readable) return ready.hung_up;
     if (link == .pipe) return ready.hung_up and pipeDrained(fd);
     return peerGone(io, fd, link == .unix_socket);
@@ -88,10 +108,10 @@ fn pipeDrained(pipe: std.posix.fd_t) bool {
     return waiting == 0;
 }
 
-/// Windows pipes have no wait; an empty pipe sleeps the idle wait instead.
-fn pipeClosed(pipe: std.posix.fd_t) bool {
+/// Windows pipes have no wait; an empty pipe sleeps the wait instead.
+fn pipeClosed(pipe: std.posix.fd_t, wait_ms: u32) bool {
     const waiting = win32.pipeWaiting(pipe) orelse return true;
-    if (waiting == 0) win32.Sleep(idle_wait_ms);
+    if (waiting == 0) win32.Sleep(wait_ms);
     return false;
 }
 
@@ -142,6 +162,6 @@ fn managedSession(
         };
         if (service.pending != null) return true;
         if (polled != .idle) continue;
-        if (stopping.load(.acquire) or try closed(io, fd, link)) return false;
+        if (try shouldStop(io, fd, link, source.context.worker)) return false;
     }
 }

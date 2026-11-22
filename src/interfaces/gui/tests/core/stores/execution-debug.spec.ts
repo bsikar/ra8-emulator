@@ -3,6 +3,7 @@ import {
   CAP_TRANSPORT,
   CAP_WORKSPACE,
   Core,
+  Direction,
   EventKind,
   LocalWhereKind,
   SetVarScope,
@@ -186,5 +187,67 @@ describe('ExecutionStore and DebugStore', () => {
     expect(execution.inspectionEpoch()).toBe(beforeEpoch + 1);
     expect(execution.externalSyncCount()).toBe(1);
     expect(execution.virtualTimeNs()).toBe(950_000n);
+  });
+
+  it('streams continuous forward play via Topic.Transport and halts on breakpoint completion', async () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const execution = TestBed.inject(ExecutionStore);
+
+    const playCalls: Array<{ dir: Direction; speedMilli: bigint }> = [];
+    const fakeClient = {
+      play: async (dir: Direction, speedMilli: bigint) => {
+        playCalls.push({ dir, speedMilli });
+        return true;
+      },
+      interrupt: async () => true,
+      pause: async () => true,
+      now: async () => 50_000_000n,
+    };
+
+    rpc.connectionState.set('connected');
+    rpc.serverCaps.set(CAP_TRANSPORT);
+    Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
+
+    await execution.run();
+    expect(execution.isRunning()).toBe(true);
+    expect(playCalls).toEqual([{ dir: Direction.Fwd, speedMilli: 0n }]);
+
+    rpc.transport$.next({
+      epoch: 1n,
+      phase: 1,
+      targetNs: 0n,
+      reachedNs: 42_000_000n,
+      slices: 20n,
+      finished: 0,
+      core: Core.Cpu0,
+      fromNs: 0n,
+      toNs: 0n,
+      reason: StopReason.Count,
+      address: 0,
+    });
+    expect(execution.isRunning()).toBe(true);
+    expect(execution.virtualTimeNs()).toBe(42_000_000n);
+    expect(playCalls.length).toBe(1);
+
+    const beforeEpoch = execution.inspectionEpoch();
+    rpc.transport$.next({
+      epoch: 2n,
+      phase: 0,
+      targetNs: 0n,
+      reachedNs: 50_000_000n,
+      slices: 24n,
+      finished: 1,
+      core: Core.Cpu0,
+      fromNs: 0n,
+      toNs: 50_000_000n,
+      reason: StopReason.Breakpoint,
+      address: 0x0200_0200,
+    });
+    expect(execution.isRunning()).toBe(false);
+    expect(execution.virtualTimeNs()).toBe(50_000_000n);
+    expect(execution.lastStop()?.address).toBe(0x0200_0200);
+    expect(execution.lastStop()?.reason).toBe(StopReason.Breakpoint);
+    expect(execution.inspectionEpoch()).toBe(beforeEpoch + 1);
   });
 });
