@@ -2,11 +2,10 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CAP_TRANSPORT, Core, RA8RpcClient, StopReason, Topic } from '../client/dist/index.js';
+import { CAP_TRANSPORT, Core, Direction, RA8RpcClient, StopReason, Topic } from '../client/dist/index.js';
 
 const GUI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(GUI_DIR, '..', '..', '..');
-const SOAK_SLICE_NS = 16_000_000n;
 const SOAK_BUDGET_INSTR = 500_000n;
 
 export function parseDurationMs(argv) {
@@ -109,7 +108,7 @@ async function pumpSoakRunner(client, useTransport, state) {
   state.inFlight = true;
   state.pending = false;
   try {
-    if (useTransport) await client.advanceAsync(Core.Cpu0, SOAK_SLICE_NS);
+    if (useTransport) await client.play(Direction.Fwd, 0n);
     else await client.continueRun(Core.Cpu0, SOAK_BUDGET_INSTR);
   } catch (err) {
     if (state.active) throw err;
@@ -162,7 +161,7 @@ export async function runSoak(argv = process.argv.slice(2)) {
     await client.setSpeed(Core.Cpu0, 0n);
 
     client.on('stop', (evt) => {
-      if (evt.reason === StopReason.Count && state.active) void pumpSoakRunner(client, useTransport, state);
+      if (!useTransport && evt.reason === StopReason.Count && state.active) void pumpSoakRunner(client, useTransport, state);
     });
     client.on('transport', (evt) => {
       if (evt.finished && evt.reason === StopReason.Count && state.active) void pumpSoakRunner(client, useTransport, state);

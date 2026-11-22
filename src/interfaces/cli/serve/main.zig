@@ -223,10 +223,7 @@ pub fn run(
     defer workbench.close();
     workbench.bind(&setup.context);
     defer workbench.unbind(if (service) |owner| &owner.active.context else &setup.context);
-    if (!attachDevices(&setup, asked, bridges.allocator(), io)) return 1;
-    bindings.debugger(&setup);
-    if (asked.folded) try setup.sampleStacks(fold_every);
-    restrictStateFiles(&setup, asked);
+    if (!attachRuntime(&setup, asked, bridges.allocator(), io)) return 1;
     var imported: bindings.Bindings = .{
         .workbench = &workbench,
         .folded = asked.folded,
@@ -249,6 +246,26 @@ pub fn run(
         return 1;
     };
     return 0;
+}
+
+fn attachRuntime(
+    setup: *served_setup.Served,
+    asked: Asked,
+    arena: std.mem.Allocator,
+    io: std.Io,
+) bool {
+    if (!attachDevices(setup, asked, arena, io)) return false;
+    bindings.debugger(setup);
+    setup.startWorker() catch |err| {
+        std.debug.print("serve: cannot start execution worker: {s}\n", .{@errorName(err)});
+        return false;
+    };
+    if (asked.folded) setup.sampleStacks(fold_every) catch |err| {
+        std.debug.print("serve: cannot sample stacks: {s}\n", .{@errorName(err)});
+        return false;
+    };
+    restrictStateFiles(setup, asked);
+    return true;
 }
 
 fn serveWithDiscovery(

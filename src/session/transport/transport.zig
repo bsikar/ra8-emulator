@@ -176,18 +176,27 @@ pub const Transport = struct {
     pub fn cancel(self: *Transport) void {
         seek_mod.disarm(self);
         self.cancelled = true;
-        if (self.job) |job| {
-            self.session.setRunBudget(job.core, job.prior_budget) catch {};
-            // A backward job's cancel returns the machine to the origin
-            // checkpoint it queued at, whatever its replay rebased to
-            // meanwhile (the seek contract's cancel rule, prompt 17).
-            if (job.back) |*back| back_mod.restoreOrigin(self, back);
-            if (job.rc) |*rc| reverse_mod.restoreOrigin(self, rc);
-            if (job.dir == .back) {
-                if (self.session.smooth_rewind) |rewind| rewind.pause() catch {};
-            }
+        if (self.job) |*job| {
+            self.restoreCancelledJob(job);
             self.job = null;
         }
+    }
+
+    fn restoreCancelledJob(self: *Transport, job: *Job) void {
+        self.session.setRunBudget(job.core, job.prior_budget) catch |err| {
+            std.log.debug("transport: restore budget failed: {s}", .{@errorName(err)});
+        };
+        play_mod.clearForwardSpeed(self, job);
+        // A backward job's cancel returns the machine to the origin
+        // checkpoint it queued at, whatever its replay rebased to
+        // meanwhile (the seek contract's cancel rule, prompt 17).
+        if (job.back) |*back| back_mod.restoreOrigin(self, back);
+        if (job.rc) |*rc| reverse_mod.restoreOrigin(self, rc);
+        if (job.dir != .back) return;
+        const rewind = self.session.smooth_rewind orelse return;
+        rewind.pause() catch |err| {
+            std.log.debug("transport: rewind pause failed: {s}", .{@errorName(err)});
+        };
     }
 
     /// Drive the queued job in slices bounded by the wall until `until_ns`,
@@ -350,6 +359,7 @@ pub const Transport = struct {
         seek_mod.disarm(self);
         const finished: Finished = .{ .ticket = job.ticket, .epoch = job.epoch, .core = job.core, .ended = ended };
         self.session.setRunBudget(job.core, job.prior_budget) catch {};
+        play_mod.clearForwardSpeed(self, job);
         self.job = null;
         self.done = finished;
         return finished;

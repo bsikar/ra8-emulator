@@ -172,6 +172,9 @@ pub const Host = struct {
     /// rectangles, the session events, the RTOS events and the stop event it
     /// produced, in that order.
     pub fn poll(self: *Host, tx: []u8) anyerror!rpc.Step {
+        const worker = self.server.context.worker;
+        if (worker) |w| w.acquire();
+        defer if (worker) |w| w.release();
         const step = try self.server.poll(tx);
         const context = self.server.context;
         if (context.artifacts) |service| if (service.pending != null) return step;
@@ -207,63 +210,128 @@ pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
 /// command changed the plane's epoch, and the completion of the advance
 /// this connection queued with `advance_async`, whether it finished or a
 /// newer command preempted it.
+const transport_progress_ns: u64 = 33_000_000;
+
 pub fn pumpTransport(context: *Context, server: anytype, tx: []u8) !void {
     const plane = context.transport orelse return;
     if (context.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
-    if (plane.job == null and context.advance_ticket == null) return;
+    const has_latched = if (context.worker) |w|
+        w.latched_finished != null or w.latched_error != null
+    else
+        false;
+    if (plane.job == null and context.advance_ticket == null and !has_latched) return;
     const wall = context.wall orelse return;
     const now = wall.nowFn(wall.context);
-    const pumped = try plane.pump(wall, now + pump_slice_ns);
+    const pumped = if (context.worker) |w|
+        try w.takePumped()
+    else
+        try plane.pump(wall, now + pump_slice_ns);
     const subscriber = context.wants(.cpu0, .transport) or context.wants(.cpu1, .transport);
-    if (pumped.finished == null and pumped.report.epoch != context.transport_epoch and subscriber) {
-        context.transport_epoch = pumped.report.epoch;
-        try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), eventOf(pumped.report, null), tx);
+    if (pumped.finished == null) {
+        try emitProgress(context, server, plane.job != null, now, pumped.report, subscriber, tx);
     }
-    const ticket = context.advance_ticket orelse return;
+    const ticket = context.advance_ticket orelse {
+        if (pumped.finished) |fin| try emitFinished(context, server, pumped.report, fin, subscriber, tx);
+        return;
+    };
     if (pumped.finished) |fin| {
         if (fin.ticket == ticket) {
             const target = context.advance_target_ns;
             context.advance_ticket = null;
             context.advance_target_ns = 0;
-            if (subscriber) {
-                const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
-                // A completion that ended by count is the run keeping its
-                // word: no halt happened, so the stop topic hears nothing.
-                // Only a real end parks the stop for `poll` to emit.
-                if (fin.ended != .count) context.pending = stop;
-                const to = context.session.now() catch context.advance_from_ns;
-                var event = eventOf(pumped.report, coreOf(fin.core));
-                event.finished = 1;
-                event.from_ns = context.advance_from_ns;
-                event.target_ns = target;
-                event.to_ns = to;
-                event.reason = stop.reason;
-                event.address = stop.address;
-                try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
-            }
+            try emitTicketStop(context, server, pumped.report, fin, target, subscriber, tx);
             return;
         }
     }
-    // The job is neither running under our ticket nor the plane's newest
-    // finished one: a newer command preempted it, so it stopped where it
-    // got to, halted like any front end's interrupt.
+    try emitPreempted(context, server, plane, pumped.report, ticket, subscriber, tx);
+}
+
+fn emitProgress(
+    context: *Context,
+    server: anytype,
+    running: bool,
+    now: u64,
+    report: transport_mod.Report,
+    subscriber: bool,
+    tx: []u8,
+) !void {
+    if (!subscriber) return;
+    const epoch_changed = report.epoch != context.transport_epoch;
+    const due = running and now -| context.transport_last_emit_ns >= transport_progress_ns;
+    if (!epoch_changed and !due) return;
+    context.transport_epoch = report.epoch;
+    context.transport_last_emit_ns = now;
+    var event = eventOf(report, null);
+    if (event.reached_ns == 0 and running) event.reached_ns = context.session.now() catch 0;
+    try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
+}
+
+fn emitFinished(
+    context: *Context,
+    server: anytype,
+    report: transport_mod.Report,
+    fin: transport_mod.Finished,
+    subscriber: bool,
+    tx: []u8,
+) !void {
+    const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
+    if (fin.ended != .count) context.pending = stop;
+    if (!subscriber) return;
+    var event = eventOf(report, coreOf(fin.core));
+    const now_ns = context.session.now() catch 0;
+    event.finished = 1;
+    if (event.reached_ns == 0) event.reached_ns = now_ns;
+    event.to_ns = now_ns;
+    event.reason = stop.reason;
+    event.address = stop.address;
+    try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
+}
+
+fn emitTicketStop(
+    context: *Context,
+    server: anytype,
+    report: transport_mod.Report,
+    fin: transport_mod.Finished,
+    target: u64,
+    subscriber: bool,
+    tx: []u8,
+) !void {
+    if (!subscriber) return;
+    const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
+    if (fin.ended != .count) context.pending = stop;
+    var event = eventOf(report, coreOf(fin.core));
+    event.finished = 1;
+    event.from_ns = context.advance_from_ns;
+    event.target_ns = target;
+    event.to_ns = context.session.now() catch context.advance_from_ns;
+    event.reason = stop.reason;
+    event.address = stop.address;
+    try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
+}
+
+fn emitPreempted(
+    context: *Context,
+    server: anytype,
+    plane: *transport_mod.Transport,
+    report: transport_mod.Report,
+    ticket: transport_mod.Ticket,
+    subscriber: bool,
+    tx: []u8,
+) !void {
     const active = plane.job != null and plane.job.?.ticket == ticket;
     const newest = plane.done != null and plane.done.?.ticket == ticket;
-    if (!active and !newest) {
-        const target = context.advance_target_ns;
-        context.advance_ticket = null;
-        context.advance_target_ns = 0;
-        if (subscriber) {
-            const to = context.session.now() catch context.advance_from_ns;
-            var event = eventOf(pumped.report, context.advance_core);
-            event.finished = 1;
-            event.from_ns = context.advance_from_ns;
-            event.target_ns = target;
-            event.to_ns = to;
-            event.reason = .halt_requested;
-            try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
-        }
-    }
+    if (active or newest) return;
+    const target = context.advance_target_ns;
+    context.advance_ticket = null;
+    context.advance_target_ns = 0;
+    if (!subscriber) return;
+    var event = eventOf(report, context.advance_core);
+    event.finished = 1;
+    event.from_ns = context.advance_from_ns;
+    event.target_ns = target;
+    event.to_ns = context.session.now() catch context.advance_from_ns;
+    event.reason = .halt_requested;
+    try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
 }
 
 /// The wire form of one transport report; the completion fields stay zero

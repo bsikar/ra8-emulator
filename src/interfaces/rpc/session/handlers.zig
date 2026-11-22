@@ -12,11 +12,12 @@ const nav_hooks = @import("nav_hooks.zig");
 const proto = @import("rpc.zig");
 const region_map = @import("ra8_session").region.map;
 const rpc = @import("ra8_rpc_wire");
+const served_worker = @import("../served_worker.zig");
 const session_lib = @import("ra8_session");
 const session_rtc = @import("ra8_session").rtc;
 const session_symbols = @import("ra8_session").symbols;
 const source_spec = @import("ra8_host").camera.source_spec;
-const stop_machine = @import("ra8_session").stop_machine;
+const stopped_wire = @import("stopped.zig");
 const target_progress = @import("../target_progress.zig");
 const transport_mod = @import("ra8_session").transport;
 const workspace_watch = @import("../workspace_watch.zig");
@@ -142,6 +143,8 @@ pub const Context = struct {
     transport: ?*transport_mod.Transport = null,
     /// The wall the transport's blocking finish reads against.
     wall: ?transport_mod.Wall = null,
+    /// Dedicated execution worker owning continuous `plane.pump` slices (`RA8EMU-1238`).
+    worker: ?*served_worker.Worker = null,
     /// True when this host pumps between frames, so advances queue (RA8EMU-1196).
     transport_async: bool = false,
     /// This connection's queued advance; null once ended or preempted.
@@ -152,6 +155,7 @@ pub const Context = struct {
     advance_target_ns: u64 = 0,
     advance_core: proto.Core = .cpu0,
     transport_epoch: u64 = 0, // epoch last reported on the transport topic
+    transport_last_emit_ns: u64 = 0,
     nav: nav_hooks.Hooks = .{}, // application hooks of the navigation requests
 
     pub fn wants(self: *const Context, of: proto.Core, topic: proto.Topic) bool {
@@ -186,11 +190,13 @@ fn register(of: proto.Register) ?api.Register {
 }
 
 pub fn load(context: *Context, args: proto.Load) Ack {
+    if (context.transport) |plane| plane.cancel();
     context.session.load(core(args.core), args.image) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 pub fn run(context: *Context, args: proto.Run) Ack {
+    if (context.transport) |plane| plane.cancel();
     const session = context.session;
     if (args.budget != 0) {
         session.setRunBudget(core(args.core), args.budget) catch |err| return refuse(proto.Ack, err);
@@ -206,15 +212,31 @@ pub fn step(context: *Context, args: proto.CoreOnly) Ack {
 }
 
 pub fn pause(context: *Context, args: proto.CoreOnly) Ack {
+    if (context.transport) |plane| _ = plane.command(.pause) catch plane.cancel();
     context.session.pause(core(args.core)) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 /// Thousandths of the default rate; zero is `max`, the unpaced speed.
 pub fn setSpeed(context: *Context, args: proto.SetSpeed) Ack {
+    const which = core(args.core);
     const factor: ?f64 = if (args.milli == 0) null else @as(f64, @floatFromInt(args.milli)) / 1000.0;
-    context.session.setSpeed(core(args.core), factor) catch |err| return refuse(proto.Ack, err);
+    context.session.setSpeed(which, factor) catch |err| return refuse(proto.Ack, err);
+    capActivePlayBudget(context, which, factor) catch |err| return refuse(proto.Ack, err);
     return ack;
+}
+
+fn capActivePlayBudget(context: *Context, which: api.Core, factor: ?f64) !void {
+    const plane = context.transport orelse return;
+    const job = &(plane.job orelse return);
+    if (job.kind != .play or job.dir != .fwd) return;
+    const capped = @min(
+        transport_mod.budgetOf(context.session, which),
+        session_lib.transport_play.max_slice_budget,
+    );
+    try context.session.setRunBudget(which, capped);
+    job.speed = factor;
+    job.budget = capped;
 }
 
 pub fn setRunBudget(context: *Context, args: proto.RunBudget) Ack {
@@ -361,39 +383,10 @@ pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
 }
 
 pub fn interrupt(context: *Context, args: proto.CoreOnly) rpc.Outcome(proto.Stopped) {
+    if (context.transport) |plane| plane.cancel();
     const stop = context.session.interrupt(core(args.core)) catch |err| return refuse(proto.Stopped, err);
     return .{ .ok = reported(context.session, args.core, .{ .stop = stop }) };
 }
 
-/// The wire form of how a run ended, on the core that ended it: a served
-/// round can stop the other core than the one asked.
-pub fn stopped(session: *api.Session, _: proto.Core, ended: api.Ended) proto.Stopped {
-    return reported(session, @fromBackingInt(@intCast(session.live.ended_index)), ended);
-}
-
-/// The wire form of how a run of `of` ended, at the PC it left.
-pub fn reported(session: *api.Session, of: proto.Core, ended: api.Ended) proto.Stopped {
-    const pc = session.register(core(of), .pc) catch 0;
-    return switch (ended) {
-        .count => .{ .core = of, .reason = .count, .address = pc, .detail = 0 },
-        .core => |stop| .{
-            .core = of,
-            .reason = .core_fault,
-            .address = pc,
-            .detail = @backingInt(std.meta.activeTag(stop)),
-        },
-        .stop => |stop| .{ .core = of, .reason = reason(stop), .address = pc, .detail = detail(stop) },
-    };
-}
-
-fn reason(stop: stop_machine.Stop) proto.StopReason {
-    return std.meta.stringToEnum(proto.StopReason, @tagName(stop)) orelse .halt_requested;
-}
-
-fn detail(stop: stop_machine.Stop) u32 {
-    return switch (stop) {
-        .watchpoint => |hit| hit.id,
-        .replay_failed => |failure| @backingInt(failure.source),
-        inline else => |value| if (@typeInfo(@TypeOf(value)) == .int) @truncate(value) else 0,
-    };
-}
+pub const stopped = stopped_wire.stopped;
+pub const reported = stopped_wire.reported;
