@@ -198,3 +198,12 @@ test "the complete wide hint number table claims architectural hints only" {
         }
     }
 }
+
+test "BTI hint is a NOP on Cortex-M55 without PACBTI" {
+    const regs = ra8.chip.core.cpu.regs;
+    var cpu: ra8.chip.core.cpu.cpu.Cpu = .{ .bus = undefined, .profile = ra8.chip.core.cpu.decode.profile.Profile.m55 };
+    cpu.regs.xpsr = regs.xpsr_bits.thumb | regs.xpsr_bits.bti;
+    const exec = wide(0x800F) orelse return error.NotClaimed;
+    try exec(&cpu, .{ .address = 0, .hw1 = 0xF3AF, .hw2 = 0x800F, .size = 4 });
+    try std.testing.expect(cpu.regs.xpsr & regs.xpsr_bits.bti != 0);
+}

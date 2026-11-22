@@ -237,7 +237,6 @@
     {"count": 1, "fingerprint": "3f40a70939227b04f51f6a2695bdc57b048b24f5625667fe0c495aecbf86603c", "path": "src/session/board/plug.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "0a29aa3a974b0ff98b61e8d310fdcd48253d50754b8db7e01c73ae4c3ce50099", "path": "src/session/board/state.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "e3915ecf70a68aad231fc88db02cf308bbaf5cc7c660228c2ce122bebfd9c7be", "path": "src/session/board/state.zig", "rule": "complexity"},
-    {"count": 1, "fingerprint": "e71a87a7b6ff2391700c9fd83353aea4fde79445cdf98674ec4ed9712636e4fd", "path": "src/session/board/state.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "8a0bf708db5a4e843d6b26f417d627c7a4433b0be77796a47fdcd5ccd2588a82", "path": "src/session/cpu1/bringup.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "cc63f91aa74e4a2fb90afa911dcd9e08d071ad597a8d5974cabb08b9f8c7a2c2", "path": "src/session/dwarf/compilation.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "7dd44a41fdfbb11042b5b1e0a50b52c302c7cb15ca4d77775bf1d2ac14a952d6", "path": "src/session/dwarf/info.zig", "rule": "complexity"},

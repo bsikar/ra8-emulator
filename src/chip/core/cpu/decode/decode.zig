@@ -3,6 +3,7 @@
 pub const fpu_gate = @import("fpu_gate.zig");
 const Instr = @import("../instr.zig").Instr;
 const op = @import("../op.zig");
+pub const pac_gate = @import("pac_gate.zig");
 const table = @import("../ops/table.zig");
 
 pub const Hit = struct {
@@ -28,13 +29,16 @@ pub fn decode(instr: Instr) ?Hit {
 pub fn decodeFor(core: profile.Profile, instr: Instr) ?Hit {
     for (table.groups) |group| {
         if (!core.has(group.needs)) continue;
-        if (!fpu_gate.allows(core, group.name, instr)) continue;
-        if (group.decode(instr)) |exec| return .{
-            .group = group.name,
-            .exec = exec,
-            .oracle = group.oracle,
-            .eci = group.eciOf(instr),
-        };
+        if (group.decode(instr)) |exec| {
+            if (!fpu_gate.allows(core, group.name, instr)) continue;
+            if (!pac_gate.allows(core, group.name, instr)) continue;
+            return .{
+                .group = group.name,
+                .exec = exec,
+                .oracle = group.oracle,
+                .eci = group.eciOf(instr),
+            };
+        }
     }
     return null;
 }

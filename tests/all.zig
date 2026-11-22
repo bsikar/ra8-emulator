@@ -64,6 +64,7 @@ test {
     _ = @import("chip/core/cpu/exception/reset_scs_test.zig");
     _ = @import("chip/core/cpu/decode/decode_test.zig");
     _ = @import("chip/core/cpu/decode/fpu_gate_test.zig");
+    _ = @import("chip/core/cpu/decode/pac_gate_test.zig");
     _ = @import("chip/core/cpu/decode/cache_test.zig");
     _ = @import("chip/core/cpu/text/all_test.zig");
     _ = @import("chip/core/cpu/instr_test.zig");

@@ -192,3 +192,30 @@ test "vcmpe.f16 with a quiet NaN is unordered and raises IOC" {
     try std.testing.expectEqual(@as(u4, 0b0011), nzcv(&cpu));
     try std.testing.expectEqual(@as(u1, 1), cpu.fp.fpscr.ioc);
 }
+
+test "system register transfers return Undefined when core profile lacks feature" {
+    const no_fp_v81: ra8.chip.core.cpu.decode.profile.Profile = .{
+        .v8_1m = true,
+        .mve = false,
+        .mve_fp = false,
+        .lob = true,
+        .fpu = .none,
+        .fp16 = false,
+    };
+    const m55_no_mve: ra8.chip.core.cpu.decode.profile.Profile = .{
+        .v8_1m = true,
+        .mve = false,
+        .mve_fp = false,
+        .lob = true,
+        .fpu = .double,
+    };
+    var cpu = fresh();
+    cpu.profile = no_fp_v81;
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xEEF1, 0x0A10));
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xEEF2, 0x0A10));
+    cpu.profile = m55_no_mve;
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xEEFC, 0x0A10));
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xEEED, 0x0A10));
+    cpu.profile = ra8.chip.core.cpu.decode.profile.Profile.m33;
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xEEFE, 0x0A10));
+}

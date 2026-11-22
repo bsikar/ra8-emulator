@@ -272,7 +272,7 @@ pub const Files = struct {
                 units.nvic = normalized(pending.model);
                 units.last_non_secure = pending.last_non_secure;
             };
-            units.dwt.numcomp = if (!self.coresOf()[index].profile.v8_1m) 4 else 8;
+            units.dwt.numcomp = self.coresOf()[index].profile.dwt_comparators;
             @memset(units.itm.text.buffer[units.itm.text.len..], 0);
             try fields.write(writer, units);
         }
@@ -331,15 +331,18 @@ fn readDebug(bytes: []const u8, units: []Units, cores: []const *Cpu) !void {
     if (try fields.read(u8, &cursor) != units.len) return error.BadValue;
     for (units, cores) |*unit, core| {
         unit.* = try fields.read(Units, &cursor);
-        const expected: u4 = if (!core.profile.v8_1m) 4 else 8;
-        if (unit.dwt.numcomp != expected or unit.dwt.numcomp > unit.dwt.comps.len) return error.BadValue;
-        if (unit.itm.text.len > unit.itm.text.buffer.len) return error.BadValue;
-        if (unit.unit_pending) |pending| {
-            if (pending >= @max(unit.fpb.comps.len, unit.dwt.comps.len)) return error.BadValue;
-        }
-        if (unit.nvic) |model| if (model.depth > model.active.len) return error.BadValue;
+        try validateUnit(unit, core.profile.dwt_comparators);
     }
     if (!cursor.done()) return error.BadValue;
+}
+
+fn validateUnit(unit: *const Units, expected_dwt: u4) !void {
+    if (unit.dwt.numcomp != expected_dwt or unit.dwt.numcomp > unit.dwt.comps.len) return error.BadValue;
+    if (unit.itm.text.len > unit.itm.text.buffer.len) return error.BadValue;
+    if (unit.unit_pending) |pending| {
+        if (pending >= @max(unit.fpb.comps.len, unit.dwt.comps.len)) return error.BadValue;
+    }
+    if (unit.nvic) |model| if (model.depth > model.active.len) return error.BadValue;
 }
 
 pub const saveSecond = second_state.saveSecond;

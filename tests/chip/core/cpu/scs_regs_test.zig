@@ -150,3 +150,36 @@ test "has_fpu = false gates CPACR and FPCCR..FPDSCR as RAZ/WI across both banks"
         }
     }
 }
+
+test "Policy serves read-only M55 ID and MVFR registers through SCS and ignores writes" {
+    const scs_regs = ra8.chip.core.cpu.board_bus.scs_regs;
+    const id_regs = ra8.chip.periph.id_regs;
+    const Profile = ra8.chip.core.cpu.decode.profile.Profile;
+    var store = try Store.init(null);
+    defer store.deinit();
+    const ram: Guest = .{ .store = &store };
+    var backing = GuestBus.of(&ram, false);
+    const view = backing.view();
+    const policy: scs_regs.Policy = .{
+        .has_security = true,
+        .id = Profile.m55.idBank(true, 8),
+    };
+
+    const reads = [_]struct { addr: u32, expect: u32 }{
+        .{ .addr = id_regs.addr.id_pfr0, .expect = 0x2000_0030 },
+        .{ .addr = id_regs.addr.id_pfr1, .expect = 0x0000_0230 },
+        .{ .addr = id_regs.addr.id_isar5, .expect = 0x0000_0000 },
+        .{ .addr = id_regs.addr.mvfr0, .expect = 0x1011_0221 },
+        .{ .addr = id_regs.addr.mvfr1, .expect = 0x1210_0211 },
+    };
+    for (reads) |case| {
+        try std.testing.expect(try scs_regs.write(policy, view, case.addr, true, &.{ 0xFF, 0xFF, 0xFF, 0xFF }));
+        var buf: [4]u8 = @splat(0);
+        try std.testing.expect(try scs_regs.read(policy, view, case.addr, true, &buf));
+        try std.testing.expectEqual(case.expect, std.mem.readInt(u32, &buf, .little));
+
+        var ns_alias: [4]u8 = @splat(0xAA);
+        try std.testing.expect(try scs_regs.read(policy, view, case.addr + 0x0002_0000, false, &ns_alias));
+        try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, &ns_alias, .little));
+    }
+}

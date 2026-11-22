@@ -106,7 +106,20 @@ fn compareFor(comptime fmt: Format, comptime zero: bool) op.Exec {
     }.exec;
 }
 
+fn requireFpOrMve(cpu: *const Cpu) op.Error!void {
+    if (cpu.profile.fpu == .none and !cpu.profile.mve) return error.Undefined;
+}
+
+fn requireV81mMve(cpu: *const Cpu) op.Error!void {
+    if (!cpu.profile.v8_1m or !cpu.profile.mve) return error.Undefined;
+}
+
+fn requireV81mFpOrMve(cpu: *const Cpu) op.Error!void {
+    if (!cpu.profile.v8_1m or (cpu.profile.fpu == .none and !cpu.profile.mve)) return error.Undefined;
+}
+
 fn vmrs(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireFpOrMve(cpu);
     const rt: u4 = @intCast(instr.hw2 >> 12);
     if (rt == 15) {
         cpu.regs.xpsr = (cpu.regs.xpsr & 0x0FFF_FFFF) | cpu.fp.fpscr.apsrNzcv();
@@ -116,32 +129,39 @@ fn vmrs(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn vmsr(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireFpOrMve(cpu);
     cpu.fp.fpscr = Fpscr.fromBits(cpu.regs.get(@intCast(instr.hw2 >> 12)));
 }
 
 fn vmrsVpr(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mMve(cpu);
     cpu.regs.set(@intCast(instr.hw2 >> 12), @bitCast(cpu.fp.vpr));
 }
 
 fn vmsrVpr(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mMve(cpu);
     var vpr: @TypeOf(cpu.fp.vpr) = @bitCast(cpu.regs.get(@intCast(instr.hw2 >> 12)));
     vpr.reserved = 0;
     cpu.fp.vpr = vpr;
 }
 
 fn vmrsP0(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mMve(cpu);
     cpu.regs.set(@intCast(instr.hw2 >> 12), cpu.fp.vpr.p0);
 }
 
 fn vmsrP0(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mMve(cpu);
     cpu.fp.vpr.p0 = @truncate(cpu.regs.get(@intCast(instr.hw2 >> 12)));
 }
 
 fn vmrsNzcvqc(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     cpu.regs.set(@intCast(instr.hw2 >> 12), cpu.fp.fpscr.bits() & 0xF800_0000);
 }
 
 fn vmsrNzcvqc(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     const flags = cpu.regs.get(@intCast(instr.hw2 >> 12)) & 0xF800_0000;
     cpu.fp.fpscr = Fpscr.fromBits((cpu.fp.fpscr.bits() & 0x07FF_FFFF) | flags);
 }
@@ -160,6 +180,7 @@ fn contextPayload(sfpa: u1, fpscr: u32) u32 {
 }
 
 fn vmrsFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     try requireSecure(cpu);
     const inactive = fpInactive(cpu);
     const control_bits = regs.control_bits;
@@ -173,6 +194,7 @@ fn vmrsFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn vmsrFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     try requireSecure(cpu);
     // With no FP context active the write is a NOP (DDI0553 VMSR FPCXT_NS).
     if (fpInactive(cpu)) return;
@@ -180,6 +202,7 @@ fn vmsrFpcxtNs(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn vmrsFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     try requireSecure(cpu);
     const control_bits = regs.control_bits;
     cpu.regs.set(@intCast(instr.hw2 >> 12), contextPayload(@truncate(cpu.regs.control >> 3), cpu.fp.fpscr.bits()));
@@ -188,6 +211,7 @@ fn vmrsFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
 }
 
 fn vmsrFpcxtS(cpu: *Cpu, instr: Instr) op.Error!void {
+    try requireV81mFpOrMve(cpu);
     try requireSecure(cpu);
     writeContext(cpu, cpu.regs.get(@intCast(instr.hw2 >> 12)));
 }

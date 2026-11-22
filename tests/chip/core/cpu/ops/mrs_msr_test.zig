@@ -111,3 +111,26 @@ test "M33 CONTROL reads zero for PACBTI enables and ignores writes to them" {
     try run(&cpu, 0xF3EF, 0x8014); // mrs r0, control
     try std.testing.expectEqual(@as(u32, 0), cpu.regs.low[0] & enables);
 }
+
+test "M55 treats CONTROL PACBTI enables as RAZ/WI and refuses PAC_KEY moves" {
+    const profile = ra8.chip.core.cpu.decode.profile.Profile;
+    const sysreg = ra8.chip.core.cpu.sysreg;
+    var cpu: Cpu = .{ .bus = undefined, .profile = profile.m55, .regs = .{ .xpsr = regs.xpsr_bits.thumb } };
+    cpu.regs.control = 0xF6;
+    cpu.banked.other.control = 0xF7;
+
+    try run(&cpu, 0xF3EF, 0x8014); // MRS R0, CONTROL
+    try std.testing.expectEqual(@as(u32, 0x06), cpu.regs.get(0));
+    try run(&cpu, 0xF3EF, 0x8194); // MRS R1, CONTROL_NS
+    try std.testing.expectEqual(@as(u32, 0x07), cpu.regs.get(1));
+
+    cpu.regs.set(2, 0xF2);
+    try run(&cpu, 0xF382, 0x8814); // MSR CONTROL, R2
+    try std.testing.expectEqual(@as(u32, 0x02), sysreg.read(&cpu.regs, sysreg.sysm.control) & 0xF7);
+    cpu.regs.set(3, 0xF3);
+    try run(&cpu, 0xF383, 0x8894); // MSR CONTROL_NS, R3
+    try std.testing.expectEqual(@as(u32, 0x03), cpu.banked.other.control);
+
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xF3EF, 0x8020)); // MRS R0, PAC_KEY_P_0
+    try std.testing.expectError(error.Undefined, run(&cpu, 0xF382, 0x8824)); // MSR PAC_KEY_U_0, R2
+}

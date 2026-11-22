@@ -4,6 +4,7 @@ const fault_clear = @import("../../periph/fault/clear.zig");
 const fp_scb = @import("fpu/scb.zig");
 const fp_state = @import("fpu/state.zig");
 const GuestBus = @import("memory/guest/bus.zig").GuestBus;
+const id_regs = @import("../../periph/id_regs.zig");
 const itm_port = @import("../../periph/itm.zig");
 const memmap = @import("../memmap.zig");
 const mpu = @import("../../periph/mpu/mpu.zig");
@@ -42,6 +43,7 @@ pub const Scs = struct {
     has_fpu: bool = true,
     dwt_numcomp: ?u4 = null,
     fpb_wired: bool = false,
+    id: ?id_regs.Bank = null,
 
     pub fn attachFp(self: *Scs, fp: *fp_state.State, present: bool) void {
         self.fp = if (present) fp else null;
@@ -56,6 +58,7 @@ pub const Scs = struct {
             .has_fpu = self.has_fpu,
             .dwt_numcomp = self.dwt_numcomp,
             .fpb_wired = self.fpb_wired,
+            .id = self.id,
         };
     }
 

@@ -165,6 +165,7 @@ test {
     _ = @import("session/zig/watch_test.zig");
     _ = @import("session/itm_console_test.zig");
     _ = @import("session/generic_machines_test.zig");
+    _ = @import("session/generic_m55_test.zig");
     _ = @import("session/zig/stop_test.zig");
     _ = @import("session/zig_stop_ns_test.zig");
     _ = @import("session/zig/break_sym_test.zig");

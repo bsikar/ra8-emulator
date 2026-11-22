@@ -67,7 +67,7 @@ pub const Cpu1 = struct {
         const desc = try opened.board().desc().cores.require(.cpu1);
         errdefer self.* = .{};
         self.machine = .{
-            .dwt = .{ .numcomp = desc.scs.effectiveDwt(desc.profile.v8_1m) },
+            .dwt = .{ .numcomp = desc.dwtComparators() },
             .fpb = .{ .num_code = desc.scs.fpb_code },
         };
         self.bytes = try allocator.dupe(u8, bytes);

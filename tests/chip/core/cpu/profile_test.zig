@@ -89,3 +89,49 @@ test "on the M85 profile the same encodings run" {
         try std.testing.expect(cpu.regs.pc != usage_handler);
     }
 }
+
+test "Profile.m55 enables Armv8.1-M/MVE/LOB while refusing M85-only PACBTI encodings" {
+    try std.testing.expect(Profile.m55.has(.v8_1m));
+    try std.testing.expect(Profile.m55.has(.mve));
+    try std.testing.expect(Profile.m55.has(.lob));
+    try std.testing.expect(!Profile.m55.has(.pacbti));
+    try std.testing.expectEqual(@as(u4, 4), Profile.m55.dwt_comparators);
+
+    const csel = [2]u16{ 0xEA50, 0x8102 }; // CSEL R1, R0, R2, EQ
+    const clrm = [2]u16{ 0xE89F, 0x000F }; // CLRM {R0-R3}
+    for (armv8_1m_only ++ [_][2]u16{ csel, clrm }) |hw| {
+        try std.testing.expect(decode.decodeFor(Profile.m55, wide(hw)) != null);
+    }
+
+    const pac_hint = [2]u16{ 0xF3AF, 0x801D };
+    const pacbti_hint = [2]u16{ 0xF3AF, 0x800D };
+    const aut_hint = [2]u16{ 0xF3AF, 0x802D };
+    const bti_hint = [2]u16{ 0xF3AF, 0x800F };
+    for ([_][2]u16{ pac_hint, pacbti_hint, aut_hint, bti_hint }) |hw| {
+        try std.testing.expect(decode.decodeFor(Profile.m55, wide(hw)) != null);
+    }
+
+    const pacg = [2]u16{ 0xFB61, 0xF203 };
+    const autg = [2]u16{ 0xFB51, 0x2F03 };
+    const bxaut = [2]u16{ 0xFB5C, 0xCF1D };
+    const mrs_pac_key = [2]u16{ 0xF3EF, 0x8020 };
+    const msr_pac_key = [2]u16{ 0xF380, 0x8820 };
+    for ([_][2]u16{ pacg, autg, bxaut, mrs_pac_key, msr_pac_key }) |hw| {
+        try std.testing.expect(decode.refused(Profile.m55, wide(hw)));
+        try std.testing.expect(decode.decodeFor(Profile.m85, wide(hw)) != null);
+    }
+
+    const mve_i_only: Profile = .{
+        .v8_1m = true,
+        .mve = true,
+        .mve_fp = false,
+        .lob = true,
+        .pacbti = false,
+        .fpu = .none,
+        .fp16 = false,
+    };
+    const mve_fadd = [2]u16{ 0xEF00, 0x0D40 };
+    try std.testing.expect(decode.decodeFor(mve_i_only, wide(vadd_i32)) != null);
+    try std.testing.expect(decode.decodeFor(mve_i_only, wide(lsll)) != null);
+    try std.testing.expect(decode.refused(mve_i_only, wide(mve_fadd)));
+}

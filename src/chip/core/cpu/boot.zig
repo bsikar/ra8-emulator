@@ -219,6 +219,7 @@ pub fn runOnBoard(
             .has_security = wiring.security,
             .dwt_numcomp = wiring.dwt_numcomp,
             .fpb_wired = wiring.fpb_wired,
+            .id = wiring.profile.idBank(wiring.security, wiring.scs.fpb_code),
         },
     };
     var partitions: SauSource = undefined;

@@ -39,6 +39,11 @@ pub const limit_bits: u32 = 0xFFFF_FFF8;
 /// CONTROL bits MSR may change: nPRIV, SPSEL, FPCA and PACBTI enables.
 pub const control_writable: u32 = 0xF7;
 
+/// Whether SYSm names a privileged/unprivileged PAC key register (0x20..0x27).
+pub fn isPacKey(n: u8) bool {
+    return n >= 0x20 and n <= 0x27;
+}
+
 /// Whether SYSm names a register this file models.
 pub fn known(n: u8) bool {
     return switch (n) {

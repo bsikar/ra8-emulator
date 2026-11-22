@@ -123,3 +123,19 @@ test "M33 profile ignores BTI CONTROL enables and never checks EPSR.B" {
     try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr) & invstate);
     try std.testing.expectEqual(regs.xpsr_bits.bti, cpu.regs.xpsr & regs.xpsr_bits.bti);
 }
+
+test "Cortex-M55 ignores BTI on indirect branches even when CONTROL.BTI_EN bit is set" {
+    var ram: fixture.Ram = .{};
+    const target: u32 = fixture.code + 8;
+    ram.putHalf(target, 0xBF00); // NOP landing without BTI
+    ram.putHalf(target + 2, 0xBF00); // NOP
+    var cpu = try branchToTarget(&ram, target);
+    cpu.profile = ra8.chip.core.cpu.decode.profile.Profile.m55;
+    cpu.regs.control |= regs.control_bits.bti_en;
+    cpu.regs.xpsr &= ~regs.xpsr_bits.bti;
+    try std.testing.expectEqual(@as(?ra8.chip.core.cpu.cpu.Stop, null), cpu.step()); // BX R0
+    try std.testing.expectEqual(@as(u32, 0), cpu.regs.xpsr & regs.xpsr_bits.bti);
+    try std.testing.expectEqual(@as(?ra8.chip.core.cpu.cpu.Stop, null), cpu.step()); // NOP without BTI fault
+    try std.testing.expectEqual(@as(u32, 0), ram.word(memmap.scb.cfsr) & invstate);
+    try std.testing.expectEqual(target + 2, cpu.regs.pc);
+}

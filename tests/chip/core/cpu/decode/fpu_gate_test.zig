@@ -84,3 +84,115 @@ test "M33 executing VADD.F64 or VCVT.F64.F32 takes UsageFault.UNDEFINSTR" {
         try std.testing.expectEqual(undefinstr_bit, ram.word(memmap.scb.cfsr));
     }
 }
+
+test "FP16 scalar and MVE-I + FPU combinations decode independently" {
+    const hx_sp_fp16: Profile = .{
+        .v8_1m = true,
+        .mve = false,
+        .mve_fp = false,
+        .lob = true,
+        .pacbti = false,
+        .fpu = .single,
+        .fp16 = true,
+    };
+    for ([_][2]u16{ vadd_f16, vmov_f16, vldr_16, vadd_f32 }) |hw| {
+        try std.testing.expect(decode.decodeFor(hx_sp_fp16, wide(hw)) != null);
+    }
+    try std.testing.expect(decode.decodeFor(hx_sp_fp16, wide(vadd_f64)) == null);
+    for ([_][2]u16{ vadd_f16, vmov_f16, vldr_16 }) |hw| {
+        try std.testing.expect(decode.decodeFor(Profile.m33, wide(hw)) == null);
+    }
+
+    const dp_mve_i: Profile = .{
+        .v8_1m = true,
+        .mve = true,
+        .mve_fp = false,
+        .lob = true,
+        .pacbti = false,
+        .fpu = .double,
+        .fp16 = true,
+    };
+    const mve_fadd_f32 = [2]u16{ 0xEF00, 0x0D40 }; // VADD.F32 Q0, Q0, Q0
+    const mve_vadd_i32 = [2]u16{ 0xEF22, 0x0844 }; // VADD.I32 Q0, Q1, Q2
+    try std.testing.expect(decode.decodeFor(dp_mve_i, wide(vadd_f64)) != null);
+    try std.testing.expect(decode.decodeFor(dp_mve_i, wide(mve_vadd_i32)) != null);
+    try std.testing.expect(decode.decodeFor(dp_mve_i, wide(mve_fadd_f32)) == null);
+    try std.testing.expect(decode.decodeFor(Profile.m55, wide(mve_fadd_f32)) != null);
+}
+
+test "VMRS/VMSR and VLDR sysreg transfers gate VPR/P0 on MVE and v8.1-M extensions on v8_1m" {
+    const no_fpu_v81m: Profile = .{
+        .v8_1m = true,
+        .mve = false,
+        .mve_fp = false,
+        .lob = true,
+        .fpu = .none,
+        .fp16 = false,
+    };
+    const mve_i: Profile = .{ .v8_1m = true, .mve = true, .mve_fp = false, .lob = true, .fpu = .none, .fp16 = false };
+    const m55_no_mve_dp: Profile = .{ .v8_1m = true, .mve = false, .mve_fp = false, .lob = true, .fpu = .double };
+    const m55_no_mve_sp: Profile = .{ .v8_1m = true, .mve = false, .mve_fp = false, .lob = true, .fpu = .single };
+
+    const fpscr_ops = [_][2]u16{ .{ 0xEEF1, 0x0A10 }, .{ 0xEEE1, 0x0A10 } };
+    const vpr_p0_ops = [_][2]u16{
+        .{ 0xEEFC, 0x0A10 }, .{ 0xEEEC, 0x0A10 },
+        .{ 0xEEFD, 0x0A10 }, .{ 0xEEED, 0x0A10 },
+    };
+    const v81_fp_ops = [_][2]u16{
+        .{ 0xEEF2, 0x0A10 }, .{ 0xEEE2, 0x0A10 },
+        .{ 0xEEFE, 0x0A10 }, .{ 0xEEEE, 0x0A10 },
+        .{ 0xEEFF, 0x0A10 }, .{ 0xEEEF, 0x0A10 },
+    };
+    const vldr_fpscr = [2]u16{ 0xED90, 0x1F80 };
+    const vldr_vpr = [2]u16{ 0xEDD0, 0x4F80 };
+
+    for (fpscr_ops) |hw| {
+        try std.testing.expect(decode.decodeFor(Profile.m33, wide(hw)) != null);
+        try std.testing.expect(decode.decodeFor(mve_i, wide(hw)) != null);
+        try std.testing.expect(decode.refused(no_fpu_v81m, wide(hw)));
+    }
+    for (vpr_p0_ops) |hw| {
+        try std.testing.expect(decode.refused(Profile.m33, wide(hw)));
+        try std.testing.expect(decode.refused(m55_no_mve_sp, wide(hw)));
+        try std.testing.expect(decode.refused(m55_no_mve_dp, wide(hw)));
+        try std.testing.expect(decode.refused(no_fpu_v81m, wide(hw)));
+        try std.testing.expect(decode.decodeFor(mve_i, wide(hw)) != null);
+        try std.testing.expect(decode.decodeFor(Profile.m55, wide(hw)) != null);
+    }
+    for (v81_fp_ops) |hw| {
+        try std.testing.expect(decode.refused(Profile.m33, wide(hw)));
+        try std.testing.expect(decode.refused(no_fpu_v81m, wide(hw)));
+        try std.testing.expect(decode.decodeFor(m55_no_mve_sp, wide(hw)) != null);
+        try std.testing.expect(decode.decodeFor(m55_no_mve_dp, wide(hw)) != null);
+        try std.testing.expect(decode.decodeFor(mve_i, wide(hw)) != null);
+    }
+    try std.testing.expect(decode.refused(Profile.m33, wide(vldr_fpscr)));
+    try std.testing.expect(decode.refused(Profile.m33, wide(vldr_vpr)));
+    try std.testing.expect(decode.refused(m55_no_mve_dp, wide(vldr_vpr)));
+    try std.testing.expect(decode.refused(no_fpu_v81m, wide(vldr_fpscr)));
+    try std.testing.expect(decode.decodeFor(m55_no_mve_dp, wide(vldr_fpscr)) != null);
+    try std.testing.expect(decode.decodeFor(mve_i, wide(vldr_vpr)) != null);
+}
+
+test "M33 and M55-without-MVE take UsageFault.UNDEFINSTR on VMRS VPR or FPSCR_nzcvqc" {
+    const m55_no_mve: Profile = .{ .v8_1m = true, .mve = false, .mve_fp = false, .lob = true, .fpu = .double };
+    const cases = [_]struct { profile: Profile, hw: [2]u16 }{
+        .{ .profile = Profile.m33, .hw = .{ 0xEEFC, 0x0A10 } },
+        .{ .profile = Profile.m33, .hw = .{ 0xEEF2, 0x0A10 } },
+        .{ .profile = m55_no_mve, .hw = .{ 0xEEFC, 0x0A10 } },
+        .{ .profile = m55_no_mve, .hw = .{ 0xEEFD, 0x0A10 } },
+    };
+    for (cases) |c| {
+        var ram: fixture.Ram = .{};
+        ram.putWord(fixture.base + 6 * 4, usage_handler | 1);
+        ram.putWord(memmap.scb.shcsr, usgfaultena);
+        ram.putHalf(fixture.code, c.hw[0]);
+        ram.putHalf(fixture.code + 2, c.hw[1]);
+        var cpu = try fixture.boot(&ram);
+        cpu.profile = c.profile;
+        cpu.fp.cpacr = 0x00F0_0000;
+        try std.testing.expectEqual(@as(?ra8.chip.core.cpu.cpu.Stop, null), cpu.step());
+        try std.testing.expectEqual(usage_handler, cpu.regs.pc);
+        try std.testing.expectEqual(undefinstr_bit, ram.word(memmap.scb.cfsr));
+    }
+}

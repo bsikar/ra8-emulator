@@ -73,8 +73,8 @@ fn byNumber(number: u16) ?op.Exec {
 
 fn clearBti(cpu: *Cpu, instr: Instr) op.Error!void {
     _ = instr;
-    // In the hint space, BTI is a NOP on a core without PACBTI (the M33).
-    if (!cpu.profile.v8_1m) return;
+    // In the hint space, BTI is a NOP on a core without PACBTI (M33 and M55).
+    if (!cpu.profile.pacbti) return;
     cpu.regs.xpsr &= ~regs.xpsr_bits.bti;
 }
 

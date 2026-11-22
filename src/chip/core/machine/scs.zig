@@ -1,6 +1,7 @@
 //! Per-core System Control Space configuration: interrupt line count,
 //! priority width, SAU and MPU region counts, DWT and FPB comparator counts,
 //! initial VTOR seed, and SysTick calibration value.
+const dwt = @import("../../periph/dwt.zig");
 
 /// Architectural upper bound on external interrupt lines in Armv8-M.
 pub const max_irq_lines: u16 = 480;
@@ -68,6 +69,10 @@ pub const ScsConfig = struct {
 
     pub fn effectiveDwt(self: ScsConfig, is_m85: bool) u4 {
         return self.dwt_comparators orelse if (is_m85) 8 else 4;
+    }
+
+    pub fn effectiveDwtFor(self: ScsConfig, identity: u32) u4 {
+        return self.dwt_comparators orelse dwt.numcompOf(identity);
     }
 
     pub fn effectiveSau(self: ScsConfig, security: bool) u8 {

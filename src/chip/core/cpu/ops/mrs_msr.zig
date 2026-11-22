@@ -74,25 +74,27 @@ const pacbti_control: u32 = regs.control_bits.bti_en | regs.control_bits.ubti_en
 fn mrs(cpu: *Cpu, instr: Instr) op.Error!void {
     const rd: u4 = @intCast((instr.hw2 >> 8) & 0xF);
     const n = sysmOf(instr);
+    if (!cpu.profile.pacbti and sysreg.isPacKey(n)) return error.Undefined;
     if (!nsAlias(n)) {
         const value = sysreg.read(&cpu.regs, n);
         return cpu.regs.set(
             rd,
             if (n == sysreg.sysm.control and
-                !cpu.profile.v8_1m) value & ~pacbti_control else value,
+                !cpu.profile.pacbti) value & ~pacbti_control else value,
         );
     }
     const value = if (sysreg.privileged(&cpu.regs)) cpu.banked.readNs(&cpu.regs, n) else null;
     const visible = value orelse 0;
-    cpu.regs.set(rd, if (n == banked.sysm.control_ns and !cpu.profile.v8_1m) visible & ~pacbti_control else visible);
+    cpu.regs.set(rd, if (n == banked.sysm.control_ns and !cpu.profile.pacbti) visible & ~pacbti_control else visible);
 }
 
 fn msr(cpu: *Cpu, instr: Instr) op.Error!void {
     const value = cpu.regs.get(@intCast(instr.hw1 & 0xF));
     const n = sysmOf(instr);
+    if (!cpu.profile.pacbti and sysreg.isPacKey(n)) return error.Undefined;
     if (!nsAlias(n)) {
         const masked = switch (n) {
-            sysreg.sysm.control => if (!cpu.profile.v8_1m) value & ~pacbti_control else value,
+            sysreg.sysm.control => if (!cpu.profile.pacbti) value & ~pacbti_control else value,
             sysreg.sysm.basepri, sysreg.sysm.basepri_max => value & cpu.profile.prioMask(),
             else => value,
         };
@@ -100,7 +102,7 @@ fn msr(cpu: *Cpu, instr: Instr) op.Error!void {
     }
     if (sysreg.privileged(&cpu.regs)) {
         const masked = switch (n) {
-            banked.sysm.control_ns => if (!cpu.profile.v8_1m) value & ~pacbti_control else value,
+            banked.sysm.control_ns => if (!cpu.profile.pacbti) value & ~pacbti_control else value,
             banked.sysm.basepri_ns => value & cpu.profile.prioMask(),
             else => value,
         };

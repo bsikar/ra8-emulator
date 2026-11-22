@@ -170,7 +170,7 @@ pub const Loop = struct {
             .security = primary.security,
             .systicks = primary.systicks,
             .scs = primary.scs,
-            .dwt_numcomp = primary.scs.effectiveDwt(primary.profile.v8_1m),
+            .dwt_numcomp = primary.dwtComparators(),
             .fpb_wired = true,
         };
     }

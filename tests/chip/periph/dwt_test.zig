@@ -297,3 +297,12 @@ test "only comparator 0 counts cycles, and only while TRCENA is set" {
     _ = unit.write(function(1), counts);
     try std.testing.expect(!unit.watchesCycles());
 }
+
+test "Cortex-M55 defaults to four DWT comparators" {
+    const m55_id = ra8.chip.periph.cpuid.wordAt(
+        ra8.chip.periph.cpuid.partno.cortex_m55,
+        .{ .variant = 1, .patch = 1 },
+    );
+    try std.testing.expectEqual(@as(u4, 4), dwt.numcompOf(m55_id));
+    try std.testing.expectEqual(@as(u32, 0x4000_0000), dwt.ctrlValue(dwt.numcompOf(m55_id)));
+}

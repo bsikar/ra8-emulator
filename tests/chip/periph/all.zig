@@ -115,6 +115,7 @@ test {
     _ = @import("icu/intsel_test.zig");
     _ = @import("icu/nmi_test.zig");
     _ = @import("icu/source_test.zig");
+    _ = @import("id_regs_test.zig");
     _ = @import("irq_source_test.zig");
     _ = @import("lanes_test.zig");
     _ = @import("lvd/field_lock_test.zig");

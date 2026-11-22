@@ -256,7 +256,7 @@ pub const groups = [_]op.Group{
     acq_rel.group,
     needs(.v8_1m, clrm.group),
     eci(.restarts, wide_api7.group),
-    needs(.v8_1m, pac.group),
+    pac.group,
 };
 
 fn needs(comptime feature: Feature, comptime group: op.Group) op.Group {

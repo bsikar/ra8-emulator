@@ -6,7 +6,7 @@ const std = @import("std");
 const catalog = ra8.chip.core.machine.catalog;
 const cpuid = ra8.chip.periph.cpuid;
 
-test "ra8d2, ra8p1, ra8e1, ra4t1, cortex-m33, and cortex-m85 resolve and refuse unknown names" {
+test "ra8d2, ra8p1, ra8e1, ra4t1, cortex-m33, cortex-m55, and cortex-m85 resolve and refuse unknown names" {
     try std.testing.expectEqual(&catalog.ra8d2, catalog.find("ra8d2").?);
     try std.testing.expectEqual(&catalog.ra8p1, catalog.find("ra8p1").?);
     try std.testing.expectEqual(&catalog.ra8e1, catalog.find("ra8e1").?);
@@ -14,6 +14,7 @@ test "ra8d2, ra8p1, ra8e1, ra4t1, cortex-m33, and cortex-m85 resolve and refuse 
     try std.testing.expectEqual(&catalog.ra4t1, catalog.find("ra4t1").?);
     try std.testing.expectEqual(&catalog.ra4t1, catalog.find("fpb-ra4t1").?);
     try std.testing.expectEqual(&catalog.cortex_m33, catalog.find("cortex-m33").?);
+    try std.testing.expectEqual(&catalog.cortex_m55, catalog.find("cortex-m55").?);
     try std.testing.expectEqual(&catalog.cortex_m85, catalog.find("cortex-m85").?);
     try std.testing.expectEqual(@as(?*const ra8.chip.core.machine.Machine, null), catalog.find("RA8D2"));
     try std.testing.expectEqual(@as(?*const ra8.chip.core.machine.Machine, null), catalog.find("FPB-RA8E1"));
@@ -47,6 +48,17 @@ test "cortex-m33 and cortex-m85 are single-core machines without CPU1 or NPU" {
     try std.testing.expectEqual(cpuid.word(cpuid.partno.cortex_m33), catalog.cortex_m33.primary().cpuid);
     try std.testing.expect(!catalog.cortex_m33.primary().has(.v8_1m));
     try std.testing.expect(!catalog.cortex_m33.hasNpu());
+
+    try std.testing.expect(!catalog.cortex_m55.hasSecond());
+    try std.testing.expectEqual(@as(?ra8.chip.core.machine.Core, null), catalog.cortex_m55.core(.cpu1));
+    try std.testing.expectEqual(
+        cpuid.wordAt(cpuid.partno.cortex_m55, .{ .variant = 1, .patch = 1 }),
+        catalog.cortex_m55.primary().cpuid,
+    );
+    try std.testing.expect(catalog.cortex_m55.primary().has(.v8_1m));
+    try std.testing.expect(catalog.cortex_m55.primary().has(.mve));
+    try std.testing.expect(!catalog.cortex_m55.primary().has(.pacbti));
+    try std.testing.expect(!catalog.cortex_m55.hasNpu());
 
     try std.testing.expect(!catalog.cortex_m85.hasSecond());
     try std.testing.expectEqual(@as(?ra8.chip.core.machine.Core, null), catalog.cortex_m85.core(.cpu1));

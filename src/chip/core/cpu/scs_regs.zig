@@ -12,6 +12,7 @@ const bus = @import("bus.zig");
 const dwt = @import("../../periph/dwt.zig");
 const fp_scb = @import("fpu/scb.zig");
 const fpb = @import("../../periph/fpb.zig");
+const id_regs = @import("../../periph/id_regs.zig");
 const memmap = @import("../memmap.zig");
 const nvic = @import("../../periph/nvic/nvic.zig");
 const scs_mod = @import("../machine/scs.zig");
@@ -28,6 +29,7 @@ pub const Policy = struct {
     has_fpu: bool = true,
     dwt_numcomp: ?u4 = null,
     fpb_wired: bool = false,
+    id: ?id_regs.Bank = null,
 };
 
 /// Overlay per-core read rules onto `into` after a raw read, or answer directly.
@@ -70,16 +72,9 @@ fn readScsRegister(policy: Policy, memory: bus.Bus, target: alias.Target, into: 
         @memset(into, 0);
         return true;
     }
+    if (policy.id) |bank| if (bank.read(target.address, into)) return true;
     if (target.address == memmap.syst.calib and into.len == 4) {
-        if (policy.systicks == 0 or (target.view == .non_secure and policy.systicks < 2)) {
-            @memset(into, 0);
-            return true;
-        }
-        if (policy.config.syst_calib != 0) {
-            std.mem.writeInt(u32, into[0..4], policy.config.syst_calib, .little);
-            return true;
-        }
-        return false;
+        return readSystCalib(policy, target, into);
     }
     if (intersects(target.address, into.len, memmap.nvic.iabr, iabr_span)) {
         try readIabrRange(policy, memory, target, into);
@@ -91,6 +86,18 @@ fn readScsRegister(policy: Policy, memory: bus.Bus, target: alias.Target, into: 
     }
     if (intersects(target.address, into.len, memmap.nvic.ipr, ipr_span)) {
         try readIprRange(policy, memory, target, into);
+        return true;
+    }
+    return false;
+}
+
+fn readSystCalib(policy: Policy, target: alias.Target, into: []u8) bool {
+    if (policy.systicks == 0 or (target.view == .non_secure and policy.systicks < 2)) {
+        @memset(into, 0);
+        return true;
+    }
+    if (policy.config.syst_calib != 0) {
+        std.mem.writeInt(u32, into[0..4], policy.config.syst_calib, .little);
         return true;
     }
     return false;
@@ -132,6 +139,7 @@ fn writeDebugCaps(policy: Policy, memory: bus.Bus, given: u32, bytes: []const u8
 fn writeScsRegister(policy: Policy, memory: bus.Bus, target: alias.Target, bytes: []const u8) bus.Error!bool {
     if (inSpan(target.address, memmap.nvic.ictr, 4)) return true;
     if (!policy.has_fpu and isFpScbRange(target.address, bytes.len)) return true;
+    if (policy.id != null and id_regs.Bank.covers(target.address, bytes.len)) return true;
     if (target.address == memmap.syst.calib) return true;
     if (inSpan(target.address, memmap.nvic.iabr, iabr_span)) return true;
     if (inSpan(target.address, nvic.itns.base, itns_span)) {

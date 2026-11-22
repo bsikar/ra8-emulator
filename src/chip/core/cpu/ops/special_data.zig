@@ -87,12 +87,12 @@ fn bx(cpu: *Cpu, instr: Instr) op.Error!void {
     const rm = second(instr.hw1);
     const target = read(cpu, instr, rm);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) bti.setForBranch(&cpu.regs, rm, cpu.profile.v8_1m);
+    if (cpu.regs.exc_return == null) bti.setForBranch(&cpu.regs, rm, cpu.profile.pacbti);
 }
 
 fn blx(cpu: *Cpu, instr: Instr) op.Error!void {
     const target = cpu.regs.get(second(instr.hw1));
     cpu.regs.set(14, (instr.address +% 2) | 1);
     exchange(cpu, target);
-    if (cpu.regs.exc_return == null) bti.setForCall(&cpu.regs, cpu.profile.v8_1m);
+    if (cpu.regs.exc_return == null) bti.setForCall(&cpu.regs, cpu.profile.pacbti);
 }

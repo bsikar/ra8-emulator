@@ -1,11 +1,12 @@
-//! Vendor-neutral single-core Cortex-M33 and Cortex-M85 machine definitions.
+//! Vendor-neutral single-core Cortex-M33, Cortex-M55, and Cortex-M85 machine
+//! definitions.
 //!
 //! Provides a minimal machine with one core, its architectural System Control
 //! Space (SCS/PPB), one executable read-only flash region holding the vector
 //! table, and one SRAM region, with configurable bases and capacities and no
 //! vendor peripherals attached. Serves both as a selectable standalone target
-//! (`--part cortex-m33`, `--part cortex-m85`) and as a starting template for
-//! MCU profiles.
+//! (`--part cortex-m33`, `--part cortex-m55`, `--part cortex-m85`) and as a
+//! starting template for MCU profiles.
 const core = @import("core.zig");
 const cpuid = @import("../../periph/cpuid.zig");
 const Machine = @import("machine.zig").Machine;
@@ -89,6 +90,30 @@ pub const M33Config = struct {
     source: []const u8 = default_source,
 };
 
+pub const M55Config = struct {
+    name: []const u8 = "cortex-m55",
+    label: []const u8 = "Cortex-M55",
+    layout: Layout = .{},
+    security: bool = false,
+    fpu: core.Fpu = .double,
+    mve: bool = true,
+    lob: bool = true,
+    fp16: bool = true,
+    cache: bool = true,
+    systicks: u2 = 1,
+    revision: cpuid.Revision = .{ .variant = 1, .patch = 1 },
+    scs: core.scs.ScsConfig = .{
+        .irq_lines = 32,
+        .prio_bits = 4,
+        .sau_regions = 0,
+        .mpu_regions_s = 8,
+        .mpu_regions_ns = 0,
+        .dwt_comparators = 4,
+        .fpb_code = 8,
+    },
+    source: []const u8 = default_source,
+};
+
 pub const M85Config = struct {
     name: []const u8 = "cortex-m85",
     label: []const u8 = "Cortex-M85",
@@ -135,6 +160,29 @@ pub fn cortexM33Machine(comptime cfg: M33Config) Machine {
     };
 }
 
+pub fn cortexM55Machine(comptime cfg: M55Config) Machine {
+    return .{
+        .name = cfg.name,
+        .label = cfg.label,
+        .cores = .{
+            .primary = core.cortexM55(.{
+                .security = cfg.security,
+                .fpu = cfg.fpu,
+                .mve = cfg.mve,
+                .lob = cfg.lob,
+                .fp16 = cfg.fp16,
+                .cache = cfg.cache,
+                .systicks = cfg.systicks,
+                .revision = cfg.revision,
+                .scs = resolvedScs(cfg.scs, cfg.layout.flash_base),
+            }),
+        },
+        .memory = memoryMap(cfg.layout),
+        .part = .ra8d2,
+        .source = cfg.source,
+    };
+}
+
 pub fn cortexM85Machine(comptime cfg: M85Config) Machine {
     return .{
         .name = cfg.name,
@@ -156,4 +204,5 @@ pub fn cortexM85Machine(comptime cfg: M85Config) Machine {
 }
 
 pub const cortex_m33: Machine = cortexM33Machine(.{});
+pub const cortex_m55: Machine = cortexM55Machine(.{});
 pub const cortex_m85: Machine = cortexM85Machine(.{});
