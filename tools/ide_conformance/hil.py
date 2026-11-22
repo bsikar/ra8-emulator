@@ -2,29 +2,20 @@
 import io
 import json
 from pathlib import Path
-import queue
 import secrets
 import shutil
-import socket
 import subprocess
 import tarfile
 import threading
-import time
 
 import gdb_debug
+import parity
 from rpc_client import IdeClient
-import sim_agent
 import workspace_setup
 
 ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_SERIALS = ("001083322193", "001088957027")
 FORBIDDEN_COM_PORTS = {"COM1", "COM3", "COM9"}
-
-
-def _free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def _sel(entry):
@@ -73,12 +64,14 @@ class _SshTunnel:
                 "-o", "ExitOnForwardFailure=yes", *args, host]
         self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                      stderr=subprocess.PIPE, text=True, encoding="utf8", errors="replace")
+
         def drain():
             for line in iter(lambda: self.proc.stderr.readline(4096), ""):
                 if len(self.lines) < 512:
                     self.lines.append(line)
                 if ready_marker in line:
                     self.ready.set()
+
         self.reader = threading.Thread(target=drain, daemon=True)
         self.reader.start()
         if not self.ready.wait(timeout=15) or self.proc.poll() is not None:
@@ -124,16 +117,59 @@ def _repo_tar_bytes() -> bytes:
     return buf.getvalue()
 
 
+def _verify_targets(h, listed):
+    e1 = _find(listed, "fpb-ra8e1", "001083322193")
+    t1 = _find(listed, "fpb-ra4t1", "001088957027")
+    h.check("ra8e1 connected/verified", (e1["target"]["connection"], e1["target"]["identity_verified"]), ("connected", True))
+    h.check("ra4t1 connected/verified", (t1["target"]["connection"], t1["target"]["identity_verified"]), ("connected", True))
+    vcom = e1["target"]["uart"]
+    h.require("ra8e1 VCOM safe port", bool(vcom) and vcom.upper() not in FORBIDDEN_COM_PORTS)
+    h.check("ra4t1 VCOM unsupported", (t1["target"]["capabilities"]["uart"], "uart" in t1["target"]["operations"]), (False, False))
+    return e1, t1
+
+
+def _flash_e1_and_compare(h, client: IdeClient, e1, receipt: str, emu_e1: dict, tag: str, drain_progress=False):
+    client.targets_reserve(_sel(e1))
+    client.target_progress.clear()
+    res = client.targets_flash_receipt(_sel(e1), receipt, reset=True, uart=True)
+    h.check(f"{tag} ra8e1 flash/verify",
+            (res["flash"]["flashed"], res["flash"]["verified"], res["flash"]["serial"],
+             res["flash"]["cpuid"], res["flash"]["part"], res["flash"]["sha256"]),
+            (True, True, "001083322193", "0x410FD232", "R7FA8E1AFDCFB", emu_e1["elf_sha256"]))
+    h.check(f"{tag} ra8e1 reset", res["reset"]["reset"], True)
+    h.check(f"{tag} ra8e1 uart parity", (res["uart"]["bytes"], res["uart"]["text"]), (172, emu_e1["uart"]))
+    if drain_progress:
+        client.targets_list()
+        h.check(f"{tag} progress stages", [p["stage"] for p in client.target_progress[-3:]], ["flash", "reset", "uart"])
+    for action in ("halt", "registers", "step", "resume"):
+        client.targets_perform(_sel(e1), action)
+    client.targets_release()
+    return res
+
+
+def _flash_t1_and_compare(h, client: IdeClient, t1, receipt: str, emu_t1: dict, tag: str):
+    client.targets_reserve(_sel(t1))
+    res = client.targets_flash_receipt(_sel(t1), receipt, reset=True, uart=False)
+    h.check(f"{tag} ra4t1 flash/verify",
+            (res["flash"]["flashed"], res["flash"]["verified"], res["flash"]["serial"],
+             res["flash"]["cpuid"], res["flash"]["part"], res["flash"]["sha256"]),
+            (True, True, "001088957027", "0x410FD214", "R7FA4T1BB3CFM", emu_t1["elf_sha256"]))
+    h.check(f"{tag} ra4t1 reset", res["reset"]["reset"], True)
+    client.targets_perform(_sel(t1), "uart", error=0x195)
+    for action in ("halt", "registers", "step", "resume"):
+        client.targets_perform(_sel(t1), action)
+    client.targets_release()
+    return res
+
+
 def hil_local_windows_bench(h):
-    jlink = h.args.jlink.resolve()
-    gdb_srv = h.args.jlink_gdb_server.resolve()
+    jlink, gdb_srv = h.args.jlink.resolve(), h.args.jlink_gdb_server.resolve()
     h.require("JLink.exe exists", jlink.is_file())
     h.require("JLinkGDBServerCL.exe exists", gdb_srv.is_file())
     h.require("GDB exists", h.gdb is not None and h.gdb.is_file())
 
-    ws = h.output / "hil_local_ws"
+    ws, scratch = h.output / "hil_local_ws", h.output / "hil_local_scratch"
     workspace_setup.populate(ws)
-    scratch = h.output / "hil_local_scratch"
     scratch.mkdir()
     tgt = h.output / "hil_local_targets.json"
     _write_targets(tgt, jlink, scratch, "win-bench")
@@ -142,54 +178,19 @@ def hil_local_windows_bench(h):
                    "--history", "off", "--listen", "tcp::0", h.fixture],
                   "serve: listening on tcp:", "hil_local_serve", "hil_local_serve.log", port_from_ready=True)
     client = IdeClient(srv.port, h.trace, h.deadline, frame_timeout=90.0)
-    elf_e1 = elf_t1 = None
     try:
-        listed = client.targets_list()
-        e1 = _find(listed, "fpb-ra8e1", "001083322193")
-        t1 = _find(listed, "fpb-ra4t1", "001088957027")
-        h.check("ra8e1 connected/verified", (e1["target"]["connection"], e1["target"]["identity_verified"]), ("connected", True))
-        h.check("ra4t1 connected/verified", (t1["target"]["connection"], t1["target"]["identity_verified"]), ("connected", True))
-        vcom = e1["target"]["uart"]
-        h.require("ra8e1 VCOM safe port", bool(vcom) and vcom.upper() not in FORBIDDEN_COM_PORTS)
-        h.check("ra4t1 VCOM unsupported", (t1["target"]["capabilities"]["uart"], "uart" in t1["target"]["operations"]), (False, False))
-
-        client.open_project("project_ra8e1.json")
-        j1 = client.build_project("debug")
-        h.check("local HIL build ra8e1", client.finish(j1)["state"], "succeeded")
-        rec_e1 = client.prepare(j1)
-        elf_e1 = ws / "boards" / json.loads((ws / "boards" / rec_e1).read_text(encoding="utf8"))["artifact"]
-
+        e1, t1 = _verify_targets(h, client.targets_list())
+        b8 = parity.build_board_once(h, client, "fpb-ra8e1", ws)
+        emu_e1 = parity.emulate_local(h, "hil_local_emu_e1", b8["elf_path"], "fpb-ra8e1")
         client.targets_reserve(_sel(t1))
-        client.targets_flash_receipt(_sel(t1), rec_e1, error=0x198)
+        client.targets_flash_receipt(_sel(t1), b8["receipt"], error=0x198)
         client.targets_release()
-
-        client.targets_reserve(_sel(e1))
-        res_e1 = client.targets_flash_receipt(_sel(e1), rec_e1, reset=True, uart=True)
-        h.check("HIL ra8e1 flash/verify", (res_e1["flash"]["flashed"], res_e1["flash"]["verified"], res_e1["flash"]["serial"], res_e1["flash"]["cpuid"], res_e1["flash"]["part"]),
-                (True, True, "001083322193", "0x410FD232", "R7FA8E1AFDCFB"))
-        h.check("HIL ra8e1 reset", res_e1["reset"]["reset"], True)
-        h.check("HIL ra8e1 172B VCOM UART", (res_e1["uart"]["bytes"], res_e1["uart"]["text"]), (172, sim_agent.KNOWN_BANNER))
-        for action in ("halt", "registers", "step", "resume"):
-            client.targets_perform(_sel(e1), action)
-        client.targets_release()
+        res_e1 = _flash_e1_and_compare(h, client, e1, b8["receipt"], emu_e1, "hil_local")
         client.close_project()
 
-        client.open_project("project_ra4t1.json")
-        client.completed.clear(); client.outputs.clear(); client.sequences.clear()
-        j2 = client.build_project("debug")
-        h.check("local HIL build ra4t1", client.finish(j2)["state"], "succeeded")
-        rec_t1 = client.prepare(j2)
-        elf_t1 = ws / "boards" / json.loads((ws / "boards" / rec_t1).read_text(encoding="utf8"))["artifact"]
-
-        client.targets_reserve(_sel(t1))
-        res_t1 = client.targets_flash_receipt(_sel(t1), rec_t1, reset=True, uart=False)
-        h.check("HIL ra4t1 flash/verify", (res_t1["flash"]["flashed"], res_t1["flash"]["verified"], res_t1["flash"]["serial"], res_t1["flash"]["cpuid"], res_t1["flash"]["part"]),
-                (True, True, "001088957027", "0x410FD214", "R7FA4T1BB3CFM"))
-        h.check("HIL ra4t1 reset", res_t1["reset"]["reset"], True)
-        client.targets_perform(_sel(t1), "uart", error=0x195)
-        for action in ("halt", "registers", "step", "resume"):
-            client.targets_perform(_sel(t1), action)
-        client.targets_release()
+        b4 = parity.build_board_once(h, client, "fpb-ra4t1", ws)
+        emu_t1 = parity.emulate_local(h, "hil_local_emu_t1", b4["elf_path"], "fpb-ra4t1")
+        res_t1 = _flash_t1_and_compare(h, client, t1, b4["receipt"], emu_t1, "hil_local")
         client.close_project()
     finally:
         client.close()
@@ -199,21 +200,54 @@ def hil_local_windows_bench(h):
     h.physical_gates["local_windows_bench_fpb_ra4t1"] = "PASS"
 
     gdb_e1 = gdb_debug.run_hardware_jlink_gdb(
-        h.gdb, gdb_srv, "001083322193", "R7FA8E1AF", elf_e1, "fpb_ra8e1.zig",
+        h.gdb, gdb_srv, "001083322193", "R7FA8E1AF", b8["elf_path"], "fpb_ra8e1.zig",
         "0x22060100", "0x52413845", "0x410fd232", h.output, "ra8e1", h.trace, h.deadline,
     )
+    cmp_e1 = parity.compare_hw_state(h, "hil_local ra8e1", "fpb-ra8e1", emu_e1["state_words"], gdb_e1["state_words"])
     h.physical_gates["local_windows_hardware_jlink_gdb_ra8e1"] = "PASS"
+
     gdb_t1 = gdb_debug.run_hardware_jlink_gdb(
-        h.gdb, gdb_srv, "001088957027", "R7FA4T1BB", elf_t1, "fpb_ra4t1.zig",
+        h.gdb, gdb_srv, "001088957027", "R7FA4T1BB", b4["elf_path"], "fpb_ra4t1.zig",
         "0x20000100", "0x52413454", "0x410fd214", h.output, "ra4t1", h.trace, h.deadline,
     )
+    cmp_t1 = parity.compare_hw_state(h, "hil_local ra4t1", "fpb-ra4t1", emu_t1["state_words"], gdb_t1["state_words"])
     h.physical_gates["local_windows_hardware_jlink_gdb_ra4t1"] = "PASS"
-    h.results["hil_local"] = dict(ra8e1_uart_bytes=172, gdb_ra8e1=gdb_e1, gdb_ra4t1=gdb_t1)
+
+    h.results["hil_local"] = dict(
+        ra8e1=dict(elf_sha256=emu_e1["elf_sha256"], flash_sha256=res_e1["flash"]["sha256"],
+                   uart_bytes=172, uart_match=True, **cmp_e1, gdb=gdb_e1),
+        ra4t1=dict(elf_sha256=emu_t1["elf_sha256"], flash_sha256=res_t1["flash"]["sha256"],
+                   emu_uart_bytes=172, hw_uart="Unsupported(0x195)", boundary=emu_t1["uart_boundary"],
+                   **cmp_t1, gdb=gdb_t1),
+    )
+
+
+def _stage_remote_env(h, ssh_base: list[str], remote_dir: str, secret: Path) -> tuple[str, int]:
+    subprocess.run(ssh_base + [f"mkdir -p {remote_dir}/repo && tar -xzf - -C {remote_dir}/repo"],
+                   input=_repo_tar_bytes(), check=True, timeout=60)
+    remote_emu = h.args.remote_emulator or f"{remote_dir}/repo/zig-out/bin/ra8_emulator"
+    if not h.args.remote_emulator:
+        subprocess.run(ssh_base + [f"cd {remote_dir}/repo && {h.args.remote_zig} build"],
+                       check=True, capture_output=True, text=True, timeout=240)
+    subprocess.run(ssh_base + [
+        f"python3 -c \"import sys; from pathlib import Path; sys.path.insert(0, '{remote_dir}/repo/tools/ide_conformance'); "
+        f"import workspace_setup; workspace_setup.populate(Path('{remote_dir}/ws'))\""
+    ], check=True, timeout=30)
+    subprocess.run(ssh_base + [f"cat > {remote_dir}/probe_agent.key && chmod 600 {remote_dir}/probe_agent.key"],
+                   input=secret.read_bytes(), check=True, timeout=15)
+    r_agent_port = int(subprocess.check_output(
+        ssh_base + ["python3 -c 'import socket; s=socket.socket(); s.bind((\"127.0.0.1\",0)); print(s.getsockname()[1]); s.close()'"],
+        text=True, timeout=15).strip())
+    rem_tgt = h.output / "hil_remote_targets.json"
+    _write_remote_targets(rem_tgt, r_agent_port, f"{remote_dir}/probe_agent.key", "win-bench")
+    subprocess.run(ssh_base + [f"cat > {remote_dir}/remote_targets.json"], input=rem_tgt.read_bytes(), check=True, timeout=15)
+    return remote_emu, r_agent_port
 
 
 def hil_remote_linux_backend_laptop_probe(h):
     h.require("ssh client available", shutil.which("ssh") is not None)
     ssh_base = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", h.args.ssh_host]
+    gdb_srv = h.args.jlink_gdb_server.resolve()
     scratch = h.output / "hil_agent_scratch"
     scratch.mkdir()
     agent_cfg = h.output / "hil_agent_probes.json"
@@ -224,29 +258,11 @@ def hil_remote_linux_backend_laptop_probe(h):
     agent = h.spawn([h.emulator, "probe-agent", "--targets", agent_cfg, "--secret-file", secret,
                      "--host-id", "win-bench", "--listen", "tcp:127.0.0.1:0"],
                     "probe-agent: listening on tcp:", "hil_win_agent", "hil_win_agent.log", port_from_ready=True)
-    remote_dir = None
-    rev_tun = fwd_tun = r_serve = client = remote_pid = None
+    remote_dir = rev_tun = fwd_tun = r_serve = client = remote_pid = None
     try:
         remote_dir = subprocess.check_output(ssh_base + ["mktemp -d /tmp/ra8-ide-hil.XXXXXX"], text=True, timeout=15).strip()
         h.require("safe remote temp dir", remote_dir.startswith("/tmp/ra8-ide-hil."))
-        subprocess.run(ssh_base + [f"mkdir -p {remote_dir}/repo && tar -xzf - -C {remote_dir}/repo"],
-                       input=_repo_tar_bytes(), check=True, timeout=60)
-        remote_emu = h.args.remote_emulator or f"{remote_dir}/repo/zig-out/bin/ra8_emulator"
-        if not h.args.remote_emulator:
-            subprocess.run(ssh_base + [f"cd {remote_dir}/repo && {h.args.remote_zig} build"],
-                           check=True, capture_output=True, text=True, timeout=240)
-        subprocess.run(ssh_base + [
-            f"python3 -c \"import sys; from pathlib import Path; sys.path.insert(0, '{remote_dir}/repo/tools/ide_conformance'); "
-            f"import workspace_setup; workspace_setup.populate(Path('{remote_dir}/ws'))\""
-        ], check=True, timeout=30)
-        subprocess.run(ssh_base + [f"cat > {remote_dir}/probe_agent.key && chmod 600 {remote_dir}/probe_agent.key"],
-                       input=secret.read_bytes(), check=True, timeout=15)
-        r_agent_port = int(subprocess.check_output(
-            ssh_base + ["python3 -c 'import socket; s=socket.socket(); s.bind((\"127.0.0.1\",0)); print(s.getsockname()[1]); s.close()'"],
-            text=True, timeout=15).strip())
-        rem_tgt = h.output / "hil_remote_targets.json"
-        _write_remote_targets(rem_tgt, r_agent_port, f"{remote_dir}/probe_agent.key", "win-bench")
-        subprocess.run(ssh_base + [f"cat > {remote_dir}/remote_targets.json"], input=rem_tgt.read_bytes(), check=True, timeout=15)
+        remote_emu, r_agent_port = _stage_remote_env(h, ssh_base, remote_dir, secret)
 
         rev_tun = _SshTunnel(h, h.args.ssh_host, ["-R", f"127.0.0.1:{r_agent_port}:127.0.0.1:{agent.port}"],
                              "forwarding_success: all expected forwarding replies received", "rev_agent")
@@ -255,31 +271,40 @@ def hil_remote_linux_backend_laptop_probe(h):
                       f"--listen tcp:127.0.0.1:0 {remote_dir}/repo/tests/fixtures/uart/uart_irq_echo.elf")
         r_serve = h.spawn([*ssh_base, remote_cmd], "serve: listening on tcp:", "hil_remote_serve", "hil_remote_serve.log", port_from_ready=True)
         remote_pid = next(int(ln.split(":", 1)[1]) for ln in r_serve.lines if ln.startswith("PID:"))
-        local_rpc_port = _free_port()
+        local_rpc_port = gdb_debug.free_port()
         fwd_tun = _SshTunnel(h, h.args.ssh_host, ["-L", f"127.0.0.1:{local_rpc_port}:127.0.0.1:{r_serve.port}"],
                              f"Local forwarding listening on 127.0.0.1 port {local_rpc_port}.", "fwd_rpc")
 
         client = IdeClient(local_rpc_port, h.trace, h.deadline, frame_timeout=90.0)
-        e1 = _find(client.targets_list(), "fpb-ra8e1", "001083322193")
-        client.open_project("project_ra8e1.json")
-        job = client.build_project("debug")
-        b_res = client.finish(job, timeout=180)
-        h.check("remote Linux build succeeded", (b_res["state"], b_res["platform"]), ("succeeded", "linux-x86_64"))
-        rec = client.prepare(job)
-        client.targets_reserve(_sel(e1))
-        client.target_progress.clear()
-        f_res = client.targets_flash_receipt(_sel(e1), rec, reset=True, uart=True)
-        h.check("remote->laptop flash/verify", (f_res["flash"]["flashed"], f_res["flash"]["verified"], f_res["flash"]["serial"], f_res["flash"]["part"]),
-                (True, True, "001083322193", "R7FA8E1AFDCFB"))
-        h.check("remote->laptop reset", f_res["reset"]["reset"], True)
-        h.check("remote->laptop 172B UART", (f_res["uart"]["bytes"], f_res["uart"]["text"]), (172, sim_agent.KNOWN_BANNER))
-        client.targets_list()
-        h.check("remote->laptop progress stages", [p["stage"] for p in client.target_progress[-3:]], ["flash", "reset", "uart"])
-        client.targets_release()
+        e1, t1 = _verify_targets(h, client.targets_list())
+
+        b8 = parity.build_board_once(h, client, "fpb-ra8e1")
+        rem_e1 = parity.emulate_remote(h, ssh_base, remote_emu, f"{remote_dir}/ws/boards/{b8['artifact']}",
+                                       b8["sha256"], "fpb-ra8e1", _SshTunnel, gdb_debug.free_port, "hil_rem_emu_e1")
+        f_e1 = _flash_e1_and_compare(h, client, e1, b8["receipt"], rem_e1, "hil_remote", drain_progress=True)
         client.close_project()
+        hw_e1 = gdb_debug.read_hardware_state(h.gdb, gdb_srv, "001083322193", "R7FA8E1AF", "0x22060100",
+                                              h.output, "remote_ra8e1", h.trace, h.deadline)
+        cmp_e1 = parity.compare_hw_state(h, "hil_remote ra8e1", "fpb-ra8e1", rem_e1["state_words"], hw_e1["state_words"])
+
+        b4 = parity.build_board_once(h, client, "fpb-ra4t1")
+        rem_t1 = parity.emulate_remote(h, ssh_base, remote_emu, f"{remote_dir}/ws/boards/{b4['artifact']}",
+                                       b4["sha256"], "fpb-ra4t1", _SshTunnel, gdb_debug.free_port, "hil_rem_emu_t1")
+        f_t1 = _flash_t1_and_compare(h, client, t1, b4["receipt"], rem_t1, "hil_remote")
+        client.close_project()
+        hw_t1 = gdb_debug.read_hardware_state(h.gdb, gdb_srv, "001088957027", "R7FA4T1BB", "0x20000100",
+                                              h.output, "remote_ra4t1", h.trace, h.deadline)
+        cmp_t1 = parity.compare_hw_state(h, "hil_remote ra4t1", "fpb-ra4t1", rem_t1["state_words"], hw_t1["state_words"])
+
         h.physical_gates["remote_linux_backend_laptop_windows_probe"] = "PASS"
-        h.results["hil_remote"] = dict(build_host=b_res["host"], build_platform=b_res["platform"], ra8e1_uart_bytes=172,
-                                       server_attached_probe="PENDING_RA8EMU-1351")
+        h.results["hil_remote"] = dict(
+            ra8e1=dict(elf_sha256=rem_e1["elf_sha256"], flash_sha256=f_e1["flash"]["sha256"],
+                       uart_bytes=172, uart_match=True, **cmp_e1),
+            ra4t1=dict(elf_sha256=rem_t1["elf_sha256"], flash_sha256=f_t1["flash"]["sha256"],
+                       emu_uart_bytes=172, hw_uart="Unsupported(0x195)", boundary=rem_t1["uart_boundary"],
+                       **cmp_t1),
+            server_attached_probe="PENDING_RA8EMU-1351",
+        )
     finally:
         if client is not None:
             client.close()

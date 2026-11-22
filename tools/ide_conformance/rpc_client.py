@@ -21,6 +21,10 @@ ACTION_CODES = {
 }
 
 workspace_client.METHODS.update(
+    run=0x0101,
+    read_memory=0x0107,
+    subscribe=0x010d,
+    now=0x010f,
     targets_list=0x190,
     targets_reserve=0x191,
     targets_release=0x192,
@@ -45,6 +49,7 @@ def pack_selection(sel):
 class IdeClient(ProjectClient):
     def __init__(self, port, trace, deadline, frame_timeout=30.0):
         self.target_progress = []
+        self.uart_bytes = bytearray()
         self.default_frame_timeout = frame_timeout
         super().__init__(port, trace, deadline)
 
@@ -53,6 +58,16 @@ class IdeClient(ProjectClient):
 
     def event(self, payload):
         topic, = struct.unpack_from("<H", payload)
+        if topic == 0x0100:
+            return
+        if topic == 0x0101:
+            body, end = take_blob(payload, 2)
+            assert end == len(payload), "uart envelope"
+            _, _, _, length = struct.unpack_from("<BBQI", body)
+            chunk = body[14:14 + length]
+            assert len(chunk) == length, "uart payload length"
+            self.uart_bytes.extend(chunk)
+            return
         if topic == 0x183:
             body, end = take_blob(payload, 2)
             assert end == len(payload), "target progress envelope"
@@ -115,6 +130,22 @@ class IdeClient(ProjectClient):
         raw, end = take_blob(body)
         assert end == len(body)
         return json.loads(raw.decode("utf8"))
+
+    def subscribe_uart(self, core=0):
+        assert self.call("subscribe", struct.pack("<BHH", core, 0x0101, 0)) == b"\x01"
+
+    def run_chunk(self, budget=2000, core=0):
+        assert self.call("run", struct.pack("<BBQ", core, 1, budget)) == b"\x01"
+
+    def read_memory(self, address, length, core=0):
+        body = self.call("read_memory", struct.pack("<BII", core, address, length))
+        mlen, = struct.unpack_from("<I", body)
+        assert mlen == length and len(body) == 4 + length
+        return body[4:4 + length]
+
+    def now(self, core=0):
+        body = self.call("now", struct.pack("<B", core))
+        return struct.unpack("<Q", body)[0]
 
     def targets_flash_receipt(self, sel, receipt, reset=False, uart=False, error=None):
         args = pack_selection(sel) + blob(receipt) + struct.pack("<BB", int(bool(reset)), int(bool(uart)))
