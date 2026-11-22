@@ -13,4 +13,7 @@ test {
     _ = @import("effects_wide_test.zig");
     _ = @import("dataflow_plan_test.zig");
     _ = @import("dataflow_test.zig");
+    _ = @import("emit_format_test.zig");
+    _ = @import("emit_expr_test.zig");
+    _ = @import("emit_test.zig");
 }

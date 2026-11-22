@@ -24,6 +24,35 @@ describe('decompiler', () => {
     expect(branchLine?.tokens.some((t) => t.kind === 'num' && t.text === '0x6c')).toBe(true);
   });
 
+  it('prefers structured pseudocode attached to rows when present', () => {
+    const fn = decompileThumbRows(
+      [
+        {
+          address: 0x0200_03fc,
+          size: 4,
+          decoded: true,
+          text: 'bl #0x20029c8 ; ra8_pfs_route_peripheral',
+          symbol: 'uart_irq_pins_init',
+          pseudo: 'r0 = ra8_pfs_route_peripheral(0xd02, 4, 0x2002b6c /* g_uart_pins_try */)',
+        },
+        {
+          address: 0x0200_0408,
+          size: 2,
+          decoded: true,
+          text: 'beq #0x200040e',
+          pseudo: 'if (r3 == 0) goto uart_irq_pins_init+0x22',
+        },
+      ],
+      0x0200_03fc
+    );
+
+    expect(fn.functionName).toBe('uart_irq_pins_init');
+    expect(fn.lines[1]?.code).toBe('  r0 = ra8_pfs_route_peripheral(0xd02, 4, 0x2002b6c /* g_uart_pins_try */);');
+    expect(fn.lines[1]?.tokens.some((t) => t.kind === 'fn' && t.text === 'ra8_pfs_route_peripheral')).toBe(true);
+    expect(fn.lines[2]?.code).toBe('  if (r3 == 0) goto uart_irq_pins_init+0x22;');
+    expect(fn.lines[2]?.tokens.some((t) => t.kind === 'kw' && t.text === 'if')).toBe(true);
+  });
+
   it('tokenizes keywords, types, functions, numbers, and comments cleanly', () => {
     const tokens = tokenizeCodeLine('const uint32_t ok = run_step(0x10); // done');
     expect(tokens.some((t) => t.kind === 'kw' && t.text === 'const')).toBe(true);

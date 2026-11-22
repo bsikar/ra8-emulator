@@ -90,6 +90,7 @@ export interface DisasmRow {
   raw: Uint8Array;
   text: string;
   symbol: string;
+  pseudo?: string;
 }
 
 export interface DisasmReply {
@@ -218,20 +219,24 @@ export function decodeDisasmReply(data: Uint8Array): DisasmReply {
   const rows: DisasmRow[] = [];
   let at = 0;
   for (let i = 0; i < count && at < rowsBytes.length; i++) {
-    if (at + 12 > rowsBytes.length) throw new Error("Truncated DisasmRow header");
+    if (at + 13 > rowsBytes.length) throw new Error("Truncated DisasmRow header");
     const rView = new DataView(rowsBytes.buffer, rowsBytes.byteOffset + at, rowsBytes.length - at);
     const tlen = rView.getUint8(10);
     if (at + 11 + tlen + 1 > rowsBytes.length) throw new Error("Truncated DisasmRow text");
     const slen = rowsBytes[at + 11 + tlen] ?? 0;
-    const total = 11 + tlen + 1 + slen;
-    if (at + total > rowsBytes.length) throw new Error("Truncated DisasmRow symbol");
+    const symEnd = 12 + tlen + slen;
+    if (at + symEnd + 1 > rowsBytes.length) throw new Error("Truncated DisasmRow symbol");
+    const plen = rowsBytes[at + symEnd] ?? 0;
+    const total = symEnd + 1 + plen;
+    if (at + total > rowsBytes.length) throw new Error("Truncated DisasmRow pseudo");
     rows.push({
       address: rView.getUint32(0, true),
       size: rView.getUint8(4),
       decoded: rView.getUint8(5) !== 0,
       raw: rowsBytes.slice(at + 6, at + 10),
       text: decodeUtf8(rowsBytes.subarray(at + 11, at + 11 + tlen)),
-      symbol: decodeUtf8(rowsBytes.subarray(at + 12 + tlen, at + total)),
+      symbol: decodeUtf8(rowsBytes.subarray(at + 12 + tlen, at + symEnd)),
+      pseudo: decodeUtf8(rowsBytes.subarray(at + symEnd + 1, at + total)),
     });
     at += total;
   }
