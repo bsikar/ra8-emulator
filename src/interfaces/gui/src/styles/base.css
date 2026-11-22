@@ -170,3 +170,48 @@ pre,
   font-size: 12px;
   font-weight: 500;
 }
+
+.es-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--es-text-muted);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-sm);
+  padding: 1px 5px;
+  background: var(--es-chrome);
+}
+
+.es-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 14, 21, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 68;
+}
+
+.es-sheet-card {
+  width: min(460px, calc(100vw - 32px));
+  background: var(--es-container);
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-xl);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.es-sheet-head,
+.es-sheet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.es-sheet-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--es-divider);
+  font-size: 12px;
+}

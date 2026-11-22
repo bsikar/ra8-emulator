@@ -44,6 +44,29 @@
                     }
                   </button>
                 }
+                @if (menu.id === 'file') {
+                  <div class="menu-divider" role="separator"></div>
+                  <div class="menu-subhead">
+                    <app-section-kicker label="OPEN RECENT" />
+                  </div>
+                  @if (recentElf.entries().length === 0) {
+                    <div class="dropdown-empty mono" data-testid="menuitem-recent-empty">No recent images</div>
+                  } @else {
+                    @for (entry of recentElf.entries(); track entry.id; let idx = $index) {
+                      <button
+                        type="button"
+                        role="menuitem"
+                        class="dropdown-item recent-elf-item"
+                        [attr.data-testid]="'menuitem-recent-elf-' + idx"
+                        [disabled]="rpc.observeOnly()"
+                        (click)="openRecentFromMenu(entry)"
+                      >
+                        <span class="recent-elf-name mono">{{ entry.fileName }}</span>
+                        <span class="es-kbd" data-allow-11px>{{ entry.sourceKind === 'workspace' ? 'WS' : 'LOCAL' }}</span>
+                      </button>
+                    }
+                  }
+                }
               </div>
             }
           </div>
@@ -95,6 +118,16 @@
           (click)="execution.step()"
         >
           Step
+        </button>
+        <button
+          type="button"
+          class="es-ghost-link"
+          data-testid="topbar-reload"
+          [disabled]="!recentElf.canReload()"
+          [title]="'Reload active ELF (' + reloadChordLabel + ')'"
+          (click)="recentElf.reloadActiveElf()"
+        >
+          Reload
         </button>
       }
     </div>
@@ -192,32 +225,41 @@
   }
 
   @if (cmdMode.helpOpen()) {
-    <div class="sheet-backdrop" (click)="cmdMode.helpOpen.set(false)">
-      <div class="sheet-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" (click)="$event.stopPropagation()">
-        <div class="sheet-head">
+    <div class="es-sheet-backdrop" (click)="cmdMode.helpOpen.set(false)">
+      <div class="es-sheet-card" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" (click)="$event.stopPropagation()">
+        <div class="es-sheet-head">
           <app-section-kicker label="SHORTCUTS" />
           <app-tonal-button variant="ghost" (pressed)="cmdMode.helpOpen.set(false)">Close</app-tonal-button>
         </div>
-        <div class="sheet-row"><span class="es-meta">Command Mode</span><span class="mono">{{ commandChordLabel }}</span></div>
-        <div class="sheet-row"><span class="es-meta">Search Everywhere</span><span class="mono">Shift+Shift</span></div>
-        <div class="sheet-row"><span class="es-meta">Extensions</span><span class="mono">{{ extensionsChordLabel }}</span></div>
-        <div class="sheet-row"><span class="es-meta">Vim :ex Prompt</span><span class="mono">:vim on|off / :ext / :help</span></div>
-        <div class="sheet-row"><span class="es-meta">Full Screen</span><span class="mono">F11 / Ctrl+Cmd+F</span></div>
-        <div class="sheet-row"><span class="es-meta">Continue / Step</span><span class="mono">F5 / F10 / Shift+F11</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Command Mode</span><span class="mono">{{ commandChordLabel }}</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Search Everywhere</span><span class="mono">Shift+Shift</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Extensions</span><span class="mono">{{ extensionsChordLabel }}</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Vim :ex Prompt</span><span class="mono">:vim on|off / :ext / :help</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Full Screen</span><span class="mono">F11 / Ctrl+Cmd+F</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Reload Active ELF</span><span class="mono">{{ reloadChordLabel }}</span></div>
+        <div class="es-sheet-row"><span class="es-meta">Continue / Step</span><span class="mono">F5 / F10 / Shift+F11</span></div>
       </div>
     </div>
   }
 
-  <app-connection-popover
-    [open]="connectionPopoverOpen()"
-    (closed)="connectionPopoverOpen.set(false)"
-    (openConnectManager)="openConnectRoute()"
-  />
+  @defer (when connectionPopoverOpen()) {
+    <app-connection-popover
+      [open]="connectionPopoverOpen()"
+      (closed)="connectionPopoverOpen.set(false)"
+      (openConnectManager)="openConnectRoute()"
+    />
+  }
   @defer (when cmdMode.extensionsOpen()) {
     <app-extensions-sheet [open]="cmdMode.extensionsOpen()" (closed)="cmdMode.extensionsOpen.set(false)" />
   }
-  <app-search-everywhere />
-  <app-command-palette />
-  <app-drop-veil [visible]="dragActive()" />
+  @defer (when searchEverywhere.open()) {
+    <app-search-everywhere />
+  }
+  @defer (when cmdMode.paletteOpen()) {
+    <app-command-palette />
+  }
+  @defer (when dragActive()) {
+    <app-drop-veil [visible]="dragActive()" />
+  }
   <app-toast-region />
 </div>
