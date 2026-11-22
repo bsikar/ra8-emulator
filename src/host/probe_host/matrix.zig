@@ -120,7 +120,7 @@ fn nativeDriver(os: HostOs, probe: ProbeKind) []const u8 {
         .jlink_usb => switch (os) {
             .windows => "SEGGER J-Link WinUSB/JLink_x64 + CfgMgr32 CDC",
             .linux => "SEGGER JLinkExe libusb + /dev/serial/by-id",
-            .macos => "SEGGER JLinkExe IOKit USB",
+            .macos => "SEGGER JLinkExe IOKit USB + /dev/cu.usbmodem CDC",
         },
         .cmsis_dap => switch (os) {
             .windows => "WinUSB/HID CMSIS-DAP",
@@ -149,6 +149,7 @@ pub fn writeJson(writer: *std.Io.Writer) !void {
         evaluate(.macos, .linux, .jlink_usb, .laptop_attached, true),
         evaluate(.linux, .linux, .jlink_usb, .laptop_attached, true),
         evaluate(.linux, .linux, .jlink_usb, .server_attached, false),
+        evaluate(.macos, .macos, .jlink_usb, .server_attached, false),
         evaluate(.linux, .windows, .jlink_usb, .laptop_attached, true),
         evaluate(.linux, .linux, .bootloader_serial, .laptop_attached, true),
     };

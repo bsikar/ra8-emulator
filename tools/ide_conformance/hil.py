@@ -99,13 +99,17 @@ class _SshTunnel:
 
 def _repo_tar_bytes() -> bytes:
     tracked = subprocess.check_output(
-        ["git", "ls-files", "-z", "build.zig", "build.zig.zon", "build_tests.zig", "src/root.zig",
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+         "build.zig", "build.zig.zon", "build_tests.zig", "src/root.zig",
          "src/chip", "src/components", "src/board", "src/session", "src/snapshot", "src/host",
          "src/interfaces/cli", "src/interfaces/dap", "src/interfaces/gdb", "src/interfaces/render",
          "src/interfaces/rpc", "src/interfaces/usbip", "tools", "tests"],
         cwd=ROOT,
     ).split(b"\0")
-    rel_paths = {p.decode("utf8") for p in tracked if p and not p.startswith(b"tests/corpus/")}
+    rel_paths = {
+        p.decode("utf8") for p in tracked
+        if p and not p.startswith(b"tests/corpus/") and b"__pycache__" not in p
+    }
     for extra in ROOT.glob("tools/ide_conformance/*.py"):
         rel_paths.add(extra.relative_to(ROOT).as_posix())
     buf = io.BytesIO()
@@ -246,7 +250,8 @@ def _stage_remote_env(h, ssh_base: list[str], remote_dir: str, secret: Path) -> 
 
 def hil_remote_linux_backend_laptop_probe(h):
     h.require("ssh client available", shutil.which("ssh") is not None)
-    ssh_base = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", h.args.ssh_host]
+    ssh_base = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+                "-o", "ServerAliveInterval=5", "-o", "ServerAliveCountMax=2", h.args.ssh_host]
     gdb_srv = h.args.jlink_gdb_server.resolve()
     scratch = h.output / "hil_agent_scratch"
     scratch.mkdir()
@@ -303,7 +308,6 @@ def hil_remote_linux_backend_laptop_probe(h):
             ra4t1=dict(elf_sha256=rem_t1["elf_sha256"], flash_sha256=f_t1["flash"]["sha256"],
                        emu_uart_bytes=172, hw_uart="Unsupported(0x195)", boundary=rem_t1["uart_boundary"],
                        **cmp_t1),
-            server_attached_probe="PENDING_RA8EMU-1351",
         )
     finally:
         if client is not None:
@@ -311,7 +315,10 @@ def hil_remote_linux_backend_laptop_probe(h):
         if fwd_tun is not None:
             fwd_tun.close()
         if remote_pid is not None and r_serve is not None and r_serve.proc.poll() is None:
-            subprocess.run(ssh_base + [f"kill -TERM {remote_pid}"], timeout=10)
+            try:
+                subprocess.run(ssh_base + [f"kill -TERM {remote_pid}"], stdin=subprocess.DEVNULL, timeout=25)
+            except subprocess.TimeoutExpired:
+                pass
         if r_serve is not None:
             r_serve.close()
         if rev_tun is not None:

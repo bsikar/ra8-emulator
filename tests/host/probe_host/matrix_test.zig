@@ -24,8 +24,14 @@ test "transport matrix selects Linux USB/IP only where supported and falls back 
     try std.testing.expectEqual(matrix.Transport.unsupported, bootloader.chosen);
     try std.testing.expect(!bootloader.supported);
 
+    const mac_server = matrix.evaluate(.macos, .macos, .jlink_usb, .server_attached, false);
+    try std.testing.expectEqual(matrix.Transport.native_local, mac_server.chosen);
+    try std.testing.expect(std.mem.indexOf(u8, mac_server.driver, "/dev/cu.usbmodem CDC") != null);
+
     var buf: [4096]u8 = undefined;
     var writer: std.Io.Writer = .fixed(&buf);
     try matrix.writeJson(&writer);
     try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "native_agent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "server_attached") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.buffered(), "/dev/cu.usbmodem CDC") != null);
 }
