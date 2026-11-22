@@ -42,6 +42,7 @@ pub const gtclkcr = @import("periph/gtclkcr.zig");
 pub const held = @import("periph/held.zig");
 pub const i3c = @import("periph/i3c/i3c.zig");
 pub const icu = @import("periph/icu/icu.zig");
+pub const id_regs = @import("periph/id_regs.zig");
 pub const ipc = @import("periph/ipc/ipc.zig");
 pub const irq_source = @import("periph/irq_source.zig");
 pub const iwdt = @import("periph/iwdt/iwdt.zig");

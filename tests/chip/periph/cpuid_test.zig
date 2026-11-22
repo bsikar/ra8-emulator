@@ -38,3 +38,13 @@ test "a primed word is never zero, which names no processor" {
     try std.testing.expect(cpuid.cpu0 != 0);
     try std.testing.expect(cpuid.cpu1 != 0);
 }
+
+test "Cortex-M55 CPUID identity encodes partno 0xD22 and configurable revision" {
+    const r1p1 = cpuid.wordAt(cpuid.partno.cortex_m55, .{ .variant = 1, .patch = 1 });
+    const r0p1 = cpuid.wordAt(cpuid.partno.cortex_m55, .{ .variant = 0, .patch = 1 });
+    try std.testing.expectEqual(@as(u32, 0x411F_D221), r1p1);
+    try std.testing.expectEqual(@as(u32, 0x410F_D221), r0p1);
+    try std.testing.expectEqual(cpuid.partno.cortex_m55, cpuid.part(r1p1));
+    try std.testing.expectEqual(cpuid.partno.cortex_m55, cpuid.part(r0p1));
+    try std.testing.expectEqual(@as(u12, 0xD22), cpuid.partno.cortex_m55);
+}

@@ -51,10 +51,13 @@ pub const ctrl_bits = struct {
     pub const numcomp_mask: u32 = 0xF << numcomp_shift;
 };
 
-/// The comparators the core a CPUID word names has: 4 on a Cortex-M33,
-/// 8 on the Cortex-M85 and anything unrecognised.
+/// The comparators the core a CPUID word names has: 4 on a Cortex-M33
+/// or Cortex-M55, 8 on the Cortex-M85 and anything unrecognised.
 pub fn numcompOf(identity: u32) u4 {
-    return if (cpuid.part(identity) == cpuid.partno.cortex_m33) 4 else limits.comparators;
+    return switch (cpuid.part(identity)) {
+        cpuid.partno.cortex_m33, cpuid.partno.cortex_m55 => 4,
+        else => limits.comparators,
+    };
 }
 
 /// DWT_CTRL at reset for an explicit comparator count.

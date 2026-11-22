@@ -11,6 +11,7 @@ const memmap = ra8.chip.core.memmap;
 const symbols = ra8.session.symbols;
 
 const m33_elf = @embedFile("../../../fixtures/generic_machines/cortex_m33.elf");
+const m55_elf = @embedFile("../../../fixtures/generic_machines/cortex_m55.elf");
 const m85_elf = @embedFile("../../../fixtures/generic_machines/cortex_m85.elf");
 const state_addr: u32 = 0x2000_0100;
 
@@ -30,9 +31,10 @@ fn runToPark(bytes: []const u8, machine: *const ra8.chip.core.machine.Machine) !
     var h = try harness_mod.open(std.testing.allocator, std.testing.io, .{
         .elf_bytes = bytes,
         .machine = machine,
-        .history_frames = 4,
+        .history_frames = 0,
     });
     defer h.deinit();
+    h.session().history = null;
 
     const park = symbols.addressOf(h.image(), "generic_park") orelse return error.MissingSymbol;
     _ = try h.session().setBreakpoint(.cpu0, .{ .address = park });
@@ -79,6 +81,22 @@ test "generic cortex-m33 and cortex-m85 defaults describe single-core profiles" 
     try std.testing.expectEqual(@as(u2, 1), m85.primary().systicks);
     try std.testing.expectEqual(@as(u32, 0), m85.primary().scs.init_vtor.?);
     try std.testing.expectEqual(@as(u4, 8), m85.primary().scs.dwt_comparators);
+
+    const m55 = generic.cortex_m55;
+    try std.testing.expectEqualStrings("cortex-m55", m55.name);
+    try std.testing.expectEqualStrings("Cortex-M55", m55.label);
+    try std.testing.expect(!m55.hasSecond());
+    try std.testing.expectEqual(@as(?ra8.chip.core.machine.Core, null), m55.core(.cpu1));
+    try std.testing.expect(!m55.hasNpu());
+    try std.testing.expectEqual(
+        cpuid.wordAt(cpuid.partno.cortex_m55, .{ .variant = 1, .patch = 1 }),
+        m55.primary().cpuid,
+    );
+    try std.testing.expectEqual(ra8.chip.core.machine.core.Fpu.double, m55.primary().fpu);
+    try std.testing.expect(m55.primary().has(.v8_1m));
+    try std.testing.expect(m55.primary().has(.mve));
+    try std.testing.expect(!m55.primary().has(.pacbti));
+    try std.testing.expectEqual(@as(u4, 4), m55.primary().dwtComparators());
 }
 
 test "generic regionsFor and memoryMap expose flash, sram, and ppb without vendor blocks" {
@@ -134,6 +152,20 @@ test "custom generic Layout and config overrides update memory map and VTOR" {
         .fpu = .single,
         .mve = false,
     });
+    const m55 = generic.cortexM55Machine(.{
+        .name = "m55-custom",
+        .label = "M55 Custom",
+        .layout = custom_layout,
+        .fpu = .single,
+        .mve = false,
+        .revision = .{ .variant = 0, .patch = 1 },
+    });
+
+    try std.testing.expectEqualStrings("m55-custom", m55.name);
+    try std.testing.expectEqual(@as(u32, 0x0800_0000), m55.primary().scs.init_vtor.?);
+    try std.testing.expectEqual(@as(u32, 0x410F_D221), m55.primary().cpuid);
+    try std.testing.expect(!m55.primary().has(.mve));
+    try std.testing.expect(!m55.primary().has(.pacbti));
 
     try std.testing.expectEqualStrings("m33-custom", m33.name);
     try std.testing.expectEqualStrings("M33 Custom", m33.label);
@@ -201,6 +233,27 @@ test "cortex-m85 firmware traps on cortex-m33 with UNDEFINSTR fault record" {
     try std.testing.expectEqual(@as(u32, 0x0001_0000), run.words[7]);
     try std.testing.expectEqualStrings(
         "GENERIC BOOT machine=cortex-m85\nGENERIC FAULT machine=cortex-m85\n",
+        run.itm,
+    );
+}
+
+test "generic cortex-m55 firmware exercises MVE, LOB, FP64, DWT=4, and absent PACBTI" {
+    const run = try runToPark(m55_elf, &catalog.cortex_m55);
+    defer std.testing.allocator.free(run.itm);
+
+    try std.testing.expectEqualSlices(u32, &.{
+        0x474D_3535,
+        0x411F_D221,
+        0x0000_0000,
+        0x0004_0008,
+        5,
+        165,
+        0x401C_0000,
+        1,
+    }, &run.words);
+    try std.testing.expectEqualStrings(
+        "GENERIC BOOT machine=cortex-m55\n" ++
+            "GENERIC M55 PASS cpuid=411fd221 ticks=5 sum=165 dwt=4 pac_undef=1\n",
         run.itm,
     );
 }

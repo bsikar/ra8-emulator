@@ -65,6 +65,6 @@ fn load(cpu: *Cpu, instr: Instr) op.Error!void {
     };
     if (f.rt == 15) {
         cpu.regs.bxWritePc(value);
-        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.v8_1m);
+        if (cpu.regs.exc_return == null) bti.setForAddress(&cpu.regs, cpu.profile.pacbti);
     } else cpu.regs.set(f.rt, value);
 }
