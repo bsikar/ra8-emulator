@@ -182,6 +182,8 @@ export enum Method {
   TargetsReserve = 0x0191,
   TargetsRelease = 0x0192,
   TargetsPerform = 0x0193,
+  LabelSet = 0x01a6,
+  LocalLabelSet = 0x01a7,
 }
 
 export { Method as Opcode };

@@ -122,6 +122,42 @@ export function decodeLocals(data: Uint8Array): LocalsResult {
   return { core, count, locals };
 }
 
+export interface SetLabelArgs {
+  core: Core;
+  address: number;
+  name: string;
+  width?: 0 | 1 | 2 | 4 | 8;
+}
+
+export function encodeSetLabel(args: SetLabelArgs): Uint8Array {
+  const name = encodeText(args.name, 48, "Label name");
+  const buf = new Uint8Array(6 + name.length);
+  const view = new DataView(buf.buffer);
+  view.setUint8(0, args.core);
+  view.setUint32(1, args.address >>> 0, true);
+  view.setUint8(5, args.width ?? 0);
+  buf.set(name, 6);
+  return buf;
+}
+
+export interface SetLocalLabelArgs {
+  core: Core;
+  frame: number;
+  local: string;
+  name: string;
+}
+
+export function encodeSetLocalLabel(args: SetLocalLabelArgs): Uint8Array {
+  const frame = encodeCoreFrame(args.core, args.frame);
+  const local = encodeText(args.local, 40, "Local name");
+  const name = encodeText(args.name, 40, "Label name");
+  const buf = new Uint8Array(frame.length + local.length + name.length);
+  buf.set(frame);
+  buf.set(local, frame.length);
+  buf.set(name, frame.length + local.length);
+  return buf;
+}
+
 export function encodeSetVarArgs(args: SetVarArgs): Uint8Array {
   const nameSlice = encodeText(args.name, 256, "SetVar name");
   const valSlice = encodeText(args.value, 256, "SetVar value");

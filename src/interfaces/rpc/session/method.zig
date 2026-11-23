@@ -70,4 +70,6 @@ pub const Method = enum(u16) {
     session_status = 0x01A3,
     session_close = 0x01A4,
     session_configure = 0x01A5,
+    label_set = 0x01A6,
+    local_label_set = 0x01A7,
 };

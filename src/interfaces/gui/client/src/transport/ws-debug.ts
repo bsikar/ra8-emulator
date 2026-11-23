@@ -13,6 +13,8 @@ import {
   Register,
   RegisterEntry,
   SYS_REGISTERS,
+  SetLabelArgs,
+  SetLocalLabelArgs,
   SetVarArgs,
   SetVarReply,
   SourceLineResult,
@@ -32,6 +34,8 @@ import {
   encodePointId,
   encodeReadMemory,
   encodeReadRegister,
+  encodeSetLabel,
+  encodeSetLocalLabel,
   encodeSetVarArgs,
   encodeWatchpoint,
   encodeWriteMemory,
@@ -190,6 +194,14 @@ export class RA8RpcDebugClient extends RA8RpcSessionClient {
 
   public async getLocalsAt(core: Core, frame: number): Promise<LocalsResult> {
     return decodeLocals(await this.call(Method.LocalsAt, encodeCoreFrame(core, frame)));
+  }
+
+  public setLabel(args: SetLabelArgs): Promise<boolean> {
+    return this.ack(Method.LabelSet, encodeSetLabel(args));
+  }
+
+  public setLocalLabel(args: SetLocalLabelArgs): Promise<boolean> {
+    return this.ack(Method.LocalLabelSet, encodeSetLocalLabel(args));
   }
 
   public async setVar(args: SetVarArgs): Promise<SetVarReply> {

@@ -1,8 +1,10 @@
 //! Mutate live/rewound variable state by symbol or DWARF local name using
 //! Session.write / Session.setRegister and typed little-endian encoding.
+const annotate = @import("annotate.zig");
 const Core = @import("api.zig").Core;
 const core_view = @import("core_view.zig");
 const elf = @import("ra8_board").image.elf;
+const label_locals = @import("label_locals.zig");
 const Session = @import("api.zig").Session;
 const std = @import("std");
 const var_value = @import("var_value.zig");
@@ -69,9 +71,33 @@ pub fn set(
 
     if (has_dwarf) {
         const lookup_pc = if (frame_idx == 0) regs[15] & ~@as(u32, 1) else (regs[15] & ~@as(u32, 1)) -| 1;
-        if (try vars.findLocal(sections, lookup_pc, name)) |local| {
+        const aliased = try label_locals.byName(.{ .map = &session.labels, .core = core }, sections, lookup_pc, name);
+        if (aliased orelse try vars.findLocal(sections, lookup_pc, name)) |local| {
             return writeLocal(session, core, frame_idx, frame_bytes, regs, local, value);
         }
+    }
+
+    return writeNamedGlobal(session, core, image, sections, name, value);
+}
+
+fn writeNamedGlobal(
+    session: *Session,
+    core: Core,
+    image: elf.Image,
+    sections: dwarf.locals.Sections,
+    name: []const u8,
+    value: []const u8,
+) !Result {
+    const has_dwarf = vars.hasDebugInfo(sections);
+    if (session.labels.byName(core, null, name)) |label| {
+        const address = label.key.address;
+        const original = annotate.symbolAt(image, address);
+        if (original) |symbol_name| {
+            const sym = symbols.symbolOf(image, symbol_name);
+            const dglob = if (has_dwarf) try vars.findGlobal(sections, symbol_name) else null;
+            if (sym != null or dglob != null) return writeGlobal(session, core, sym, dglob, value);
+        }
+        return writeAddressLabel(session, core, address, label.width, value);
     }
 
     const sym = symbols.symbolOf(image, name);
@@ -198,6 +224,20 @@ fn writeGlobal(
     const encoded = encodeValue(value, width, kind, &buf) catch |err| return mapEncodeError(err, .global);
     session.write(core, addr, encoded) catch |err| return mapWriteError(err, .global);
     return .{ .status = .ok, .scope = .global, .address = addr, .size = width, .message = "updated global variable" };
+}
+
+fn writeAddressLabel(session: *Session, core: Core, address: u32, width: u8, value: []const u8) Result {
+    if (width == 0) return fail(.unsupported_type, .global, "address label has no variable width");
+    var buffer: [8]u8 = undefined;
+    const encoded = encodeValue(value, width, .unsigned, &buffer) catch |err| return mapEncodeError(err, .global);
+    session.write(core, address, encoded) catch |err| return mapWriteError(err, .global);
+    return .{
+        .status = .ok,
+        .scope = .global,
+        .address = address,
+        .size = width,
+        .message = "updated labeled address",
+    };
 }
 
 const Reader = struct {

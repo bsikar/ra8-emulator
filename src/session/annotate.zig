@@ -16,6 +16,7 @@ const dwarf = @import("dwarf/dwarf.zig");
 
 const elf = @import("ra8_board").image.elf;
 const known = @import("annotation_names.zig");
+const labels = @import("labels.zig");
 const local_names = @import("annotation_locals.zig");
 const std = @import("std");
 const symbols = @import("symbols.zig");
@@ -87,9 +88,26 @@ pub fn line(image: elf.Image, into: *text.Text) void {
 
 /// Locals are matched only within the instruction's own active DWARF scope.
 pub fn at(image: ?elf.Image, address: u32, into: *text.Text) void {
+    atWithLabels(image, address, into, null);
+}
+
+pub fn atWithLabels(image: ?elf.Image, address: u32, into: *text.Text, view: ?labels.View) void {
+    if (labelImmediate(into.slice(), view)) |name| {
+        into.put(" ; {s}", .{name});
+    } else {
+        appendAddressName(image, into);
+    }
+    if (image) |loaded| local_names.appendWithLabels(loaded, address, into, view);
+}
+
+fn labelImmediate(instruction: []const u8, view: ?labels.View) ?[]const u8 {
+    const names = view orelse return null;
+    return names.nameAt(hexImmediate(instruction) orelse return null);
+}
+
+fn appendAddressName(image: ?elf.Image, into: *text.Text) void {
     if (image) |loaded| {
         line(loaded, into);
-        local_names.append(loaded, address, into);
     } else {
         const value = hexImmediate(into.slice()) orelse return;
         if (known.find(value)) |name| into.put(" ; {s}", .{name});

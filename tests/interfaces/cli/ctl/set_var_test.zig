@@ -14,6 +14,11 @@ fn stripDebugSections(bytes: []u8) !void {
     const sh = ra8.session.symbols.SectionHeader;
     const shstr_off = hdr.e_shoff + @as(u32, hdr.e_shstrndx) * @sizeOf(sh);
     const shstr = std.mem.bytesAsValue(sh, bytes[shstr_off..][0..@sizeOf(sh)]).*;
+    for (0..hdr.e_shnum) |i| {
+        const offset = hdr.e_shoff + i * @sizeOf(sh);
+        const head = std.mem.bytesAsValue(sh, bytes[offset..][0..@sizeOf(sh)]);
+        if (head.sh_type == ra8.session.symbols.section_type.symtab) head.sh_type = 0;
+    }
     const slice = bytes[shstr.sh_offset..][0..shstr.sh_size];
     var i: usize = 0;
     while (std.mem.indexOfPos(u8, slice, i, ".debug_")) |pos| {
@@ -41,7 +46,8 @@ test "ctl set writes global and local variables on uart_irq_echo.elf and reports
     for (0..6) |_| try expectOkRun(gpa, spec, &.{"step"});
 
     // Global 4-byte scalar write + memory verification.
-    var g = try ctl_run.run(gpa, spec, &.{ "set", "g_uart_irq_echoes=0x1234" });
+    try expectOkRun(gpa, spec, &.{ "label", "0x22000034", "echo_count" });
+    var g = try ctl_run.run(gpa, spec, &.{ "set", "echo_count=0x1234" });
     defer g.deinit();
     try std.testing.expectEqual(Term{ .exited = 0 }, g.term);
     const g_obj = g.field("set_var").object;
@@ -53,7 +59,8 @@ test "ctl set writes global and local variables on uart_irq_echo.elf and reports
     try std.testing.expectEqualStrings("34120000", gmem.field("hex").string);
 
     // Local 1-byte uint8_t write + memory verification.
-    var loc = try ctl_run.run(gpa, spec, &.{ "set", "channel=7" });
+    try expectOkRun(gpa, spec, &.{ "label-local", "0", "channel", "uart_channel" });
+    var loc = try ctl_run.run(gpa, spec, &.{ "set", "uart_channel=7" });
     defer loc.deinit();
     try std.testing.expectEqual(Term{ .exited = 0 }, loc.term);
     const l_obj = loc.field("set_var").object;
@@ -68,7 +75,7 @@ test "ctl set writes global and local variables on uart_irq_echo.elf and reports
     try std.testing.expectEqualStrings("07", lmem.field("hex").string);
 
     // Overflow and unknown variable return exit 1 and actionable JSON error.
-    var ovf = try ctl_run.run(gpa, spec, &.{ "set", "channel=300" });
+    var ovf = try ctl_run.run(gpa, spec, &.{ "set", "uart_channel=300" });
     defer ovf.deinit();
     try std.testing.expectEqual(Term{ .exited = 1 }, ovf.term);
     try std.testing.expectEqualStrings("overflow", ovf.field("status").string);
@@ -100,7 +107,8 @@ test "ctl set writes globals on a stripped No-DWARF ELF and refuses locals clear
     try expectOkRun(gpa, spec, &.{ "break", "0x02001974" });
     try expectOkRun(gpa, spec, &.{ "run", "--budget", "200000" });
 
-    var g = try ctl_run.run(gpa, spec, &.{ "set", "g_uart_irq_echoes=77" });
+    try expectOkRun(gpa, spec, &.{ "label", "0x22000034", "echo_count", "4" });
+    var g = try ctl_run.run(gpa, spec, &.{ "set", "echo_count=77" });
     defer g.deinit();
     try std.testing.expectEqual(Term{ .exited = 0 }, g.term);
 

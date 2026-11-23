@@ -7,7 +7,7 @@ const decomp = ra8.session.decomp;
 fn formatLine(dis_line: []const u8, flow: decomp.dataflow.InsnFlow, cp: ?decomp.value.ConditionPair) ![]const u8 {
     var buf: [256]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
-    try decomp.emit_expr.writeInstruction(&w, null, flow.address, dis_line, &flow, null, cp);
+    try decomp.emit_expr.writeInstruction(&w, .{}, flow.address, dis_line, &flow, null, cp);
     return std.testing.allocator.dupe(u8, w.buffered());
 }
 

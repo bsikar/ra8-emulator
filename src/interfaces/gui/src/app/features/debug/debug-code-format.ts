@@ -212,7 +212,7 @@ export function buildCodeBufferLines(opts: {
       kind: 'decomp',
       lineNumber: line.lineNumber,
       address: line.address >>> 0,
-      symbol: '',
+      symbol: opts.disasmRows.find((row) => row.address === line.address)?.symbol ?? '',
       rawHex: formatHex32(line.address),
       text: fullText,
       tokens: tokenizeDebugCodeLine(fullText),

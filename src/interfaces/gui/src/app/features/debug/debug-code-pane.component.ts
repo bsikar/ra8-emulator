@@ -19,6 +19,7 @@ import { WorkspaceStore } from '../../core/stores/workspace.store';
 import { VimStore } from '../../core/vim/vim.store';
 import { CommandModeStore } from '../../shell/command-mode.store';
 import { formatHex32, parseHexAddress } from '../../shared/utils/hex';
+import { DebugAddressLabelComponent } from './debug-address-label.component';
 import { type DebugCodeMode, buildCodeBufferLines } from './debug-code-format';
 
 function normalizeWorkspacePath(raw: string): string {
@@ -32,6 +33,7 @@ function baseFileName(raw: string): string {
 
 @Component({
   selector: 'app-debug-code-pane',
+  imports: [DebugAddressLabelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './debug-code-pane.component.html',
   styleUrl: './debug-code-pane.component.css',
