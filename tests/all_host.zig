@@ -194,6 +194,7 @@ test {
     _ = @import("interfaces/rpc/host_gdb_test.zig");
     _ = @import("interfaces/rpc/socket_transport_test.zig");
     _ = @import("interfaces/rpc/served_setup_test.zig");
+    _ = @import("interfaces/rpc/session_slot_test.zig");
     _ = @import("interfaces/rpc/served_camera_test.zig");
     _ = @import("interfaces/rpc/served_usbip_test.zig");
     _ = @import("interfaces/rpc/regression_replay_test.zig");

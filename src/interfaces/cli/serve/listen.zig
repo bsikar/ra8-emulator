@@ -81,7 +81,8 @@ fn bindServer(io: std.Io, spec: Spec) !Server {
 }
 
 fn commitRecorder(active: *served.Context) !void {
-    const rec = active.session.persistent_recorder orelse return;
+    const session = active.session orelse return;
+    const rec = session.persistent_recorder orelse return;
     if (active.worker) |w| w.acquire();
     defer if (active.worker) |w| w.release();
     try rec.maybeCommit(rec.now());

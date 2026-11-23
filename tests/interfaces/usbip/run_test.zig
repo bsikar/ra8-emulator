@@ -70,3 +70,20 @@ test "the events read as plain lines" {
     try run.report(&out.writer, .none, &link);
     try std.testing.expectEqual(@as(usize, 0), out.written().len);
 }
+
+test "uninstall releases the listener so a replacement can bind its port" {
+    var board = ra8.board.usb.Usb{};
+    try run.install(&board, std.testing.allocator, std.testing.io, 0);
+    const live: *run.Live = @ptrCast(@alignCast(board.bridge.?.context));
+    var device_state = usbfs.Device{};
+    const script = enumerated();
+    _ = try live.link.poll(&device_state, &script);
+    const port = live.link.port().?;
+    run.uninstall(&board, std.testing.allocator);
+    try std.testing.expect(board.bridge == null);
+    try run.install(&board, std.testing.allocator, std.testing.io, port);
+    defer run.uninstall(&board, std.testing.allocator);
+    const replacement: *run.Live = @ptrCast(@alignCast(board.bridge.?.context));
+    _ = try replacement.link.poll(&device_state, &script);
+    try std.testing.expectEqual(port, replacement.link.port().?);
+}

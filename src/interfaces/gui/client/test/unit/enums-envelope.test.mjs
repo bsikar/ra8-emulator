@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   CAP_ARTIFACTS,
+  CAP_SESSION_LIFECYCLE,
   CAP_BUILD,
   CAP_PROJECT,
   CAP_RECOVERY,
@@ -34,9 +35,9 @@ import {
 function registerEnumTests(suite) {
   suite.section("Enums, Capabilities, Error Codes & Envelopes");
 
-  suite.test("Method defines all 64 session opcodes (0x0100..0x013F) plus 23 backend opcodes", () => {
+  suite.test("Method defines all 64 session opcodes (0x0100..0x013F) plus backend and lifecycle opcodes", () => {
     const numeric = Object.values(Method).filter((v) => typeof v === "number");
-    assert.equal(numeric.length, 87);
+    assert.equal(numeric.length, 90);
     assert.equal(Method.Load, 0x0100);
     assert.equal(Method.Interrupt, 0x0110);
     assert.equal(Method.SetRunBudget, 0x0111);
@@ -66,7 +67,12 @@ function registerEnumTests(suite) {
     assert.equal(CAP_RECOVERY, 1 << 19);
     assert.equal(CAP_ARTIFACTS, 1 << 20);
     assert.equal(CAP_TARGETS, 1 << 21);
-    assert.equal(DEFAULT_CLIENT_CAPS, 0x003f_ffff);
+    assert.equal(CAP_SESSION_LIFECYCLE, 1 << 23);
+    assert.equal(Method.SessionStatus, 0x01a3);
+    assert.equal(Method.SessionClose, 0x01a4);
+    assert.equal(Method.SessionConfigure, 0x01a5);
+    assert.equal(ErrorCode.AppNoSession, 0x0104);
+    assert.equal(DEFAULT_CLIENT_CAPS, 0x00bf_ffff);
 
     assert.equal(ErrorCode.WorkspaceUnavailable, 0x0150);
     assert.equal(ErrorCode.WorkspaceNotFile, 0x0157);

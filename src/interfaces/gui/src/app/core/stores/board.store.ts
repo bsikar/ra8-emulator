@@ -50,7 +50,6 @@ export class BoardStore implements OnDestroy {
   private readonly execution = inject(ExecutionStore);
   private readonly subs = new Subscription();
   private renderer: FramebufferRenderer | null = null;
-
   public readonly boardParts = signal<BoardParts | null>(null);
   public readonly ledStates = signal<boolean[]>(Array<boolean>(8).fill(false));
   public readonly uploadProgress = signal<UploadProgressState | null>(null);
@@ -72,8 +71,10 @@ export class BoardStore implements OnDestroy {
   public readonly boardProfileName = signal<string>('ra8d2');
   public readonly lcdFps = signal<number>(0);
   public readonly lcdFrames = signal<number>(0);
-
   constructor() {
+    this.subs.add(this.rpc.sessionChanged$.subscribe((loaded) => {
+      this.resetBoardView(); if (loaded) void this.refreshBoardParts();
+    }));
     this.subs.add(this.rpc.connected$.subscribe(() => void this.refreshBoardParts()));
     this.subs.add(this.rpc.disconnected$.subscribe(() => this.resetBoardView()));
     this.subs.add(this.rpc.session$.subscribe((evt) => this.handleSessionEvent(evt)));
@@ -84,11 +85,9 @@ export class BoardStore implements OnDestroy {
     if (!get2dContext(canvas)) { this.renderer = null; return; }
     this.renderer = new FramebufferRenderer(canvas, { defaultWidth, defaultHeight });
   }
-
   public detachCanvas(): void {
     this.renderer = null;
   }
-
   public importBoardProfileText(fileName: string, rawText: string): boolean {
     try {
       const parsed = parseBoardProfile(rawText);
@@ -119,7 +118,6 @@ export class BoardStore implements OnDestroy {
     this.rpc.pushToast(`Selected preset ${preset.name}`);
     return preset;
   }
-
   public duplicateBoardPreset(preset: BoardPreset): BoardPreset {
     const id = `custom-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
     const copy: BoardPreset = {
@@ -144,7 +142,6 @@ export class BoardStore implements OnDestroy {
     this.selectBoardPreset(copy.id);
     return copy;
   }
-
   public upsertCustomBoard(preset: StoredCustomBoardPreset): StoredCustomBoardPreset {
     this.savedBoards.update((prev) => {
       const idx = prev.findIndex((b) => b.id === preset.id);
@@ -171,7 +168,7 @@ export class BoardStore implements OnDestroy {
 
   public async refreshBoardParts(): Promise<void> {
     const client = this.rpc.activeClient;
-    if (!client) return;
+    if (!client || !this.rpc.sessionLoaded()) return;
     try {
       const parts = await client.getBoardParts();
       this.boardParts.set(parts);
@@ -217,6 +214,9 @@ export class BoardStore implements OnDestroy {
       statusText: `Uploading ${fileName}...`,
     });
     try {
+      if (core === Core.Cpu0 && this.rpc.supportsSessionLifecycle()) {
+        await client.configureSession(this.selectedPreset()?.silicon ?? 'ra8d2', this.exportBoardProfileText());
+      }
       const ok = await client.loadElf(core, bytes, (loaded, total) => {
         const percent = total > 0 ? Math.round((loaded * 100) / total) : 100;
         this.uploadProgress.set({ active: true, fileName, core, percent, statusText: `Uploading ${fileName} (${percent}%)` });
@@ -225,6 +225,7 @@ export class BoardStore implements OnDestroy {
         this.uploadProgress.set(null);
         return false;
       }
+      await this.rpc.refreshSession(core === Core.Cpu0);
       this.recordLoadedElfMetadata(core, fileName, bytes, header.hasDebugInfo);
       try {
         this.memoryMapText.set(await client.getMap(core, true));
@@ -339,6 +340,9 @@ export class BoardStore implements OnDestroy {
     this.ledStates.set(Array<boolean>(8).fill(false));
     this.uploadProgress.set(null);
     this.memoryMapText.set('');
+    this.cpu0ElfName.set(null); this.cpu1ElfName.set(null);
+    this.cpu0ElfSymbols.set([]); this.cpu1ElfSymbols.set([]);
+    this.cpu0HasDwarf.set(false); this.cpu1HasDwarf.set(false);
     if (typeof document !== 'undefined') {
       document.title = 'RA8 Emulator';
     }

@@ -21,7 +21,7 @@ const none: proto.SourceLine = .{ .found = 0, .pc = 0, .line = 0, .path = "" };
 
 pub fn sourceLine(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const view = context.session.view(which) catch |err| return refuse(err);
+    const view = context.session.?.view(which) catch |err| return refuse(err);
     const pc = view.register(.pc) catch |err| return refuse(err);
     const loaded = imageOf(context, which) orelse return .{ .ok = none };
     const place = (dwarf_line.lookup(dwarf_line.ofImage(loaded), pc) catch null) orelse return .{ .ok = none };

@@ -22,6 +22,7 @@ describe('DebugRouteComponent', () => {
     const prefs = TestBed.inject(PreferencesStore);
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.setObserveOnly(true);
     debug.cpu0Registers.set({ pc: 0x0200_0100, sp: 0x2200_4000 });
     execution.executionStatus.set('halted');

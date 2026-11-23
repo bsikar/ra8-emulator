@@ -5,6 +5,19 @@ import { RpcConnectionStore } from '../../../src/app/core/rpc/rpc-connection.sto
 import { DebugPointsStore } from '../../../src/app/core/stores/debug-points.store';
 
 describe('DebugPointsStore named breakpoint preservation', () => {
+  it('drops obsolete point IDs when a session closes or is replaced', () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const points = TestBed.inject(DebugPointsStore);
+    points.cpu0Breakpoints.set(new Map([[0x2000100, 1]]));
+    points.cpu1Breakpoints.set(new Map([[0x2000200, 2]]));
+    rpc.sessionChanged$.next(false);
+    expect(points.allBreakpoints()).toEqual([]);
+    points.cpu0Breakpoints.set(new Map([[0x2000300, 1]]));
+    rpc.sessionChanged$.next(true);
+    expect(points.allBreakpoints()).toEqual([]);
+  });
+
   it('collects explicit symbol names, deferred symbols, and symbol-matched gutter addresses', async () => {
     TestBed.configureTestingModule({});
     const rpc = TestBed.inject(RpcConnectionStore);

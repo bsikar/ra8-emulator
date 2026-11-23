@@ -14,6 +14,7 @@ pub const protocol_version: u16 = 1;
 pub const capabilities: u32 = 0x0048_7FFF;
 pub const recovery_cap: u32 = 1 << 19;
 /// Capability bit 15, the transport topic (ORed in when frame loop pumps).
+pub const lifecycle_cap: u32 = 1 << 23;
 pub const transport_cap: u32 = 0x0000_8000;
 pub const max_payload = 1_048_576;
 
@@ -22,6 +23,7 @@ pub const app_codes = struct {
     pub const no_core: u16 = 0x0101;
     pub const too_long: u16 = 0x0102;
     pub const history: u16 = 0x0103;
+    pub const no_session: u16 = 0x0104;
 };
 
 pub const Method = @import("method.zig").Method;

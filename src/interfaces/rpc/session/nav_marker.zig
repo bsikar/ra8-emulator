@@ -47,13 +47,13 @@ pub fn markerSet(context: *handlers.Context, args: proto.MarkerSetArgs) Outcome 
     const plane = context.transport orelse return refuse();
     const wall = context.wall orelse return refuse();
     const gpa = context.gpa orelse return refuse();
-    const nav = context.session.nav_index orelse return refuse();
+    const nav = context.session.?.nav_index orelse return refuse();
     const named = resolve(context, args.place) orelse return .{ .err = .bad_args };
     const address = named & ~@as(u32, 1); // the Thumb bit names the mode, not the place
     const end = historyEnd(plane);
     nav.dropStaleMarkers(end);
     if (nav.markerArrivalCount(args.name) == 0) {
-        const origin = context.session.currentPosition();
+        const origin = context.session.?.currentPosition();
         var scan: Scan = .{ .plane = plane };
         const armed = late_marker.armLate(gpa, context.nav.markers, cache_file, args.name, address, end, .{
             .context = &scan,

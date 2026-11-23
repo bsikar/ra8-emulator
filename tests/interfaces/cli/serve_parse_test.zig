@@ -6,7 +6,7 @@ const parse = cli_app.serve.main.parse;
 
 test "a bare transport asks for no options" {
     const asked = parse(&.{ "ra8_emulator", "serve", "--stdio", "a.elf" }).?;
-    try std.testing.expectEqualStrings("a.elf", asked.elf);
+    try std.testing.expectEqualStrings("a.elf", asked.elf.?);
     try std.testing.expect(!asked.folded);
     try std.testing.expect(asked.cpu1 == null);
 }
@@ -17,7 +17,7 @@ test "--cpu1 and --profile-folded come in either order" {
     for ([_]@TypeOf(one){ one, two }) |asked| {
         try std.testing.expect(asked.folded);
         try std.testing.expectEqualStrings("b.elf", asked.cpu1.?);
-        try std.testing.expectEqualStrings("a.elf", asked.elf);
+        try std.testing.expectEqualStrings("a.elf", asked.elf.?);
     }
 }
 
@@ -40,7 +40,7 @@ test "--sd-dir and repeated --app fill the card the server opens with (RA8EMU-11
     try std.testing.expectEqualStrings("card", asked.sdhi.dir.?);
     try std.testing.expectEqual(@as(usize, 2), asked.sdhi.appPaths().len);
     try std.testing.expectEqualStrings("f.ra8app", asked.sdhi.appPaths()[1]);
-    try std.testing.expectEqualStrings("a.elf", asked.elf);
+    try std.testing.expectEqualStrings("a.elf", asked.elf.?);
 }
 
 test "--sd-dir is taken at most once" {

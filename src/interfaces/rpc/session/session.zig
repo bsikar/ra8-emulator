@@ -17,6 +17,7 @@ pub const handlers = @import("handlers.zig");
 pub const input = @import("input.zig");
 pub const intervene = @import("intervene.zig");
 pub const lcd_feed = @import("lcd_feed.zig");
+pub const lifecycle = @import("lifecycle.zig");
 pub const load_chunks = @import("load_chunks.zig");
 pub const locals = @import("locals.zig");
 pub const locals_wire = @import("locals_wire.zig");

@@ -15,6 +15,7 @@ describe('DebugCodePaneComponent', () => {
 
   it('switches Source/Disasm/Mixed/Decomp modes, toggles gutter breakpoint, and moves Vim cursor', async () => {
     const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.sessionLoaded.set(true);
     const debug = TestBed.inject(DebugStore);
     const execution = TestBed.inject(ExecutionStore);
     const vim = TestBed.inject(VimStore);

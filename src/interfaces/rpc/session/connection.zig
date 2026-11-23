@@ -11,6 +11,11 @@ pub fn forget(context: *Context) void {
     project.forget(context);
     build.forget(context);
     context.workspace_watches.clear();
+    context.chunks.drop();
+    clearSession(context);
+}
+
+pub fn clearSession(context: *Context) void {
     context.topics = .{ 0, 0 };
     context.pending = null;
     context.advance_ticket = null;
@@ -31,11 +36,11 @@ pub fn forget(context: *Context) void {
 pub fn unwatch(context: *Context) void {
     if (context.lcd_feed == null) return;
     release(context, &context.lcd_feed);
-    if (context.session.display) |display| display.watch(false);
+    if (context.session.?.display) |display| display.watch(false);
 }
 
 pub fn release(context: *Context, feed: *?usize) void {
     const id = feed.* orelse return;
-    context.session.unsubscribe(id);
+    if (context.session) |session| session.unsubscribe(id);
     feed.* = null;
 }

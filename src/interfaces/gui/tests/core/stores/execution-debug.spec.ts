@@ -15,6 +15,33 @@ import { DebugStore } from '../../../src/app/core/stores/debug.store';
 import { ExecutionStore } from '../../../src/app/core/stores/execution.store';
 
 describe('ExecutionStore and DebugStore', () => {
+  it('clears debugger state when firmware is replaced while remaining loaded', () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const debug = TestBed.inject(DebugStore);
+    rpc.sessionLoaded.set(true);
+    debug.cpu0PrevRegisters.set({ pc: 0x2000100 });
+    debug.cpu1Registers.set({ pc: 0x2000200 });
+    debug.canUndoWrite.set(true);
+    rpc.sessionChanged$.next(true);
+    expect(rpc.sessionLoaded()).toBe(true);
+    expect(debug.cpu0PrevRegisters()).toEqual({});
+    expect(debug.cpu1Registers()).toEqual({});
+    expect(debug.canUndoWrite()).toBe(false);
+  });
+
+  it('keeps execution disabled on an idle backend', async () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const execution = TestBed.inject(ExecutionStore);
+    const step = vi.fn();
+    Object.defineProperty(rpc, 'activeClient', { get: () => ({ step }) });
+    rpc.connectionState.set('connected');
+    expect(execution.canControlTarget()).toBe(false);
+    await execution.step();
+    expect(step).not.toHaveBeenCalled();
+  });
+
   it('drives continuous run via Topic.Transport slices without setTimeout polling', async () => {
     TestBed.configureTestingModule({});
     const rpc = TestBed.inject(RpcConnectionStore);
@@ -32,6 +59,7 @@ describe('ExecutionStore and DebugStore', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.serverCaps.set(CAP_TRANSPORT);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
 
@@ -87,6 +115,7 @@ describe('ExecutionStore and DebugStore', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.serverCaps.set(CAP_WORKSPACE);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
 
@@ -123,6 +152,7 @@ describe('ExecutionStore and DebugStore', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     execution.cpu1Attached.set(true);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
 
@@ -170,6 +200,7 @@ describe('ExecutionStore and DebugStore', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.setObserveOnly(true);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
 
@@ -206,6 +237,7 @@ describe('ExecutionStore and DebugStore', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.serverCaps.set(CAP_TRANSPORT);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
 

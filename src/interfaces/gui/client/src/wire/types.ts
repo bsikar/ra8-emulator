@@ -15,6 +15,7 @@ export const CAP_BUILD = 1 << 17;
 export const CAP_PROJECT = 1 << 18;
 export const CAP_RECOVERY = 1 << 19;
 export const CAP_ARTIFACTS = 1 << 20;
+export const CAP_SESSION_LIFECYCLE = 1 << 23;
 export const CAP_TARGETS = 1 << 21;
 
 export const DEFAULT_CLIENT_CAPS =
@@ -25,7 +26,8 @@ export const DEFAULT_CLIENT_CAPS =
   CAP_PROJECT |
   CAP_RECOVERY |
   CAP_ARTIFACTS |
-  CAP_TARGETS;
+  CAP_TARGETS |
+  CAP_SESSION_LIFECYCLE;
 
 /** Wire message kinds (`Kind` in `ra8_rpc/envelope.zig`). */
 export enum Kind {
@@ -55,6 +57,7 @@ export enum ErrorCode {
   AppNoCore = 0x0101,
   AppTooLong = 0x0102,
   AppHistory = 0x0103,
+  AppNoSession = 0x0104,
   WorkspaceUnavailable = 0x0150,
   WorkspaceInvalidPath = 0x0151,
   WorkspaceConflict = 0x0152,
@@ -89,6 +92,9 @@ export enum ErrorCode {
 
 /** Session (`0x0100..0x013F`) and backend (`0x0140..0x0193`) RPC opcodes. */
 export enum Method {
+  SessionStatus = 0x01a3,
+  SessionClose = 0x01a4,
+  SessionConfigure = 0x01a5,
   Load = 0x0100,
   Run = 0x0101,
   Pause = 0x0102,

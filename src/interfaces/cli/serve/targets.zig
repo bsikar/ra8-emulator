@@ -39,6 +39,7 @@ pub const Provider = struct {
     binding: Binding,
     io: std.Io,
     session: ?*api.Session,
+    service_context: ?*Context = null,
 
     fn perform(context: *anyopaque, action: model.Action, out: []u8) ![]const u8 {
         const self: *Provider = @ptrCast(@alignCast(context));
@@ -57,7 +58,8 @@ pub const Provider = struct {
             };
             try probe.execute(self.io, request, &writer);
         } else {
-            const session = self.session orelse return error.Unsupported;
+            const active = if (self.service_context) |ctx| ctx.session else self.session;
+            const session = active orelse return error.Unsupported;
             switch (action) {
                 .halt => {
                     try session.pause(.cpu0);
@@ -85,6 +87,7 @@ pub const Inventory = struct {
     agent_target_count: usize = 0,
     hosts_texts: [16][]const u8 = undefined,
     hosts_text_count: usize = 0,
+    service_context: ?*Context = null,
     allocator: ?std.mem.Allocator = null,
     parsed: ?std.json.Parsed([]Binding) = null,
 
@@ -112,10 +115,15 @@ pub const Inventory = struct {
                 .jlink => try self.addProbe(io, descriptor, binding),
                 .agent => try self.addAgent(allocator, io, bindings[0..i], descriptor, binding),
                 .emulator => {
-                    if (session == null) return error.InvalidEndpoint;
+                    if (session == null and self.service_context == null) return error.InvalidEndpoint;
                     if (emulator) return error.DuplicateEmulator;
                     emulator = true;
-                    self.providers[i] = .{ .binding = binding, .io = io, .session = session };
+                    self.providers[i] = .{
+                        .binding = binding,
+                        .io = io,
+                        .session = session,
+                        .service_context = self.service_context,
+                    };
                     _ = try self.registry.add(descriptor, .{
                         .context = &self.providers[i],
                         .performFn = Provider.perform,
@@ -123,7 +131,12 @@ pub const Inventory = struct {
                 },
                 .rsp => {
                     try uniqueEndpoint(bindings[0..i], binding);
-                    self.providers[i] = .{ .binding = binding, .io = io, .session = session };
+                    self.providers[i] = .{
+                        .binding = binding,
+                        .io = io,
+                        .session = session,
+                        .service_context = self.service_context,
+                    };
                     _ = try self.registry.add(descriptor, .{
                         .context = &self.providers[i],
                         .performFn = Provider.perform,
@@ -231,6 +244,7 @@ pub const Inventory = struct {
         context: *Context,
     ) !void {
         const file = path orelse return;
+        self.service_context = context;
         try self.open(allocator, io, file, context.session);
         context.targets = &self.registry;
     }
@@ -249,6 +263,7 @@ pub const Inventory = struct {
         }
         if (self.parsed) |parsed| parsed.deinit();
         self.parsed = null;
+        self.service_context = null;
         self.registry.entries = @splat(null);
         self.registry.scanner = null;
         self.probe_count = 0;

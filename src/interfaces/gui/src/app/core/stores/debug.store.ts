@@ -1,4 +1,5 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   Access,
   type Backtrace,
@@ -65,13 +66,31 @@ export class DebugStore {
   );
 
   constructor() {
+    this.rpc.sessionChanged$.pipe(takeUntilDestroyed(inject(DestroyRef)))
+      .subscribe(() => this.resetView());
     effect(() => {
-      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected()) void this.refreshAll();
+      if (!this.rpc.sessionLoaded()) {
+        this.resetView();
+        return;
+      }
+      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected() && this.rpc.sessionLoaded()) void this.refreshAll();
     });
   }
 
+  private resetView(): void {
+    this.activeCore.set(Core.Cpu0);
+    this.selectedFrameIndex.set(0);
+    this.cpu0Registers.set({}); this.cpu1Registers.set({});
+    this.cpu0PrevRegisters.set({}); this.cpu1PrevRegisters.set({});
+    this.cpu0Disasm.set([]); this.cpu1Disasm.set([]);
+    this.cpu0Backtrace.set(null); this.cpu1Backtrace.set(null);
+    this.sourceLine.set(null); this.sourceFileLines.set([]); this.locals.set([]);
+    this.memoryBytes.set(new Uint8Array()); this.memoryPrevBytes.set(new Uint8Array());
+    this.canUndoWrite.set(false); this.lastSetVar.set(null);
+  }
+
   public async refreshAll(): Promise<void> {
-    if (!this.rpc.isConnected()) return;
+    if (!this.rpc.isConnected() || !this.rpc.sessionLoaded()) return;
     this.selectedFrameIndex.set(0);
     await Promise.all([
       this.refreshRegisters(),
@@ -86,7 +105,7 @@ export class DebugStore {
   public async selectCore(core: Core): Promise<void> {
     this.activeCore.set(core);
     this.selectedFrameIndex.set(0);
-    if (!this.rpc.isConnected()) return;
+    if (!this.rpc.isConnected() || !this.rpc.sessionLoaded()) return;
     await Promise.all([
       this.refreshSourceAndLocals(0),
       this.readMemoryPage(this.memoryAddress(), 256, core, true),

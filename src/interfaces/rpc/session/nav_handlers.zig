@@ -20,7 +20,7 @@ pub fn play(context: *handlers.Context, args: proto.PlayArgs) OutcomeAck {
 }
 
 pub fn navQuery(context: *handlers.Context, args: proto.NavQueryArgs) OutcomeResult {
-    const nav = context.session.nav_index orelse {
+    const nav = context.session.?.nav_index orelse {
         return .{ .ok = .{ .found = 0 } };
     };
     switch (args.kind) {
@@ -41,7 +41,7 @@ pub fn navQuery(context: *handlers.Context, args: proto.NavQueryArgs) OutcomeRes
 pub fn frameStatus(context: *handlers.Context, _: proto.CoreOnly) rpc.Outcome(proto.FrameStatusResult) {
     const hook = context.nav.status orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     const read = hook.readFn(hook.context);
-    const decoded: u64 = if (context.session.smooth_rewind) |rewind| rewind.decoded_segments else 0;
+    const decoded: u64 = if (context.session.?.smooth_rewind) |rewind| rewind.decoded_segments else 0;
     return .{ .ok = .{
         .ram_bytes = read.ram_bytes,
         .disk_bytes = read.disk_bytes,

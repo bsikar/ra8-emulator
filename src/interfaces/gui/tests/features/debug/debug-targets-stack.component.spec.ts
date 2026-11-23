@@ -14,6 +14,7 @@ describe('DebugTargetsStackComponent', () => {
 
   it('switches cores, selects stack frame, and arms named/hex breakpoints', async () => {
     const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.sessionLoaded.set(true);
     const execution = TestBed.inject(ExecutionStore);
     const debug = TestBed.inject(DebugStore);
     const profile = TestBed.inject(ProfileStore);

@@ -30,7 +30,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var due: [2]?Due = .{ null, null };
     var whole = false;
     var events: [batch]api.Event = undefined;
-    while (context.session.pollEvents(id, &events)) |read| {
+    while (context.session.?.pollEvents(id, &events)) |read| {
         whole = whole or read.dropped != 0;
         for (events[0..read.count]) |event| {
             whole = whole or event.kind == .rewound;
@@ -59,7 +59,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     }
     if (due[0] == null and due[1] == null) return;
     const gpa = context.gpa orelse return;
-    var frame = context.session.frame(gpa) catch |err| return skip("capture", err);
+    var frame = context.session.?.frame(gpa) catch |err| return skip("capture", err);
     defer frame.deinit(gpa);
     if (frame.pixels.len != @as(usize, frame.width) * frame.height) return skip("capture", error.BadFrameShape);
     const chunk = gpa.alloc(u8, max_pixels) catch |err| return skip("buffer", err);

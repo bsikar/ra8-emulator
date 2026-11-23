@@ -19,7 +19,7 @@ fn refuse() AckOutcome {
 pub fn branchList(context: *handlers.Context, args: proto.CoreOnly) ListOutcome {
     _ = args;
     const gpa = context.gpa orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
-    const router = context.session.fork_router orelse return .{
+    const router = context.session.?.fork_router orelse return .{
         .err = @fromBackingInt(@intCast(handlers.app_codes.history)),
     };
     const graph = router.graph orelse return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) };
@@ -53,7 +53,7 @@ pub fn branchList(context: *handlers.Context, args: proto.CoreOnly) ListOutcome 
 }
 
 pub fn branchSwitch(context: *handlers.Context, args: proto.BranchSwitch) AckOutcome {
-    lifecycle.switchBranch(context.session, context.transport, args.branch) catch |err| switch (err) {
+    lifecycle.switchBranch(context.session.?, context.transport, args.branch) catch |err| switch (err) {
         error.NoHistory => return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) },
         else => return refuse(),
     };
@@ -61,7 +61,7 @@ pub fn branchSwitch(context: *handlers.Context, args: proto.BranchSwitch) AckOut
 }
 
 pub fn branchDelete(context: *handlers.Context, args: proto.BranchDelete) AckOutcome {
-    _ = lifecycle.removeBranch(context.session, args.branch, args.confirm != 0) catch |err| switch (err) {
+    _ = lifecycle.removeBranch(context.session.?, args.branch, args.confirm != 0) catch |err| switch (err) {
         error.NoHistory => return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.history)) },
         else => return refuse(),
     };
@@ -70,19 +70,19 @@ pub fn branchDelete(context: *handlers.Context, args: proto.BranchDelete) AckOut
 
 pub fn branchConfirmFork(context: *handlers.Context, args: proto.BranchConfirmFork) AckOutcome {
     _ = args;
-    context.session.confirmFork() catch return refuse();
+    context.session.?.confirmFork() catch return refuse();
     return .{ .ok = .{ .accepted = 1 } };
 }
 
 pub fn branchCancelFork(context: *handlers.Context, args: proto.BranchCancelFork) AckOutcome {
     _ = args;
-    context.session.cancelFork();
+    context.session.?.cancelFork();
     return .{ .ok = .{ .accepted = 1 } };
 }
 
 pub fn branchStatus(context: *handlers.Context, args: proto.CoreOnly) StatusOutcome {
     _ = args;
-    if (context.session.forkPending()) |pending| {
+    if (context.session.?.forkPending()) |pending| {
         return .{
             .ok = .{
                 .pending = 1,

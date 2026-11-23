@@ -1,4 +1,5 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Access, Core, type ElfSymbol, type NamedPointResult } from 'ra8-rpc-client';
 import { formatHex32 } from '../../shared/utils/hex';
 import { RpcConnectionStore } from '../rpc/rpc-connection.store';
@@ -62,6 +63,22 @@ export class DebugPointsStore {
     }
     return [...out, ...this.deferredBreakpoints()];
   });
+
+  constructor() {
+    effect(() => {
+      if (!this.rpc.sessionLoaded()) this.reset();
+    });
+    this.rpc.sessionChanged$.pipe(takeUntilDestroyed(inject(DestroyRef))).subscribe(() => this.reset());
+  }
+
+  private reset(): void {
+    this.cpu0Breakpoints.set(new Map());
+    this.cpu1Breakpoints.set(new Map());
+    this.bpLabelsCpu0.clear();
+    this.bpLabelsCpu1.clear();
+    this.deferredBreakpoints.set([]);
+    this.watchpoints.set([]);
+  }
 
   public async toggleBreakpoint(address: number, core: Core, label?: string): Promise<boolean> {
     const client = this.rpc.activeClient;

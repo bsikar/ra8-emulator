@@ -11,7 +11,7 @@ const lcd_feed = @import("lcd_feed.zig");
 
 /// Sends the rewind frame the engine shows, if it is new to this connection.
 pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
-    const rewind = context.session.smooth_rewind orelse return;
+    const rewind = context.session.?.smooth_rewind orelse return;
     if (!rewind.isBusy()) {
         context.nav.rewind_sent = null;
         return;

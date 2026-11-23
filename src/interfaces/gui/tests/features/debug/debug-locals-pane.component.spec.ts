@@ -12,6 +12,7 @@ describe('DebugLocalsPaneComponent', () => {
 
   it('edits writable DWARF locals, renders read-only badge for optimized vars, and adds watches', async () => {
     const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.sessionLoaded.set(true);
     const debug = TestBed.inject(DebugStore);
     rpc.connectionState.set('connected');
 

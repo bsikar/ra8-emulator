@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { RpcConnectionStore } from '../core/rpc/rpc-connection.store';
 import { DebugStore } from '../core/stores/debug.store';
 import { ExecutionStore } from '../core/stores/execution.store';
@@ -17,6 +18,7 @@ import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
   selector: 'app-debug-route',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    RouterLink,
     SplitPaneComponent,
     StatusDotComponent,
     TonalButtonComponent,
@@ -37,7 +39,7 @@ import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
           </div>
           <app-status-dot
             [tone]="rpc.isConnected() ? (execution.isRunning() ? 'cursor' : 'nominal') : 'muted'"
-            [label]="execution.executionStatus()"
+            [label]="rpc.isConnected() && !rpc.sessionLoaded() ? 'No firmware loaded' : execution.executionStatus()"
           />
           @if (rpc.observeOnly()) {
             <span class="observe-pill" data-testid="debug-observe-pill">OBSERVE · Read-Only</span>
@@ -45,37 +47,44 @@ import { TonalButtonComponent } from '../shared/ui/tonal-button.component';
         </div>
 
         <div class="toolbar-right">
+          @if (rpc.isConnected() && !rpc.sessionLoaded()) {
+            <a routerLink="/open" data-testid="idle-open-elf">Open firmware…</a>
+          }
+          @if (rpc.supportsSessionLifecycle() && rpc.sessionLoaded()) {
+            <app-tonal-button testId="debug-close-session-btn" [disabled]="rpc.observeOnly()"
+              (pressed)="execution.closeSession()">Close Session</app-tonal-button>
+          }
           <app-tonal-button
             testId="debug-step-btn"
-            [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
+            [disabled]="!rpc.isConnected() || !rpc.sessionLoaded() || execution.isRunning() || rpc.observeOnly()"
             (pressed)="execution.step(debug.activeCore())"
           >
             Step
           </app-tonal-button>
           <app-tonal-button
             testId="debug-step-over-btn"
-            [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
+            [disabled]="!rpc.isConnected() || !rpc.sessionLoaded() || execution.isRunning() || rpc.observeOnly()"
             (pressed)="execution.stepOver(debug.activeCore())"
           >
             Step Over
           </app-tonal-button>
           <app-tonal-button
             testId="debug-step-out-btn"
-            [disabled]="!rpc.isConnected() || execution.isRunning() || rpc.observeOnly()"
+            [disabled]="!rpc.isConnected() || !rpc.sessionLoaded() || execution.isRunning() || rpc.observeOnly()"
             (pressed)="execution.stepOut(debug.activeCore())"
           >
             Step Out
           </app-tonal-button>
           <app-tonal-button
             testId="debug-run-btn"
-            [disabled]="!rpc.isConnected() || rpc.observeOnly()"
+            [disabled]="!rpc.isConnected() || !rpc.sessionLoaded() || rpc.observeOnly()"
             (pressed)="toggleRun()"
           >
             {{ execution.isRunning() ? 'Pause' : 'Continue' }}
           </app-tonal-button>
           <app-tonal-button
             testId="debug-reset-btn"
-            [disabled]="!rpc.isConnected() || rpc.observeOnly()"
+            [disabled]="!rpc.isConnected() || !rpc.sessionLoaded() || rpc.observeOnly()"
             (pressed)="execution.resetImage()"
           >
             Reset
@@ -143,7 +152,7 @@ export class DebugRouteComponent {
 
   constructor() {
     effect(() => {
-      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected()) {
+      if (this.execution.inspectionEpoch() > 0 && this.rpc.isConnected() && this.rpc.sessionLoaded()) {
         void this.profile.refreshStacks(this.execution.cpu1Attached());
       }
     });

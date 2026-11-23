@@ -51,6 +51,10 @@ describe('ConsoleStore, ProfileStore, and HardwareHilStore', () => {
     profileStore.foldedText.set('Reset_Handler;main;blink 40\nReset_Handler;main;idle 10');
     expect(profileStore.flamegraph().totalSamples).toBe(50);
     expect(profileStore.flamegraph().hotspot?.name).toBe('blink');
+    rpc.sessionChanged$.next(true);
+    expect(profileStore.traceTimeline()).toEqual([]);
+    expect(profileStore.foldedText()).toBe('');
+    expect(profileStore.metrics()).toBeNull();
   });
 
   it('parses first-@ endpoints and formats MODEL@ENDPOINT=MODE fault rules cleanly', () => {

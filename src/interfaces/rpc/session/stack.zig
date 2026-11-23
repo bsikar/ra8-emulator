@@ -12,7 +12,7 @@ const Outcome = rpc.Outcome(proto.StackReport);
 
 pub fn stack(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const view = context.session.view(which) catch |err| return refuse(err);
+    const view = context.session.?.view(which) catch |err| return refuse(err);
     const report: stack_low.Report = .{ .marks = view.stack(), .stack = reservation(context, which) };
     const marks = report.marks;
     const found = report.stack orelse region_map.Stack{ .base = 0, .size = 0, .region = null };

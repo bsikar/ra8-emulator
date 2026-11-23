@@ -43,6 +43,17 @@ function buildMinimalBundleTar(manifest: Record<string, unknown>): Uint8Array {
 }
 
 describe('BoardStore and RewindStore fixed wire semantics', () => {
+  it('clears secondary firmware metadata when the primary session is replaced', () => {
+    TestBed.configureTestingModule({});
+    const rpc = TestBed.inject(RpcConnectionStore);
+    const board = TestBed.inject(BoardStore);
+    board.cpu1ElfName.set('old-cpu1.elf');
+    board.cpu1HasDwarf.set(true);
+    rpc.sessionChanged$.next(true);
+    expect(board.cpu1ElfName()).toBeNull();
+    expect(board.cpu1HasDwarf()).toBe(false);
+  });
+
   it('decodes EventKind.LedChanged as index (bits 0..7) + level (bit 8) instead of bitmask', () => {
     expect(decodeLedEvent(0x0102)).toEqual({ index: 2, on: true });
     expect(decodeLedEvent(0x0002)).toEqual({ index: 2, on: false });
@@ -162,6 +173,9 @@ describe('BoardStore and RewindStore fixed wire semantics', () => {
     expect(rewind.recentBundles().length).toBe(1);
     rewind.removeRecentBundle(rewind.recentBundles()[0]!.id);
     expect(rewind.recentBundles().length).toBe(0);
+    rpc.sessionChanged$.next(true);
+    expect(rewind.activeDiff()).toBeNull();
+    expect(rewind.lastNavResult()).toBeNull();
 
     expect((await rewind.importArtifactBundle(new Uint8Array([9, 9])))?.accepted).toBe(true);
     expect(rewind.stagedBundlePreview()).toBeNull();

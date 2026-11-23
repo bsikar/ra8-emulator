@@ -52,14 +52,17 @@ export class RewindStore implements OnDestroy {
   public readonly diffRows = computed<DiffStateRow[]>(() =>
     this.activeDiff() ? mapDiffRows(this.activeDiff()!) : []
   );
-
   constructor() {
+    this.subs.add(this.rpc.sessionChanged$.subscribe((loaded) => {
+      this.resetState(); if (loaded) void this.refreshBranches();
+    }));
     this.subs.add(this.rpc.connected$.subscribe(() => void this.refreshBranches()));
     this.subs.add(this.rpc.disconnected$.subscribe(() => this.resetState()));
     this.subs.add(this.rpc.session$.subscribe((evt) => this.handleSessionEvent(evt)));
   }
 
   public async refreshBranches(): Promise<void> {
+    if (!this.rpc.sessionLoaded()) return;
     const client = this.rpc.activeClient;
     if (!client) return;
     try {

@@ -113,7 +113,7 @@ test.describe('Quick ELF Switching, Viewport Drop, Open Recent, and Reload', () 
     );
 
     await page.getByTestId('debug-code-viewport').click();
-    await page.keyboard.press('Control+r');
+    await page.keyboard.press('ControlOrMeta+r');
 
     await expect(page.getByText(/Reloaded firmware\.elf at reset/)).toBeVisible({ timeout: 10_000 });
     await expect(bpItems).toHaveCount(1, { timeout: 10_000 });

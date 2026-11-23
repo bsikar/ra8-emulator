@@ -2,6 +2,7 @@ import { Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import {
   CAP_ARTIFACTS,
+  CAP_SESSION_LIFECYCLE,
   CAP_BUILD,
   CAP_PROJECT,
   CAP_RECOVERY,
@@ -28,6 +29,7 @@ const EXPECTED_REFUSAL_CODES = new Set<number>([
   ErrorCode.AppRefused,
   ErrorCode.AppNoCore,
   ErrorCode.AppHistory,
+  ErrorCode.AppNoSession,
 ]);
 
 export function isExpectedRefusal(err: unknown): boolean {
@@ -71,6 +73,9 @@ export class RpcConnectionStore implements OnDestroy {
   public readonly connectionState = signal<ConnectionState>('disconnected');
   public readonly serverUrl = signal<string>(DEFAULT_RPC_URL);
   public readonly errorMessage = signal<string | null>(null);
+  public readonly sessionLoaded = signal<boolean>(false);
+  public readonly sessionChanged$ = new Subject<boolean>();
+  public readonly supportsSessionLifecycle = computed(() => this.hasCapability(CAP_SESSION_LIFECYCLE));
   public readonly serverCaps = signal<number>(0);
   public readonly toasts = signal<ToastItem[]>([]);
 
@@ -168,6 +173,7 @@ export class RpcConnectionStore implements OnDestroy {
       this.connectionState.set('connected');
       this.errorMessage.set(null);
       this.sessionEverConnected = true;
+      await this.refreshSession(false);
       await this.subscribeCoreTopics(client, Core.Cpu0);
       this.ensureReconnectLoop();
       this.connected$.next(hello);
@@ -179,6 +185,25 @@ export class RpcConnectionStore implements OnDestroy {
         this.errorMessage.set(`Backend unreachable at ${this.serverUrl()}: ${err instanceof Error ? err.message : String(err)}`);
       }
       return false;
+    }
+  }
+
+  public async refreshSession(notify = true): Promise<void> {
+    const client = this.activeClient;
+    if (!client) return;
+    const loaded = this.supportsSessionLifecycle() ? (await client.sessionStatus()).loaded : true;
+    this.sessionLoaded.set(loaded);
+    if (notify) this.sessionChanged$.next(loaded);
+  }
+
+  public async closeSession(): Promise<void> {
+    const client = this.activeClient;
+    if (!client || this.observeOnly() || !this.supportsSessionLifecycle()) return;
+    try {
+      await client.closeSession();
+      await this.refreshSession();
+    } catch (err) {
+      this.reportError('Close session failed', err);
     }
   }
 
@@ -203,6 +228,7 @@ export class RpcConnectionStore implements OnDestroy {
       this.lastHandshakeMs.set(null);
     }
     this.cleanupClient();
+    this.sessionLoaded.set(false);
     this.connectionState.set('disconnected');
     this.serverCaps.set(0);
     this.disconnected$.next();
@@ -223,11 +249,12 @@ export class RpcConnectionStore implements OnDestroy {
 
   private wireClientEvents(client: RA8RpcClient, silent: boolean): void {
     client.on('error', (err: Error) => {
-      if (!silent) this.errorMessage.set(err.message);
+      if (!silent && !isExpectedRefusal(err)) this.errorMessage.set(err.message);
     });
     client.on('close', () => {
       if (this.client !== client) return;
       this.client = null;
+      this.sessionLoaded.set(false);
       this.connectionState.set('disconnected');
       this.disconnected$.next();
     });

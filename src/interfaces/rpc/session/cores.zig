@@ -9,7 +9,7 @@ const wire = @import("cores_wire.zig");
 pub const Outcome = rpc.Outcome(wire.CoreList);
 
 pub fn listCores(context: *handlers.Context, _: struct {}) Outcome {
-    const desc = context.session.machine_desc;
+    const desc = context.session.?.machine_desc;
     const need = wire.max_items * wire.item_bytes;
     if (context.scratch.len < need) {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.too_long)) };
@@ -21,7 +21,7 @@ pub fn listCores(context: *handlers.Context, _: struct {}) Outcome {
         .{ @as(u8, 1), chip.core.machine.Slot.cpu1, api.Core.cpu1 },
     }) |entry| {
         if (desc.core(entry[1])) |info| {
-            wire.put(buf, written, itemOf(entry[0], context.session.hasCore(entry[2]), info));
+            wire.put(buf, written, itemOf(entry[0], context.session.?.hasCore(entry[2]), info));
             written += 1;
         }
     }

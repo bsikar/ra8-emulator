@@ -13,7 +13,7 @@ pub const SetVarOutcome = rpc.Outcome(wire.SetVarReply);
 
 pub fn setVar(context: *Context, request: wire.SetVarArgs) SetVarOutcome {
     const which: api.Core = if (request.core == .cpu0) .cpu0 else .cpu1;
-    if (!context.session.hasCore(which)) {
+    if (!context.session.?.hasCore(which)) {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     }
     const image = handlers.imageOf(context, which) orelse return .{ .ok = .{
@@ -25,7 +25,7 @@ pub fn setVar(context: *Context, request: wire.SetVarArgs) SetVarOutcome {
         .message = "no firmware image loaded on core",
     } };
 
-    const result = var_write.set(context.session, which, image, request.frame, request.name, request.value) catch {
+    const result = var_write.set(context.session.?, which, image, request.frame, request.name, request.value) catch {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.refused)) };
     };
     return .{ .ok = .{

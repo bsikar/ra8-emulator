@@ -14,6 +14,7 @@ describe('DebugMemoryPaneComponent', () => {
     const rpc = TestBed.inject(RpcConnectionStore);
     const debug = TestBed.inject(DebugStore);
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     debug.activeCore.set(Core.Cpu1);
 
     const calls: Array<{ core: Core; addr: number; byte?: number }> = [];
