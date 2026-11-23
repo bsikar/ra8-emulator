@@ -285,10 +285,15 @@ pub fn skipBkpt(self: *Session, core: Core) anyerror!void {
 }
 
 pub fn load(self: *Session, core: Core, image: []const u8) anyerror!void {
-    if (new_history.differs(self, core, image)) return new_history.start(self, core, image);
+    if (new_history.differs(self, core, image)) {
+        try new_history.start(self, core, image);
+        self.labels.clearCore(core);
+        return;
+    }
     if (self.root == null and self.fork_router != null) {
         const idx = @as(usize, @backingInt(core));
         if (self.image_identity[idx] == null) self.image_identity[idx] = history_root.identity(image);
     }
-    return routeIntervention(self, core, .load, .{ .load = .{ .core = core, .image = image } });
+    try routeIntervention(self, core, .load, .{ .load = .{ .core = core, .image = image } });
+    self.labels.clearCore(core);
 }

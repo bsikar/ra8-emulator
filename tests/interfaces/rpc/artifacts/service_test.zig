@@ -17,8 +17,11 @@ test "export download and checked upload prepare a replacement before activation
     defer f.close();
     const context = &f.original.context;
     const saved = try context.session.?.register(.cpu0, .r0);
+    const address: ra8.session.labels.Key = .{ .core = .cpu0, .address = 0x2000000 };
+    try context.session.?.labels.set(address, "start_here", 0);
     const descriptor = try ok(artifacts.wire.Descriptor, artifacts.handlers.exportBegin(context, .{ .recording = 0 }));
     try context.session.?.setRegister(.cpu0, .r0, saved +% 1);
+    try context.session.?.labels.set(address, "changed_after_capture", 0);
     var bytes = std.Io.Writer.Allocating.init(gpa);
     defer bytes.deinit();
     while (bytes.written().len < descriptor.total) {
@@ -42,17 +45,23 @@ test "export download and checked upload prepare a replacement before activation
     try std.testing.expectEqual(saved +% 1, try f.original.owner.session().register(.cpu0, .r0));
     f.service.activate();
     try std.testing.expect(f.service.active != f.original);
-    try std.testing.expectEqual(saved, try f.service.active.owner.session().register(.cpu0, .r0));
+    const restored = f.service.active.owner.session();
+    try std.testing.expectEqual(saved, try restored.register(.cpu0, .r0));
+    try std.testing.expectEqualStrings("start_here", restored.labels.at(address).?.name());
 }
 
 test "RAM recording capture imports its root branches and checkpoint objects" {
     var f = try fixture.Fixture.open();
     defer f.close();
+    const key: ra8.session.labels.Key = .{ .core = .cpu0, .address = 0x2000000 };
+    try f.original.owner.session().labels.set(key, "recorded_entry", 0);
     const file = try artifacts.capture.make(f.original, f.service.spool, true);
     defer file.close(std.testing.io);
     try f.service.prepare(file);
     try std.testing.expect(f.service.pending.?.history != null);
     f.service.activate();
+    const restored = f.service.active.owner.session();
+    try std.testing.expectEqualStrings("recorded_entry", restored.labels.at(key).?.name());
     const facts = try ra8.rpc.history_bridge.Bridge.facts(&f.service.active.bridge.?);
     try std.testing.expect(facts.checkpoints.len > 0);
 }

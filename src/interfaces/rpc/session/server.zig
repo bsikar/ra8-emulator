@@ -13,6 +13,7 @@ const build = @import("../build.zig");
 const build_wire = @import("../build_wire.zig");
 const event_feed = @import("event_feed.zig");
 const handlers = @import("handlers.zig");
+const label = @import("label.zig");
 const lcd_feed = @import("lcd_feed.zig");
 const lifecycle = @import("lifecycle.zig");
 const parts = @import("parts.zig");
@@ -128,6 +129,8 @@ const session_routes = .{
     .{ @backingInt(M.frame_status), lifecycle.guard(.frame_status, session_nav.frameStatus) },
     .{ @backingInt(M.diff), lifecycle.guard(.diff, session_diff.diff) },
     .{ @backingInt(M.set_var), lifecycle.guard(.set_var, session_set_var.setVar) },
+    .{ @backingInt(M.label_set), lifecycle.guard(.label_set, label.set) },
+    .{ @backingInt(M.local_label_set), lifecycle.guard(.local_label_set, label.setLocal) },
     .{ @backingInt(M.list_cores), lifecycle.guard(.list_cores, session_cores.listCores) },
     .{ @backingInt(M.disasm), lifecycle.guard(.disasm, session_disasm.disasm) },
     .{ @backingInt(M.step_back), lifecycle.guard(.step_back, session_intervene.stepBack) },

@@ -102,7 +102,9 @@
             @if (line.rawHex) {
               <span class="raw-bytes mono">{{ line.rawHex }}</span>
             }
-            @if (line.symbol) {
+            @if (line.address !== null && line.kind !== 'source' && line.kind !== 'header') {
+              <app-debug-address-label [address]="line.address" [core]="debug.activeCore()" [name]="line.symbol" />
+            } @else if (line.symbol) {
               <span class="sym-tag mono">&lt;{{ line.symbol }}&gt;</span>
             }
             <span class="code-tokens mono">

@@ -7,7 +7,10 @@
 const api = @import("ra8_session").api;
 const backtrace_mod = @import("backtrace.zig");
 const dwarf_locals = @import("ra8_session").dwarf.locals;
+const dwarf_vars = @import("ra8_session").dwarf.vars;
 const handlers = @import("handlers.zig");
+const label_locals = @import("ra8_session").label_locals;
+const labels = @import("ra8_session").labels;
 const locals_wire = @import("../locals_wire.zig");
 const proto = @import("rpc.zig");
 const rpc = @import("ra8_rpc_wire");
@@ -38,7 +41,7 @@ pub fn localsAt(context: *handlers.Context, args: proto.CoreFrame) Outcome {
 
 /// The pc a frame's locals read at: the stopped pc, or the call site the
 /// frame sits in (a return address is the instruction after the call).
-fn pcAtFrame(context: *handlers.Context, view: anytype, which: api.Core, frame: u32) !u32 {
+pub fn pcAtFrame(context: *handlers.Context, view: anytype, which: api.Core, frame: u32) !u32 {
     if (frame == 0) return view.register(.pc);
     const image = imageOf(context, which);
     var walked: [unwind.limits.frames]unwind.Frame = undefined;
@@ -51,12 +54,22 @@ fn pcAtFrame(context: *handlers.Context, view: anytype, which: api.Core, frame: 
 fn rowsAt(context: *handlers.Context, which: api.Core, shown: proto.Core, pc: u32) Outcome {
     const loaded = imageOf(context, which) orelse return .{ .ok = .{ .core = shown, .count = 0, .rows = "" } };
     var into: [proto.locals_rows]dwarf_locals.Local = undefined;
-    const count = dwarf_locals.inFunction(dwarf_locals.ofImage(loaded), pc, &into) catch |err| return refuse(err);
+    const sections = dwarf_locals.ofImage(loaded);
+    const count = dwarf_locals.inFunction(sections, pc, &into) catch |err| return refuse(err);
     var at: usize = 0;
+    const names: labels.View = .{ .map = &context.session.?.labels, .core = which };
     for (into[0..count]) |found| {
-        locals_wire.put(context.scratch[0..proto.locals_bytes], &at, describe(found)) catch |err| return refuse(err);
+        var row = describe(found);
+        if (localLabel(names, sections, pc, found.name)) |name| row.name = name;
+        locals_wire.put(context.scratch[0..proto.locals_bytes], &at, row) catch |err| return refuse(err);
     }
     return .{ .ok = .{ .core = shown, .count = @intCast(count), .rows = context.scratch[0..at] } };
+}
+
+fn localLabel(names: labels.View, sections: dwarf_locals.Sections, pc: u32, name: []const u8) ?[]const u8 {
+    if (!label_locals.hasLocals(names)) return null;
+    const variable = (dwarf_vars.findLocal(sections, pc, name) catch null) orelse return null;
+    return label_locals.nameOf(names, variable);
 }
 
 fn describe(found: dwarf_locals.Local) proto.LocalRow {

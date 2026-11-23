@@ -37,7 +37,9 @@ function registerEnumTests(suite) {
 
   suite.test("Method defines all 64 session opcodes (0x0100..0x013F) plus backend and lifecycle opcodes", () => {
     const numeric = Object.values(Method).filter((v) => typeof v === "number");
-    assert.equal(numeric.length, 90);
+    assert.equal(numeric.length, 92);
+    assert.equal(Method.LabelSet, 0x01a6);
+    assert.equal(Method.LocalLabelSet, 0x01a7);
     assert.equal(Method.Load, 0x0100);
     assert.equal(Method.Interrupt, 0x0110);
     assert.equal(Method.SetRunBudget, 0x0111);

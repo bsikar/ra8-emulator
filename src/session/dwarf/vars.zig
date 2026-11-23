@@ -39,6 +39,7 @@ pub const Variable = struct {
     location: Location,
     type_info: TypeInfo,
     frame_base_expr: []const u8 = "",
+    die_offset: usize = 0,
 };
 
 const UnitHeader = struct {
@@ -114,6 +115,7 @@ fn searchUnitLocal(sections: locals.Sections, unit: UnitHeader, pc: u32, wanted:
     var matched: ?Variable = null;
 
     while (!cur.done()) {
+        const die_offset = cur.at;
         const code = try cur.uleb();
         if (code == 0) {
             if (depth > 0) depth -= 1;
@@ -148,6 +150,7 @@ fn searchUnitLocal(sections: locals.Sections, unit: UnitHeader, pc: u32, wanted:
             matched = .{
                 .name = attrs.name,
                 .scope = .local,
+                .die_offset = die_offset,
                 .location = var_loc.classify(attrs.loc_form, attrs.loc_bytes, attrs.has_const_val, unit.addr_size),
                 .type_info = ti,
                 .frame_base_expr = activeFrameBase(scopes[0..depth]),

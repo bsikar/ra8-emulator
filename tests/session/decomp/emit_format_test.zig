@@ -24,7 +24,7 @@ test "writeConstant, writeCondition, and writeValue format constants, conditions
 
     var buf: [256]u8 = undefined;
     var w: std.Io.Writer = .fixed(&buf);
-    try decomp.emit_format.writeConstant(&w, image, banner_sym.value, true);
+    try decomp.emit_format.writeConstant(&w, .{ .image = image }, banner_sym.value, true);
     try std.testing.expect(std.mem.indexOf(u8, w.buffered(), "k_uart_irq_banner") != null);
 
     var cbuf: [128]u8 = undefined;
@@ -36,16 +36,16 @@ test "writeConstant, writeCondition, and writeValue format constants, conditions
         .lhs_reg = 3,
         .rhs_imm = 0,
     };
-    try decomp.emit_format.writeCondition(&cw, null, 1, origin, null);
+    try decomp.emit_format.writeCondition(&cw, .{}, 1, origin, null);
     try std.testing.expectEqualStrings("r3 != 0", cw.buffered());
 
     var sbuf: [64]u8 = undefined;
     var sw: std.Io.Writer = .fixed(&sbuf);
-    try decomp.emit_format.writeCondition(&sw, null, 0, null, 2);
+    try decomp.emit_format.writeCondition(&sw, .{}, 0, null, 2);
     try std.testing.expectEqualStrings("r2 == 0", sw.buffered());
 
     var vbuf: [64]u8 = undefined;
     var vw: std.Io.Writer = .fixed(&vbuf);
-    try decomp.emit_format.writeValue(&vw, null, .{ .sp_offset = -16 }, 2);
+    try decomp.emit_format.writeValue(&vw, .{}, .{ .sp_offset = -16 }, 2);
     try std.testing.expectEqualStrings("sp - 0x10", vw.buffered());
 }

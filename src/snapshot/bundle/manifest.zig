@@ -14,6 +14,7 @@ pub const Metadata = struct {
     board: []const u8,
     elf0: Image,
     elf1: ?Image = null,
+    labels: ?[]const u8 = null,
 };
 
 pub const Elf = struct {
@@ -35,6 +36,7 @@ pub const Manifest = struct {
     elf0: Elf,
     elf1: ?Elf,
     recording: bool,
+    labels: ?[]const u8 = null,
 };
 
 pub fn encode(buffer: []u8, metadata: Metadata, recording: bool) ![]const u8 {
@@ -53,6 +55,7 @@ pub fn encode(buffer: []u8, metadata: Metadata, recording: bool) ![]const u8 {
         .elf0 = Elf.from(metadata.elf0),
         .elf1 = if (metadata.elf1) |image| Elf.from(image) else null,
         .recording = recording,
+        .labels = metadata.labels,
     }, .{}, &out);
     return out.buffered();
 }
