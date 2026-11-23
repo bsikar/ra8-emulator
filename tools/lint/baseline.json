@@ -209,7 +209,6 @@
     {"count": 1, "fingerprint": "c0c246890054c3c7ae2360dd32af01b53bb3f740ea35c9abcea29bd4aa541f4c", "path": "src/interfaces/rpc/session/diff.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "ea33f6463a077b0ec2e3ef17bbe4415c3f813ddd9731a8fb9aef0b48f3ee8139", "path": "src/interfaces/rpc/session/diff.zig", "rule": "no_swallow_error"},
     {"count": 1, "fingerprint": "e0383b285df68ddc48a9e6395bcef9977cb8ca8b938f4e29428da3fca1d41ec0", "path": "src/interfaces/rpc/session/diff_target.zig", "rule": "no_swallow_error"},
-    {"count": 1, "fingerprint": "ae2b83cb91ffb0a8a8b01237b7b81f4be749ba36a4285d975d9c2f2506677458", "path": "src/interfaces/rpc/session/handlers.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "e625819d3081eeec9c5f754cee258421adab541a6f2fab2bee63231d6cd6abce", "path": "src/interfaces/rpc/session/lcd_feed.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "ac32743ec772de18d6011841e1d54dcdf82ce8a29d97f8c303ba2f334f7ed7de", "path": "src/interfaces/rpc/session/trace_feed.zig", "rule": "complexity"},
     {"count": 1, "fingerprint": "1b63dc408aa6cb6213de8acc83c659032da100b391dcaad1817aa7416b73f7fc", "path": "src/interfaces/rpc/session/uart_feed.zig", "rule": "complexity"},

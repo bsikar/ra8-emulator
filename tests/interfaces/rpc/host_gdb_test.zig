@@ -53,7 +53,7 @@ test "host GDB serves ordinary packets, reconnects and drops a slow peer in fini
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, io, &env);
     defer bound.deinit();
-    const port = try bound.addGdb("fixture.elf", opened.context.session);
+    const port = try bound.addGdb("fixture.elf", opened.context.session.?);
     const host = bound.gdb.items[0];
     const address = std.Io.net.IpAddress{ .ip4 = .loopback(port) };
     for (0..4) |_| {
@@ -116,7 +116,7 @@ test "host GDB sends port 0's console text as O packets ahead of the stop reply"
     defer opened.deinit();
     var bound = try listener_mod.Listener.bind(gpa, io, &env);
     defer bound.deinit();
-    const port = try bound.addGdb("fixture.elf", opened.context.session);
+    const port = try bound.addGdb("fixture.elf", opened.context.session.?);
     const host = bound.gdb.items[0];
     const address = std.Io.net.IpAddress{ .ip4 = .loopback(port) };
     const client = try address.connect(io, .{ .mode = .stream });
@@ -125,7 +125,7 @@ test "host GDB sends port 0's console text as O packets ahead of the stop reply"
 
     // Print through stimulus port 0 while the target is paused.
     const itm = ra8.chip.periph.itm;
-    const itmp = try opened.context.session.itmPort(opened.context.session.currentCore());
+    const itmp = try opened.context.session.?.itmPort(opened.context.session.?.currentCore());
     _ = itmp.write(itm.offsets.tcr, itm.tcr_bits.itmena, 4);
     _ = itmp.write(itm.offsets.ter, 1, 4);
     for ("host console\n") |ch| _ = itmp.write(itm.offsets.stim0, ch, 1);

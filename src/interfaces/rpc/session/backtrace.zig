@@ -25,7 +25,7 @@ comptime {
 
 pub fn backtrace(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const view = context.session.view(which) catch |err| return refuse(err);
+    const view = context.session.?.view(which) catch |err| return refuse(err);
     if (context.scratch.len < proto.backtrace_bytes) return refuse(error.NoRoom);
     const image = imageOf(context, which);
     var walked: [unwind.limits.frames]unwind.Frame = undefined;

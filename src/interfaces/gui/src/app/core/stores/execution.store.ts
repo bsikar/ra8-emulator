@@ -38,9 +38,13 @@ export class ExecutionStore implements OnDestroy {
 
   public readonly virtualTimeLabel = computed(() => formatVirtualTime(this.virtualTimeNs()));
   public readonly isRunning = computed(() => this.executionStatus() === 'running');
-  public readonly canControlTarget = computed(() => this.rpc.isConnected() && !this.rpc.observeOnly());
+  public readonly canControlTarget = computed(() => this.rpc.isConnected() && this.rpc.sessionLoaded() && !this.rpc.observeOnly());
 
   constructor() {
+    this.subs.add(this.rpc.sessionChanged$.subscribe((loaded) => {
+      if (loaded) void this.onConnected();
+      else this.onDisconnected();
+    }));
     this.subs.add(this.rpc.connected$.subscribe(() => void this.onConnected()));
     this.subs.add(this.rpc.disconnected$.subscribe(() => this.onDisconnected()));
     this.subs.add(this.rpc.stop$.subscribe((evt) => this.handleStop(evt)));
@@ -56,6 +60,11 @@ export class ExecutionStore implements OnDestroy {
     this.continuousWanted = true;
     this.executionStatus.set('running');
     await this.pumpNextSlice();
+  }
+
+  public async closeSession(): Promise<void> {
+    this.continuousWanted = false;
+    await this.rpc.closeSession();
   }
 
   public async pause(): Promise<void> {
@@ -185,7 +194,7 @@ export class ExecutionStore implements OnDestroy {
 
   public async refreshClock(): Promise<void> {
     const client = this.rpc.activeClient;
-    if (!client) return;
+    if (!client || !this.rpc.sessionLoaded()) return;
     try {
       this.virtualTimeNs.set(await client.now(Core.Cpu0));
     } catch (err) {
@@ -199,6 +208,7 @@ export class ExecutionStore implements OnDestroy {
   }
 
   private async onConnected(): Promise<void> {
+    if (!this.rpc.sessionLoaded()) { this.onDisconnected(); return; }
     this.executionStatus.set('halted');
     await this.probeCpu1();
     await this.refreshClock();
@@ -209,6 +219,8 @@ export class ExecutionStore implements OnDestroy {
     this.continuousWanted = false;
     this.sliceInFlight = false;
     this.executionStatus.set('stopped');
+    this.virtualTimeNs.set(0n);
+    this.activeCore.set(Core.Cpu0);
     this.cpu1Attached.set(false);
     this.lastStop.set(null);
   }
@@ -301,7 +313,7 @@ export class ExecutionStore implements OnDestroy {
 
   private writableClient(action: string): RA8RpcClient | null {
     const client = this.rpc.activeClient;
-    if (!client) return null;
+    if (!client || !this.rpc.sessionLoaded()) return null;
     if (this.rpc.observeOnly()) {
       this.rpc.pushToast(`Observe mode is read-only: ${action} disabled`, 'neutral');
       return null;

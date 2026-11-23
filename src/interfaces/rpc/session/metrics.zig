@@ -114,8 +114,8 @@ pub fn metrics(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     _ = args;
     const now_ns = hostNow(context);
     host_sampler.refresh(now_ns);
-    const snap0 = context.session.deviceMetrics(.cpu0);
-    const snap1 = context.session.deviceMetrics(.cpu1);
+    const snap0 = context.session.?.deviceMetrics(.cpu0);
+    const snap1 = context.session.?.deviceMetrics(.cpu1);
     const report = createReport(&host_sampler, &snap0, &cpu0_window, &snap1, &cpu1_window);
     return .{ .ok = report };
 }

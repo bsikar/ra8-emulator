@@ -274,3 +274,32 @@ test "use_board_profile populates arrived Renesas board parameters and refuses a
         .target = testDescriptor("bench", "fpb-ra8e1", "jlink-e1", "001083322193"),
     }}, error.InvalidEndpoint);
 }
+
+test "emulator target binding follows the service across idle load and close" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.testing.io;
+    const gpa = std.testing.allocator;
+    const json = "[{\"kind\":\"emulator\",\"target\":{\"managed\":false," ++
+        "\"host_id\":\"local\",\"board_id\":\"ra8d2\",\"probe_id\":\"emulator\",\"transport\":\"in-process\"}}]";
+    try tmp.dir.writeFile(io, .{ .sub_path = "targets.json", .data = json });
+    const path = try tmp.dir.realPathFileAlloc(io, "targets.json", gpa);
+    defer gpa.free(path);
+    var inventory: cli.target_bindings.Inventory = .{};
+    defer inventory.close();
+    var slot: ra8.rpc.session_slot.Slot = undefined;
+    try slot.init(gpa, io, .{});
+    defer slot.deinit();
+    try inventory.bind(gpa, io, path, &slot.context);
+    const provider = inventory.registry.entries[0].?.provider;
+    var output: [4096]u8 = undefined;
+    try std.testing.expectError(error.Unsupported, provider.performFn(provider.context, .registers, &output));
+    const hooks = slot.context.lifecycle.?;
+    const image = @embedFile("../../../fixtures/gpio/blink.elf");
+    try hooks.loadFn(hooks.context, image);
+    hooks.commitFn(hooks.context);
+    try std.testing.expect((try provider.performFn(provider.context, .registers, &output)).len > 0);
+    try hooks.closeFn(hooks.context);
+    hooks.commitFn(hooks.context);
+    try std.testing.expectError(error.Unsupported, provider.performFn(provider.context, .registers, &output));
+}

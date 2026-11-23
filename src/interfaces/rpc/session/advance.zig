@@ -27,7 +27,7 @@ const max_rounds = 64;
 
 pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
     if (args.ns == 0) return .{ .err = .bad_args };
-    const session = context.session;
+    const session = context.session.?;
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
     const from = session.now() catch |err| return refuse(err);
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = .bad_args };
@@ -49,7 +49,7 @@ pub fn advance(context: *handlers.Context, args: proto.Advance) Outcome {
 
 /// The reply both paths end with: the stop the run ended in and the time it reached.
 fn reply(context: *handlers.Context, core: proto.Core, from: u64, ended: api.Ended) Outcome {
-    const session = context.session;
+    const session = context.session.?;
     if (session.persistent_recorder) |rec| rec.force() catch |err| return refuse(err);
     const stop = handlers.stopped(session, core, ended);
     context.pending = stop;
@@ -110,12 +110,12 @@ pub fn advanceQueued(context: *handlers.Context, args: proto.Advance) rpc.Outcom
     if (args.ns == 0) return .{ .err = .bad_args };
     const plane = context.transport orelse return .{ .err = refusedCode() };
     if (!context.transport_async or context.wall == null) return .{ .err = refusedCode() };
-    const from = context.session.now() catch return .{ .err = refusedCode() };
+    const from = context.session.?.now() catch return .{ .err = refusedCode() };
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
     // A core the session can't serve refuses the way the blocking
     // `advance` does: the plane's queue takes any core, so a job it can't
     // run would fail mid-flight with nothing reported on the topic.
-    _ = budgetOf(context.session, which) catch return .{ .err = refusedCode() };
+    _ = budgetOf(context.session.?, which) catch return .{ .err = refusedCode() };
     const target = std.math.add(u64, from, args.ns) catch return .{ .err = refusedCode() };
     const ticket = plane.command(
         .{

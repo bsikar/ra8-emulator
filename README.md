@@ -18,7 +18,8 @@ library is linked beyond libc. The browser frontend uses TypeScript.
 
 ## Install
 
-Zig **0.17.0** is the only compiler needed.
+The emulator backend needs Zig **0.17.0**. The Angular browser workbench also
+needs **Node.js 22.13 or newer in the 22.x series** and npm (CI uses Node 22).
 
 ```sh
 # linux x86_64; swap the triple for aarch64-linux, x86_64-macos or aarch64-macos
@@ -33,6 +34,73 @@ export PATH="$HOME/.local/zig-x86_64-linux-0.17.0:$PATH"
 zig build                       # zig-out/bin/ra8_emulator
 zig build gate                  # zig fmt --check, file and function length, terms
 ```
+
+## Run the browser workbench
+
+The GUI is an Angular 19 application in `src/interfaces/gui/`. Run two
+processes: the Zig emulator serves the firmware over WebSocket RPC on port
+4567, and Angular serves the browser UI on port 4200.
+
+In the first terminal, from the repository root:
+
+```sh
+zig build -j1
+zig-out/bin/ra8_emulator serve --listen tcp:127.0.0.1:4567
+```
+
+The backend starts idle, with no firmware loaded. Leave it running while
+you open, replace, or close firmware sessions from the browser.
+
+In a second terminal, from the repository root:
+
+```sh
+cd src/interfaces/gui
+npm ci
+npm start
+```
+
+If your terminal is already in `src/interfaces/gui/`, just run `npm ci` and
+`npm start`. No global Angular CLI installation is needed. On later runs,
+use `npm start`; rerun `npm ci` after dependency changes.
+
+Open <http://localhost:4200/connect>, enter `ws://127.0.0.1:4567`, and click
+**Connect**. Port 4200 serves the page; port 4567 connects it to the emulator.
+The UI can open without the backend, but firmware inspection and execution
+need a loaded session. On the debugger page, choose **Open firmware…**, then
+**Browse Local File…**, select an ARM firmware `.elf`, choose its board, and
+click **Open**. To try a checked-in image, select `examples/gpio/blink.elf`.
+Loading stops at reset; **Continue** starts execution. **Close Session** unloads
+firmware and leaves the backend connected and ready for another image.
+Stop each process with Ctrl+C in its terminal.
+
+For scripts, a startup ELF is still optional:
+
+```sh
+zig-out/bin/ra8_emulator serve --listen tcp:127.0.0.1:4567 examples/gpio/blink.elf
+```
+
+`--discover`, `--artifacts-root`, and reopening kept history with `--reopen`
+currently require a startup ELF and use the existing session-backed serving
+path. That path does not advertise the new load/close lifecycle controls.
+
+For workspace file access, add `--workspace /absolute/path/to/project` before
+the ELF argument in the backend command. This grants connected clients
+read/write access within that directory; see [Workspace filesystem](#workspace-filesystem).
+
+Useful frontend commands, also run from `src/interfaces/gui/`:
+
+```sh
+npm run build                 # production PWA in dist/ra8-gui/browser/
+npm test                      # unit tests
+npm run gate                  # frontend source checks
+npm start -- --port 4201       # use another port if 4200 is busy
+```
+
+If the browser reports that the backend is unreachable, check that `serve`
+is still running and that the WebSocket URL matches its listening port.
+`npm start` starts only the Angular development server. The production
+build includes the PWA service worker; development serving uses the
+development configuration.
 
 ## Toolchain planning
 
@@ -122,10 +190,10 @@ zig-out/bin/ra8_emulator serve --listen tcp:127.0.0.1:4567 app.elf
 zig-out/bin/ra8_emulator serve --discover --listen tcp:127.0.0.1:4567 app.elf
 ```
 
-The Angular PWA workbench lives in `src/interfaces/gui/`, backed by the
-TypeScript RPC client in `src/interfaces/gui/client/` (`npm ci && npm start`
-connects to `ws://127.0.0.1:4567`). The native Zig/SDL GUI has been retired on
-`dev`; its reference implementation remains on the `BSIKAR/time-travel` branch.
+For the Angular PWA and its TypeScript RPC client, see
+[Run the browser workbench](#run-the-browser-workbench). The native Zig/SDL
+GUI has been retired on `dev`; its reference implementation remains on the
+`BSIKAR/time-travel` branch.
 
 
 ## Debugger conformance

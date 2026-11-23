@@ -15,6 +15,7 @@ describe('DebugInspectorPaneComponent', () => {
 
   it('switches GPR/MVE/Sys registers, dims zeroes, edits register value, and switches Memory/Peripherals tabs', async () => {
     const rpc = TestBed.inject(RpcConnectionStore);
+    rpc.sessionLoaded.set(true);
     const debug = TestBed.inject(DebugStore);
     const prefs = TestBed.inject(PreferencesStore);
     const hil = TestBed.inject(HardwareHilStore);

@@ -36,14 +36,14 @@ fn refused(err: anyerror) Ack {
 /// `MODEL@ENDPOINT`: a fresh part of that model on that endpoint.
 pub fn plug(context: *Context, args: proto.PartSpec) Ack {
     const wanted = request.parse(args.text) catch return .{ .err = .bad_args };
-    context.session.plug(core(args.core), wanted.at, wanted.name) catch |err| return refused(err);
+    context.session.?.plug(core(args.core), wanted.at, wanted.name) catch |err| return refused(err);
     return ack;
 }
 
 /// `ENDPOINT`: take whatever sits there off it.
 pub fn unplug(context: *Context, args: proto.PartSpec) Ack {
     const at = endpoint.parse(args.text) catch return .{ .err = .bad_args };
-    context.session.unplug(core(args.core), at) catch |err| return refused(err);
+    context.session.?.unplug(core(args.core), at) catch |err| return refused(err);
     return ack;
 }
 
@@ -51,14 +51,14 @@ pub fn unplug(context: *Context, args: proto.PartSpec) Ack {
 /// that way from now on, mid-run included.
 pub fn setFault(context: *Context, args: proto.PartSpec) Ack {
     const wanted = fault_spec.parse(args.text) catch return .{ .err = .bad_args };
-    context.session.setFault(core(args.core), wanted.target.at, wanted.mode) catch |err| return refused(err);
+    context.session.?.setFault(core(args.core), wanted.target.at, wanted.mode) catch |err| return refused(err);
     return ack;
 }
 
 /// `ENDPOINT`: the part there behaves like the part again.
 pub fn clearFault(context: *Context, args: proto.PartSpec) Ack {
     const at = endpoint.parse(args.text) catch return .{ .err = .bad_args };
-    context.session.clearFault(core(args.core), at) catch |err| return refused(err);
+    context.session.?.clearFault(core(args.core), at) catch |err| return refused(err);
     return ack;
 }
 

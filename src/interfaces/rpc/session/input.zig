@@ -14,7 +14,7 @@ const Ack = rpc.Outcome(proto.Ack);
 /// An unknown button is bad_args; a session without an input script, an
 /// event already in the past or a full queue is refused.
 pub fn input(context: *handlers.Context, args: proto.ScheduleInput) Ack {
-    const session = context.session;
+    const session = context.session.?;
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
     const at = args.at_ns;
     const from: gt911.Contact = .{ .x = args.x, .y = args.y };

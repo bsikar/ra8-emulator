@@ -17,7 +17,7 @@ pub fn pump(context: *Context, server: anytype, tx: []u8) !void {
     var events: [batch]api.Event = undefined;
     var name_buf: [proto.TraceEvent.max_len.name]u8 = undefined;
     while (true) {
-        const read = context.session.pollEvents(id, &events) orelse return;
+        const read = context.session.?.pollEvents(id, &events) orelse return;
         if (read.dropped != 0) std.debug.print(
             "serve: {d} trace events dropped before a client read them\n",
             .{read.dropped},

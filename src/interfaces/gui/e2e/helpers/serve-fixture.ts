@@ -37,18 +37,18 @@ function resolveEmulatorBinary(repoRoot: string): string {
 }
 
 export async function startServeFixture(
-  relativeElfPath = path.join('tests', 'fixtures', 'gpio', 'blink.elf'),
+  relativeElfPath: string | null = path.join('tests', 'fixtures', 'gpio', 'blink.elf'),
   extraArgs: readonly string[] = [],
   extraEnv: Record<string, string> = {}
 ): Promise<ServedEmulatorHandle> {
   const repoRoot = resolveRepoRoot();
   const bin = resolveEmulatorBinary(repoRoot);
-  const elf = path.resolve(repoRoot, relativeElfPath);
-  if (!fs.existsSync(elf)) {
+  const elf = relativeElfPath === null ? null : path.resolve(repoRoot, relativeElfPath);
+  if (elf !== null && !fs.existsSync(elf)) {
     throw new Error(`Missing ELF fixture at ${elf}`);
   }
 
-  const proc = spawn(bin, ['serve', ...extraArgs, '--listen', 'tcp:127.0.0.1:0', elf], {
+  const proc = spawn(bin, ['serve', ...extraArgs, '--listen', 'tcp:127.0.0.1:0', ...(elf === null ? [] : [elf])], {
     cwd: repoRoot,
     env: { ...process.env, ...extraEnv },
     stdio: ['pipe', 'pipe', 'pipe'],

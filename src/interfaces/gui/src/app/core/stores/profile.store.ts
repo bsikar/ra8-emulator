@@ -74,6 +74,7 @@ export class ProfileStore implements OnDestroy {
   });
 
   constructor() {
+    this.subs.add(this.rpc.sessionChanged$.subscribe(() => this.clear()));
     this.subs.add(this.rpc.trace$.subscribe((evt) => this.pushTraceEvent(evt)));
     this.subs.add(this.rpc.disconnected$.subscribe(() => this.stopMetricsPoll()));
   }
@@ -97,7 +98,7 @@ export class ProfileStore implements OnDestroy {
 
   public async refreshMetrics(): Promise<void> {
     const client = this.rpc.activeClient;
-    if (!client) return;
+    if (!client || !this.rpc.sessionLoaded()) return;
     try {
       const [report, vns] = await Promise.all([client.getMetrics(), client.now(Core.Cpu0)]);
       this.metrics.set(report);
@@ -111,7 +112,7 @@ export class ProfileStore implements OnDestroy {
 
   public async refreshStacks(cpu1Attached = false): Promise<void> {
     const client = this.rpc.activeClient;
-    if (!client) return;
+    if (!client || !this.rpc.sessionLoaded()) return;
     try {
       this.cpu0Stack.set(await client.getStackReport(Core.Cpu0));
     } catch (err) {
@@ -133,7 +134,7 @@ export class ProfileStore implements OnDestroy {
     toNs = 0xffff_ffff_ffff_ffffn
   ): Promise<string> {
     const client = this.rpc.activeClient;
-    if (!client) return '';
+    if (!client || !this.rpc.sessionLoaded()) return '';
     try {
       const folded = await client.getFolded(core, thread, fromNs, toNs);
       this.foldedText.set(folded);

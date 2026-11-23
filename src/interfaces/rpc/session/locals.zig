@@ -19,7 +19,7 @@ const Outcome = rpc.Outcome(proto.Locals);
 
 pub fn locals(context: *handlers.Context, args: proto.CoreOnly) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const view = context.session.view(which) catch |err| return refuse(err);
+    const view = context.session.?.view(which) catch |err| return refuse(err);
     if (context.scratch.len < proto.locals_bytes) return refuse(error.NoRoom);
     const pc = view.register(.pc) catch |err| return refuse(err);
     return rowsAt(context, which, args.core, pc);
@@ -30,7 +30,7 @@ pub fn locals(context: *handlers.Context, args: proto.CoreOnly) Outcome {
 /// and reads the function containing that frame's call site.
 pub fn localsAt(context: *handlers.Context, args: proto.CoreFrame) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const view = context.session.view(which) catch |err| return refuse(err);
+    const view = context.session.?.view(which) catch |err| return refuse(err);
     if (context.scratch.len < proto.locals_bytes) return refuse(error.NoRoom);
     const pc = pcAtFrame(context, view, which, args.frame) catch |err| return refuse(err);
     return rowsAt(context, which, args.core, pc);

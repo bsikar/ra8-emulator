@@ -11,7 +11,7 @@ const rpc = @import("ra8_rpc_wire");
 const refused = handlers.app_codes.refused;
 
 pub fn periph(context: *handlers.Context, args: proto.PeriphAsk) rpc.Outcome(proto.PeriphText) {
-    if (!context.session.hasCore(handlers.core(args.core))) {
+    if (!context.session.?.hasCore(handlers.core(args.core))) {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     }
     const peripherals = context.peripherals orelse return .{ .err = @fromBackingInt(@intCast(refused)) };

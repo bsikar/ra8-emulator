@@ -14,6 +14,7 @@ const build_wire = @import("../build_wire.zig");
 const event_feed = @import("event_feed.zig");
 const handlers = @import("handlers.zig");
 const lcd_feed = @import("lcd_feed.zig");
+const lifecycle = @import("lifecycle.zig");
 const parts = @import("parts.zig");
 const project = @import("../project.zig");
 const project_wire = @import("../project_wire.zig");
@@ -63,76 +64,76 @@ pub const forget = handlers.forget;
 
 const M = proto.Method;
 const session_routes = .{
-    .{ @backingInt(M.load), handlers.load },
-    .{ @backingInt(M.load_begin), session_chunks.loadBegin },
-    .{ @backingInt(M.load_chunk), session_chunks.loadChunk },
-    .{ @backingInt(M.load_end), session_chunks.loadEnd },
-    .{ @backingInt(M.run), handlers.run },
-    .{ @backingInt(M.pause), handlers.pause },
-    .{ @backingInt(M.step), handlers.step },
-    .{ @backingInt(M.set_speed), handlers.setSpeed },
-    .{ @backingInt(M.read_register), handlers.readRegister },
-    .{ @backingInt(M.write_register), handlers.writeRegister },
-    .{ @backingInt(M.read_memory), handlers.readMemory },
-    .{ @backingInt(M.disassemble), session_disasm.read },
-    .{ @backingInt(M.write_memory), handlers.writeMemory },
-    .{ @backingInt(M.set_breakpoint), handlers.setBreakpoint },
-    .{ @backingInt(M.set_breakpoint_name), handlers.setBreakpointNamed },
-    .{ @backingInt(M.clear_breakpoint), handlers.clearBreakpoint },
-    .{ @backingInt(M.set_watchpoint), handlers.setWatchpoint },
-    .{ @backingInt(M.clear_watchpoint), handlers.clearWatchpoint },
-    .{ @backingInt(M.subscribe), handlers.subscribe },
-    .{ @backingInt(M.unsubscribe), handlers.unsubscribe },
-    .{ @backingInt(M.now), handlers.now },
-    .{ @backingInt(M.interrupt), handlers.interrupt },
-    .{ @backingInt(M.set_run_budget), handlers.setRunBudget },
-    .{ @backingInt(M.remove_point), handlers.removePoint },
-    .{ @backingInt(M.plug), parts.plug },
-    .{ @backingInt(M.unplug), parts.unplug },
-    .{ @backingInt(M.set_fault), parts.setFault },
-    .{ @backingInt(M.clear_fault), parts.clearFault },
-    .{ @backingInt(M.list_parts), parts.listParts },
-    .{ @backingInt(M.board_parts), parts.boardParts },
-    .{ @backingInt(M.set_camera_source), session_camera.setCameraSource },
-    .{ @backingInt(M.map), session_map.map },
-    .{ @backingInt(M.stack), session_stack.stack },
-    .{ @backingInt(M.backtrace), session_backtrace.backtrace },
-    .{ @backingInt(M.source_line), session_source_line.sourceLine },
-    .{ @backingInt(M.locals), session_locals.locals },
-    .{ @backingInt(M.locals_at), session_locals.localsAt },
-    .{ @backingInt(M.periph), session_periph.periph },
-    .{ @backingInt(M.folded), session_folded.folded },
-    .{ @backingInt(M.rtc), session_rtc.rtc },
-    .{ @backingInt(M.input), session_input.input },
-    .{ @backingInt(M.advance), session_advance.advance },
-    .{ @backingInt(M.advance_async), session_advance.advanceQueued },
-    .{ @backingInt(M.seek), session_seek.seek },
-    .{ @backingInt(M.rcont), session_rcont.rcont },
-    .{ @backingInt(M.metrics), session_metrics.metrics },
-    .{ @backingInt(M.snapshot), session_files.snapshot },
-    .{ @backingInt(M.restore), session_files.restore },
-    .{ @backingInt(M.branch_list), session_branch.branchList },
-    .{ @backingInt(M.branch_switch), session_branch.branchSwitch },
-    .{ @backingInt(M.branch_delete), session_branch.branchDelete },
-    .{ @backingInt(M.branch_confirm_fork), session_branch.branchConfirmFork },
-    .{ @backingInt(M.branch_cancel_fork), session_branch.branchCancelFork },
-    .{ @backingInt(M.branch_status), session_branch.branchStatus },
-    .{ @backingInt(M.console_input), session_intervene.consoleInput },
-    .{ @backingInt(M.skip_bkpt), session_intervene.skipBkpt },
-    .{ @backingInt(M.undo_write), session_intervene.undoWrite },
-    .{ @backingInt(M.reset_image), session_intervene.resetImage },
-    .{ @backingInt(M.play), session_nav.play },
-    .{ @backingInt(M.nav_query), session_nav.navQuery },
-    .{ @backingInt(M.marker_set), session_marker.markerSet },
-    .{ @backingInt(M.frame_status), session_nav.frameStatus },
-    .{ @backingInt(M.diff), session_diff.diff },
-    .{ @backingInt(M.set_var), session_set_var.setVar },
-    .{ @backingInt(M.list_cores), session_cores.listCores },
-    .{ @backingInt(M.disasm), session_disasm.disasm },
-    .{ @backingInt(M.step_back), session_intervene.stepBack },
+    .{ @backingInt(M.load), lifecycle.guard(.load, handlers.load) },
+    .{ @backingInt(M.load_begin), lifecycle.guard(.load_begin, session_chunks.loadBegin) },
+    .{ @backingInt(M.load_chunk), lifecycle.guard(.load_chunk, session_chunks.loadChunk) },
+    .{ @backingInt(M.load_end), lifecycle.guard(.load_end, session_chunks.loadEnd) },
+    .{ @backingInt(M.run), lifecycle.guard(.run, handlers.run) },
+    .{ @backingInt(M.pause), lifecycle.guard(.pause, handlers.pause) },
+    .{ @backingInt(M.step), lifecycle.guard(.step, handlers.step) },
+    .{ @backingInt(M.set_speed), lifecycle.guard(.set_speed, handlers.setSpeed) },
+    .{ @backingInt(M.read_register), lifecycle.guard(.read_register, handlers.readRegister) },
+    .{ @backingInt(M.write_register), lifecycle.guard(.write_register, handlers.writeRegister) },
+    .{ @backingInt(M.read_memory), lifecycle.guard(.read_memory, handlers.readMemory) },
+    .{ @backingInt(M.disassemble), lifecycle.guard(.disassemble, session_disasm.read) },
+    .{ @backingInt(M.write_memory), lifecycle.guard(.write_memory, handlers.writeMemory) },
+    .{ @backingInt(M.set_breakpoint), lifecycle.guard(.set_breakpoint, handlers.setBreakpoint) },
+    .{ @backingInt(M.set_breakpoint_name), lifecycle.guard(.set_breakpoint_name, handlers.setBreakpointNamed) },
+    .{ @backingInt(M.clear_breakpoint), lifecycle.guard(.clear_breakpoint, handlers.clearBreakpoint) },
+    .{ @backingInt(M.set_watchpoint), lifecycle.guard(.set_watchpoint, handlers.setWatchpoint) },
+    .{ @backingInt(M.clear_watchpoint), lifecycle.guard(.clear_watchpoint, handlers.clearWatchpoint) },
+    .{ @backingInt(M.subscribe), lifecycle.guard(.subscribe, handlers.subscribe) },
+    .{ @backingInt(M.unsubscribe), lifecycle.guard(.unsubscribe, handlers.unsubscribe) },
+    .{ @backingInt(M.now), lifecycle.guard(.now, handlers.now) },
+    .{ @backingInt(M.interrupt), lifecycle.guard(.interrupt, handlers.interrupt) },
+    .{ @backingInt(M.set_run_budget), lifecycle.guard(.set_run_budget, handlers.setRunBudget) },
+    .{ @backingInt(M.remove_point), lifecycle.guard(.remove_point, handlers.removePoint) },
+    .{ @backingInt(M.plug), lifecycle.guard(.plug, parts.plug) },
+    .{ @backingInt(M.unplug), lifecycle.guard(.unplug, parts.unplug) },
+    .{ @backingInt(M.set_fault), lifecycle.guard(.set_fault, parts.setFault) },
+    .{ @backingInt(M.clear_fault), lifecycle.guard(.clear_fault, parts.clearFault) },
+    .{ @backingInt(M.list_parts), lifecycle.guard(.list_parts, parts.listParts) },
+    .{ @backingInt(M.board_parts), lifecycle.guard(.board_parts, parts.boardParts) },
+    .{ @backingInt(M.set_camera_source), lifecycle.guard(.set_camera_source, session_camera.setCameraSource) },
+    .{ @backingInt(M.map), lifecycle.guard(.map, session_map.map) },
+    .{ @backingInt(M.stack), lifecycle.guard(.stack, session_stack.stack) },
+    .{ @backingInt(M.backtrace), lifecycle.guard(.backtrace, session_backtrace.backtrace) },
+    .{ @backingInt(M.source_line), lifecycle.guard(.source_line, session_source_line.sourceLine) },
+    .{ @backingInt(M.locals), lifecycle.guard(.locals, session_locals.locals) },
+    .{ @backingInt(M.locals_at), lifecycle.guard(.locals_at, session_locals.localsAt) },
+    .{ @backingInt(M.periph), lifecycle.guard(.periph, session_periph.periph) },
+    .{ @backingInt(M.folded), lifecycle.guard(.folded, session_folded.folded) },
+    .{ @backingInt(M.rtc), lifecycle.guard(.rtc, session_rtc.rtc) },
+    .{ @backingInt(M.input), lifecycle.guard(.input, session_input.input) },
+    .{ @backingInt(M.advance), lifecycle.guard(.advance, session_advance.advance) },
+    .{ @backingInt(M.advance_async), lifecycle.guard(.advance_async, session_advance.advanceQueued) },
+    .{ @backingInt(M.seek), lifecycle.guard(.seek, session_seek.seek) },
+    .{ @backingInt(M.rcont), lifecycle.guard(.rcont, session_rcont.rcont) },
+    .{ @backingInt(M.metrics), lifecycle.guard(.metrics, session_metrics.metrics) },
+    .{ @backingInt(M.snapshot), lifecycle.guard(.snapshot, session_files.snapshot) },
+    .{ @backingInt(M.restore), lifecycle.guard(.restore, session_files.restore) },
+    .{ @backingInt(M.branch_list), lifecycle.guard(.branch_list, session_branch.branchList) },
+    .{ @backingInt(M.branch_switch), lifecycle.guard(.branch_switch, session_branch.branchSwitch) },
+    .{ @backingInt(M.branch_delete), lifecycle.guard(.branch_delete, session_branch.branchDelete) },
+    .{ @backingInt(M.branch_confirm_fork), lifecycle.guard(.branch_confirm_fork, session_branch.branchConfirmFork) },
+    .{ @backingInt(M.branch_cancel_fork), lifecycle.guard(.branch_cancel_fork, session_branch.branchCancelFork) },
+    .{ @backingInt(M.branch_status), lifecycle.guard(.branch_status, session_branch.branchStatus) },
+    .{ @backingInt(M.console_input), lifecycle.guard(.console_input, session_intervene.consoleInput) },
+    .{ @backingInt(M.skip_bkpt), lifecycle.guard(.skip_bkpt, session_intervene.skipBkpt) },
+    .{ @backingInt(M.undo_write), lifecycle.guard(.undo_write, session_intervene.undoWrite) },
+    .{ @backingInt(M.reset_image), lifecycle.guard(.reset_image, session_intervene.resetImage) },
+    .{ @backingInt(M.play), lifecycle.guard(.play, session_nav.play) },
+    .{ @backingInt(M.nav_query), lifecycle.guard(.nav_query, session_nav.navQuery) },
+    .{ @backingInt(M.marker_set), lifecycle.guard(.marker_set, session_marker.markerSet) },
+    .{ @backingInt(M.frame_status), lifecycle.guard(.frame_status, session_nav.frameStatus) },
+    .{ @backingInt(M.diff), lifecycle.guard(.diff, session_diff.diff) },
+    .{ @backingInt(M.set_var), lifecycle.guard(.set_var, session_set_var.setVar) },
+    .{ @backingInt(M.list_cores), lifecycle.guard(.list_cores, session_cores.listCores) },
+    .{ @backingInt(M.disasm), lifecycle.guard(.disasm, session_disasm.disasm) },
+    .{ @backingInt(M.step_back), lifecycle.guard(.step_back, session_intervene.stepBack) },
 };
 
-pub const routes = session_routes ++ workspace.routes ++ build.routes ++ project.routes ++
+pub const routes = session_routes ++ lifecycle.routes ++ workspace.routes ++ build.routes ++ project.routes ++
     artifact_handlers.routes ++ targets.routes;
 
 pub const Server = rpc.Server(Context, proto.max_payload, routes);
@@ -154,6 +155,7 @@ pub const Host = struct {
         // its clients know `advance_async` queues and completes on the
         // transport topic (RA8EMU-1196, slice 14).
         var caps = proto.capabilities;
+        if (context.lifecycle != null) caps |= proto.lifecycle_cap;
         if (context.transport_async) caps |= proto.transport_cap;
         if (context.workspace != null) caps |= workspace_wire.capability;
         if (context.build_runner != null) caps |= build_wire.capability;
@@ -172,12 +174,26 @@ pub const Host = struct {
     /// rectangles, the session events, the RTOS events and the stop event it
     /// produced, in that order.
     pub fn poll(self: *Host, tx: []u8) anyerror!rpc.Step {
+        const context = self.server.context;
+        const step = self.pollLocked(tx) catch |err| {
+            if (context.lifecycle) |hooks| hooks.discardFn(hooks.context);
+            return err;
+        };
+        if (context.session_change_pending) {
+            context.lifecycle.?.commitFn(context.lifecycle.?.context);
+            context.session_change_pending = false;
+        }
+        return step;
+    }
+
+    fn pollLocked(self: *Host, tx: []u8) anyerror!rpc.Step {
         const worker = self.server.context.worker;
         if (worker) |w| w.acquire();
         defer if (worker) |w| w.release();
         const step = try self.server.poll(tx);
         const context = self.server.context;
         if (context.artifacts) |service| if (service.pending != null) return step;
+        if (context.session_change_pending) return step;
         try pumpFeeds(context, &self.server, tx);
         if (context.pending) |stopped| {
             context.pending = null;
@@ -197,6 +213,7 @@ pub fn pumpFeeds(context: *Context, server: anytype, tx: []u8) !void {
     try build.pump(context, server, tx);
     try targets.pump(context, server, tx);
     try workspace_watch.pump(context, server, tx);
+    if (context.session == null) return;
     try uart_feed.pump(context, server, tx);
     try lcd_feed.pump(context, server, tx);
     try event_feed.pump(context, server, tx);
@@ -214,7 +231,7 @@ const transport_progress_ns: u64 = 33_000_000;
 
 pub fn pumpTransport(context: *Context, server: anytype, tx: []u8) !void {
     const plane = context.transport orelse return;
-    if (context.session.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
+    if (context.session.?.persistent_recorder) |rec| try rec.maybeCommit(rec.now());
     const has_latched = if (context.worker) |w|
         w.latched_finished != null or w.latched_error != null
     else
@@ -262,7 +279,7 @@ fn emitProgress(
     context.transport_epoch = report.epoch;
     context.transport_last_emit_ns = now;
     var event = eventOf(report, null);
-    if (event.reached_ns == 0 and running) event.reached_ns = context.session.now() catch 0;
+    if (event.reached_ns == 0 and running) event.reached_ns = context.session.?.now() catch 0;
     try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
 }
 
@@ -274,11 +291,11 @@ fn emitFinished(
     subscriber: bool,
     tx: []u8,
 ) !void {
-    const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
+    const stop = handlers.stopped(context.session.?, coreOf(fin.core), fin.ended);
     if (fin.ended != .count) context.pending = stop;
     if (!subscriber) return;
     var event = eventOf(report, coreOf(fin.core));
-    const now_ns = context.session.now() catch 0;
+    const now_ns = context.session.?.now() catch 0;
     event.finished = 1;
     if (event.reached_ns == 0) event.reached_ns = now_ns;
     event.to_ns = now_ns;
@@ -297,13 +314,13 @@ fn emitTicketStop(
     tx: []u8,
 ) !void {
     if (!subscriber) return;
-    const stop = handlers.stopped(context.session, coreOf(fin.core), fin.ended);
+    const stop = handlers.stopped(context.session.?, coreOf(fin.core), fin.ended);
     if (fin.ended != .count) context.pending = stop;
     var event = eventOf(report, coreOf(fin.core));
     event.finished = 1;
     event.from_ns = context.advance_from_ns;
     event.target_ns = target;
-    event.to_ns = context.session.now() catch context.advance_from_ns;
+    event.to_ns = context.session.?.now() catch context.advance_from_ns;
     event.reason = stop.reason;
     event.address = stop.address;
     try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
@@ -329,7 +346,7 @@ fn emitPreempted(
     event.finished = 1;
     event.from_ns = context.advance_from_ns;
     event.target_ns = target;
-    event.to_ns = context.session.now() catch context.advance_from_ns;
+    event.to_ns = context.session.?.now() catch context.advance_from_ns;
     event.reason = .halt_requested;
     try server.emit(proto.TransportEvent, @backingInt(proto.Topic.transport), event, tx);
 }

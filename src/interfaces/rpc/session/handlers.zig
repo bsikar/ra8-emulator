@@ -7,6 +7,7 @@ const artifact_transfer = @import("../artifacts/transfer.zig");
 const board_lib = @import("ra8_board");
 const cores = @import("cores.zig");
 const host = @import("ra8_host");
+const lifecycle = @import("lifecycle.zig");
 const load_chunks = @import("load_chunks.zig");
 const nav_hooks = @import("nav_hooks.zig");
 const proto = @import("rpc.zig");
@@ -18,6 +19,7 @@ const session_rtc = @import("ra8_session").rtc;
 const session_symbols = @import("ra8_session").symbols;
 const source_spec = @import("ra8_host").camera.source_spec;
 const stopped_wire = @import("stopped.zig");
+const subscriptions = @import("subscriptions.zig");
 const target_progress = @import("../target_progress.zig");
 const transport_mod = @import("ra8_session").transport;
 const workspace_watch = @import("../workspace_watch.zig");
@@ -81,7 +83,9 @@ pub const HostClock = struct {
 const topic_count = @typeInfo(proto.Topic).@"enum".field_names.len;
 
 pub const Context = struct {
-    session: *api.Session,
+    session: ?*api.Session = null,
+    lifecycle: ?lifecycle.Hooks = null,
+    session_change_pending: bool = false,
     targets: ?*host.targets.Registry = null,
     artifacts: ?*artifact_service.Service = null,
     artifact_transfer: artifact_transfer.Transfer = .{},
@@ -190,14 +194,18 @@ fn register(of: proto.Register) ?api.Register {
 }
 
 pub fn load(context: *Context, args: proto.Load) Ack {
+    if (context.lifecycle != null and args.core == .cpu0) {
+        return lifecycle.load(context, args.image);
+    }
+    if (context.session == null) return .{ .err = code(app_codes.no_session) };
     if (context.transport) |plane| plane.cancel();
-    context.session.load(core(args.core), args.image) catch |err| return refuse(proto.Ack, err);
+    context.session.?.load(core(args.core), args.image) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 pub fn run(context: *Context, args: proto.Run) Ack {
     if (context.transport) |plane| plane.cancel();
-    const session = context.session;
+    const session = context.session.?;
     if (args.budget != 0) {
         session.setRunBudget(core(args.core), args.budget) catch |err| return refuse(proto.Ack, err);
     }
@@ -213,7 +221,7 @@ pub fn step(context: *Context, args: proto.CoreOnly) Ack {
 
 pub fn pause(context: *Context, args: proto.CoreOnly) Ack {
     if (context.transport) |plane| _ = plane.command(.pause) catch plane.cancel();
-    context.session.pause(core(args.core)) catch |err| return refuse(proto.Ack, err);
+    context.session.?.pause(core(args.core)) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
@@ -221,7 +229,7 @@ pub fn pause(context: *Context, args: proto.CoreOnly) Ack {
 pub fn setSpeed(context: *Context, args: proto.SetSpeed) Ack {
     const which = core(args.core);
     const factor: ?f64 = if (args.milli == 0) null else @as(f64, @floatFromInt(args.milli)) / 1000.0;
-    context.session.setSpeed(which, factor) catch |err| return refuse(proto.Ack, err);
+    context.session.?.setSpeed(which, factor) catch |err| return refuse(proto.Ack, err);
     capActivePlayBudget(context, which, factor) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
@@ -231,51 +239,51 @@ fn capActivePlayBudget(context: *Context, which: api.Core, factor: ?f64) !void {
     const job = &(plane.job orelse return);
     if (job.kind != .play or job.dir != .fwd) return;
     const capped = @min(
-        transport_mod.budgetOf(context.session, which),
+        transport_mod.budgetOf(context.session.?, which),
         session_lib.transport_play.max_slice_budget,
     );
-    try context.session.setRunBudget(which, capped);
+    try context.session.?.setRunBudget(which, capped);
     job.speed = factor;
     job.budget = capped;
 }
 
 pub fn setRunBudget(context: *Context, args: proto.RunBudget) Ack {
-    context.session.setRunBudget(core(args.core), args.instructions) catch |err| return refuse(proto.Ack, err);
+    context.session.?.setRunBudget(core(args.core), args.instructions) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 pub fn readRegister(context: *Context, args: proto.ReadRegister) rpc.Outcome(proto.U32) {
     const which = register(args.register) orelse return .{ .err = .bad_args };
-    const value = context.session.register(core(args.core), which) catch |err| return refuse(proto.U32, err);
+    const value = context.session.?.register(core(args.core), which) catch |err| return refuse(proto.U32, err);
     return .{ .ok = .{ .value = value } };
 }
 
 pub fn writeRegister(context: *Context, args: proto.WriteRegister) Ack {
     const which = register(args.register) orelse return .{ .err = .bad_args };
-    context.session.setRegister(core(args.core), which, args.value) catch |err| return refuse(proto.Ack, err);
+    context.session.?.setRegister(core(args.core), which, args.value) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 pub fn readMemory(context: *Context, args: proto.ReadMemory) rpc.Outcome(proto.Memory) {
     if (args.length > context.scratch.len) return .{ .err = code(app_codes.too_long) };
     const into = context.scratch[0..args.length];
-    context.session.read(core(args.core), args.address, into) catch |err| return refuse(proto.Memory, err);
+    context.session.?.read(core(args.core), args.address, into) catch |err| return refuse(proto.Memory, err);
     return .{ .ok = .{ .bytes = into } };
 }
 
 pub fn writeMemory(context: *Context, args: proto.WriteMemory) Ack {
-    context.session.write(core(args.core), args.address, args.bytes) catch |err| return refuse(proto.Ack, err);
+    context.session.?.write(core(args.core), args.address, args.bytes) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 pub fn setBreakpoint(context: *Context, args: proto.Point) rpc.Outcome(proto.U32) {
-    const id = context.session.setBreakpoint(core(args.core), .{ .address = args.address }) catch |err|
+    const id = context.session.?.setBreakpoint(core(args.core), .{ .address = args.address }) catch |err|
         return refuse(proto.U32, err);
     return .{ .ok = .{ .value = id } };
 }
 
 pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
-    context.session.clearBreakpoint(core(args.core), args.id) catch |err| {
+    context.session.?.clearBreakpoint(core(args.core), args.id) catch |err| {
         if (err != error.NoSuchBreak) return refuse(proto.Ack, err);
         if (context.modules) |table| if (table.remove(args.id)) return ack;
         return refuse(proto.Ack, err);
@@ -286,7 +294,7 @@ pub fn clearBreakpoint(context: *Context, args: proto.PointId) Ack {
 /// `break NAME` resolves modules before the image, waiting if unknown (RA8EMU-1141).
 pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome(proto.NamedPoint) {
     const which = core(args.core);
-    if (cores.absent(context.session, which)) return .{ .err = code(app_codes.no_core) };
+    if (cores.absent(context.session.?, which)) return .{ .err = code(app_codes.no_core) };
     if (context.modules) |table| if (table.addressOf(args.name)) |address| {
         return placeNamed(context, which, address);
     };
@@ -299,7 +307,7 @@ pub fn setBreakpointNamed(context: *Context, args: proto.NamedBreak) rpc.Outcome
 }
 
 fn placeNamed(context: *Context, which: api.Core, address: u32) rpc.Outcome(proto.NamedPoint) {
-    const id = context.session.setBreakpoint(which, .{ .address = address }) catch |err|
+    const id = context.session.?.setBreakpoint(which, .{ .address = address }) catch |err|
         return refuse(proto.NamedPoint, err);
     return .{ .ok = .{ .id = id, .address = address, .deferred = 0 } };
 }
@@ -314,7 +322,7 @@ pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32
     if (args.last < args.first) return .{ .err = .bad_args };
     const kind = std.meta.stringToEnum(@FieldType(session_lib.watch.table.Watch, "kind"), @tagName(args.access)) orelse
         return .{ .err = .bad_args };
-    const id = context.session.setWatchpoint(
+    const id = context.session.?.setWatchpoint(
         core(args.core),
         .{ .first = args.first, .last = args.last, .kind = kind },
     ) catch |err|
@@ -323,69 +331,31 @@ pub fn setWatchpoint(context: *Context, args: proto.Watch) rpc.Outcome(proto.U32
 }
 
 pub fn clearWatchpoint(context: *Context, args: proto.PointId) Ack {
-    context.session.clearWatchpoint(core(args.core), args.id) catch |err| return refuse(proto.Ack, err);
+    context.session.?.clearWatchpoint(core(args.core), args.id) catch |err| return refuse(proto.Ack, err);
     return ack;
 }
 
 /// Replies 0 when the id was a breakpoint and 1 when it was a watchpoint.
 pub fn removePoint(context: *Context, args: proto.PointId) rpc.Outcome(proto.U32) {
-    const removed = context.session.removePoint(core(args.core), args.id) catch |err| return refuse(proto.U32, err);
+    const removed = context.session.?.removePoint(core(args.core), args.id) catch |err| return refuse(proto.U32, err);
     return .{ .ok = .{ .value = @backingInt(removed) } };
 }
 
-pub fn subscribe(context: *Context, args: proto.Subscription) Ack {
-    if (!context.session.hasCore(core(args.core))) return .{ .err = code(app_codes.no_core) };
-    if (args.topic == .uart and context.uart_feed == null) {
-        context.uart_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
-    }
-    if (args.topic == .session and context.session_feed == null) {
-        context.session_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
-    }
-    if (args.topic == .trace and context.trace_feed == null) {
-        const on = context.trace_on orelse return .{ .err = code(app_codes.refused) };
-        if (!on.onFn(on.context)) return .{ .err = code(app_codes.refused) };
-        context.trace_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
-    }
-    if (args.topic == .lcd_dirty and context.lcd_feed == null) {
-        const display = context.session.display orelse return .{ .err = code(app_codes.refused) };
-        if (context.gpa == null) return .{ .err = code(app_codes.refused) };
-        context.lcd_feed = context.session.subscribe() catch |err| return refuse(proto.Ack, err);
-        // A GLCDC panel is scanned only for a viewer: this client is one now.
-        display.watch(true);
-    }
-    if (args.topic == .lcd_dirty) context.lcd_rate[@backingInt(args.core)] = args.rate;
-    context.topics[@backingInt(args.core)] |= bit(args.topic);
-    return ack;
-}
-
-pub fn unsubscribe(context: *Context, args: proto.Subscription) Ack {
-    if (cores.absent(context.session, core(args.core))) return .{ .err = code(app_codes.no_core) };
-    context.topics[@backingInt(args.core)] &= ~bit(args.topic);
-    if (!context.wants(args.core, .lcd_dirty)) {
-        context.lcd_rate[@backingInt(args.core)] = 0;
-        context.lcd_pending[@backingInt(args.core)] = null;
-    }
-    if (!context.wants(.cpu0, .uart) and !context.wants(.cpu1, .uart)) release(context, &context.uart_feed);
-    if (!context.wants(.cpu0, .lcd_dirty) and !context.wants(.cpu1, .lcd_dirty)) unwatch(context);
-    if (!context.wants(.cpu0, .session) and !context.wants(.cpu1, .session)) release(context, &context.session_feed);
-    if (!context.wants(.cpu0, .trace) and !context.wants(.cpu1, .trace)) release(context, &context.trace_feed);
-    return ack;
-}
+pub const subscribe = subscriptions.subscribe;
+pub const unsubscribe = subscriptions.unsubscribe;
 
 pub const forget = @import("connection.zig").forget;
-const release = @import("connection.zig").release;
-const unwatch = @import("connection.zig").unwatch;
 
 pub fn now(context: *Context, args: proto.Now) rpc.Outcome(proto.U64) {
     _ = args;
-    const ns = context.session.now() catch |err| return refuse(proto.U64, err);
+    const ns = context.session.?.now() catch |err| return refuse(proto.U64, err);
     return .{ .ok = .{ .value = ns } };
 }
 
 pub fn interrupt(context: *Context, args: proto.CoreOnly) rpc.Outcome(proto.Stopped) {
     if (context.transport) |plane| plane.cancel();
-    const stop = context.session.interrupt(core(args.core)) catch |err| return refuse(proto.Stopped, err);
-    return .{ .ok = reported(context.session, args.core, .{ .stop = stop }) };
+    const stop = context.session.?.interrupt(core(args.core)) catch |err| return refuse(proto.Stopped, err);
+    return .{ .ok = reported(context.session.?, args.core, .{ .stop = stop }) };
 }
 
 pub const stopped = stopped_wire.stopped;

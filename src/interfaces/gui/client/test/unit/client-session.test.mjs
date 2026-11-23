@@ -125,7 +125,7 @@ export async function run(t) {
   t.section("Defaults & Handshake");
   await t.testAsync("connects with DEFAULT_CLIENT_CAPS and exposes DEFAULT_RPC_URL", async () => {
     assert.equal(DEFAULT_RPC_URL, "ws://127.0.0.1:4567");
-    assert.equal(DEFAULT_CLIENT_CAPS, 0x003f_ffff);
+    assert.equal(DEFAULT_CLIENT_CAPS, 0x00bf_ffff);
 
     const client = new RA8RpcClient({ WebSocketClass: MockWebSocket });
     const hello = await client.connect();

@@ -63,7 +63,9 @@ pub const Assembler = struct {
 };
 
 pub fn loadBegin(context: *Context, args: proto.LoadBegin) Ack {
-    if (!context.session.hasCore(handlers.core(args.core))) {
+    if ((context.session == null and args.core != .cpu0) or
+        (context.session != null and !context.session.?.hasCore(handlers.core(args.core))))
+    {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     }
     const gpa = context.gpa orelse return .{ .err = .bad_args };
@@ -72,7 +74,9 @@ pub fn loadBegin(context: *Context, args: proto.LoadBegin) Ack {
 }
 
 pub fn loadChunk(context: *Context, args: proto.LoadChunk) Ack {
-    if (!context.session.hasCore(handlers.core(args.core))) {
+    if ((context.session == null and args.core != .cpu0) or
+        (context.session != null and !context.session.?.hasCore(handlers.core(args.core))))
+    {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     }
     context.chunks.chunk(args.offset, args.bytes) catch return .{ .err = .bad_args };
@@ -83,7 +87,9 @@ pub fn loadChunk(context: *Context, args: proto.LoadChunk) Ack {
 /// semantics are identical by construction (RA8EMU-1174).
 pub fn loadEnd(context: *Context, args: proto.CoreOnly) Ack {
     // Checked first, so a refused end leaves another core's assembly in flight.
-    if (!context.session.hasCore(handlers.core(args.core))) {
+    if ((context.session == null and args.core != .cpu0) or
+        (context.session != null and !context.session.?.hasCore(handlers.core(args.core))))
+    {
         return .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) };
     }
     const image = context.chunks.end() catch return .{ .err = .bad_args };

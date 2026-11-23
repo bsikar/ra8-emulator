@@ -67,4 +67,7 @@ pub const Method = enum(u16) {
     disassemble = 0x01A0,
     list_cores = 0x01A1,
     step_back = 0x01A2,
+    session_status = 0x01A3,
+    session_close = 0x01A4,
+    session_configure = 0x01A5,
 };

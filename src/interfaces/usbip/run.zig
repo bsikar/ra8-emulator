@@ -75,6 +75,16 @@ pub fn install(target: *usb.Usb, allocator: std.mem.Allocator, io: std.Io, port:
     target.bridge = .{ .context = live, .pollFn = Live.poll, .port = Live.port };
 }
 
+/// Release a live bridge after the recorded wrapper has been removed.
+pub fn uninstall(target: *usb.Usb, allocator: std.mem.Allocator) void {
+    const hook = target.bridge orelse return;
+    if (hook.pollFn != &Live.poll) return;
+    const live: *Live = @ptrCast(@alignCast(hook.context));
+    live.link.deinit(allocator);
+    allocator.destroy(live);
+    target.bridge = null;
+}
+
 /// One line for each event that changed something a user would see.
 pub fn report(out: anytype, event: bridge.Event, link: *const bridge.Bridge) !void {
     switch (event) {

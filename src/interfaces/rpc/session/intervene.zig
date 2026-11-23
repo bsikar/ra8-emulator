@@ -17,13 +17,13 @@ pub const ConsoleInput = struct {
 };
 
 pub fn consoleInput(context: *handlers.Context, args: ConsoleInput) AckOutcome {
-    context.session.consoleInput(core(args.core), args.bytes) catch |err| return refuse(err);
+    context.session.?.consoleInput(core(args.core), args.bytes) catch |err| return refuse(err);
     return .{ .ok = .{ .accepted = 1 } };
 }
 
 /// Steps the core's PC over the BKPT it is stopped on.
 pub fn skipBkpt(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
-    context.session.skipBkpt(core(args.core)) catch |err| return refuse(err);
+    context.session.?.skipBkpt(core(args.core)) catch |err| return refuse(err);
     return .{ .ok = .{ .accepted = 1 } };
 }
 
@@ -31,7 +31,7 @@ pub fn skipBkpt(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
 pub fn undoWrite(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     _ = args;
     if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
-    context.session.undoWrite() catch |err| return refuse(err);
+    context.session.?.undoWrite() catch |err| return refuse(err);
     context.pending = null;
     return .{ .ok = .{ .accepted = 1 } };
 }
@@ -40,7 +40,7 @@ pub fn undoWrite(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
 pub fn resetImage(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     _ = args;
     if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
-    context.session.resetImage() catch |err| return refuse(err);
+    context.session.?.resetImage() catch |err| return refuse(err);
     context.pending = null;
     return .{ .ok = .{ .accepted = 1 } };
 }
@@ -48,8 +48,8 @@ pub fn resetImage(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
 /// Rewinds one recorded stop on `args.core` and emits the stop event.
 pub fn stepBack(context: *handlers.Context, args: proto.CoreOnly) AckOutcome {
     if (context.transport) |plane| if (plane.job != null) return refuse(error.Busy);
-    context.session.stepBack(core(args.core)) catch |err| return refuse(err);
-    context.pending = handlers.reported(context.session, args.core, .{ .stop = .stepped });
+    context.session.?.stepBack(core(args.core)) catch |err| return refuse(err);
+    context.pending = handlers.reported(context.session.?, args.core, .{ .stop = .stepped });
     return .{ .ok = .{ .accepted = 1 } };
 }
 

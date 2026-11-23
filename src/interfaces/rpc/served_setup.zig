@@ -62,6 +62,10 @@ pub const SecondImage = served_second.Image;
 
 pub const Served = struct {
     owner: harness.Harness,
+    cleanup: ?struct {
+        context: *anyopaque,
+        closeFn: *const fn (*anyopaque, *Served) void,
+    } = null,
     context: served.Context,
     /// Incoming frames (two frames long) and one outgoing frame.
     rx: []u8,
@@ -140,7 +144,7 @@ pub const Served = struct {
             allocator,
             io,
             elf_path,
-            if (history_opts) |opts| opts.elf_bytes else null,
+            if (history_opts) |opts| opts.elf_bytes orelse startup.elf_bytes else startup.elf_bytes,
             second_image,
         );
         defer initial.deinit();
@@ -349,6 +353,7 @@ pub const Served = struct {
             self.frames = null;
         }
         served_usbip.release(self);
+        if (self.cleanup) |cleanup| cleanup.closeFn(cleanup.context, self);
         board_c6.release(&self.owner.board().c6.wire.bridge);
         if (self.bridge) |*b| b.deinit();
         if (self.stacks) |stacks| {

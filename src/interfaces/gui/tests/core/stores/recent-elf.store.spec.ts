@@ -94,6 +94,7 @@ describe('RecentElfStore and workspace chunk helper', () => {
     };
 
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
     board.loadElfFile = async (_name, bytes, _core, opts) => {
       uploadedPayloads.push(bytes);
@@ -156,6 +157,7 @@ describe('RecentElfStore and workspace chunk helper', () => {
       }),
     };
     rpc.connectionState.set('connected');
+    rpc.sessionLoaded.set(true);
     rpc.serverCaps.set(CAP_WORKSPACE);
     Object.defineProperty(rpc, 'activeClient', { get: () => fakeClient });
     board.loadElfFile = async (_name, bytes) => {

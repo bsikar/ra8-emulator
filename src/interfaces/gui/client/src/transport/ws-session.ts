@@ -34,11 +34,30 @@ import {
   uploadElfImage,
 } from "../wire/session.js";
 import { Core, Method, RunMode, Topic } from "../wire/types.js";
-import { decodeAck, decodeTextSlice, decodeU64, encodeCoreOnly } from "./envelope.js";
+import { decodeAck, decodeTextSlice, decodeU64, encodeCoreOnly, encodeText } from "./envelope.js";
 import { WsTransport } from "./ws-transport.js";
 
 /** Session execution, board hardware, input, metrics, and snapshot methods. */
 export class RA8RpcSessionClient extends WsTransport {
+  public async sessionStatus(): Promise<{ loaded: boolean; machine: string }> {
+    const reply = await this.call(Method.SessionStatus, new Uint8Array());
+    if (reply.length < 5 || reply[0]! > 1) throw new Error("Invalid session status reply");
+    return { loaded: reply[0] === 1, machine: decodeTextSlice(reply.subarray(1)) };
+  }
+
+  public closeSession(): Promise<boolean> {
+    return this.ack(Method.SessionClose, new Uint8Array());
+  }
+
+  public configureSession(machine: string, profile = ""): Promise<boolean> {
+    const name = encodeText(machine, 64);
+    const board = encodeText(profile, 65536);
+    const args = new Uint8Array(name.length + board.length);
+    args.set(name);
+    args.set(board, name.length);
+    return this.ack(Method.SessionConfigure, args);
+  }
+
   public async loadElf(
     core: Core,
     image: Uint8Array,

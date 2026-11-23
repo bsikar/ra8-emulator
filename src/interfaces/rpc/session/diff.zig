@@ -290,12 +290,12 @@ pub fn diff(context: *handlers.Context, args: proto.DiffArgs) DiffOutcome {
     if (plane.busy() != null) return refuse();
     const bridge = plane.history orelse return refuse();
     var facts = bridge.facts(bridge.context) catch return refuse();
-    if (context.session.fork_router) |router| {
+    if (context.session.?.fork_router) |router| {
         facts.graph = router.graph;
         facts.active_line = router.active_line;
     }
-    if (context.session.nav_index) |nav| facts.nav = nav;
-    const cursor = context.session.currentPosition();
+    if (context.session.?.nav_index) |nav| facts.nav = nav;
+    const cursor = context.session.?.currentPosition();
     const line = lineCheckpoints(gpa, facts, cursor.branch) catch return refuse();
     defer gpa.free(line);
     const side_a = resolveSide(gpa, line, facts, args.a, cursor) orelse return refuse();
@@ -314,7 +314,7 @@ pub fn diff(context: *handlers.Context, args: proto.DiffArgs) DiffOutcome {
         null;
     defer if (man_b) |*m| m.deinit(gpa);
     if (side_a == .plan or side_b == .plan) {
-        captureReadOnly(gpa, context.session, bridge, side_a, side_b, &blobs, &man_a, &man_b) catch return refuse();
+        captureReadOnly(gpa, context.session.?, bridge, side_a, side_b, &blobs, &man_a, &man_b) catch return refuse();
     }
     var result = diff_engine.diffManifests(
         gpa,

@@ -21,7 +21,7 @@ pub const Bindings = struct {
 
 pub fn debugger(source: *setup.Served) void {
     if (source.context.modules) |table| {
-        table.armer = .{ .ctx = source.context.session, .arm = arm, .drop = drop };
+        table.armer = .{ .ctx = source.context.session.?, .arm = arm, .drop = drop };
     }
 }
 

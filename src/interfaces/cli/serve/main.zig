@@ -18,6 +18,7 @@ const loop = @import("loop.zig");
 const machine_mod = @import("ra8_chip").core.machine;
 const served_camera = @import("ra8_rpc").served_camera;
 const served_setup = @import("ra8_rpc").served_setup;
+const service_run = @import("service_run.zig");
 const source_spec = @import("ra8_host").camera.source_spec;
 const targets = @import("targets.zig");
 const usbip_run = @import("ra8_usbip").exported.run;
@@ -25,9 +26,9 @@ const Workbench = @import("workbench.zig").Workbench;
 
 pub const usage =
     "usage: ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] --stdio " ++
-    "<firmware.elf>\n" ++
+    "[firmware.elf]\n" ++
     "       ra8_emulator serve [--discover] [--profile-folded] [--cpu1 CPU1.elf] " ++
-    "[--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT <firmware.elf>\n" ++
+    "[--allow-state-files] --listen unix:PATH|tcp:[HOST]:PORT [firmware.elf]\n" ++
     "       --discover publishes per-user RPC/GDB discovery for ctl and IDE clients\n" ++
     "       --profile-folded samples each core's call stacks for `ctl folded`\n" ++
     "       --cpu1 brings CPU1 up from its own image, parked until it is run\n" ++
@@ -63,7 +64,7 @@ const Asked = struct {
     build_zig: ?[]const u8 = null,
     build_toolchain_cache: ?[]const u8 = null,
     where: Where,
-    elf: []const u8,
+    elf: ?[]const u8,
     discover: bool = false,
     folded: bool = false,
     cpu1: ?[]const u8 = null,
@@ -132,6 +133,7 @@ pub fn parseWithCatalog(argv: []const []const u8, machines: []const *const machi
         c.allow_webcam = flags.allow_webcam;
         asked.camera = c;
     }
+    if (asked.elf == null and (asked.discover or asked.artifacts_root != null or asked.reopen != null)) return null;
     if (!coresAllowed(asked)) return null;
     return if (consistent(asked)) asked else null;
 }
@@ -169,10 +171,12 @@ fn consistent(asked: Asked) bool {
 }
 
 fn parseWhere(argv: []const []const u8) ?Asked {
-    if (argv.len == 4 and std.mem.eql(u8, argv[2], "--stdio")) return .{ .where = .stdio, .elf = argv[3] };
-    if (argv.len != 5 or !std.mem.eql(u8, argv[2], "--listen")) return null;
+    if ((argv.len == 3 or argv.len == 4) and std.mem.eql(u8, argv[2], "--stdio")) {
+        return .{ .where = .stdio, .elf = if (argv.len == 4) argv[3] else null };
+    }
+    if ((argv.len != 4 and argv.len != 5) or !std.mem.eql(u8, argv[2], "--listen")) return null;
     const spec = listen.Spec.parse(argv[3]) catch return null;
-    return .{ .where = .{ .listen = spec }, .elf = argv[4] };
+    return .{ .where = .{ .listen = spec }, .elf = if (argv.len == 5) argv[4] else null };
 }
 
 /// Each paired app's display name and module ELF, as the session places them.
@@ -187,6 +191,9 @@ pub fn run(
         std.debug.print("{s}", .{usage});
         return 2;
     };
+    if (usesService(asked)) {
+        return service_run.run(allocator, io, asked, historyOptions(asked), attachRuntime);
+    }
     // Declared before the session so the bridge outlives the session's release of it.
     var bridges = std.heap.ArenaAllocator.init(allocator);
     defer bridges.deinit();
@@ -195,13 +202,13 @@ pub fn run(
     setup.openInputs(
         allocator,
         io,
-        asked.elf,
+        asked.elf.?,
         null,
         history_opts,
         if (asked.cpu1) |path| .{ .path = path } else null,
         .{ .card = asked.sdhi, .machine = asked.machine },
     ) catch |err| {
-        std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf, @errorName(err) });
+        std.debug.print("serve: cannot open {s}: {s}\n", .{ asked.elf.?, @errorName(err) });
         return 1;
     };
     var inventory: targets.Inventory = .{};
@@ -248,6 +255,10 @@ pub fn run(
     return 0;
 }
 
+fn usesService(asked: Asked) bool {
+    return !asked.discover and asked.artifacts_root == null and asked.reopen == null;
+}
+
 fn attachRuntime(
     setup: *served_setup.Served,
     asked: Asked,
@@ -278,7 +289,7 @@ fn serveWithDiscovery(
 ) !void {
     if (asked.discover) listen.catchStops();
     var hosted = if (asked.discover)
-        try discovery.open(allocator, io, env, asked.elf, setup.context.session)
+        try discovery.open(allocator, io, env, asked.elf.?, setup.context.session.?)
     else
         null;
     defer if (hosted) |*listener| listener.deinit();

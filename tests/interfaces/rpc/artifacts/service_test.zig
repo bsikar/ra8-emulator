@@ -16,9 +16,9 @@ test "export download and checked upload prepare a replacement before activation
     var f = try fixture.Fixture.open();
     defer f.close();
     const context = &f.original.context;
-    const saved = try context.session.register(.cpu0, .r0);
+    const saved = try context.session.?.register(.cpu0, .r0);
     const descriptor = try ok(artifacts.wire.Descriptor, artifacts.handlers.exportBegin(context, .{ .recording = 0 }));
-    try context.session.setRegister(.cpu0, .r0, saved +% 1);
+    try context.session.?.setRegister(.cpu0, .r0, saved +% 1);
     var bytes = std.Io.Writer.Allocating.init(gpa);
     defer bytes.deinit();
     while (bytes.written().len < descriptor.total) {

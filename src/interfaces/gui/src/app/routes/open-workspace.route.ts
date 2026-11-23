@@ -51,7 +51,7 @@ export class OpenWorkspaceRouteComponent implements OnInit {
   protected readonly stagedElf = signal<StagedElfArtifact | null>(null);
   protected readonly stagedBoard = signal<StagedBoardArtifact | null>(null);
   protected readonly validationError = signal<string | null>(null);
-  protected readonly wsUrl = signal<string>('ws://127.0.0.1:4567');
+  protected readonly wsUrl = signal<string>(this.rpc.serverUrl());
   protected readonly selectedBoardId = signal<string>(OFFICIAL_BOARD_PRESETS[0]!.id);
   protected readonly selectedCore = signal<Core>(Core.Cpu0);
   protected readonly breakAtMain = signal<boolean>(false);

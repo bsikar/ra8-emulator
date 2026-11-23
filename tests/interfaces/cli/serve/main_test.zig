@@ -17,7 +17,7 @@ test "serve workspace access requires one explicit nonempty root" {
     try std.testing.expectEqual(@as(?[]const u8, null), plain.workspace);
     const enabled = cli.parse(&.{ "ra8", "serve", "--workspace", "project with spaces", "--stdio", "firmware.elf" }).?;
     try std.testing.expectEqualStrings("project with spaces", enabled.workspace.?);
-    try std.testing.expectEqualStrings("firmware.elf", enabled.elf);
+    try std.testing.expectEqualStrings("firmware.elf", enabled.elf.?);
     try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--workspace", "", "--stdio", "fw.elf" }) == null);
     try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--workspace", "one", "--workspace", "two", "--stdio", "fw.elf" }) == null);
     try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--workspace" }) == null);
@@ -54,4 +54,11 @@ test "serve takes a machine from the catalog and refuses --cpu1 on a single-core
     try std.testing.expect(cli.parseWithCatalog(shipped_only, &list) == null);
     const shipped = cli.parse(&.{ "ra8", "serve", "--part", "ra8p1", "--stdio", "fw.elf" }).?;
     try std.testing.expectEqual(&machine_mod.catalog.ra8p1, shipped.machine.?);
+}
+
+test "serve accepts an idle listener without startup firmware" {
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--listen", "tcp:127.0.0.1:4567" }) != null);
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--stdio" }) != null);
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--discover", "--stdio" }) == null);
+    try std.testing.expect(cli.parse(&.{ "ra8", "serve", "--artifacts-root", ".", "--stdio" }) == null);
 }

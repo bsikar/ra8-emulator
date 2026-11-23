@@ -17,7 +17,7 @@ const Outcome = rpc.Outcome(proto.DisasmReply);
 
 pub fn read(context: *handlers.Context, args: wire.Request) rpc.Outcome(wire.Reply) {
     const core: api.Core = if (args.core == .cpu0) .cpu0 else .cpu1;
-    const view = context.session.view(core) catch |err| return if (err == error.CoreNotAttached)
+    const view = context.session.?.view(core) catch |err| return if (err == error.CoreNotAttached)
         .{ .err = @fromBackingInt(@intCast(handlers.app_codes.no_core)) }
     else
         refuseRead();
@@ -45,14 +45,14 @@ fn tooLong() rpc.Outcome(wire.Reply) {
 
 pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     const which: api.Core = @fromBackingInt(@intCast(@backingInt(args.core)));
-    const pc = (context.session.register(which, .pc) catch |err| return refuse(err)) & ~@as(u32, 1);
+    const pc = (context.session.?.register(which, .pc) catch |err| return refuse(err)) & ~@as(u32, 1);
     if (context.scratch.len < wire.disasm_bytes) return refuse(error.NoRoom);
 
     const requested: usize = if (args.count == 0) 24 else args.count;
     const count = @min(requested, wire.disasm_max_rows);
     var address: u32 = if (args.use_pc != 0) pc else (args.address & ~@as(u32, 1));
     const image = handlers.imageOf(context, which);
-    const core_v: ?core_view.View = context.session.view(which) catch null;
+    const core_v: ?core_view.View = context.session.?.view(which) catch null;
     const alloc = context.gpa orelse std.heap.page_allocator;
     var decomp_cache: ?decomp.cache.CfgCache = decomp.cache.CfgCache.init(
         alloc,
@@ -68,7 +68,7 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
         var text_buf: [wire.disasm_text_cap]u8 = undefined;
         var pseudo_buf: [wire.disasm_pseudo_cap]u8 = undefined;
         var row = decodeOne(
-            context.session,
+            context.session.?,
             which,
             core_v,
             address,
