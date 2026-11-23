@@ -39,7 +39,12 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, input: *std.Io.Reader, options: 
     try validation.snapshotSections(gpa, state);
     const chosen = options.machine orelse &catalog.ra8p1;
     try board_snap.machineOf(chosen, state);
-    if (metadata.recording) return recorded(gpa, io, &reader, state, options);
+    const labels = try session.label_codec.decode(metadata.labels);
+    if (metadata.recording) {
+        const imported = try recorded(gpa, io, &reader, state, options);
+        imported.owner.session().labels = labels;
+        return imported;
+    }
     if (try reader.next() != null) return error.UnexpectedEntry;
     const first = options.elf0 orelse return error.MissingImage;
     try images(metadata, first, options.elf1);
@@ -56,6 +61,7 @@ pub fn open(gpa: std.mem.Allocator, io: std.Io, input: *std.Io.Reader, options: 
     );
     errdefer candidate.deinit();
     try candidate.owner.state.files.readFrom(state);
+    candidate.owner.session().labels = labels;
     return candidate;
 }
 

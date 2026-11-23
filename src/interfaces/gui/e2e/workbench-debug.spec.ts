@@ -59,6 +59,12 @@ test.describe('Workbench Debug (/debug) with Live Emulator RPC', () => {
     const gutterBtn = page.locator('[data-testid^="debug-gutter-"]').nth(1);
     await gutterBtn.click();
     await expect(page.locator('[data-testid^="debug-bp-item-"]')).toHaveCount(1, { timeout: 10_000 });
+    const labelEditor = page.getByTestId('debug-disasm').getByRole('button', { name: 'Edit debugger label' }).first();
+    await labelEditor.click();
+    const label = page.getByRole('textbox', { name: 'Debugger label' });
+    await label.fill('blink_entry');
+    await label.press('Enter');
+    await expect(page.getByTestId('debug-disasm')).toContainText('blink_entry');
     await page.getByTestId('debug-mode-decomp').click();
     await expect(page.getByTestId('debug-disasm')).toBeVisible();
     await page.getByTestId('debug-mode-mixed').click();

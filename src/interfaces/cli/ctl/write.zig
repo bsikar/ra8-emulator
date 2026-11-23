@@ -9,6 +9,8 @@ const Client = @import("client.zig").Client;
 const intervene = rpc_session.intervene;
 
 pub const WriteCommand = union(enum) {
+    label: rpc_session.label.Request,
+    label_local: rpc_session.label.LocalRequest,
     write_reg: struct { reg: proto.Register, value: u32 },
     write_mem: struct { addr: u32, bytes: []const u8 },
     set_var: struct { frame: u32, name: []const u8, value: []const u8 },
@@ -27,10 +29,34 @@ pub fn parseWord(allocator: std.mem.Allocator, name: []const u8, args: []const [
     const eql = std.mem.eql;
     if (eql(u8, name, "write-reg") or (eql(u8, name, "reg") and args.len == 2)) return try parseReg(args);
     if (eql(u8, name, "write-mem") or (eql(u8, name, "poke") and args.len == 2)) return try parseMem(allocator, args);
+    if (eql(u8, name, "label-local")) return try parseLocalLabel(args);
+    if (eql(u8, name, "label")) return try parseLabel(args);
     if (eql(u8, name, "set")) return try parseSet(args);
     if (eql(u8, name, "console")) return if (args.len == 1) .{ .console = args[0] } else error.BadArguments;
     if (try parseNoArgs(name, args)) |cmd| return cmd;
     return null;
+}
+
+/// Parse `label ADDRESS NAME [WIDTH]`. An empty name clears the label.
+fn parseLabel(args: []const []const u8) !WriteCommand {
+    if (args.len < 2 or args.len > 3) return error.BadArguments;
+    return .{ .label = .{
+        .core = .cpu0,
+        .address = try std.fmt.parseInt(u32, args[0], 0),
+        .name = args[1],
+        .width = if (args.len == 3) try std.fmt.parseInt(u8, args[2], 0) else 0,
+    } };
+}
+
+/// Parse `label-local FRAME LOCAL NAME`. An empty name clears the label.
+fn parseLocalLabel(args: []const []const u8) !WriteCommand {
+    if (args.len != 3) return error.BadArguments;
+    return .{ .label_local = .{
+        .core = .cpu0,
+        .frame = try std.fmt.parseInt(u32, args[0], 0),
+        .local = args[1],
+        .name = args[2],
+    } };
 }
 
 fn parseNoArgs(name: []const u8, args: []const []const u8) !?WriteCommand {
@@ -122,6 +148,14 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
                 try w.print("memory at 0x{x:0>8} ({d} bytes) written\n", .{ mem.addr, mem.bytes.len });
             }
         },
+        .label => |label| {
+            _ = try client.call(proto.Ack, rpc_session.label.Request, .label_set, label);
+            try writeLabelAck(w, json, "label updated\n");
+        },
+        .label_local => |label| {
+            _ = try client.call(proto.Ack, rpc_session.label.LocalRequest, .local_label_set, label);
+            try writeLabelAck(w, json, "local label updated\n");
+        },
         .set_var => |s| return try performSetVar(client, w, json, s.frame, s.name, s.value),
         .console => |text| {
             _ = try client.call(proto.Ack, intervene.ConsoleInput, .console_input, .{ .core = .cpu0, .bytes = text });
@@ -135,21 +169,27 @@ pub fn perform(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !u8 {
             _ = try client.call(proto.Ack, proto.CoreOnly, .skip_bkpt, .{ .core = .cpu0 });
             if (json) try w.writeAll("{\"skip_bkpt\":true}\n") else try w.writeAll("BKPT skipped\n");
         },
-        .undo, .reset_image => {
-            if (cmd == .undo) {
-                _ = try client.call(proto.Ack, proto.CoreOnly, .undo_write, .{ .core = .cpu0 });
-            } else {
-                _ = try client.call(proto.Ack, proto.CoreOnly, .reset_image, .{ .core = .cpu0 });
-            }
-            const name = if (cmd == .undo) "undo" else "reset_image";
-            if (json) {
-                try w.print("{{\"{s}\":true}}\n", .{name});
-            } else {
-                try w.print("{s}: restored machine checkpoint\n", .{name});
-            }
-        },
+        .undo, .reset_image => try performRestore(client, w, json, cmd),
     }
     return 0;
+}
+
+fn writeLabelAck(w: anytype, json: bool, message: []const u8) !void {
+    try w.writeAll(if (json) "{\"label\":true}\n" else message);
+}
+
+fn performRestore(client: *Client, w: anytype, json: bool, cmd: WriteCommand) !void {
+    if (cmd == .undo) {
+        _ = try client.call(proto.Ack, proto.CoreOnly, .undo_write, .{ .core = .cpu0 });
+    } else {
+        _ = try client.call(proto.Ack, proto.CoreOnly, .reset_image, .{ .core = .cpu0 });
+    }
+    const name = if (cmd == .undo) "undo" else "reset_image";
+    if (json) {
+        try w.print("{{\"{s}\":true}}\n", .{name});
+    } else {
+        try w.print("{s}: restored machine checkpoint\n", .{name});
+    }
 }
 
 fn performSetVar(client: *Client, w: anytype, json: bool, frame: u32, name: []const u8, value: []const u8) !u8 {

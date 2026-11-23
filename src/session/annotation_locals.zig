@@ -4,17 +4,27 @@ const std = @import("std");
 const Cursor = @import("dwarf/cursor.zig").Cursor;
 const dwarf = @import("dwarf/dwarf.zig");
 const elf = @import("ra8_board").image.elf;
+const label_locals = @import("label_locals.zig");
+const labels = @import("labels.zig");
 const operands = @import("annotation_operands.zig");
 const text = @import("ra8_chip").core.cpu.text.text;
 
 pub fn append(image: elf.Image, pc: u32, into: *text.Text) void {
-    const name = nameAt(image, pc, into.slice()) orelse return;
+    appendWithLabels(image, pc, into, null);
+}
+
+pub fn appendWithLabels(image: elf.Image, pc: u32, into: *text.Text, names: ?labels.View) void {
+    const name = nameAtWithLabels(image, pc, into.slice(), names) orelse return;
     // One unambiguous name keeps a crowded alias set from overflowing text.
     into.put(" ; local {s}", .{name});
 }
 
 /// Return the active-scope DWARF local variable name matching `line` at `pc`, if any.
 pub fn nameAt(image: elf.Image, pc: u32, line: []const u8) ?[]const u8 {
+    return nameAtWithLabels(image, pc, line, null);
+}
+
+pub fn nameAtWithLabels(image: elf.Image, pc: u32, line: []const u8, names: ?labels.View) ?[]const u8 {
     const sections = dwarf.locals.ofImage(image);
     var rows: [64]dwarf.locals.Local = undefined;
     const count = dwarf.locals.inFunction(sections, pc, &rows) catch return null;
@@ -22,6 +32,9 @@ pub fn nameAt(image: elf.Image, pc: u32, line: []const u8) ?[]const u8 {
         if (row.name.len == 0) continue;
         const local = (dwarf.vars.findLocal(sections, pc, row.name) catch null) orelse continue;
         if (!touches(image, pc, local, line)) continue;
+        if (names) |view| {
+            if (label_locals.nameOf(view, local)) |name| return name;
+        }
         return local.name;
     }
     return null;

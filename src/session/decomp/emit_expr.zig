@@ -3,7 +3,6 @@ const std = @import("std");
 
 const annotation_locals = @import("../annotation_locals.zig");
 const dataflow_mod = @import("dataflow.zig");
-const elf = @import("ra8_board").image.elf;
 const emit_format = @import("emit_format.zig");
 const text = @import("ra8_chip").core.cpu.text.text;
 const value = @import("value.zig");
@@ -13,7 +12,7 @@ const ParsedDisasm = emit_format.ParsedDisasm;
 /// Emit pseudocode-lite for one non-branch/non-call instruction line.
 pub fn writeInstruction(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: emit_format.Names,
     addr: u32,
     dis_line: []const u8,
     flow: *const dataflow_mod.InsnFlow,
@@ -30,11 +29,11 @@ pub fn writeInstruction(
     if (isFlagSetter(m) and ops.len >= 2) return writeFlagSetter(w, m, ops);
     if (try tryWritePair(w, m, ops, pair_opt)) return;
     if (isLoadMnemonic(m) or isStoreMnemonic(m)) {
-        try writeMemOp(w, image, addr, dis_line, &parsed, flow);
+        try writeMemOp(w, names, addr, dis_line, &parsed, flow);
         return;
     }
-    if (try tryWriteCsel(w, image, m, ops, cond_opt)) return;
-    try writeAluOrMove(w, image, &parsed, flow);
+    if (try tryWriteCsel(w, names, m, ops, cond_opt)) return;
+    try writeAluOrMove(w, names, &parsed, flow);
 }
 
 fn isBarrierOrHint(m: []const u8) bool {
@@ -87,7 +86,7 @@ fn isStoreMnemonic(m: []const u8) bool {
 
 fn writeMemOp(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: emit_format.Names,
     addr: u32,
     dis_line: []const u8,
     parsed: *const ParsedDisasm,
@@ -95,11 +94,14 @@ fn writeMemOp(
 ) !void {
     const ops = parsed.ops();
     if (ops.len < 2) return w.print("/* {s} */", .{dis_line});
-    const local_opt = if (image) |img| annotation_locals.nameAt(img, addr, dis_line) else null;
+    const local_opt = if (names.image) |img|
+        annotation_locals.nameAtWithLabels(img, addr, dis_line, names.labels_for_core)
+    else
+        null;
     if (isLoadMnemonic(parsed.mnemonic)) {
         if (flow.primary_val == .constant) {
             try w.print("{s} = ", .{ops[0]});
-            return emit_format.writeConstant(w, image, flow.primary_val.constant, true);
+            return emit_format.writeConstant(w, names, flow.primary_val.constant, true);
         }
         if (local_opt) |loc| return w.print("{s} = {s}", .{ ops[0], loc });
         try w.print("{s} = {s}[", .{ ops[0], memWidthTag(parsed.mnemonic) });
@@ -139,7 +141,7 @@ fn writeMemExpr(w: *std.Io.Writer, ops: []const []const u8) !void {
 
 fn tryWriteCsel(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: emit_format.Names,
     m: []const u8,
     ops: []const []const u8,
     cond_opt: ?value.ConditionPair,
@@ -150,7 +152,7 @@ fn tryWriteCsel(
     if ((!is_csel and !is_alias) or ops.len < 2) return false;
     const eff_cond: u4 = if (is_alias) (cp.cond ^ 1) else cp.cond;
     try w.print("{s} = (", .{ops[0]});
-    try emit_format.writeCondition(w, image, eff_cond, cp.origin, cp.self_reg);
+    try emit_format.writeCondition(w, names, eff_cond, cp.origin, cp.self_reg);
     try w.writeAll(") ? ");
     try writeCselBranches(w, m, is_alias, ops);
     return true;
@@ -173,14 +175,14 @@ fn writeCselBranches(w: *std.Io.Writer, m: []const u8, is_alias: bool, ops: []co
 
 fn writeAluOrMove(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: emit_format.Names,
     parsed: *const ParsedDisasm,
     flow: *const dataflow_mod.InsnFlow,
 ) !void {
     const m = parsed.mnemonic;
     const ops = parsed.ops();
     if (ops.len == 0) return w.print("/* {s} */", .{parsed.raw_mnemonic});
-    if (isMoveMnemonic(m) and ops.len >= 2) return writeMove(w, image, m, ops, flow);
+    if (isMoveMnemonic(m) and ops.len >= 2) return writeMove(w, names, m, ops, flow);
     if (binaryOpSymbol(m)) |sym| {
         if (ops.len == 3) {
             try w.print("{s} = {s} {s} {s}", .{ ops[0], ops[1], sym, cleanImm(ops[2]) });
@@ -189,13 +191,13 @@ fn writeAluOrMove(
         } else {
             return w.print("/* {s} {s} */", .{ parsed.raw_mnemonic, parsed.args_str });
         }
-        return maybeWriteFoldedComment(w, image, flow.primary_val);
+        return maybeWriteFoldedComment(w, names, flow.primary_val);
     }
-    if (try tryWriteBitOrExtend(w, m, ops)) return maybeWriteFoldedComment(w, image, flow.primary_val);
+    if (try tryWriteBitOrExtend(w, m, ops)) return maybeWriteFoldedComment(w, names, flow.primary_val);
     if (flow.primary_rd) |rd| {
         if (flow.primary_val == .constant) {
             try w.print("{s} = ", .{text.names[rd]});
-            return emit_format.writeConstant(w, image, flow.primary_val.constant, true);
+            return emit_format.writeConstant(w, names, flow.primary_val.constant, true);
         }
     }
     try w.print("/* {s} {s} */", .{ parsed.raw_mnemonic, parsed.args_str });
@@ -207,14 +209,14 @@ fn isMoveMnemonic(m: []const u8) bool {
 
 fn writeMove(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: emit_format.Names,
     m: []const u8,
     ops: []const []const u8,
     flow: *const dataflow_mod.InsnFlow,
 ) !void {
     if (flow.primary_val == .constant) {
         try w.print("{s} = ", .{ops[0]});
-        return emit_format.writeConstant(w, image, flow.primary_val.constant, true);
+        return emit_format.writeConstant(w, names, flow.primary_val.constant, true);
     }
     if (std.mem.eql(u8, m, "mvn") or std.mem.eql(u8, m, "mvns")) {
         return w.print("{s} = ~{s}", .{ ops[0], cleanImm(ops[1]) });
@@ -282,10 +284,10 @@ fn inList(list: []const []const u8, m: []const u8) bool {
     return false;
 }
 
-fn maybeWriteFoldedComment(w: *std.Io.Writer, image: ?elf.Image, val: value.Value) !void {
+fn maybeWriteFoldedComment(w: *std.Io.Writer, names: emit_format.Names, val: value.Value) !void {
     const c = val.asConstant() orelse return;
     try w.writeAll(" /* = ");
-    try emit_format.writeConstant(w, image, c, false);
+    try emit_format.writeConstant(w, names, c, false);
     try w.writeAll(" */");
 }
 

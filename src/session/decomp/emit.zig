@@ -6,12 +6,14 @@ const dataflow_mod = @import("dataflow.zig");
 const elf = @import("ra8_board").image.elf;
 const emit_expr = @import("emit_expr.zig");
 const emit_format = @import("emit_format.zig");
+const labels = @import("../labels.zig");
 const text_disasm = @import("ra8_chip").core.cpu.text.disasm;
 const value = @import("value.zig");
 
 /// Options configuring `emitFunction`.
 pub const Options = struct {
     image: ?elf.Image = null,
+    labels_for_core: ?labels.View = null,
 };
 
 /// Pseudocode-lite annotation attached to a single instruction address inside a function.
@@ -64,7 +66,7 @@ const EmitContext = struct {
     aa: std.mem.Allocator,
     cfg: *const cfg_mod.Cfg,
     df: *const dataflow_mod.Dataflow,
-    image: ?elf.Image,
+    names: emit_format.Names,
     cond_for_insn: []const ?usize,
     call_for_insn: []const ?usize,
     call_arities: []const u3,
@@ -101,7 +103,8 @@ pub fn emitFunction(
     errdefer arena.deinit();
     const aa = arena.allocator();
 
-    const fn_name = if (cfg.name) |n|
+    const names: emit_format.Names = .{ .image = opts.image, .labels_for_core = opts.labels_for_core };
+    const fn_name = if (names.label(cfg.entry) orelse cfg.name) |n|
         try aa.dupe(u8, n)
     else
         try std.fmt.allocPrint(aa, "fn_{x:0>8}", .{cfg.entry});
@@ -111,7 +114,7 @@ pub fn emitFunction(
         .aa = aa,
         .cfg = cfg,
         .df = df,
-        .image = opts.image,
+        .names = names,
         .cond_for_insn = cond_for_insn,
         .call_for_insn = call_for_insn,
         .call_arities = call_arities,
@@ -136,7 +139,7 @@ fn emitAllLines(ctx: *const EmitContext) ![]const LineEmit {
     for (ctx.cfg.blocks) |blk| {
         const leader_label = if (blk.id > 0 and blk.preds.len > 0) blk: {
             var lw: std.Io.Writer = .fixed(&label_buf);
-            try emit_format.writeTargetLabel(&lw, ctx.image, ctx.cfg, blk.start);
+            try emit_format.writeTargetLabel(&lw, ctx.names, ctx.cfg, blk.start);
             break :blk try ctx.aa.dupe(u8, lw.buffered());
         } else "";
 
@@ -188,7 +191,7 @@ fn formatInsnLine(
     const dis_line = if (dis_text) |*d| d.slice() else "";
     if (flow) |fl| {
         const pair_opt = findPairAt(ctx.df.pairs, ci.instr.address);
-        try emit_expr.writeInstruction(w, ctx.image, ci.instr.address, dis_line, fl, pair_opt, cond_opt);
+        try emit_expr.writeInstruction(w, ctx.names, ci.instr.address, dis_line, fl, pair_opt, cond_opt);
     } else {
         try w.print("/* {s} */", .{dis_line});
     }
@@ -206,7 +209,7 @@ fn maybeWriteItPrefix(
     if (fl.cond_active == null or (is_last and blk_kind == .cond_branch)) return;
     const cp = cond_opt orelse return;
     try w.writeAll("if (");
-    try emit_format.writeCondition(w, ctx.image, cp.cond, cp.origin, cp.self_reg);
+    try emit_format.writeCondition(w, ctx.names, cp.cond, cp.origin, cp.self_reg);
     try w.writeAll(") ");
 }
 
@@ -271,7 +274,7 @@ fn tryWriteCallTerminator(
     } else if (call.target_name) |name| {
         try w.writeAll(name);
     } else if (call.target_address) |addr| {
-        try emit_format.writeTargetLabel(w, ctx.image, ctx.cfg, addr);
+        try emit_format.writeTargetLabel(w, ctx.names, ctx.cfg, addr);
     } else {
         try w.writeAll("sub_unknown");
     }
@@ -281,7 +284,7 @@ fn tryWriteCallTerminator(
     var i: usize = 0;
     while (i < arity) : (i += 1) {
         if (i > 0) try w.writeAll(", ");
-        try emit_format.writeValue(w, ctx.image, call.args[i], @intCast(i));
+        try emit_format.writeValue(w, ctx.names, call.args[i], @intCast(i));
     }
     try w.writeByte(')');
     return true;
@@ -294,7 +297,7 @@ fn writeReturnStmt(ctx: *const EmitContext, blk: cfg_mod.BasicBlock, w: *std.Io.
         .r0 => {
             if (recentR0Constant(ctx.df, blk)) |c| {
                 try w.writeAll("return ");
-                return emit_format.writeConstant(w, ctx.image, c, true);
+                return emit_format.writeConstant(w, ctx.names, c, true);
             }
             return w.writeAll("return r0");
         },
@@ -325,12 +328,12 @@ fn tryWriteCondBranch(
     const dst = taken.target_address orelse return false;
     try w.writeAll("if (");
     if (cond_opt) |cp| {
-        try emit_format.writeCondition(w, ctx.image, cp.cond, cp.origin, cp.self_reg);
+        try emit_format.writeCondition(w, ctx.names, cp.cond, cp.origin, cp.self_reg);
     } else {
         try w.writeAll("cond");
     }
     try w.writeAll(") goto ");
-    try emit_format.writeTargetLabel(w, ctx.image, ctx.cfg, dst);
+    try emit_format.writeTargetLabel(w, ctx.names, ctx.cfg, dst);
     return true;
 }
 
@@ -338,7 +341,7 @@ fn tryWriteDirectJump(ctx: *const EmitContext, blk: cfg_mod.BasicBlock, w: *std.
     const edge = if (blk.succs.len > 0) blk.succs[0] else return false;
     const dst = edge.target_address orelse return false;
     try w.writeAll("goto ");
-    try emit_format.writeTargetLabel(w, ctx.image, ctx.cfg, dst);
+    try emit_format.writeTargetLabel(w, ctx.names, ctx.cfg, dst);
     return true;
 }
 

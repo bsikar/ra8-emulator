@@ -18,7 +18,9 @@ pub fn make(source: *setup.Served, spool: *Spool, recording: bool) !std.Io.File 
     try source.flushHistory();
     const state = try spool.save(&source.owner.state.files, writeState, 1024 * 1024 * 1024);
     defer state.close(source.io);
-    const metadata = try describe(source);
+    var metadata = try describe(source);
+    var label_text: [session.label_codec.text_cap]u8 = undefined;
+    metadata.labels = session.label_codec.encode(&source.owner.session().labels, &label_text);
     const root = if (recording) source.owner.session().root else null;
     var list: inventory.Inventory = .{ .gpa = spool.gpa };
     defer list.deinit();

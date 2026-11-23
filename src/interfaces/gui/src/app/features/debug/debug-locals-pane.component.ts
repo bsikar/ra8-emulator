@@ -5,6 +5,7 @@ import { BoardStore } from '../../core/stores/board.store';
 import { DebugStore } from '../../core/stores/debug.store';
 import { SectionKickerComponent } from '../../shared/ui/section-kicker.component';
 import { type EvaluatedLocal } from '../../shared/utils/dwarf-eval';
+import { DebugAddressLabelComponent } from './debug-address-label.component';
 import { evaluateWatchExpressions, parseRegisterOrMemoryValue } from './debug-view';
 
 function encodeScalarBytes(value: number, size: number): Uint8Array {
@@ -20,7 +21,7 @@ function encodeScalarBytes(value: number, size: number): Uint8Array {
 @Component({
   selector: 'app-debug-locals-pane',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SectionKickerComponent],
+  imports: [SectionKickerComponent, DebugAddressLabelComponent],
   template: `
     <div class="locals-pane">
       <div class="pane-head">
@@ -54,7 +55,16 @@ function encodeScalarBytes(value: number, size: number): Uint8Array {
       <div class="rows">
         @for (local of debug.locals(); track local.name) {
           <div class="var-row" [attr.data-testid]="'debug-local-' + local.name">
-            <span class="var-name mono ellipsis">{{ local.name }}</span>
+            @if (local.locationLabel !== 'optimized out') {
+              <app-debug-address-label
+                class="var-name mono ellipsis"
+                [core]="debug.activeCore()"
+                [frame]="debug.selectedFrameIndex()"
+                [name]="local.name"
+              />
+            } @else {
+              <span class="var-name mono ellipsis">{{ local.name }}</span>
+            }
             <span class="var-type es-meta mono ellipsis">{{ local.typeName }}</span>
             <span class="var-where es-meta mono ellipsis">{{ local.locationLabel }}</span>
             @if (editingLocal() === local.name) {

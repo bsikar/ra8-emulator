@@ -6,6 +6,8 @@
 const std = @import("std");
 test {
     _ = @import("session/boot_auth_test.zig");
+    _ = @import("session/labels_test.zig");
+    _ = @import("session/label_codec_test.zig");
     _ = @import("session/write_undo_test.zig");
     _ = @import("session/dwarf/compilation_test.zig");
     _ = @import("session/dwarf/line/path_test.zig");

@@ -9,6 +9,7 @@ const annotation_literal = @import("annotation_literal.zig");
 
 const core_view = @import("core_view.zig");
 const Instr = @import("ra8_chip").core.cpu.instr.Instr;
+const labels = @import("labels.zig");
 const printers = @import("ra8_chip").core.cpu.text.disasm;
 const std = @import("std");
 const symbols = @import("symbols.zig");
@@ -50,10 +51,20 @@ pub const Row = struct {
 /// The embedding/pane API: bounded rows, read from this core's current memory.
 /// Instruction bytes remain available even when a decoder does not know them.
 pub fn capture(core: core_view.View, image: ?symbols.Image, start: u32, into: []Row) !u32 {
+    return captureWithLabels(core, image, start, into, null);
+}
+
+pub fn captureWithLabels(
+    core: core_view.View,
+    image: ?symbols.Image,
+    start: u32,
+    into: []Row,
+    names: ?labels.View,
+) !u32 {
     if (into.len > max_rows or start & 1 != 0) return error.BadDisassemblyRange;
     var address = start;
     for (into) |*row| {
-        row.* = read(core, image, address);
+        row.* = readWithLabels(core, image, address, names);
         address = std.math.add(u32, address, row.size) catch return error.BadDisassemblyRange;
     }
     return address;
@@ -61,15 +72,36 @@ pub fn capture(core: core_view.View, image: ?symbols.Image, start: u32, into: []
 
 /// Append symbol, DWARF local, and literal annotations to an already-decoded disassembly `into` buffer.
 pub fn annotateLine(core: ?core_view.View, image: ?symbols.Image, address: u32, bytes: []const u8, into: *Text) void {
-    annotate.at(image, address, into);
+    annotateWithLabels(core, image, address, bytes, into, null);
+}
+
+pub fn annotateWithLabels(
+    core: ?core_view.View,
+    image: ?symbols.Image,
+    address: u32,
+    bytes: []const u8,
+    into: *Text,
+    names: ?labels.View,
+) void {
+    annotate.atWithLabels(image, address, into, names);
     const live_core = core orelse return;
     const instr = fromBytes(address, bytes) orelse return;
     annotation_literal.append(live_core, instr, into);
 }
 
 pub fn read(core: core_view.View, image: ?symbols.Image, address: u32) Row {
+    return readWithLabels(core, image, address, null);
+}
+
+fn readWithLabels(core: core_view.View, image: ?symbols.Image, address: u32, names: ?labels.View) Row {
     var row: Row = .{ .address = address };
     function(image, &row);
+    if (names) |view| {
+        if (view.nameAt(address)) |name| {
+            row.function = name;
+            row.offset = 0;
+        }
+    }
     core.read(address, row.bytes[0..2]) catch {
         row.text.put("<unreadable>", .{});
         return row;
@@ -86,7 +118,7 @@ pub fn read(core: core_view.View, image: ?symbols.Image, address: u32) Row {
         row.text.put("<undecoded 0x{X:0>4}>", .{first});
         return row;
     };
-    annotateLine(core, image, address, row.bytes[0..row.size], &row.text);
+    annotateWithLabels(core, image, address, row.bytes[0..row.size], &row.text, names);
     return row;
 }
 

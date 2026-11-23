@@ -27,6 +27,7 @@ const history_recorder = @import("history/recorder.zig");
 const history_root = @import("history/root.zig");
 const input_script = @import("ra8_components").input_script;
 const itm = @import("ra8_chip").periph.itm;
+const labels = @import("labels.zig");
 const replay_feeder = @import("history/replay_feeder.zig");
 const session_control = @import("control.zig");
 const session_display = @import("display.zig");
@@ -100,6 +101,7 @@ pub const Event = @import("event/stream.zig").Event;
 const BoardRun = struct { tick: BoardTick, guest: Guest };
 pub const Session = struct {
     live: zig_session.ZigSession,
+    labels: labels.Map = .{},
     machine_desc: *const Machine = &chip.core.machine.catalog.ra8d2,
     metrics: ?device_metrics.Hook = null,
     time_base: ?*const TimeBase = null,

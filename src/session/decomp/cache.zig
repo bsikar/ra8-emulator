@@ -10,10 +10,12 @@ const elf = @import("ra8_board").image.elf;
 const emit_mod = @import("emit.zig");
 const extents_mod = @import("extents.zig");
 const image_bus = @import("image_bus.zig");
+const labels = @import("../labels.zig");
 
 /// Configuration when constructing a `CfgCache`.
 pub const Options = struct {
     live: ?core_view.View = null,
+    labels_for_core: ?labels.View = null,
     profile: decode.profile.Profile = decode.profile.Profile.m85,
     max_blocks: usize = 1024,
 };
@@ -21,6 +23,7 @@ pub const Options = struct {
 /// Owns extracted function extents, a heap-allocated `DecodeCache`, and cached function CFGs.
 pub const CfgCache = struct {
     allocator: std.mem.Allocator,
+    labels_for_core: ?labels.View,
     image: ?elf.Image,
     bus_state: image_bus.ImageBus,
     profile: decode.profile.Profile,
@@ -46,6 +49,7 @@ pub const CfgCache = struct {
 
         return .{
             .allocator = allocator,
+            .labels_for_core = opts.labels_for_core,
             .image = image,
             .bus_state = .{ .image = image, .live = opts.live },
             .profile = opts.profile,
@@ -115,7 +119,10 @@ pub const CfgCache = struct {
         const cfg_ptr = try self.get(address);
         if (self.emits.getPtr(cfg_ptr.entry)) |existing| return existing;
         const df_ptr = try self.getDataflow(address);
-        var built = try emit_mod.emitFunction(self.allocator, cfg_ptr, df_ptr, .{ .image = self.image });
+        var built = try emit_mod.emitFunction(self.allocator, cfg_ptr, df_ptr, .{
+            .image = self.image,
+            .labels_for_core = self.labels_for_core,
+        });
         errdefer built.deinit();
         try self.emits.put(self.allocator, cfg_ptr.entry, built);
         return self.emits.getPtr(cfg_ptr.entry).?;

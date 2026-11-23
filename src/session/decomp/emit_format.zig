@@ -8,9 +8,20 @@ const cfg_mod = @import("cfg.zig");
 const dataflow_mod = @import("dataflow.zig");
 const dwarf = @import("../dwarf/dwarf.zig");
 const elf = @import("ra8_board").image.elf;
+const labels = @import("../labels.zig");
 const symbols = @import("../symbols.zig");
 const text = @import("ra8_chip").core.cpu.text.text;
 const value = @import("value.zig");
+
+pub const Names = struct {
+    image: ?elf.Image = null,
+    labels_for_core: ?labels.View = null,
+
+    pub fn label(self: Names, address: u32) ?[]const u8 {
+        const view = self.labels_for_core orelse return null;
+        return view.nameAt(address);
+    }
+};
 
 /// Parse a UAL disassembly line into cleaned mnemonic (`add.w` -> `add`) and comma-split operands.
 pub const ParsedDisasm = struct {
@@ -72,9 +83,10 @@ fn appendTrimmedOp(raw: []const u8, out: *ParsedDisasm) void {
 }
 
 /// Resolve an exact symbol, global/static local, or named chip register for `val`.
-pub fn resolveAddressName(image: ?elf.Image, val: u32) ?[]const u8 {
+pub fn resolveAddressName(names: Names, val: u32) ?[]const u8 {
+    if (names.label(val)) |label| return label;
     if (val < 0x100) return null;
-    if (image) |img| {
+    if (names.image) |img| {
         if (annotate.symbolAt(img, val)) |name| return name;
         if (dwarf.locals.atAddress(dwarf.locals.ofImage(img), val) catch null) |local_name| {
             return local_name;
@@ -84,34 +96,34 @@ pub fn resolveAddressName(image: ?elf.Image, val: u32) ?[]const u8 {
 }
 
 /// Write a decimal/hex constant, optionally annotated with a resolved ELF/peripheral symbol comment.
-pub fn writeConstant(w: *std.Io.Writer, image: ?elf.Image, val: u32, with_comment: bool) !void {
+pub fn writeConstant(w: *std.Io.Writer, names: Names, val: u32, with_comment: bool) !void {
     if (val < text.decimal_below) {
         try w.print("{d}", .{val});
     } else {
         try w.print("0x{x}", .{val});
     }
     if (with_comment) {
-        if (resolveAddressName(image, val)) |name| {
+        if (resolveAddressName(names, val)) |name| {
             try w.print(" /* {s} */", .{name});
         }
     }
 }
 
 /// Write a symbolic intra-function (`fn+0xoff`), external symbol, or `loc_<addr>` label.
-pub fn writeTargetLabel(w: *std.Io.Writer, image: ?elf.Image, cfg: *const cfg_mod.Cfg, target_addr: u32) !void {
+pub fn writeTargetLabel(w: *std.Io.Writer, names: Names, cfg: *const cfg_mod.Cfg, target_addr: u32) !void {
     const norm = target_addr & ~@as(u32, 1);
+    if (names.label(norm)) |label| return w.writeAll(label);
     const fn_end = cfg.entry +% cfg.extent_size;
     if ((cfg.extent_size > 0 and norm >= cfg.entry and norm < fn_end) or cfg.blockAt(norm) != null) {
-        return writeInternalLabel(w, cfg, norm);
+        return writeInternalLabel(w, cfg, names.label(cfg.entry) orelse cfg.name orelse "", norm);
     }
-    if (image) |img| {
+    if (names.image) |img| {
         if (try tryWriteExternalSymbol(w, img, norm)) return;
     }
     try w.print("loc_{x:0>8}", .{norm});
 }
 
-fn writeInternalLabel(w: *std.Io.Writer, cfg: *const cfg_mod.Cfg, norm: u32) !void {
-    const base = cfg.name orelse "";
+fn writeInternalLabel(w: *std.Io.Writer, cfg: *const cfg_mod.Cfg, base: []const u8, norm: u32) !void {
     if (base.len > 0 and norm == cfg.entry) return w.print("{s}", .{base});
     if (base.len > 0 and norm > cfg.entry) return w.print("{s}+0x{x}", .{ base, norm - cfg.entry });
     return w.print("loc_{x:0>8}", .{norm});
@@ -134,9 +146,9 @@ fn tryWriteExternalSymbol(w: *std.Io.Writer, img: elf.Image, norm: u32) !bool {
 }
 
 /// Format an abstract dataflow `Value` or fall back to register name `fallback_reg`.
-pub fn writeValue(w: *std.Io.Writer, image: ?elf.Image, val: value.Value, fallback_reg: ?u4) !void {
+pub fn writeValue(w: *std.Io.Writer, names: Names, val: value.Value, fallback_reg: ?u4) !void {
     switch (val) {
-        .constant => |c| try writeConstant(w, image, c, true),
+        .constant => |c| try writeConstant(w, names, c, true),
         .sp_offset => |off| try writeSpOffset(w, off),
         .entry_reg => |r| try w.writeAll(text.names[r]),
         .pair_lo => |p| try w.print("{s}:{s}", .{ text.names[p.hi_reg], text.names[p.lo_reg] }),
@@ -165,7 +177,7 @@ fn writeSpOffset(w: *std.Io.Writer, off: i32) !void {
 /// Emit a relational/bitwise condition predicate from a paired flag setter or self-comparing branch.
 pub fn writeCondition(
     w: *std.Io.Writer,
-    image: ?elf.Image,
+    names: Names,
     cond: u4,
     origin_opt: ?value.FlagOrigin,
     self_reg: ?u4,
@@ -177,7 +189,7 @@ pub fn writeCondition(
     const origin = origin_opt orelse return writeFallbackCond(w, cond);
     if (cond >= 14) return w.writeAll("true");
     switch (origin.kind) {
-        .cmp => try writeCmpCondition(w, image, origin, cond),
+        .cmp => try writeCmpCondition(w, names, origin, cond),
         .cmn => try writeCmnCondition(w, origin, cond),
         .tst => try writeBitCondition(w, origin, cond, "&"),
         .teq => try writeBitCondition(w, origin, cond, "^"),
@@ -202,11 +214,11 @@ fn condOp(cond: u4) ?[]const u8 {
     };
 }
 
-fn writeCmpCondition(w: *std.Io.Writer, image: ?elf.Image, origin: value.FlagOrigin, cond: u4) !void {
+fn writeCmpCondition(w: *std.Io.Writer, names: Names, origin: value.FlagOrigin, cond: u4) !void {
     const op = condOp(cond) orelse return writeFallbackCond(w, cond);
     try writeOriginLhs(w, origin);
     try w.print(" {s} ", .{op});
-    try writeOriginRhs(w, image, origin);
+    try writeOriginRhs(w, names, origin);
 }
 
 fn writeCmnCondition(w: *std.Io.Writer, origin: value.FlagOrigin, cond: u4) !void {
@@ -214,7 +226,7 @@ fn writeCmnCondition(w: *std.Io.Writer, origin: value.FlagOrigin, cond: u4) !voi
     try w.writeByte('(');
     try writeOriginLhs(w, origin);
     try w.writeAll(" + ");
-    try writeOriginRhs(w, null, origin);
+    try writeOriginRhs(w, .{}, origin);
     try w.print(") {s} 0", .{rel});
 }
 
@@ -224,7 +236,7 @@ fn writeBitCondition(w: *std.Io.Writer, origin: value.FlagOrigin, cond: u4, bit_
     try w.writeByte('(');
     try writeOriginLhs(w, origin);
     try w.print(" {s} ", .{bit_op});
-    try writeOriginRhs(w, null, origin);
+    try writeOriginRhs(w, .{}, origin);
     try w.print(") {s} 0", .{rel});
 }
 
@@ -242,14 +254,14 @@ fn writeResultCondition(w: *std.Io.Writer, origin: value.FlagOrigin, cond: u4) !
 
 fn writeOriginLhs(w: *std.Io.Writer, origin: value.FlagOrigin) !void {
     if (origin.lhs_reg) |r| return w.writeAll(text.names[r]);
-    if (origin.lhs_val.asConstant()) |c| return writeConstant(w, null, c, false);
+    if (origin.lhs_val.asConstant()) |c| return writeConstant(w, .{}, c, false);
     try w.writeAll("lhs");
 }
 
-fn writeOriginRhs(w: *std.Io.Writer, image: ?elf.Image, origin: value.FlagOrigin) !void {
-    if (origin.rhs_imm) |imm| return writeConstant(w, image, imm, false);
+fn writeOriginRhs(w: *std.Io.Writer, names: Names, origin: value.FlagOrigin) !void {
+    if (origin.rhs_imm) |imm| return writeConstant(w, names, imm, false);
     if (origin.rhs_reg) |r| return w.writeAll(text.names[r]);
-    if (origin.rhs_val.asConstant()) |c| return writeConstant(w, image, c, false);
+    if (origin.rhs_val.asConstant()) |c| return writeConstant(w, names, c, false);
     try w.writeAll("rhs");
 }
 

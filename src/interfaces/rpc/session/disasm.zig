@@ -5,6 +5,7 @@ const api = @import("ra8_session").api;
 const core_view = @import("ra8_session").core_view;
 const decomp = @import("ra8_session").decomp;
 const handlers = @import("handlers.zig");
+const labels = @import("ra8_session").labels;
 const proto = @import("rpc.zig");
 const rpc = @import("ra8_rpc_wire");
 const session_disasm = @import("ra8_session").disasm;
@@ -23,11 +24,12 @@ pub fn read(context: *handlers.Context, args: wire.Request) rpc.Outcome(wire.Rep
         refuseRead();
     if (args.count == 0 or args.count > session_disasm.max_rows) return refuseRead();
     var rows: [session_disasm.max_rows]session_disasm.Row = undefined;
-    const next = session_disasm.capture(
+    const next = session_disasm.captureWithLabels(
         view,
         handlers.imageOf(context, core),
         args.address,
         rows[0..args.count],
+        .{ .map = &context.session.?.labels, .core = core },
     ) catch return refuseRead();
     const room = @min(context.scratch.len, wire.Reply.max_len.text);
     var writer: std.Io.Writer = .fixed(context.scratch[0..room]);
@@ -57,7 +59,7 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     var decomp_cache: ?decomp.cache.CfgCache = decomp.cache.CfgCache.init(
         alloc,
         image,
-        .{ .live = core_v },
+        .{ .live = core_v, .labels_for_core = .{ .map = &context.session.?.labels, .core = which } },
     ) catch null;
     defer if (decomp_cache) |*c| c.deinit();
 
@@ -132,11 +134,12 @@ fn decodeOne(
     modules: ?*const txm_debug.Table,
     text_buf: *[wire.disasm_text_cap]u8,
 ) !wire.DisasmRow {
+    const names: labels.View = .{ .map = &session.labels, .core = core };
     var row: wire.DisasmRow = .{
         .address = address,
         .size = 0,
         .decoded = 0,
-        .symbol = symbolAt(address, image, modules),
+        .symbol = names.nameAt(address) orelse symbolAt(address, image, modules),
     };
     session.read(core, address, row.raw[0..2]) catch |err| {
         if (unreadable(err)) return row;
@@ -152,7 +155,7 @@ fn decodeOne(
     }
     row.size = if (wide) 4 else 2;
     var formatted = session_disasm.one(address, row.raw[0..row.size]) catch return row;
-    session_disasm.annotateLine(core_v, image, address, row.raw[0..row.size], &formatted);
+    session_disasm.annotateWithLabels(core_v, image, address, row.raw[0..row.size], &formatted, names);
     const slice = formatted.slice();
     const len = @min(slice.len, text_buf.len);
     @memcpy(text_buf[0..len], slice[0..len]);
