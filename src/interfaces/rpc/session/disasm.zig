@@ -59,7 +59,11 @@ pub fn disasm(context: *handlers.Context, args: proto.DisasmAsk) Outcome {
     var decomp_cache: ?decomp.cache.CfgCache = decomp.cache.CfgCache.init(
         alloc,
         image,
-        .{ .live = core_v, .labels_for_core = .{ .map = &context.session.?.labels, .core = which } },
+        .{
+            .live = core_v,
+            .max_blocks = 128,
+            .labels_for_core = .{ .map = &context.session.?.labels, .core = which },
+        },
     ) catch null;
     defer if (decomp_cache) |*c| c.deinit();
 
@@ -111,6 +115,7 @@ fn lookupPseudo(
     pseudo_buf: *[wire.disasm_pseudo_cap]u8,
 ) []const u8 {
     const ext_entry = cache.extentEntry(address);
+    if (ext_entry == null and cache.extents.len > 0) return "";
     const reuse = if (last_emit.*) |le|
         if (ext_entry) |ee| le.entry == ee else le.pseudoAt(address) != null
     else
