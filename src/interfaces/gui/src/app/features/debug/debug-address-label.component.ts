@@ -21,13 +21,15 @@ import { DebugLabelsStore } from '../../core/stores/debug-labels.store';
     }
   `,
   styles: `
-    :host, form { display: inline-flex; min-width: 0; gap: 4px; }
+    :host { display: inline-flex; align-items: center; min-width: 0; max-width: 100%; overflow: hidden; }
+    form { display: inline-flex; min-width: 0; gap: 4px; }
     button, input {
       border: 1px solid var(--es-border);
       background: var(--es-chrome);
       color: var(--es-text-secondary);
       font-size: 12px;
     }
+    button { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     input { width: 8rem; }
   `,
 })

@@ -168,6 +168,10 @@
   color: var(--es-tok-fn);
 }
 
+app-debug-address-label {
+  flex-shrink: 0;
+}
+
 .vim-mark {
   color: var(--es-signal-cursor);
   font-size: 12px;
