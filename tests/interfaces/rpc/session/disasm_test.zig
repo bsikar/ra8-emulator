@@ -143,3 +143,35 @@ test "disasm refuses unattached CPU1 with no_core" {
         .err => |code| try std.testing.expectEqual(@as(u16, proto.app_codes.no_core), @backingInt(code)),
     }
 }
+
+test "disasm across function end and flash padding returns bounded rows promptly" {
+    var opened = try ra8.session.harness.open(std.testing.allocator, std.testing.io, .{
+        .elf_path = "tests/fixtures/profile/call_tree.elf",
+        .files = ra8.host.session_files.cwd(ra8.session.file_ops.Ops),
+    });
+    defer opened.deinit();
+
+    var scratch: [disasm_wire.disasm_bytes]u8 = undefined;
+    var context: served.Context = .{
+        .session = opened.session(),
+        .scratch = &scratch,
+        .gpa = std.testing.allocator,
+        .mapping = .{ .context = &opened, .mapFn = noMap, .imageFn = harnessImageOf },
+    };
+
+    const reply = switch (handler.disasm(&context, .{
+        .core = .cpu0,
+        .address = 0x0200_0032,
+        .count = 32,
+        .use_pc = 0,
+    })) {
+        .ok => |r| r,
+        .err => return error.Refused,
+    };
+    try std.testing.expectEqual(@as(u8, 32), reply.count);
+
+    var reader: disasm_wire.Reader = .{ .rest = reply.rows };
+    const first = (try reader.next()).?;
+    try std.testing.expectEqual(@as(u32, 0x0200_0032), first.address);
+    try std.testing.expectEqual(@as(u8, 1), first.decoded);
+}
