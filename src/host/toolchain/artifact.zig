@@ -9,6 +9,7 @@ pub const Artifact = struct {
     archive_bytes: u64,
     executable: []const u8,
 };
+const mirror_base = "https://github.com/bsikar/ra8-emulator/releases/download/toolchain-zig-0.17.0/";
 pub const zig = [_]Artifact{
     .{
         .host = "aarch64-macos",
@@ -39,6 +40,14 @@ pub const zig = [_]Artifact{
         .executable = "zig-x86_64-windows-0.17.0/zig.exe",
     },
 };
+
+pub fn mirrorUrl(host: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, host, "aarch64-macos")) return mirror_base ++ "zig-aarch64-macos-0.17.0.tar.xz";
+    if (std.mem.eql(u8, host, "x86_64-macos")) return mirror_base ++ "zig-x86_64-macos-0.17.0.tar.xz";
+    if (std.mem.eql(u8, host, "x86_64-linux")) return mirror_base ++ "zig-x86_64-linux-0.17.0.tar.xz";
+    if (std.mem.eql(u8, host, "x86_64-windows")) return mirror_base ++ "zig-x86_64-windows-0.17.0.zip";
+    return null;
+}
 
 const manifest_hashes = [zig.len][]const u8{
     "505bfccec93f487e103711bd51cc9b05d8910c106af4450ed6369c1c23be06ef",
