@@ -88,28 +88,51 @@ fn zip(cd: *std.Io.File.Reader, data: *std.Io.File.Reader, tree: *Tree) !void {
 
 /// Setup is the only caller. No resolve/build path ever performs HTTP.
 pub fn download(gpa: std.mem.Allocator, io: std.Io, artifact: artifacts.Artifact, destination: std.Io.File) !void {
+    if (artifacts.mirrorUrl(artifact.host)) |mirror_url| {
+        downloadUrl(gpa, io, artifact, mirror_url, destination, 90) catch {
+            return downloadUrl(gpa, io, artifact, artifact.url, destination, 180);
+        };
+        return;
+    }
+    return downloadUrl(gpa, io, artifact, artifact.url, destination, 180);
+}
+
+fn downloadUrl(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    artifact: artifacts.Artifact,
+    url: []const u8,
+    destination: std.Io.File,
+    timeout_seconds: i64,
+) !void {
     const Completion = union(enum) { received: anyerror!void, timeout: std.Io.Cancelable!void };
     var results: [2]Completion = undefined;
     var select = std.Io.Select(Completion).init(io, &results);
     defer select.cancelDiscard();
-    try select.concurrent(.received, receive, .{ gpa, io, artifact, destination });
-    try select.concurrent(.timeout, std.Io.sleep, .{ io, std.Io.Duration.fromSeconds(180), .awake });
+    try select.concurrent(.received, receive, .{ gpa, io, artifact, url, destination });
+    try select.concurrent(.timeout, std.Io.sleep, .{ io, std.Io.Duration.fromSeconds(timeout_seconds), .awake });
     switch (try select.await()) {
         .received => |result| try result,
         .timeout => return error.ArchiveDownloadTimeout,
     }
 }
 
-fn receive(gpa: std.mem.Allocator, io: std.Io, artifact: artifacts.Artifact, destination: std.Io.File) !void {
+fn receive(
+    gpa: std.mem.Allocator,
+    io: std.Io,
+    artifact: artifacts.Artifact,
+    url: []const u8,
+    destination: std.Io.File,
+) !void {
     const bytes = try gpa.alloc(u8, @intCast(artifact.archive_bytes + 1));
     defer gpa.free(bytes);
     var writer: std.Io.Writer = .fixed(bytes);
     var client: std.http.Client = .{ .allocator = gpa, .io = io };
     defer client.deinit();
     const response = try client.fetch(.{
-        .location = .{ .url = artifact.url },
+        .location = .{ .url = url },
         .response_writer = &writer,
-        .redirect_behavior = .unhandled,
+        .redirect_behavior = .init(3),
     });
     if (response.status != .ok) return error.ArchiveDownloadRefused;
     const content = writer.buffered();

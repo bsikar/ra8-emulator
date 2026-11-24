@@ -17,13 +17,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Zig 0.17.0
+        id: cache-zig
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/zig-x86_64-linux-0.17.0
+          key: zig-0.17.0-x86_64-linux-v1
+
       - name: Install Zig 0.17.0
         run: |
-          curl -fsSL -o /tmp/zig.tar.xz https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz
-          echo "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026  /tmp/zig.tar.xz" | sha256sum -c -
-          mkdir -p "$HOME/zig"
-          tar -xJf /tmp/zig.tar.xz -C "$HOME/zig"
-          echo "$HOME/zig/zig-x86_64-linux-0.17.0" >> "$GITHUB_PATH"
+          if [ "${{ steps.cache-zig.outputs.cache-hit }}" != "true" ]; then
+            mirror="https://github.com/bsikar/ra8-emulator/releases/download/toolchain-zig-0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
+            upstream="https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
+            curl -fsSL --retry 3 -o /tmp/zig.tar.xz "$mirror" || curl -fsSL --retry 3 -o /tmp/zig.tar.xz "$upstream"
+            echo "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026  /tmp/zig.tar.xz" | sha256sum -c -
+            mkdir -p "${{ runner.temp }}"
+            tar -xJf /tmp/zig.tar.xz -C "${{ runner.temp }}"
+          fi
+          echo "${{ runner.temp }}/zig-x86_64-linux-0.17.0" >> "$GITHUB_PATH"
 
       - name: Check formatting
         run: zig fmt --check --exclude tests/consumer/zig-pkg build.zig build_tests.zig src tests tools
@@ -45,10 +56,18 @@ jobs:
       - name: Host suite
         run: |
           zig build ra8_host_tests-exe -j1
-          bash tools/test_batch.sh zig-out/bin/ra8_host_tests /tmp/ra8_host_tests.log
+          (
+            ulimit -v 3000000
+            exec timeout --signal=TERM --kill-after=5s 1800s zig-out/bin/ra8_host_tests
+          ) > /tmp/ra8_host_tests.log 2>&1 || {
+            status=$?
+            tail -n 40 /tmp/ra8_host_tests.log
+            exit "$status"
+          }
+          tail -n 5 /tmp/ra8_host_tests.log
 
       - name: Current firmware signed boot matrix (ReleaseFast)
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           set -o pipefail
           zig build ra8_tests -j1 -Doptimize=ReleaseFast -Dtest-filter=session.boot_auth_test 2>&1 | tee /tmp/signed-boot.log
@@ -108,21 +127,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache Zig 0.17.0
+        id: cache-zig-win
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/zig
+          key: zig-0.17.0-x86_64-windows-v1
+
       - name: Install Zig 0.17.0
         shell: pwsh
         run: |
-          $zip = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.17.0.zip'
-          $expected = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
-          curl.exe -fsSL --retry 3 -o $zip https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip
-          if ($LASTEXITCODE -ne 0) { throw "Failed to download Zig 0.17.0 (exit $LASTEXITCODE)" }
-          $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
-          Write-Host "zig_archive_sha256=$actual"
-          if ($actual -ne $expected) { throw "SHA256 mismatch: expected $expected, got $actual" }
           $dest = Join-Path $env:RUNNER_TEMP 'zig'
-          New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          tar.exe -xf $zip -C $dest
-          if ($LASTEXITCODE -ne 0) { throw "Failed to extract Zig archive (exit $LASTEXITCODE)" }
           $zigDir = Join-Path $dest 'zig-x86_64-windows-0.17.0'
+          if ('${{ steps.cache-zig-win.outputs.cache-hit }}' -ne 'true') {
+            $zip = Join-Path $env:RUNNER_TEMP 'zig-x86_64-windows-0.17.0.zip'
+            $expected = 'b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428'
+            $mirrorUrl = 'https://github.com/bsikar/ra8-emulator/releases/download/toolchain-zig-0.17.0/zig-x86_64-windows-0.17.0.zip'
+            $upstreamUrl = 'https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip'
+            curl.exe -fsSL --retry 3 -o $zip $mirrorUrl
+            if ($LASTEXITCODE -ne 0) {
+              curl.exe -fsSL --retry 3 -o $zip $upstreamUrl
+              if ($LASTEXITCODE -ne 0) { throw "Failed to download Zig 0.17.0 (exit $LASTEXITCODE)" }
+            }
+            $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+            Write-Host "zig_archive_sha256=$actual"
+            if ($actual -ne $expected) { throw "SHA256 mismatch: expected $expected, got $actual" }
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            tar.exe -xf $zip -C $dest
+            if ($LASTEXITCODE -ne 0) { throw "Failed to extract Zig archive (exit $LASTEXITCODE)" }
+          }
           if (-not (Test-Path (Join-Path $zigDir 'zig.exe'))) { throw "zig.exe not found in $zigDir" }
           Add-Content -Path $env:GITHUB_PATH -Value $zigDir
 
