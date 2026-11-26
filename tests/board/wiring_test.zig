@@ -160,3 +160,22 @@ test "Board irq_override routes raise, tick repend, and reset latch clear on bar
     try std.testing.expect(!board.irqSource(.cpu0).asserted(12));
     try std.testing.expect(reboot.requested);
 }
+
+test "the SDHI1 window is on the bus and reaches the card" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
+    const mstp = ra8.chip.periph.mstp;
+    const sdhi = ra8.chip.periph.sdhi;
+    // Both SDHI windows sit behind MSTPCRC (MSTPC12 = SDHI0, MSTPC11 = SDHI1).
+    const gate_bits = (@as(u32, 1) << 12) | (@as(u32, 1) << 11);
+    board.bus.write(mstp.win_base + 8, 4, mstp.reset_rest & ~gate_bits);
+    // Firmware moved its SDHI demos to instance 1 (RA8FW-337), so the bus
+    // carries its window next to SDHI0's and the two expose one controller.
+    const unit = board.bus.blockFor(sdhi.sdhi1_base).?;
+    try std.testing.expectEqual(sdhi.sdhi1_base, unit.base);
+    board.bus.write(sdhi.address1(sdhi.off.sd_option), 2, sdhi.option.width_8bit);
+    try std.testing.expectEqual(sdhi.option.width_8bit, board.bus.read(sdhi.address(sdhi.off.sd_option), 4));
+}

@@ -264,3 +264,17 @@ test "an unmodelled register keeps what was written" {
     poke(host, sdhi.off.sd_stop, 0x0000_0101);
     try std.testing.expectEqual(@as(u32, 0x0000_0101), peek(host, sdhi.off.sd_stop));
 }
+
+test "the SDHI1 window is the same controller" {
+    var stand: Stand = undefined;
+    stand.init();
+    defer stand.deinit();
+    const host = &stand.host;
+    const sdhi1 = host.block1();
+    try std.testing.expectEqualStrings("SDHI1", sdhi1.name);
+    try std.testing.expectEqual(sdhi.sdhi1_base, sdhi1.base);
+    // A store through SDHI1 lands on the register the SDHI0 window reads.
+    host.write(sdhi.address1(sdhi.off.sd_option), 2, sdhi.option.width_8bit);
+    try std.testing.expectEqual(sdhi.option.width_8bit, peek(host, sdhi.off.sd_option));
+    try std.testing.expectEqual(@as(u32, 8), host.lanes());
+}

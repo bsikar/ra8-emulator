@@ -93,6 +93,7 @@ const ids_doc = [_]u16{id(reg_c, 13)};
 const ids_ceu = [_]u16{id(reg_c, 16)};
 const ids_pdm = [_]u16{id(reg_c, 24)};
 const ids_sdhi = [_]u16{id(reg_c, 12)};
+const ids_sdhi1 = [_]u16{id(reg_c, 11)};
 const ids_drw = [_]u16{id(reg_c, 6)};
 
 /// One strided run of instances that share a mapping shape: instance i lives
@@ -133,6 +134,7 @@ pub const families = [_]Family{
     .{ .base = 0x4025_6000, .stride = 0x400, .ids = &ids_pdm, .name = "PDM-IF" },
     .{ .base = 0x4033_8000, .stride = 0x2224, .ids = &ids_adc, .name = "ADC_B" },
     .{ .base = 0x4025_2000, .stride = 0x200, .ids = &ids_sdhi, .name = "SDHI0" },
+    .{ .base = 0x4025_2400, .stride = 0x200, .ids = &ids_sdhi1, .name = "SDHI1" },
     .{ .base = 0x4026_8000, .stride = 0x200, .ids = &ids_xspi, .name = "XSPI0" },
     .{ .base = 0x4044_4000, .stride = 0x104, .ids = &ids_drw, .name = "DRW" },
 };

@@ -56,70 +56,28 @@ const bus_lanes = @import("../lanes.zig");
 pub const fifo = @import("fifo.zig");
 pub const line = @import("line.zig");
 const periph = @import("../registry.zig");
+pub const regs = @import("regs.zig");
 pub const snapshot = @import("snapshot.zig");
 pub const xfer = @import("xfer.zig");
 
 pub const win_base: u32 = 0x4025_2000;
 pub const win_span: u32 = 0x200;
+/// SDHI1's window: the firmware's port moved its SDHI demos to instance 1
+/// (RA8FW-337). One controller serves both windows, so the card in the slot
+/// is the one card however firmware reaches it.
+pub const sdhi1_base: u32 = 0x4025_2400;
 
 /// The registers this model interprets. Everything else in the window is
 /// shadowed.
-pub const off = struct {
-    pub const sd_cmd: u32 = 0x000;
-    pub const sd_arg: u32 = 0x008;
-    pub const sd_stop: u32 = 0x010;
-    pub const sd_seccnt: u32 = 0x014;
-    pub const sd_rsp10: u32 = 0x018;
-    pub const sd_rsp32: u32 = 0x020;
-    pub const sd_rsp54: u32 = 0x028;
-    pub const sd_rsp76: u32 = 0x030;
-    pub const sd_info1: u32 = 0x038;
-    pub const sd_info2: u32 = 0x03C;
-    pub const sd_option: u32 = 0x050;
-    pub const sd_buf0: u32 = 0x060;
-    pub const soft_rst: u32 = 0x1C0;
-};
-
+pub const off = regs.off;
 /// The status bits the firmware polls.
-pub const status = struct {
-    /// SD_INFO1.RSPEND, a response was received.
-    pub const rspend: u32 = 0x0000_0001;
-    /// SD_INFO2.BRE, the read buffer holds a block.
-    pub const bre: u32 = 0x0000_0100;
-    /// SD_INFO2.BWE, the write buffer has room.
-    pub const bwe: u32 = 0x0000_0200;
-};
-
+pub const status = regs.status;
 /// SD_OPTION's bus-width selectors, and what they decode to.
-pub const option = struct {
-    pub const width_1bit: u32 = 0x0000_8000;
-    pub const width_8bit: u32 = 0x0000_2000;
-};
-
+pub const option = regs.option;
 /// SOFT_RST bit 0: clear asserts reset, set releases it.
-pub const soft_rst = struct {
-    pub const release: u32 = 0x0000_0001;
-};
-
-/// The commands the engine decodes. The index is the low six bits of
-/// SD_CMD.
-pub const cmd = struct {
-    pub const go_idle: u32 = 0;
-    pub const send_cid: u32 = 2;
-    pub const send_rca: u32 = 3;
-    pub const select: u32 = 7;
-    pub const if_cond: u32 = 8;
-    pub const send_csd: u32 = 9;
-    pub const stop: u32 = 12;
-    pub const set_blocklen: u32 = 16;
-    pub const read_single: u32 = 17;
-    pub const read_multi: u32 = 18;
-    pub const write_single: u32 = 24;
-    pub const write_multi: u32 = 25;
-    pub const op_cond: u32 = 41;
-    pub const app_cmd: u32 = 55;
-    pub const index_mask: u32 = 0x3F;
-};
+pub const soft_rst = regs.soft_rst;
+/// The commands the engine decodes.
+pub const cmd = regs.cmd;
 
 const words = win_span / 4;
 
@@ -169,7 +127,7 @@ pub const Sdhi = struct {
     }
 
     pub fn read(self: *Sdhi, at: u32, width: u3) u32 {
-        const offset = at - win_base;
+        const offset = windowOffset(at);
         const aligned = offset & ~@as(u32, 3);
         if (aligned == off.sd_buf0) return self.fifoRead(width);
         if (word(aligned) >= words) return 0;
@@ -177,7 +135,7 @@ pub const Sdhi = struct {
     }
 
     pub fn write(self: *Sdhi, at: u32, width: u3, value: u32) void {
-        const offset = at - win_base;
+        const offset = windowOffset(at);
         const aligned = offset & ~@as(u32, 3);
         if (aligned == off.sd_buf0) return self.fifoWrite(width, value);
         if (word(aligned) >= words) return;
@@ -348,9 +306,18 @@ pub const Sdhi = struct {
     }
 
     pub fn block(self: *Sdhi) periph.Block {
+        return self.blockAt("SDHI0", win_base);
+    }
+
+    /// The second window, the one the firmware's SDHI demos now sit behind.
+    pub fn block1(self: *Sdhi) periph.Block {
+        return self.blockAt("SDHI1", sdhi1_base);
+    }
+
+    fn blockAt(self: *Sdhi, name: []const u8, base: u32) periph.Block {
         return .{
-            .name = "SDHI0",
-            .base = win_base,
+            .name = name,
+            .base = base,
             .size = win_span,
             .context = self,
             .readFn = readThunk,
@@ -360,6 +327,12 @@ pub const Sdhi = struct {
 };
 
 const soft_rst_word = off.soft_rst / 4;
+
+/// The window an address fell in: SDHI0 or SDHI1. The bus only routes
+/// addresses inside a registered block, so the wider base decides.
+fn windowOffset(at: u32) u32 {
+    return at - if (at >= sdhi1_base) sdhi1_base else win_base;
+}
 
 fn word(offset: u32) u32 {
     return offset / 4;
@@ -390,4 +363,9 @@ fn writeThunk(context: *anyopaque, at: u32, width: u3, value: u32) void {
 /// arithmetic itself.
 pub fn address(offset: u32) u32 {
     return win_base + offset;
+}
+
+/// The same offset inside SDHI1's window.
+pub fn address1(offset: u32) u32 {
+    return sdhi1_base + offset;
 }

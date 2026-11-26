@@ -169,6 +169,7 @@ fn attachDualOnlyBlocks(self: *Board, memory: Guest) !void {
     try self.sdram.attach(&self.bus);
     self.card.card = bus_line.line(&self.host_card);
     try self.bus.add(self.card.block());
+    try self.bus.add(self.card.block1());
     try self.bus.add(self.microphone.block());
     try self.bus.add(self.mailbox.block());
     if (self.desc().hasNpu()) {
