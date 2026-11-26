@@ -203,3 +203,19 @@ test "resetRa8e1 sets MSTPCRA defaults and maps GPT5 to MSTPE26 independently of
     try std.testing.expect(modules.stopped(gpt4));
     try std.testing.expect(!modules.stopped(gpt5));
 }
+
+test "SDHI0 and SDHI1 gate independently on MSTPC12 and MSTPC11" {
+    var modules = Mstp{};
+    const sdhi0 = 0x4025_2000;
+    const sdhi1 = 0x4025_2400;
+    try std.testing.expect(modules.stopped(sdhi0));
+    try std.testing.expect(modules.stopped(sdhi1));
+
+    modules.applyWrite(win_base + 8, 4, reset_rest & ~(@as(u32, 1) << 11));
+    try std.testing.expect(modules.stopped(sdhi0));
+    try std.testing.expect(!modules.stopped(sdhi1));
+
+    modules.applyWrite(win_base + 8, 4, reset_rest & ~(@as(u32, 1) << 12));
+    try std.testing.expect(!modules.stopped(sdhi0));
+    try std.testing.expect(modules.stopped(sdhi1));
+}
