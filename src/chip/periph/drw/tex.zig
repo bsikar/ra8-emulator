@@ -17,12 +17,17 @@
 //!   * U is plain sub-pixel, LUSTART + x*LUXADD + y*LUYADD in sixteenths
 //!     (ra8_drw_regs.h `k_ra8_drw_subpixel_unit`), the same fixed point the
 //!     six edge limiters use.
-//!   * V is split integer and fraction across five registers, LVSTARTI with
-//!     LVSTARTF underneath it and LVYXADDF carrying both per-step fractions.
-//!     Which half of LVYXADDF is the X step is NOT written down in
-//!     ra8_drw_regs.h; this model reads the low half as X and the high half
-//!     as Y, and says so here rather than in a commit message, because a
-//!     texture that shears the wrong way is this decision being wrong.
+//!   * V arrives already scaled by TEXPITCH: the engine programs
+//!     LVSTARTI = floor(Vs) * TEXPITCH, LVSTARTF = (Vs - floor(Vs)) *
+//!     TEXPITCH, and the increments the same way, so the address adder adds
+//!     U straight on and the second multiplier the row-unit model needed
+//!     never exists (HUM Ch 62.6.3.2 p 3731). LVSTARTF and both halves of
+//!     LVYXADDF are 16-bit fields holding those scaled texel counts, which
+//!     is why they are plain integers here rather than a sub-texel fixed
+//!     point: a Q0.16 field cannot even hold one scaled row. The HUM fixes
+//!     which half of LVYXADDF is which too (Ch 62.2.24 p 3703: LVXADDF low,
+//!     LVYADDF high), and marks LVSTARTF[31:16] as write-zero (Ch 62.2.21
+//!     p 3702).
 const std = @import("std");
 
 const clut = @import("clut.zig");
@@ -66,11 +71,17 @@ pub const control2 = struct {
 pub const limits = struct {
     pub const subpixel_shift: u5 = 4;
     pub const texpitch_max: u32 = 2048;
-    pub const umask_max: u32 = 2048;
-    pub const vmask_max: u32 = 1024;
-    pub const fraction_shift: u5 = 16;
-    pub const fraction_mask: u32 = 0xFFFF;
-    pub const mask_half: u32 = 0xFFFF;
+    /// TEXUMASK[10:0] and TEXVMASK[31:11], the fields the HUM puts TEXMASK
+    /// in (Ch 62.2.16 p 3700). The texture width and height maximums sit
+    /// behind those fields and are the programmer's to respect; the hardware
+    /// only masks with what it was given.
+    pub const umask_field: u32 = 0x7FF;
+    pub const vmask_shift: u5 = 11;
+    pub const vmask_field: u32 = 0x1F_FFFF;
+    /// The fraction fields of LVSTARTF and LVYXADDF: 16 bits each, holding
+    /// TEXPITCH-scaled texel counts (HUM Ch 62.2.21 p 3702, 62.2.24 p 3703).
+    pub const fraction_field: u32 = 0xFFFF;
+    pub const fraction_half_shift: u5 = 16;
     /// RGB of an ARGB8888 word, which is what the colour key compares.
     pub const rgb_mask: u32 = 0x00FF_FFFF;
 };
@@ -189,25 +200,32 @@ pub const Source = struct {
     }
 
     /// The raw U and V for one pixel of the bounding box, before the mask.
+    /// U comes out in texels; V comes out already TEXPITCH-scaled, the
+    /// linear texel index the address adder consumes (HUM Ch 62.6.3.2
+    /// p 3731), with the fraction fields added in as the scaled counts they
+    /// hold rather than shifted as a sub-texel fixed point.
     pub fn coordinate(self: *const Source, column: u32, row: u32) Coord {
         const x: i64 = column;
         const y: i64 = row;
         const u_sub = @as(i64, self.lustart) + x * self.luxadd + y * self.luyadd;
-        const whole = @as(i64, self.lvstarti) + x * self.lvxaddi + y * self.lvyaddi;
-        const fraction = @as(i64, self.lvstartf) +
-            x * (self.lvyxaddf & limits.fraction_mask) +
-            y * (self.lvyxaddf >> limits.fraction_shift);
+        const scaled = @as(i64, self.lvstarti) + x * self.lvxaddi + y * self.lvyaddi;
+        const fraction = @as(i64, self.lvstartf & limits.fraction_field) +
+            x * (self.lvyxaddf & limits.fraction_field) +
+            y * (self.lvyxaddf >> limits.fraction_half_shift);
         return .{
             .u = u_sub >> limits.subpixel_shift,
-            .v = whole + (fraction >> limits.fraction_shift),
+            .v = scaled + fraction,
         };
     }
 
-    /// TEXMASK's two halves, each clamped to the documented maximum.
+    /// TEXMASK's two fields, decoded where the HUM puts them (Ch 62.2.16
+    /// p 3700): TEXUMASK[10:0] on the U side, TEXVMASK[31:11] on the V
+    /// side, the V one carrying TEXPITCH * (height - 1) rather than a row
+    /// count.
     pub fn masks(self: *const Source) struct { u: u32, v: u32 } {
         return .{
-            .u = @min(self.texmask & limits.mask_half, limits.umask_max),
-            .v = @min(self.texmask >> limits.fraction_shift, limits.vmask_max),
+            .u = self.texmask & limits.umask_field,
+            .v = self.texmask >> limits.vmask_shift & limits.vmask_field,
         };
     }
 
@@ -244,7 +262,10 @@ pub const Source = struct {
         const bound = self.masks();
         const u = self.fold(raw_coord.u, bound.u, control2_word & control2.clamp_x != 0);
         const v = self.fold(raw_coord.v, bound.v, control2_word & control2.clamp_y != 0);
-        const at = (@as(u64, v) * self.texpitch + u) * width;
+        // V lands here already TEXPITCH-scaled and U adds straight on; the
+        // second multiply a row-unit V needed is the one the HUM's
+        // pre-scaling saves (Ch 62.6.3.2 p 3731).
+        const at = (@as(u64, v) + u) * width;
         const byte = @as(u64, self.texorigin) + at / 8;
         if (byte > std.math.maxInt(u32) - 4) {
             self.faults +%= 1;
@@ -274,8 +295,13 @@ pub const Source = struct {
         self.wrapped +%= 1;
         if (clamped) return if (value < 0) 0 else mask;
         if (mask == 0) return 0;
-        const span = @as(i64, mask) + 1;
-        return @intCast(@mod(value, span));
+        // The register is a mask and the HUM's wrap is that mask applied
+        // (Ch 62.2.16 p 3700): a whole TEXPITCH past the last row lands back
+        // on row zero because the row bits wrap under it, and a negative
+        // coordinate rides the same two's-complement wrap onto the far edge.
+        // For the U mask, width - 1, that is the wrap-around modulo the HUM
+        // allows any power-of-two width for (Ch 62.2.16 p 3700).
+        return @intCast(@as(u64, @bitCast(value)) & @as(u64, mask));
     }
 
     /// A raw texel as an ARGB8888 colour, through the palette when the

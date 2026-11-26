@@ -24,7 +24,7 @@ fn programmed() tex.Source {
     var source = tex.Source{};
     _ = source.latch(tex.off.texorigin, tex_base);
     _ = source.latch(tex.off.texpitch, 8);
-    _ = source.latch(tex.off.texmask, 7 << 16 | 7);
+    _ = source.latch(tex.off.texmask, 56 << 11 | 7);
     return source;
 }
 
@@ -56,32 +56,48 @@ test "a negative U start stays negative until it crosses zero" {
     try std.testing.expectEqual(@as(i64, 0), source.coordinate(2, 0).u);
 }
 
-test "V carries its fraction into the integer part" {
+test "V's fraction is TEXPITCH-scaled texels that carry across rows" {
     var source = tex.Source{};
-    _ = source.latch(tex.off.lvstarti, 1);
-    _ = source.latch(tex.off.lvyxaddf, 0x8000);
-    try std.testing.expectEqual(@as(i64, 1), source.coordinate(0, 0).v);
-    try std.testing.expectEqual(@as(i64, 1), source.coordinate(1, 0).v);
-    try std.testing.expectEqual(@as(i64, 2), source.coordinate(2, 0).v);
-    try std.testing.expectEqual(@as(i64, 3), source.coordinate(4, 0).v);
+    // Vs = 1.5 rows and dv/dx = 0.25 rows at TEXPITCH 8: the start is
+    // 12 texels into the texture and each column adds 2 texels, so the
+    // walk carries past a whole row boundary on its own.
+    _ = source.latch(tex.off.lvstarti, 8);
+    _ = source.latch(tex.off.lvstartf, 4);
+    _ = source.latch(tex.off.lvyxaddf, 2);
+    try std.testing.expectEqual(@as(i64, 12), source.coordinate(0, 0).v);
+    try std.testing.expectEqual(@as(i64, 14), source.coordinate(1, 0).v);
+    try std.testing.expectEqual(@as(i64, 16), source.coordinate(2, 0).v);
+    try std.testing.expectEqual(@as(i64, 20), source.coordinate(4, 0).v);
+}
+
+test "LVSTARTF keeps only the 16 bits the HUM documents" {
+    var source = tex.Source{};
+    _ = source.latch(tex.off.lvstartf, 0x0002_0004);
+    try std.testing.expectEqual(@as(i64, 4), source.coordinate(0, 0).v);
 }
 
 test "the LVYXADDF halves step X and Y apart" {
     var source = tex.Source{};
-    _ = source.latch(tex.off.lvyxaddf, 0x8000_0000);
-    try std.testing.expectEqual(@as(i64, 0), source.coordinate(9, 0).v);
-    try std.testing.expectEqual(@as(i64, 1), source.coordinate(0, 2).v);
-    _ = source.latch(tex.off.lvyxaddf, 0x8000);
-    try std.testing.expectEqual(@as(i64, 1), source.coordinate(2, 0).v);
-    try std.testing.expectEqual(@as(i64, 0), source.coordinate(0, 9).v);
+    // HUM Ch 62.2.24 p 3703: LVXADDF low, LVYADDF high. At TEXPITCH 8 the
+    // halves here are a quarter and half of a row per step.
+    _ = source.latch(tex.off.lvyxaddf, 4 << 16 | 2);
+    try std.testing.expectEqual(@as(i64, 18), source.coordinate(9, 0).v);
+    try std.testing.expectEqual(@as(i64, 8), source.coordinate(0, 2).v);
+    try std.testing.expectEqual(@as(i64, 36), source.coordinate(0, 9).v);
+    try std.testing.expectEqual(@as(i64, 0), source.coordinate(0, 0).v);
 }
 
-test "TEXMASK is clamped to the documented maximum per axis" {
+test "TEXMASK decodes as TEXUMASK[10:0] beside TEXVMASK[31:11]" {
     var source = tex.Source{};
     _ = source.latch(tex.off.texmask, 0xFFFF_FFFF);
     const bound = source.masks();
-    try std.testing.expectEqual(tex.limits.umask_max, bound.u);
-    try std.testing.expectEqual(tex.limits.vmask_max, bound.v);
+    try std.testing.expectEqual(@as(u32, tex.limits.umask_field), bound.u);
+    try std.testing.expectEqual(@as(u32, tex.limits.vmask_field), bound.v);
+    // The shape an 8x8 texture at TEXPITCH 8 is programmed with.
+    _ = source.latch(tex.off.texmask, 56 << 11 | 7);
+    const eight = source.masks();
+    try std.testing.expectEqual(@as(u32, 7), eight.u);
+    try std.testing.expectEqual(@as(u32, 56), eight.v);
 }
 
 test "an RLE source, a filtered one and an unknown format are all refused" {
@@ -124,7 +140,7 @@ test "the V coordinate steps a whole texture row, not a texel" {
     defer store_memory.close(memory);
     try memory.writeWord(tex_base + 8 * 4, 0xFF44_5566);
     var source = programmed();
-    _ = source.latch(tex.off.lvyaddi, 1);
+    _ = source.latch(tex.off.lvyaddi, 8);
     try std.testing.expectEqual(@as(?u32, 0xFF44_5566), source.sample(memory, readFormat(0x2), 0, 1));
 }
 
@@ -210,6 +226,43 @@ test "a negative coordinate wraps to the far edge, or clamps to zero" {
     _ = source.latch(tex.off.lustart, @bitCast(@as(i32, -16)));
     try std.testing.expectEqual(@as(?u32, 0xFF00_0007), source.sample(memory, readFormat(0x2), 0, 0));
     try std.testing.expectEqual(@as(?u32, 0xFF00_0001), source.sample(memory, readFormat(0x2) | tex.control2.clamp_x, 0, 0));
+}
+
+test "a V step past the last row wraps to row zero, and is counted" {
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
+    try memory.writeWord(tex_base, 0xFFAA_BBCC);
+    var source = programmed();
+    _ = source.latch(tex.off.lvyaddi, 8);
+    try std.testing.expectEqual(@as(?u32, 0xFFAA_BBCC), source.sample(memory, readFormat(0x2), 0, 8));
+    try std.testing.expectEqual(@as(u64, 1), source.wrapped);
+}
+
+test "a V step past the last row clamps to the last row with the clamp bit" {
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
+    try memory.writeWord(tex_base + 56 * 4, 0xFF77_7777);
+    var source = programmed();
+    _ = source.latch(tex.off.lvyaddi, 8);
+    const word = readFormat(0x2) | tex.control2.clamp_y;
+    try std.testing.expectEqual(@as(?u32, 0xFF77_7777), source.sample(memory, word, 0, 8));
+    try std.testing.expectEqual(@as(u64, 1), source.wrapped);
+}
+
+test "a stride wider than the texture keeps the row gap the V mask knows" {
+    const memory = try store_memory.open();
+    defer store_memory.close(memory);
+    // A texture eight texels wide living in a sixteen-texel-wide buffer:
+    // TEXUMASK still 7, TEXVMASK = 16 * (8 - 1), and row one starts at
+    // texel 16, not texel 8.
+    var source = tex.Source{};
+    _ = source.latch(tex.off.texorigin, tex_base);
+    _ = source.latch(tex.off.texpitch, 16);
+    _ = source.latch(tex.off.texmask, 112 << 11 | 7);
+    _ = source.latch(tex.off.lvyaddi, 16);
+    _ = source.latch(tex.off.luxadd, 16);
+    try memory.writeWord(tex_base + 18 * 4, 0xFFDD_CCCC);
+    try std.testing.expectEqual(@as(?u32, 0xFFDD_CCCC), source.sample(memory, readFormat(0x2), 2, 1));
 }
 
 test "a texture outside RAM is not read, and is counted apart from a fault" {
