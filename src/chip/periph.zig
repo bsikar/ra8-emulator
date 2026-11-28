@@ -20,6 +20,7 @@ pub const ckdiv = @import("periph/ckdiv.zig");
 pub const clocks = @import("periph/clocks.zig");
 pub const cpscu = @import("periph/cpscu/cpscu.zig");
 pub const cpu_ctrl = @import("periph/cpu_ctrl.zig");
+pub const cpu_dbg = @import("periph/cpu_dbg.zig");
 pub const cpuid = @import("periph/cpuid.zig");
 pub const crc = @import("periph/crc.zig");
 pub const dac = @import("periph/dac/dac.zig");

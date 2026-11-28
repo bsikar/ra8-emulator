@@ -108,3 +108,16 @@ test "the two monitor windows sit at PSCU +0x30 and +0x3C, four bytes each" {
     try std.testing.expectEqual(@as(u32, 4), windows[0].size);
     try std.testing.expect(windows[0].base >= pscu.win_base + pscu.win_span);
 }
+
+test "DLMMON resets to OEM state at +0x38 and ignores software stores" {
+    var unit = samon.Unit{};
+    const dlm_win = unit.dlmBlock();
+    try std.testing.expectEqual(@as(u32, 0x4020_4038), dlm_win.base);
+    try std.testing.expectEqual(@as(u32, 4), dlm_win.size);
+    try std.testing.expectEqual(@as(u32, 0x4), unit.read(samon.dlm_address, 4));
+    unit.write(samon.dlm_address, 4, 0x0);
+    try std.testing.expectEqual(@as(u32, 0x4), unit.read(samon.dlm_address, 4));
+    try std.testing.expectEqual(@as(u32, 1), unit.ignored_stores);
+    const rma_unit = samon.Unit{ .dlm = 0x8 };
+    try std.testing.expectEqual(@as(u32, 0x8), rma_unit.read(samon.dlm_address, 4));
+}

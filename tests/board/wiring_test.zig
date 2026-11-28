@@ -179,3 +179,19 @@ test "the SDHI1 window is on the bus and reaches the card" {
     board.bus.write(sdhi.address1(sdhi.off.sd_option), 2, sdhi.option.width_8bit);
     try std.testing.expectEqual(sdhi.option.width_8bit, board.bus.read(sdhi.address(sdhi.off.sd_option), 4));
 }
+
+test "PSCU.DLMMON and CPU_DBG answer on the bus across Secure and NS views" {
+    var store = try Store.init(null);
+    defer store.deinit();
+    var board = ra8.board.board.Board.init(std.testing.allocator);
+    defer board.deinit();
+    try ra8.board.wiring.attachBlocks(&board, .{ .store = &store });
+    const samon = ra8.chip.periph.pscu.samon;
+    const cpu_dbg = ra8.chip.periph.cpu_dbg;
+    const ns = ra8.chip.periph.registry.ns_offset;
+
+    try std.testing.expectEqual(@as(u32, 0x4), board.bus.read(samon.dlm_address, 4));
+    try std.testing.expectEqual(@as(u32, 0x4), board.bus.read(samon.dlm_address + ns, 4));
+    board.bus.write(cpu_dbg.win_base + cpu_dbg.regs.dbgauth0, 4, 0);
+    try std.testing.expectEqual(cpu_dbg.dbgauth0_bits.swdbg, board.bus.read(cpu_dbg.win_base + cpu_dbg.regs.dbgauth0 + ns, 4));
+}

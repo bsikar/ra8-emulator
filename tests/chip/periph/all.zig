@@ -37,6 +37,7 @@ test {
     _ = @import("ckdiv_test.zig");
     _ = @import("clocks_test.zig");
     _ = @import("cpu_ctrl_test.zig");
+    _ = @import("cpu_dbg_test.zig");
     _ = @import("crc_test.zig");
     _ = @import("dac/dac_test.zig");
     _ = @import("dac/output_test.zig");
