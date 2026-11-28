@@ -15,11 +15,13 @@
 const periph = @import("registry.zig");
 
 pub const cms_address: u32 = 0x4020_4030;
+pub const dlm_address: u32 = 0x4020_4038;
 pub const sfs_address: u32 = 0x4020_403C;
 
-/// The area field's place in the word, and a blank part's area.
+/// The area field's place in the word, a blank part's area, and reset DLM OEM state.
 pub const area_shift: u5 = 15;
 pub const blank: u9 = 0x1FF;
+pub const dlm_oem: u4 = 0x4;
 
 /// The register word a monitor reads for `area`.
 pub fn word(area: ?u9) u32 {
@@ -31,11 +33,14 @@ pub const Unit = struct {
     cms: ?u9 = null,
     /// SFSAMON.SFS: Secure SiP flash in 32 KB units. Null is unprogrammed.
     sfs: ?u9 = null,
+    /// DLMMON.DLM[3:0] (HUM Ch 51.8.13 p 3300): resets to OEM state (0x4).
+    dlm: u4 = dlm_oem,
     /// Stores the firmware aimed at either monitor; the hardware drops them.
     ignored_stores: u32 = 0,
 
     pub fn read(self: *const Unit, address: u32, width: u3) u32 {
         _ = width;
+        if (address == dlm_address) return @as(u32, self.dlm);
         return word(if (address == sfs_address) self.sfs else self.cms);
     }
 
@@ -46,6 +51,10 @@ pub const Unit = struct {
 
     pub fn blocks(self: *Unit) [2]periph.Block {
         return .{ self.block("PSCU-CMSAMON", cms_address), self.block("PSCU-SFSAMON", sfs_address) };
+    }
+
+    pub fn dlmBlock(self: *Unit) periph.Block {
+        return self.block("PSCU-DLMMON", dlm_address);
     }
 
     fn block(self: *Unit, name: []const u8, base: u32) periph.Block {

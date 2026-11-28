@@ -130,6 +130,7 @@ fn attachRa8Blocks(self: *Board, memory: Guest) !void {
     try self.bus.add(self.pinfunc.block());
     try attachAdc(self, memory);
     try self.bus.add(self.protection.block());
+    try self.bus.add(self.debug_auth.block());
     try attachSharedProtected(self, true);
     try attachDualOnlyBlocks(self, memory);
     try attachSharedPeripherals(self, memory);
@@ -243,28 +244,9 @@ fn resetThunk(context: *anyopaque) void {
     self.requestResetFrom(.software, .cpu1);
 }
 
-/// The core's own windows are PPB RAM rather than bus blocks, and RAM starts
-/// at zero. Every one of these is a register the firmware reads before it
-/// writes anything, so a zero is not a neutral starting value: it is a wrong
-/// answer the firmware then believes. Seed each with what the core reports.
-/// The windows that live inside a core rather than on the bus, seeded and
-/// hooked for the core in front of them.
-///
-/// `partitions` is the caller's because the SAU is CORE-PRIVATE STATE: each
-/// Cortex-M has its own, reached through its own PPB, and two cores
-/// programme two different maps. Sharing one model let CPU1's SAU
-/// bring-up land on top of CPU0's, and the report then described neither
-/// core: with `cpu1_pingpong_ipc` mapped onto CPU1, CPU0's five regions and
-/// two Non-Secure Callable entries read back as five regions and none,
-/// because CPU1 had overwritten the first four with its own.
-///
-/// THE MPU BESIDE IT IS CORE-PRIVATE IN EXACTLY THE SAME WAY, so it comes
-/// in with the SAU: the table and the guard that enforces it are the
-/// caller's. Shared, a CTRL store from either core rebuilt the traps from
-/// one table on whichever core made it, and CPU0's regions were CPU1's.
-///
-/// The reset values a core's own PPB windows read as, written into
-/// `memory` (RA8EMU-550).
+/// The core's own PPB windows are per-core RAM (not bus blocks), so SAU and
+/// MPU tables stay separate per core and are seeded with hardware reset values
+/// (RA8EMU-550) before execution.
 pub fn primeWindows(self: *Board, memory: Guest, windows: CoreWindows) !void {
     windows.regions.setRegions(windows.scs.mpu_regions_s);
     if (windows.regions_ns) |ns| ns.setRegions(if (windows.security) windows.scs.mpu_regions_ns else 0);
@@ -338,6 +320,7 @@ pub fn attachSharedProtected(self: *Board, dual_only: bool) !void {
         for (self.memory_monitors.blocks()) |window| {
             try self.bus.add(window);
         }
+        try self.bus.add(self.memory_monitors.dlmBlock());
         if (self.memory_monitors.cms) |area| self.idau.code_secure = sau.idau.cmsBytes(area);
     }
 }

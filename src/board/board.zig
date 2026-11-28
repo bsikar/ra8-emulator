@@ -25,6 +25,7 @@ const clocks = @import("ra8_chip").periph.clocks;
 const construct = @import("construct.zig");
 const cpscu = @import("ra8_chip").periph.cpscu;
 const cpu_ctrl = @import("ra8_chip").periph.cpu_ctrl;
+const cpu_dbg = @import("ra8_chip").periph.cpu_dbg;
 const crc = @import("ra8_chip").periph.crc;
 const dac = @import("ra8_chip").periph.dac;
 const dma_bank = @import("ra8_chip").periph.dma_bank;
@@ -174,6 +175,7 @@ pub const Board = struct {
     /// The handshake CPU0 uses to take the second core out of reset. Keyed,
     /// so nothing lands here without the key the driver writes.
     second_core: cpu_ctrl.CpuCtrl = .{},
+    debug_auth: cpu_dbg.Unit = .{},
     /// CPU1's memory, so an event INTSELR hands to CPU1 pends CPU1's NVIC
     /// words in CPU1's own store. Null on a single-core run.
     cpu1: ?Guest = null,
@@ -353,11 +355,8 @@ pub const Board = struct {
     partitions: sau.Sau,
     /// RA4T1 peripheral composition (`SYSC`, `PSCU`, `FCACHE`, `MSTP`, `PORT`, classic `SCI`, `ICU`, timers, `FACI`).
     ra4t1: ra4t1_periph.State = .{},
-    /// Where a reset this board decides on is left for the engine to perform.
     reboot: ?*reboot.Reboot = null,
-    /// Optional session event sink; excluded from board snapshots as wiring.
     event_sink: ?event_sink_api.EventSink = null,
-    /// Passive per-boundary frame taps: slot mirror and subscriber fan-out.
     frame_tap: ?*frame_tap.Tap = null,
     frame_taps: frame_tap.FanOut = .{},
     part: part.Part = .ra8d2,
